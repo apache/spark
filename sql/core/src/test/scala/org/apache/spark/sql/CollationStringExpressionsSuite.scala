@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.jdk.CollectionConverters.MapHasAsScala
-
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -57,10 +55,13 @@ class CollationStringExpressionsSuite
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT concat_ws(' ',collate('Spark', 'UTF8_LCASE'),collate('SQL', 'UNICODE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT concat_ws(' ', collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UNICODE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map("explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE`")
+    )
   }
 
   test("Support Elt string expression with collation") {
@@ -87,10 +88,13 @@ class CollationStringExpressionsSuite
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT elt(0 ,collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UNICODE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT elt(0, collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UNICODE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map("explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE`")
+    )
   }
 
   test("Support SplitPart string expression with collation") {
@@ -129,10 +133,14 @@ class CollationStringExpressionsSuite
       checkAnswer(sql(s"SELECT contains('${t.l}',collate('${t.r}','${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT contains(collate('abcde','UTF8_LCASE'),collate('C','UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT contains(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`")
+    )
   }
 
   test("Support SubstringIndex expression with collation") {
@@ -159,11 +167,14 @@ class CollationStringExpressionsSuite
         s"${t.count})"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT substring_index(collate('abcde','UTF8_LCASE')," +
-        "collate('C','UNICODE_CI'),1)")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT substring_index(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'),1)")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`")
+    )
   }
 
   test("Support StringInStr string expression with collation") {
@@ -191,10 +202,14 @@ class CollationStringExpressionsSuite
         s"collate('${t.substring}','${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT instr(collate('aaads','UTF8_BINARY'), collate('Aa','UTF8_LCASE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT instr(collate('aaads', 'UTF8_BINARY'), collate('Aa', 'UTF8_LCASE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+    )
   }
 
   test("Support FindInSet string expression with collation") {
@@ -221,11 +236,15 @@ class CollationStringExpressionsSuite
         s"collate('${t.set}', '${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT find_in_set(collate('AB','UTF8_BINARY')," +
-        s"collate('ab,xyz,fgh','UTF8_LCASE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT find_in_set(collate('AB', 'UTF8_BINARY'), " +
+          s"collate('ab,xyz,fgh', 'UTF8_LCASE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+    )
   }
 
   test("Support StartsWith string expression with collation") {
@@ -247,10 +266,14 @@ class CollationStringExpressionsSuite
       checkAnswer(sql(s"SELECT startswith('${t.l}', collate('${t.r}', '${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT startswith(collate('abcde', 'UTF8_LCASE'),collate('C', 'UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT startswith(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`")
+    )
   }
 
   test("Support StringTranslate string expression with collation") {
@@ -281,11 +304,15 @@ class CollationStringExpressionsSuite
         s"collate('${t.replaceExpression}', '${t.collation}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT translate(collate('Translate', 'UTF8_LCASE')," +
-        s"collate('Rnlt', 'UNICODE'), '1234')")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT translate(collate('Translate', 'UTF8_LCASE'), " +
+          s"collate('Rnlt', 'UNICODE'), '1234')")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE`")
+    )
   }
 
   test("Support Replace string expression with collation") {
@@ -317,10 +344,14 @@ class CollationStringExpressionsSuite
         s"collate('${t.replace}','${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT startswith(collate('abcde', 'UTF8_LCASE'),collate('C', 'UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT startswith(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`")
+    )
   }
 
   test("Support EndsWith string expression with collation") {
@@ -342,10 +373,14 @@ class CollationStringExpressionsSuite
       checkAnswer(sql(s"SELECT endswith('${t.l}', collate('${t.r}', '${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT endswith(collate('abcde', 'UTF8_LCASE'),collate('C', 'UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT endswith(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`")
+    )
   }
 
   test("Support StringRepeat string expression with collation") {
@@ -525,10 +560,13 @@ class CollationStringExpressionsSuite
            |""".stripMargin), Row(t.result))
     })
     // Collation mismatch
-    assert(
-      intercept[AnalysisException] {
+    checkError(
+      exception = intercept[AnalysisException] {
         sql("SELECT overlay('a' collate UNICODE PLACING 'b' collate UNICODE_CI FROM 1)")
-      }.getErrorClass == "COLLATION_MISMATCH.EXPLICIT"
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
     )
   }
 
@@ -683,11 +721,13 @@ class CollationStringExpressionsSuite
         val query = s"SELECT validate_utf8(${testCase.input})"
         if (testCase.result == None) {
           // Exception thrown
-          val e = intercept[SparkIllegalArgumentException] {
-            sql(query).collect()
-          }
-          assert(e.getErrorClass == "INVALID_UTF8_STRING")
-          assert(e.getMessageParameters.asScala == Map("str" -> "\\xFF"))
+          checkError(
+            exception = intercept[SparkIllegalArgumentException] {
+              sql(query).collect()
+            },
+            errorClass = "INVALID_UTF8_STRING",
+            parameters = Map("str" -> "\\xFF")
+          )
         } else {
           // Result & data type
           checkAnswer(sql(query), Row(testCase.result))
@@ -794,10 +834,14 @@ class CollationStringExpressionsSuite
         Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT rpad(collate('abcde', 'UNICODE_CI'),1,collate('C', 'UTF8_LCASE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT rpad(collate('abcde', 'UNICODE_CI'), 1, collate('C', 'UTF8_LCASE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UNICODE_CI`, `string collate UTF8_LCASE`")
+    )
   }
 
   test("Support StringLPad string expressions with collation") {
@@ -828,10 +872,14 @@ class CollationStringExpressionsSuite
         Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT lpad(collate('abcde', 'UNICODE_CI'),1,collate('C', 'UTF8_LCASE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT lpad(collate('abcde', 'UNICODE_CI'), 1, collate('C', 'UTF8_LCASE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string collate UNICODE_CI`, `string collate UTF8_LCASE`")
+    )
   }
 
   test("Support StringLPad string expressions with explicit collation on second parameter") {
@@ -868,10 +916,14 @@ class CollationStringExpressionsSuite
         s"'${t.c}'),${t.start})"), Row(t.result))
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_LCASE'),4)")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT locate(collate('aBc', 'UTF8_BINARY'), collate('abcabc', 'UTF8_LCASE'), 4)")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+    )
   }
 
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
@@ -1037,17 +1089,23 @@ class CollationStringExpressionsSuite
 
   test("StringTrim* functions - collation type mismatch") {
     List("TRIM", "LTRIM", "RTRIM").foreach(func => {
-      val collationMismatch = intercept[AnalysisException] {
-        sql("SELECT " + func + "(COLLATE('x', 'UTF8_LCASE'), "
-          + "COLLATE('xxaaaxx', 'UTF8_BINARY'))")
-      }
-      assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT " + func + "(COLLATE('x', 'UTF8_LCASE'), COLLATE('xxaaaxx', 'UTF8_BINARY'))")
+        },
+        errorClass = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+      )
     })
-
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UTF8_BINARY'), COLLATE('x', 'UTF8_LCASE'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UTF8_BINARY'), COLLATE('x', 'UTF8_LCASE'))")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+    )
   }
 
   // TODO: Add more tests for other string expressions
