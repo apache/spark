@@ -1853,22 +1853,15 @@ class SparkConnectPlanner(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
     fun.getFunctionName match {
       // Avro-specific functions
-      case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+      case "from_avro" if fun.getArgumentsCount == 2 =>
+        // FromAvro constructor requires 3 arguments.
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val jsonFormatSchema = extractString(children(1), "jsonFormatSchema")
-        var options = Map.empty[String, String]
-        if (fun.getArgumentsCount == 3) {
-          options = extractMapData(children(2), "Options")
-        }
-        Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
+        Some(FromAvro(children.head, children.last, Literal(null, NullType)))
 
-      case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
+      case "to_avro" if fun.getArgumentsCount == 1 =>
+        // ToAvro constructor requires 2 arguments.
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-        var jsonFormatSchema = Option.empty[String]
-        if (fun.getArgumentsCount == 2) {
-          jsonFormatSchema = Some(extractString(children(1), "jsonFormatSchema"))
-        }
-        Some(CatalystDataToAvro(children.head, jsonFormatSchema))
+        Some(ToAvro(children.head, Literal(null, StringType)))
 
       case _ => None
     }

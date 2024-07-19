@@ -1,2 +1,2 @@
-Project [to_avro(id#0L, None) AS to_avro(id)#0]
+Project [to_avro(id#0L, None) AS toavro(id, NULL)#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0]
