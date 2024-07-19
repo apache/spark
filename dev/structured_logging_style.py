@@ -73,7 +73,7 @@ def main():
                             start_char = start_pos - preceding_content.rfind("\n") - 1
                             nonmigrated_files[file].append((line_number, start_char))
 
-    if not nonmigrated_files:
+    if all(len(issues) == 0 for issues in nonmigrated_files.values()):
         print("Structured logging style check passed.", file=sys.stderr)
         sys.exit(0)
     else:
