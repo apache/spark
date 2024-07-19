@@ -18,11 +18,13 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, Union, cast
+from typing import Any, Union, cast, Tuple
 
 import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import StructType, _parse_datatype_string, Row
+from pyspark.sql.utils import has_numpy
+from pyspark.serializers import CPickleSerializer
 
 
 class StatefulProcessorHandleState(Enum):
@@ -35,14 +37,16 @@ class StatefulProcessorHandleState(Enum):
 class StateApiClient:
     def __init__(
             self,
-            state_server_id: int) -> None:
-        self._client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        server_address = f'./uds_{state_server_id}.sock'
-        self._client_socket.connect(server_address)
+            state_server_port: int,
+            key_schema: StructType) -> None:
+        self.key_schema = key_schema
+        self._client_socket = socket.socket()
+        self._client_socket.connect(("localhost", state_server_port))
         self.sockfile = self._client_socket.makefile("rwb",
                                                      int(os.environ.get("SPARK_BUFFER_SIZE",65536)))
         self.handle_state = StatefulProcessorHandleState.CREATED
         self.utf8_deserializer = UTF8Deserializer()
+        self.pickleSer = CPickleSerializer()
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         proto_state = self._get_proto_state(state)
@@ -59,8 +63,9 @@ class StateApiClient:
         else:
             raise Exception(f"Error setting handle state: {response_message.errorMessage}")
 
-    def set_implicit_key(self, key: str) -> None:
-        set_implicit_key = stateMessage.SetImplicitKey(key=key)
+    def set_implicit_key(self, key: Tuple) -> None:
+        key_bytes = self._serialize_to_bytes(self.key_schema, key)
+        set_implicit_key = stateMessage.SetImplicitKey(key=key_bytes)
         request = stateMessage.ImplicitGroupingKeyRequest(setImplicitKey=set_implicit_key)
         message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
 
@@ -96,7 +101,6 @@ class StateApiClient:
         status = response_message.statusCode
         if (status != 0):
             raise Exception(f"Error initializing value state: {response_message.errorMessage}")
-        print(f"getValueState status= {status}")
 
     def _get_proto_state(self,
                          state: StatefulProcessorHandleState) -> stateMessage.HandleState.ValueType:
@@ -127,3 +131,30 @@ class StateApiClient:
 
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
+
+    def _serialize_to_bytes(self, schema: StructType, data: Tuple) -> bytes:
+        converted = []
+        if has_numpy:
+            import numpy as np
+
+            # In order to convert NumPy types to Python primitive types.
+            for v in data:
+                if isinstance(v, np.generic):
+                    converted.append(v.tolist())
+                # Address a couple of pandas dtypes too.
+                elif hasattr(v, "to_pytimedelta"):
+                    converted.append(v.to_pytimedelta())
+                elif hasattr(v, "to_pydatetime"):
+                    converted.append(v.to_pydatetime())
+                else:
+                    converted.append(v)
+        else:
+            converted = list(data)
+
+        row_value = Row(*converted)
+        return self.pickleSer.dumps(schema.toInternal(row_value))
+
+    def _receive_and_deserialize(self):
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        return self.pickleSer.loads(bytes)

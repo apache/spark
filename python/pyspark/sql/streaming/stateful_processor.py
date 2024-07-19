@@ -59,25 +59,10 @@ class ValueState:
 
         .. versionadded:: 4.0.0
         """
-        value_str = self._value_state_client.get(self._state_name)
+        value = self._value_state_client.get(self._state_name)
         columns = [field.name for field in self.schema.fields]
-        dtypes = {}
-        for field in self.schema.fields:
-            if isinstance(field.dataType, (IntegerType, LongType, ShortType)):
-                dtypes[field.name] = 'int64'
-            elif isinstance(field.dataType, (FloatType, DoubleType, DecimalType)):
-                dtypes[field.name] = 'float64'
-            elif isinstance(field.dataType, BooleanType):
-                dtypes[field.name] = 'bool'
-            elif isinstance(field.dataType, (DateType, TimestampType)):
-                dtypes[field.name] = 'datetime64[ns]'
-            elif isinstance(field.dataType, StringType):
-                dtypes[field.name] = 'object'
-
         # Create the DataFrame using the values and schema
-        df = pd.DataFrame([[value_str]], columns=columns)
-        # Cast the columns to the appropriate types as defined in the schema
-        df = df.astype(dtypes)
+        df = pd.DataFrame([value], columns=columns)
         return df
 
     def update(self, new_value: Any) -> None:

@@ -33,9 +33,9 @@ object TimeModes {
     timeMode.toLowerCase(Locale.ROOT) match {
       case "none" | "notime" =>
         NoTime
-      case "processingTime" =>
+      case "processingtime" =>
         ProcessingTime
-      case "eventTime" =>
+      case "eventtime" =>
         EventTime
       case _ => throw new SparkIllegalArgumentException(
         errorClass = "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE",

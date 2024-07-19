@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from typing import Any, Union, cast
+from typing import Any, Union, cast, Tuple
 
 from pyspark.sql.streaming.state_api_client import StateApiClient
 import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import Row, StructType, _parse_datatype_string
 
 
 class ValueStateClient:
@@ -29,8 +29,8 @@ class ValueStateClient:
         self._state_api_client = state_api_client
 
     def exists(self, state_name: str) -> bool:
-        exists_call = stateMessage.Exists(stateName=state_name)
-        value_state_call = stateMessage.ValueStateCall(exists=exists_call)
+        exists_call = stateMessage.Exists()
+        value_state_call = stateMessage.ValueStateCall(stateName=state_name, exists=exists_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
@@ -46,8 +46,8 @@ class ValueStateClient:
             raise Exception(f"Error checking value state exists: {response_message.errorMessage}")
 
     def get(self, state_name: str) -> Any:
-        get_call = stateMessage.Get(stateName=state_name)
-        value_state_call = stateMessage.ValueStateCall(get=get_call)
+        get_call = stateMessage.Get()
+        value_state_call = stateMessage.ValueStateCall(stateName=state_name, get=get_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
@@ -55,16 +55,17 @@ class ValueStateClient:
         response_message = self._state_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status == 0):
-            return self._state_api_client._receive_str()
+            return self._state_api_client._receive_and_deserialize()
         else:
             raise Exception(f"Error getting value state: {response_message.errorMessage}")
 
-    def update(self, state_name: str, schema: Union[StructType, str], value: str) -> None:
+    def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
-        byteStr = value.encode('utf-8')
-        update_call = stateMessage.Update(stateName=state_name, schema=schema.json(), value=byteStr)
-        value_state_call = stateMessage.ValueStateCall(update=update_call)
+        bytes = self._state_api_client._serialize_to_bytes(schema, value)
+        update_call = stateMessage.ValueStateUpdate(schema=schema.json(), value=bytes)
+        value_state_call = stateMessage.ValueStateCall(stateName=state_name,
+                                                       valueStateUpdate=update_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
@@ -75,8 +76,8 @@ class ValueStateClient:
             raise Exception(f"Error updating value state: {response_message.errorMessage}")
 
     def clear(self, state_name: str) -> None:
-        clear_call = stateMessage.Clear(stateName=state_name)
-        value_state_call = stateMessage.ValueStateCall(clear=clear_call)
+        clear_call = stateMessage.Clear()
+        value_state_call = stateMessage.ValueStateCall(stateName=state_name, clear=clear_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 

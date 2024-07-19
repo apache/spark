@@ -18,18 +18,16 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
-import java.nio.file.{Files, Path}
+import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.ExecutionContext
 
-import jnr.unixsocket.UnixServerSocketChannel
-import jnr.unixsocket.UnixSocketAddress
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
@@ -64,9 +62,7 @@ class TransformWithStateInPandasPythonRunner(
   private val sqlConf = SQLConf.get
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
 
-  private val serverId = TransformWithStateInPandasStateServer.allocateServerId()
-
-  private val socketPath = s"./uds_$serverId.sock"
+  private var stateSocketSocketPort: Int = 0
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
@@ -83,28 +79,28 @@ class TransformWithStateInPandasPythonRunner(
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)
     // Also write the port number for state server
-    stream.writeInt(serverId)
+    stream.writeInt(stateSocketSocketPort)
+    PythonRDD.writeUTF(groupingKeySchema.json, stream)
   }
 
   override def compute(
       inputIterator: Iterator[InType],
       partitionIndex: Int,
       context: TaskContext): Iterator[OutType] = {
-    var serverChannel: UnixServerSocketChannel = null
+    var stateServerSocket: ServerSocket = null
     var failed = false
     try {
-      val socketFile = Path.of(socketPath)
-      Files.deleteIfExists(socketFile)
-      val serverAddress = new UnixSocketAddress(socketPath)
-      serverChannel = UnixServerSocketChannel.open()
-      serverChannel.socket().bind(serverAddress)
+      stateServerSocket = new ServerSocket( /* port = */0,
+        /* backlog = */1)
+      stateSocketSocketPort = stateServerSocket.getLocalPort
+      logWarning(s"opened socket on $stateSocketSocketPort")
     } catch {
       case e: Exception =>
         failed = true
         throw e
     } finally {
       if (failed) {
-        closeServerSocketChannelSilently(serverChannel)
+        closeServerSocketChannelSilently(stateServerSocket)
       }
     }
 
@@ -112,24 +108,23 @@ class TransformWithStateInPandasPythonRunner(
     val executionContext = ExecutionContext.fromExecutor(executor)
 
     executionContext.execute(
-      new TransformWithStateInPandasStateServer(serverChannel, processorHandle,
+      new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
         groupingKeySchema))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(s"completion listener called")
       executor.awaitTermination(10, TimeUnit.SECONDS)
       executor.shutdownNow()
-      val socketFile = Path.of(socketPath)
-      Files.deleteIfExists(socketFile)
+      closeServerSocketChannelSilently(stateServerSocket)
     }
 
     super.compute(inputIterator, partitionIndex, context)
   }
 
-  private def closeServerSocketChannelSilently(serverChannel: UnixServerSocketChannel): Unit = {
+  private def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
     try {
       logInfo(s"closing the state server socket")
-      serverChannel.close()
+      stateServerSocket.close()
     } catch {
       case e: Exception =>
         logError(s"failed to close state server socket", e)

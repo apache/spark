@@ -54,7 +54,7 @@ message ValueStateCall {
 }
 
 message SetImplicitKey {
-  string key = 1;
+  bytes key = 1;
 }
 
 message RemoveImplicitKey {

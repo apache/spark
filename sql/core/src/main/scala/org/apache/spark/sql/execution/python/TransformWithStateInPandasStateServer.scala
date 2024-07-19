@@ -17,26 +17,27 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException}
-import java.nio.channels.Channels
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
+import java.net.ServerSocket
 
 import scala.collection.mutable
 
 import com.google.protobuf.ByteString
-import jnr.unixsocket.UnixServerSocketChannel
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Encoder, Encoders, Row}
+import org.apache.spark.sql.{Encoders, Row}
+import org.apache.spark.sql.api.python.PythonSQLUtils
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.ValueState
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * This class is used to handle the state requests from the Python side.
  */
 class TransformWithStateInPandasStateServer(
-    private val serverChannel: UnixServerSocketChannel,
+    private val stateServerSocket: ServerSocket,
     private val statefulProcessorHandle: StatefulProcessorHandleImpl,
     private val groupingKeySchema: StructType)
   extends Runnable
@@ -45,18 +46,19 @@ class TransformWithStateInPandasStateServer(
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = _
 
-  private val valueStates = mutable.HashMap[String, ValueState[Any]]()
+  private val valueStates = mutable.HashMap[String, ValueState[Row]]()
 
   def run(): Unit = {
-    val channel = serverChannel.accept()
+    val listeningSocket = stateServerSocket.accept()
+    logWarning(s"listening on socket - ${listeningSocket.getLocalAddress}")
 
     inputStream = new DataInputStream(
-      Channels.newInputStream(channel))
+      new BufferedInputStream(listeningSocket.getInputStream))
     outputStream = new DataOutputStream(
-      Channels.newOutputStream(channel)
+      new BufferedOutputStream(listeningSocket.getOutputStream)
     )
 
-    while (channel.isConnected &&
+    while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
 
       try {
@@ -81,7 +83,7 @@ class TransformWithStateInPandasStateServer(
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>
-          logWarning(s"Error reading message: ${e.getMessage}")
+          logError(s"Error reading message: ${e.getMessage}", e)
           sendResponse(1, e.getMessage)
           outputStream.flush()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
@@ -92,11 +94,39 @@ class TransformWithStateInPandasStateServer(
   }
 
   private def handleRequest(message: StateRequest): Unit = {
-    if (message.getMethodCase == StateRequest.MethodCase.STATEFULPROCESSORCALL) {
-      val statefulProcessorHandleRequest = message.getStatefulProcessorCall
-      if (statefulProcessorHandleRequest.getMethodCase ==
-        StatefulProcessorCall.MethodCase.SETHANDLESTATE) {
-        val requestedState = statefulProcessorHandleRequest.getSetHandleState.getState
+    message.getMethodCase match {
+      case StateRequest.MethodCase.IMPLICITGROUPINGKEYREQUEST =>
+        handleImplicitGroupingKeyRequest(message.getImplicitGroupingKeyRequest)
+      case StateRequest.MethodCase.STATEFULPROCESSORCALL =>
+        handleStatefulProcessorCall(message.getStatefulProcessorCall)
+      case StateRequest.MethodCase.STATEVARIABLEREQUEST =>
+        handleStateVariableRequest(message.getStateVariableRequest)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private def handleImplicitGroupingKeyRequest(message: ImplicitGroupingKeyRequest): Unit = {
+    message.getMethodCase match {
+      case ImplicitGroupingKeyRequest.MethodCase.SETIMPLICITKEY =>
+        val keyBytes = message.getSetImplicitKey.getKey.toByteArray
+        // The key row is serialized as a byte array, we need to convert it back to a Row
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema,
+          ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer())
+        ImplicitGroupingKeyTracker.setImplicitKey(keyRow)
+        sendResponse(0)
+      case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+        sendResponse(0)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private def handleStatefulProcessorCall(message: StatefulProcessorCall): Unit = {
+    message.getMethodCase match {
+      case StatefulProcessorCall.MethodCase.SETHANDLESTATE =>
+        val requestedState = message.getSetHandleState.getState
         requestedState match {
           case HandleState.CREATED =>
             logInfo(s"set handle state to Created")
@@ -110,93 +140,74 @@ class TransformWithStateInPandasStateServer(
           case _ =>
         }
         sendResponse(0)
-      } else if (statefulProcessorHandleRequest.getMethodCase ==
-        StatefulProcessorCall.MethodCase.GETVALUESTATE) {
-        val stateName = statefulProcessorHandleRequest.getGetValueState.getStateName
-        val schema = statefulProcessorHandleRequest.getGetValueState.getSchema
+      case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
+        val stateName = message.getGetValueState.getStateName
+        val schema = message.getGetValueState.getSchema
         logInfo(s"initializing value state $stateName")
-        initializeState("ValueState", stateName, schema)
-      } else {
+        initializeValueState(stateName, schema)
+      case _ =>
         throw new IllegalArgumentException("Invalid method call")
-      }
-    } else if (message.getMethodCase == StateRequest.MethodCase.STATEVARIABLEREQUEST) {
-      if (message.getStateVariableRequest.getMethodCase ==
-        StateVariableRequest.MethodCase.VALUESTATECALL) {
-        if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
-          ValueStateCall.MethodCase.EXISTS) {
-          val stateName = message.getStateVariableRequest.getValueStateCall.getExists.getStateName
-          if (valueStates.contains(stateName) && valueStates(stateName).exists()) {
+    }
+  }
+
+  private def handleStateVariableRequest(message: StateVariableRequest): Unit = {
+    message.getMethodCase match {
+      case StateVariableRequest.MethodCase.VALUESTATECALL =>
+        handleValueStateRequest(message.getValueStateCall)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private def handleValueStateRequest(message: ValueStateCall): Unit = {
+    val stateName = message.getStateName
+    message.getMethodCase match {
+      case ValueStateCall.MethodCase.EXISTS =>
+        if (valueStates.contains(stateName) && valueStates(stateName).exists()) {
+          sendResponse(0)
+        } else {
+          sendResponse(-1)
+        }
+      case ValueStateCall.MethodCase.GET =>
+        if (valueStates.contains(stateName)) {
+          val valueOption = valueStates(stateName).getOption()
+          if (valueOption.isDefined) {
             sendResponse(0)
-          } else {
-            sendResponse(-1)
-          }
-        } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
-          ValueStateCall.MethodCase.GET) {
-          val stateName = message.getStateVariableRequest.getValueStateCall.getGet.getStateName
-          if (valueStates.contains(stateName)) {
-            val valueState = valueStates(stateName)
-            val valueOption = valueState.getOption()
-            if (valueOption.isDefined) {
-              sendResponse(0)
-              val value = valueOption.get.toString
-              val valueBytes = value.getBytes("UTF-8")
-              val byteLength = valueBytes.length
-              outputStream.writeInt(byteLength)
-              outputStream.write(valueBytes)
-            } else {
-              logWarning(s"state $stateName doesn't exist")
-              sendResponse(1, s"state $stateName doesn't exist")
-            }
-          } else {
-            logWarning(s"state $stateName doesn't exist")
-            sendResponse(1, s"state $stateName doesn't exist")
-          }
-        } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
-          ValueStateCall.MethodCase.UPDATE) {
-          val updateRequest = message.getStateVariableRequest.getValueStateCall.getUpdate
-          val stateName = updateRequest.getStateName
-          val updateValueString = updateRequest.getValue.toStringUtf8
-          val dataType = StructType.fromString(updateRequest.getSchema).fields(0).dataType
-          val updatedValue = castToType(updateValueString, dataType)
-          if (valueStates.contains(stateName)) {
-            valueStates(stateName).update(updatedValue)
-            sendResponse(0)
-          } else {
-            logWarning(s"state $stateName doesn't exist")
-            sendResponse(1, s"state $stateName doesn't exist")
-          }
-        } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
-          ValueStateCall.MethodCase.CLEAR) {
-          val stateName = message.getStateVariableRequest.getValueStateCall.getClear.getStateName
-          if (valueStates.contains(stateName)) {
-            valueStates(stateName).clear()
-            sendResponse(0)
+            // Serialize the value row as a byte array
+            val valueBytes = PythonSQLUtils.toPyRow(valueOption.get)
+            outputStream.writeInt(valueBytes.length)
+            outputStream.write(valueBytes)
           } else {
             logWarning(s"state $stateName doesn't exist")
             sendResponse(1, s"state $stateName doesn't exist")
           }
         } else {
-          throw new IllegalArgumentException("Invalid method call")
+          logWarning(s"state $stateName doesn't exist")
+          sendResponse(1, s"state $stateName doesn't exist")
         }
-      }
-    } else if (message.getMethodCase == StateRequest.MethodCase.IMPLICITGROUPINGKEYREQUEST) {
-      if (message.getImplicitGroupingKeyRequest.getMethodCase ==
-        ImplicitGroupingKeyRequest.MethodCase.SETIMPLICITKEY) {
-        val key = message.getImplicitGroupingKeyRequest.getSetImplicitKey.getKey
-        val groupingKeyType = groupingKeySchema.fields(0).dataType
-        val castedData = castToType(key, groupingKeyType)
-        val row = Row(castedData)
-        ImplicitGroupingKeyTracker.setImplicitKey(row)
-        sendResponse(0)
-      } else if (message.getImplicitGroupingKeyRequest.getMethodCase ==
-        ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY) {
-        ImplicitGroupingKeyTracker.removeImplicitKey()
-        sendResponse(0)
-      } else {
+      case ValueStateCall.MethodCase.VALUESTATEUPDATE =>
+        val byteArray = message.getValueStateUpdate.getValue.toByteArray
+        val schema = StructType.fromString(message.getValueStateUpdate.getSchema)
+        // The value row is serialized as a byte array, we need to convert it back to a Row
+        val valueRow = PythonSQLUtils.toJVMRow(byteArray, schema,
+          ExpressionEncoder(schema).resolveAndBind().createDeserializer())
+        if (valueStates.contains(stateName)) {
+          valueStates(stateName).update(valueRow)
+          sendResponse(0)
+        } else {
+          logWarning(s"state $stateName doesn't exist")
+          sendResponse(1, s"state $stateName doesn't exist")
+        }
+      case ValueStateCall.MethodCase.CLEAR =>
+        if (valueStates.contains(stateName)) {
+          valueStates(stateName).clear()
+          sendResponse(0)
+        } else {
+          logWarning(s"state $stateName doesn't exist")
+          sendResponse(1, s"state $stateName doesn't exist")
+        }
+      case _ =>
         throw new IllegalArgumentException("Invalid method call")
-      }
-    } else {
-      throw new IllegalArgumentException("Invalid method call")
     }
   }
 
@@ -212,52 +223,14 @@ class TransformWithStateInPandasStateServer(
     outputStream.write(responseMessageBytes)
   }
 
-  private def initializeState(stateType: String, stateName: String, schema: String): Unit = {
-    if (stateType == "ValueState") {
-      if (!valueStates.contains(stateName)) {
-        val structType = StructType.fromString(schema)
-        val field = structType.fields(0)
-        val encoder = getEncoder(field.dataType)
-        val state = statefulProcessorHandle.getValueState(stateName, encoder)
-          .asInstanceOf[ValueState[Any]]
+  private def initializeValueState(stateName: String, schema: String): Unit = {
+    if (!valueStates.contains(stateName)) {
+        val state = statefulProcessorHandle.getValueState[Row](stateName,
+          Encoders.row(StructType.fromString(schema)))
         valueStates.put(stateName, state)
         sendResponse(0)
       } else {
         sendResponse(1, s"state $stateName already exists")
       }
-    } else {
-      sendResponse(1, s"state type $stateType is not supported")
-    }
-  }
-
-  private def castToType(value: String, dataType: DataType): Any = {
-    dataType match {
-      case IntegerType => value.toInt
-      case LongType => value.toLong
-      case DoubleType => value.toDouble
-      case FloatType => value.toFloat
-      case BooleanType => value.toBoolean
-      case _ => value
-    }
-  }
-
-  private def getEncoder(dataType: DataType): Encoder[_] = {
-    dataType match {
-      case IntegerType => Encoders.INT
-      case LongType => Encoders.LONG
-      case DoubleType => Encoders.DOUBLE
-      case FloatType => Encoders.FLOAT
-      case BooleanType => Encoders.BOOLEAN
-      case _ => Encoders.STRING
-    }
-  }
-}
-
-object TransformWithStateInPandasStateServer {
-  @volatile private var id = 0
-
-  def allocateServerId(): Int = synchronized {
-    id = id + 1
-    return id
   }
 }

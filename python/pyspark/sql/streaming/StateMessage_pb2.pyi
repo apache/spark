@@ -49,12 +49,10 @@ class StatefulProcessorCall(_message.Message):
     def __init__(self, setHandleState: _Optional[_Union[SetHandleState, _Mapping]] = ..., getValueState: _Optional[_Union[StateCallCommand, _Mapping]] = ..., getListState: _Optional[_Union[StateCallCommand, _Mapping]] = ..., getMapState: _Optional[_Union[StateCallCommand, _Mapping]] = ...) -> None: ...
 
 class StateVariableRequest(_message.Message):
-    __slots__ = ("valueStateCall", "listStateCall")
+    __slots__ = ("valueStateCall",)
     VALUESTATECALL_FIELD_NUMBER: _ClassVar[int]
-    LISTSTATECALL_FIELD_NUMBER: _ClassVar[int]
     valueStateCall: ValueStateCall
-    listStateCall: ListStateCall
-    def __init__(self, valueStateCall: _Optional[_Union[ValueStateCall, _Mapping]] = ..., listStateCall: _Optional[_Union[ListStateCall, _Mapping]] = ...) -> None: ...
+    def __init__(self, valueStateCall: _Optional[_Union[ValueStateCall, _Mapping]] = ...) -> None: ...
 
 class ImplicitGroupingKeyRequest(_message.Message):
     __slots__ = ("setImplicitKey", "removeImplicitKey")
@@ -73,64 +71,48 @@ class StateCallCommand(_message.Message):
     def __init__(self, stateName: _Optional[str] = ..., schema: _Optional[str] = ...) -> None: ...
 
 class ValueStateCall(_message.Message):
-    __slots__ = ("exists", "get", "update", "clear")
+    __slots__ = ("stateName", "exists", "get", "valueStateUpdate", "clear")
+    STATENAME_FIELD_NUMBER: _ClassVar[int]
     EXISTS_FIELD_NUMBER: _ClassVar[int]
     GET_FIELD_NUMBER: _ClassVar[int]
-    UPDATE_FIELD_NUMBER: _ClassVar[int]
+    VALUESTATEUPDATE_FIELD_NUMBER: _ClassVar[int]
     CLEAR_FIELD_NUMBER: _ClassVar[int]
+    stateName: str
     exists: Exists
     get: Get
-    update: Update
+    valueStateUpdate: ValueStateUpdate
     clear: Clear
-    def __init__(self, exists: _Optional[_Union[Exists, _Mapping]] = ..., get: _Optional[_Union[Get, _Mapping]] = ..., update: _Optional[_Union[Update, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
-
-class ListStateCall(_message.Message):
-    __slots__ = ("exists", "get", "clear")
-    EXISTS_FIELD_NUMBER: _ClassVar[int]
-    GET_FIELD_NUMBER: _ClassVar[int]
-    CLEAR_FIELD_NUMBER: _ClassVar[int]
-    exists: Exists
-    get: Get
-    clear: Clear
-    def __init__(self, exists: _Optional[_Union[Exists, _Mapping]] = ..., get: _Optional[_Union[Get, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
+    def __init__(self, stateName: _Optional[str] = ..., exists: _Optional[_Union[Exists, _Mapping]] = ..., get: _Optional[_Union[Get, _Mapping]] = ..., valueStateUpdate: _Optional[_Union[ValueStateUpdate, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
 
 class SetImplicitKey(_message.Message):
     __slots__ = ("key",)
     KEY_FIELD_NUMBER: _ClassVar[int]
-    key: str
-    def __init__(self, key: _Optional[str] = ...) -> None: ...
+    key: bytes
+    def __init__(self, key: _Optional[bytes] = ...) -> None: ...
 
 class RemoveImplicitKey(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
 class Exists(_message.Message):
-    __slots__ = ("stateName",)
-    STATENAME_FIELD_NUMBER: _ClassVar[int]
-    stateName: str
-    def __init__(self, stateName: _Optional[str] = ...) -> None: ...
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class Get(_message.Message):
-    __slots__ = ("stateName",)
-    STATENAME_FIELD_NUMBER: _ClassVar[int]
-    stateName: str
-    def __init__(self, stateName: _Optional[str] = ...) -> None: ...
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
-class Update(_message.Message):
-    __slots__ = ("stateName", "schema", "value")
-    STATENAME_FIELD_NUMBER: _ClassVar[int]
+class ValueStateUpdate(_message.Message):
+    __slots__ = ("schema", "value")
     SCHEMA_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
-    stateName: str
     schema: str
     value: bytes
-    def __init__(self, stateName: _Optional[str] = ..., schema: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, schema: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
 
 class Clear(_message.Message):
-    __slots__ = ("stateName",)
-    STATENAME_FIELD_NUMBER: _ClassVar[int]
-    stateName: str
-    def __init__(self, stateName: _Optional[str] = ...) -> None: ...
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class SetHandleState(_message.Message):
     __slots__ = ("state",)
