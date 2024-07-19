@@ -1944,34 +1944,35 @@ class SparkConnectPlanner(
       case "unwrap_udt" if fun.getArgumentsCount == 1 =>
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
-      case "from_json"
-          if Seq(2, 3).contains(fun.getArgumentsCount) &&
-            isJsonSchema(fun.getArguments(1)) =>
+      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val schema = CharVarcharUtils
-          .failIfHasCharVarchar(DataType.fromJson(extractString(children(1), "schema")))
-        var options = Map.empty[String, String]
-        if (children.length == 3) {
-          options = extractMapData(children(2), "Options")
+        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
+          val children = fun.getArgumentsList.asScala.map(transformExpression)
+          val schema = CharVarcharUtils.failIfHasCharVarchar(dataType)
+          var options = Map.empty[String, String]
+          if (children.length == 3) {
+            options = extractMapData(children(2), "Options")
+          }
+          JsonToStructs(schema = schema, options = options, child = children.head)
         }
-        Some(JsonToStructs(schema = schema, options = options, child = children.head))
 
-      case "from_xml"
-          if Seq(2, 3).contains(fun.getArgumentsCount)
-            && isJsonSchema(fun.getArguments(1)) =>
+      case "from_xml" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // XmlToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val dataType = DataType.fromJson(extractString(children(1), "schema"))
-        val schema = dataType match {
-          case t: StructType => CharVarcharUtils.failIfHasCharVarchar(t).asInstanceOf[StructType]
-          case _ => throw DataTypeErrors.failedParsingStructTypeError(dataType.sql)
+        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
+          val children = fun.getArgumentsList.asScala.map(transformExpression)
+          val schema = dataType match {
+            case t: StructType =>
+              CharVarcharUtils
+                .failIfHasCharVarchar(t)
+                .asInstanceOf[StructType]
+            case _ => throw DataTypeErrors.failedParsingStructTypeError(dataType.sql)
+          }
+          var options = Map.empty[String, String]
+          if (children.length == 3) {
+            options = extractMapData(children(2), "Options")
+          }
+          XmlToStructs(schema = schema, options = options, child = children.head)
         }
-        var options = Map.empty[String, String]
-        if (children.length == 3) {
-          options = extractMapData(children(2), "Options")
-        }
-        Some(XmlToStructs(schema = schema, options = options, child = children.head))
 
       // Avro-specific functions
       case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
@@ -2155,16 +2156,20 @@ class SparkConnectPlanner(
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
   }
 
-  // Check whether this proto expression is a literal string representing a JSON-formatted schema
-  private def isJsonSchema(exp: proto.Expression): Boolean = {
+  // Extract the schema from a literal string representing a JSON-formatted schema
+  private def extractDataTypeFromJSON(exp: proto.Expression): Option[DataType] = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL =>
         exp.getLiteral.getLiteralTypeCase match {
           case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            Try { DataType.fromJson(exp.getLiteral.getString) }.isSuccess
-          case _ => false
+            try {
+              Some(DataType.fromJson(exp.getLiteral.getString))
+            } catch {
+              case _: Exception => None
+            }
+          case _ => None
         }
-      case _ => false
+      case _ => None
     }
   }
 
