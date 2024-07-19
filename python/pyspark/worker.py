@@ -848,7 +848,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE:
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_transform_with_state_pandas_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
@@ -1438,7 +1438,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
     ):
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
@@ -1450,7 +1450,7 @@ def read_udfs(pickleSer, infile, eval_type):
         state_object_schema = None
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE:
+        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
             state_server_port = read_int(infile)
             key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 
@@ -1479,7 +1479,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 state_object_schema,
                 arrow_max_records_per_batch,
             )
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE:
+        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
             )
@@ -1647,7 +1647,7 @@ def read_udfs(pickleSer, infile, eval_type):
             vals = [a[o] for o in parsed_offsets[0][1]]
             return f(keys, vals)
 
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE:
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         from itertools import tee
 
         # We assume there is only one UDF here because grouped map doesn't

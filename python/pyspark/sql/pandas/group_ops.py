@@ -462,7 +462,7 @@ class PandasGroupedOpsMixin:
         udf = pandas_udf(
             transformWithStateUDF,  # type: ignore[call-overload]
             returnType=outputStructType,
-            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE,
+            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
         )
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
