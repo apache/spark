@@ -199,7 +199,7 @@ abstract class CompositeKeyTTLStateImpl[K](
     stateName: String,
     store: StateStore,
     keyExprEnc: ExpressionEncoder[Any],
-    uerKeyEncoder: Encoder[K],
+    userKeyEncoder: Encoder[K],
     ttlExpirationMs: Long)
   extends TTLState {
 
@@ -207,11 +207,11 @@ abstract class CompositeKeyTTLStateImpl[K](
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
   private val keySchema = getCompositeKeyTTLRowSchema(
-    keyExprEnc.schema, uerKeyEncoder.schema
+    keyExprEnc.schema, userKeyEncoder.schema
   )
 
   private val keyRowEncoder = new CompositeKeyTTLEncoder[K](
-    keyExprEnc, uerKeyEncoder)
+    keyExprEnc, userKeyEncoder)
 
   // empty row used for values
   private val EMPTY_ROW =
@@ -249,7 +249,7 @@ abstract class CompositeKeyTTLStateImpl[K](
     }.foreach { kv =>
       numRemovedElements += clearIfExpired(
         kv.key.getStruct(1, keyExprEnc.schema.length),
-        kv.key.getStruct(2, uerKeyEncoder.schema.length))
+        kv.key.getStruct(2, userKeyEncoder.schema.length))
       store.remove(kv.key, ttlColumnFamilyName)
     }
     numRemovedElements
@@ -266,7 +266,7 @@ abstract class CompositeKeyTTLStateImpl[K](
         CompositeKeyTTLRow(
           expirationMs = kv.key.getLong(0),
           groupingKey = kv.key.getStruct(1, keyExprEnc.schema.length),
-          userKey = kv.key.getStruct(2, uerKeyEncoder.schema.length)
+          userKey = kv.key.getStruct(2, userKeyEncoder.schema.length)
         )
       }
     }

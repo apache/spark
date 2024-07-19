@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types._
@@ -240,33 +240,36 @@ class CompositeKeyStateEncoder[K, V](
 
 /** Class for TTL with single key serialization */
 class SingleKeyTTLEncoder(
-  keyExprEnc: ExpressionEncoder[Any]) {
+    keyExprEnc: ExpressionEncoder[Any]) {
 
-  private val TTLKeySchema = getSingleKeyTTLRowSchema(keyExprEnc.schema)
+  private val ttlKeyProjection = UnsafeProjection.create(
+    getSingleKeyTTLRowSchema(keyExprEnc.schema))
+
   def encodeTTLRow(expirationMs: Long, groupingKey: UnsafeRow): UnsafeRow = {
-    UnsafeProjection.create(TTLKeySchema).apply(
+    ttlKeyProjection.apply(
       InternalRow(expirationMs, groupingKey.asInstanceOf[InternalRow]))
   }
 }
 
 /** Class for TTL with composite key serialization */
 class CompositeKeyTTLEncoder[K](
-  keyExprEnc: ExpressionEncoder[Any],
-  userKeyEnc: Encoder[K]) {
+    keyExprEnc: ExpressionEncoder[Any],
+    userKeyEnc: Encoder[K]) {
 
-  private val TTLKeySchema = getCompositeKeyTTLRowSchema(
-    keyExprEnc.schema, userKeyEnc.schema)
+  private val ttlKeyProjection = UnsafeProjection.create(
+    getCompositeKeyTTLRowSchema(keyExprEnc.schema, userKeyEnc.schema))
+
   def encodeTTLRow(
       expirationMs: Long,
       groupingKey: UnsafeRow,
       userKey: UnsafeRow): UnsafeRow = {
-    UnsafeProjection.create(TTLKeySchema).apply(
-      new GenericInternalRow(
-        Array[Any](expirationMs,
+    ttlKeyProjection.apply(
+      InternalRow(
+        expirationMs,
         groupingKey.getStruct(0, keyExprEnc.schema.length)
           .asInstanceOf[InternalRow],
         userKey.getStruct(0, userKeyEnc.schema.length)
-          .asInstanceOf[InternalRow])))
+          .asInstanceOf[InternalRow]))
   }
 }
 

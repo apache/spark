@@ -165,11 +165,10 @@ class MultipleValueStatesTTLProcessor(
 
 // Class to verify state schema is correctly written for state vars.
 class TTLProcessorWithCompositeTypes(
-      ttlKey: String,
-      noTtlKey: String,
-      ttlConfig: TTLConfig)
-  extends MultipleValueStatesTTLProcessor(
-    ttlKey: String, noTtlKey: String, ttlConfig: TTLConfig) {
+    ttlKey: String,
+    noTtlKey: String,
+    ttlConfig: TTLConfig)
+  extends MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig) {
   @transient private var _listStateWithTTL: ListStateImplWithTTL[TestClass] = _
   @transient private var _mapStateWithTTL: MapStateImplWithTTL[POJOTestClass, String] = _
 
