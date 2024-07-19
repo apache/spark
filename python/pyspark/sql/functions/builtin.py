@@ -4039,7 +4039,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> df = df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_r2("y", "x")).show()
     +-------------+
     |regr_r2(y, x)|
