@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPOSE
 import org.apache.spark.sql.types.{DataType, StringType}
 
 
@@ -30,52 +31,52 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     dataTypes.reduce(TypeCoercion.findTightestCommonType(_, _).getOrElse(StringType))
   }
 
-  private def collectValues(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case transpose @ Transpose(indexColumn, child, _, _) =>
-        // Cast the index column to StringType and collect its values
-        val indexColumnAsString = Cast(indexColumn, StringType).asInstanceOf[NamedExpression]
-        val projectPlan = Project(Seq(indexColumnAsString), child)
-        val queryExecution = sparkSession.sessionState.executePlan(projectPlan)
-        val collectedValues = queryExecution.toRdd.collect().map(row => row.getString(0)).toSeq
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(TRANSPOSE)) {
+    case transpose @ Transpose(indexColumn, child, _, _) =>
+      // Cast the index column to StringType
+      val indexColumnAsString = Cast(indexColumn, StringType)
+      val aliasIndexColumnAsString = Alias(indexColumnAsString, "indexColumnAsString")()
 
-        // Determine the least common type of the non-index columns
-        val nonIndexColumns = child.output.filterNot(_.name == indexColumn.asInstanceOf[Attribute].name)
-        val nonIndexTypes = nonIndexColumns.map(_.dataType)
-        val commonType = leastCommonType(nonIndexTypes)
+      // Collect index column values (as new column names in transposed frame)
+      val projectPlan = Project(Seq(aliasIndexColumnAsString.asInstanceOf[NamedExpression]), child)
+      val queryExecution = sparkSession.sessionState.executePlan(projectPlan)
+      val collectedValues = queryExecution.toRdd.collect().map(row => row.getString(0)).toSeq
 
-        // Cast non-index columns to the least common type
-        val castedChild = child.transformExpressions {
-          case a: Attribute if nonIndexColumns.map(_.name).contains(a.name) =>
-            Cast(a, commonType)
-        }
+      // Determine the least common type of the non-index columns
+      val nonIndexColumns = child.output.filterNot(
+        _.name == indexColumn.asInstanceOf[Attribute].name)
+      val nonIndexTypes = nonIndexColumns.map(_.dataType)
+      val commonType = leastCommonType(nonIndexTypes)
 
-        // Collect original non-index column names
-        val originalColNames = nonIndexColumns.map(_.name)
+      // Cast non-index columns to the least common type
+      val castedChild = child.transformExpressions {
+        case a: Attribute if nonIndexColumns.map(_.name).contains(a.name) =>
+          Cast(a, commonType)
+      }
 
-        // Prune the index column from the resulting plan
-        val prunedProject = Project(nonIndexColumns.map(_.asInstanceOf[NamedExpression]), castedChild)
+      // Collect original non-index column names
+      val originalColNames = nonIndexColumns.map(_.name)
 
-        // Construct output attributes
-        val indexColAttr = AttributeReference(
-          indexColumn.asInstanceOf[Attribute].name, indexColumn.asInstanceOf[Attribute].dataType)()
-        val valueAttrs = nonIndexColumns.map { attr =>
-          AttributeReference(attr.name, attr.dataType)()
-        }
-        val outputAttributes = indexColAttr +: valueAttrs
+      // Prune the index column from the resulting plan
+      val prunedProject = Project(nonIndexColumns.map(_.asInstanceOf[NamedExpression]), castedChild)
 
-        Transpose(
-          indexColumn,
-          prunedProject,
-          originalColNames = originalColNames,
-          output = outputAttributes
-        )
-    }
-  }
+      // Construct output attributes
+      val indexColAttr = AttributeReference(
+        indexColumnAsString.name, indexColumnAsString.dataType)()
+      val valueAttrs = collectedValues.map { value =>
+        AttributeReference(
+          value,
+          value.getClass.getDeclaredField("dataType").get(value).asInstanceOf[DataType]
+        )()
+      }
+      val outputAttributes = indexColAttr +: valueAttrs
 
-
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    collectValues(plan)
-    plan // Return the original plan unchanged
+      Transpose(
+        indexColumn,
+        prunedProject,
+        originalColNames = originalColNames,
+        output = outputAttributes
+      )
   }
 }

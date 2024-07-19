@@ -1010,7 +1010,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case t: logical.Transpose =>
-        execution.TransposeExec(planLater(t.child)) :: Nil
+        execution.TransposeExec(
+          t.indexColumn, planLater(t.child), t.originalColNames, t.output
+        ) :: Nil
       case r: logical.RepartitionByExpression =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
           REBALANCE_PARTITIONS_BY_NONE

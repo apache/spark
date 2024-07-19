@@ -35,7 +35,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
@@ -120,7 +119,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 }
 
 case class TransposeExec(
-    indexColumn: Attribute,
+    indexColumn: Expression,
     child: SparkPlan,
     originalColNames: Seq[String],
     override val output: Seq[Attribute]) extends UnaryExecNode {
