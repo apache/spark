@@ -3474,15 +3474,15 @@
     ],
     "sqlState" : "42846"
   },
-  "PARQUET_TYPE_NOT_SUPPORTED" : {
-    "message" : [
-      "Parquet type not yet supported: <parquetType>."
-    ],
-    "sqlState" : "42846"
-  },
   "PARQUET_TYPE_NOT_RECOGNIZED" : {
     "message" : [
       "Unrecognized Parquet type: <field>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_SUPPORTED" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
     ],
     "sqlState" : "42846"
   },
