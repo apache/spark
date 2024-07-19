@@ -92,7 +92,7 @@ class SingleStatementExec(
   /**
    * Data returned after execution.
    */
-  var data: Option[Array[Row]] = None
+  var result: Option[Array[Row]] = None
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -108,8 +108,10 @@ class SingleStatementExec(
 
   def execute(session: SparkSession): Unit = {
     isExecuted = true
-    val result = Some(Dataset.ofRows(session, parsedPlan).collect())
-    if (collectResult) data = result
+    val rows = Some(Dataset.ofRows(session, parsedPlan).collect())
+    if (collectResult) {
+      result = rows
+    }
   }
 }
 
@@ -126,39 +128,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
   protected var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
 
-  protected lazy val treeIterator: Iterator[CompoundStatementExec] =
-    new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = {
-        val childHasNext = curr match {
-          case Some(body: NonLeafStatementExec) => body.getTreeIterator.hasNext
-          case Some(_: LeafStatementExec) => true
-          case None => false
-          case _ => throw SparkException.internalError(
-            "Unknown statement type encountered during SQL script interpretation.")
-        }
-        localIterator.hasNext || childHasNext
-      }
-
-      @scala.annotation.tailrec
-      override def next(): CompoundStatementExec = {
-        curr match {
-          case None => throw SparkException.internalError(
-            "No more elements to iterate through in the current SQL compound statement.")
-          case Some(statement: LeafStatementExec) =>
-            curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-            statement
-          case Some(body: NonLeafStatementExec) =>
-            if (body.getTreeIterator.hasNext) {
-              body.getTreeIterator.next()
-            } else {
-              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-              next()
-            }
-          case _ => throw SparkException.internalError(
-            "Unknown statement type encountered during SQL script interpretation.")
-        }
-      }
-    }
+  protected lazy val treeIterator: Iterator[CompoundStatementExec] = null
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
@@ -178,7 +148,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  */
 class CompoundBodyExec(
       statements: Seq[CompoundStatementExec],
-      session: SparkSession = null)
+      session: SparkSession)
   extends CompoundNestedStatementIteratorExec(statements) {
 
   override protected lazy val treeIterator: Iterator[CompoundStatementExec] =

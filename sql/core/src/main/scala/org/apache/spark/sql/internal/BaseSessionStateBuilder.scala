@@ -148,9 +148,7 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-   * Script interpreter that produces execution plan for sql batch procedural language.
-   *
-   * Note: this depends on the `conf` field.
+   * Script interpreter that produces execution plan and executes SQL scripts.
    */
   protected lazy val scriptingInterpreter: SqlScriptingInterpreter = {
     extensions.buildInterpreter(session, SqlScriptingInterpreter(session))
