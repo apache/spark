@@ -451,7 +451,15 @@ class RocksDBFileManager(
       // is to clean up files if maxSeenVersion fails to be initialized
       if (maxSeenVersion.isDefined) {
         val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
-        if (versionsToDelete < minVersionsToDelete) return
+        if (versionsToDelete < minVersionsToDelete) {
+          logInfo(log"Skipping deleting files." +
+            log"${MDC(LogKeys.VERSIONS_TO_DELETE, versionsToDelete)}" +
+            log" stale versions are not enough for batch deletion.")
+          logInfo(log"Estimated maximum version is " +
+            log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
+            log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
+          return
+        }
       }
     }
 
