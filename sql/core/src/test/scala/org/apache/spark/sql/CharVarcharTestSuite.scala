@@ -992,12 +992,12 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t2 (c1 CHAR(3), c2 CHAR(5)) USING $format LOCATION '$dir'")
           // Comparing CHAR column with CHAR column compares the padded values.
           checkAnswer(
-            sql("SELECT c1 = c2 FROM t2"),
-            Seq(Row(true), Row(true), Row(true), Row(true))
+            sql("SELECT c1 = c2, c2 = c1 FROM t2"),
+            Seq(Row(true, true), Row(true, true), Row(true, true), Row(true, true))
           )
           checkAnswer(
-            sql("SELECT c1 IN (c2) FROM t2"),
-            Seq(Row(true), Row(true), Row(true), Row(true))
+            sql("SELECT c1 IN (c2), c2 IN (c1) FROM t2"),
+            Seq(Row(true, true), Row(true, true), Row(true, true), Row(true, true))
           )
         }
       }
