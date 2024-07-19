@@ -172,7 +172,7 @@ object KMeansModel extends Loader[KMeansModel] {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
       val dataRDD = sc.parallelize(model.clusterCentersWithNorm.zipWithIndex.toImmutableArraySeq)
         .map { case (p, id) =>
           Cluster(id, p.vector)
@@ -207,7 +207,7 @@ object KMeansModel extends Loader[KMeansModel] {
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
          ~ ("k" -> model.k) ~ ("distanceMeasure" -> model.distanceMeasure)
          ~ ("trainingCost" -> model.trainingCost)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
       val dataRDD = sc.parallelize(model.clusterCentersWithNorm.zipWithIndex.toImmutableArraySeq)
         .map { case (p, id) =>
           Cluster(id, p.vector)

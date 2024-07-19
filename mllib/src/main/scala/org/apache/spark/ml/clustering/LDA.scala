@@ -659,7 +659,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
         oldModel.topicConcentration, oldModel.gammaShape)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 

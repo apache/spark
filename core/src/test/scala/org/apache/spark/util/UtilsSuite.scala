@@ -1084,6 +1084,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Set some secret keys
     val secretKeys = Seq(
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.hadoop.fs.s3.awsAccessKeyId",
       "spark.hadoop.fs.s3a.access.key",
       "spark.my.password",
       "spark.my.sECreT")

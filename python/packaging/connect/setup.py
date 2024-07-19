@@ -105,6 +105,8 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.reshape",
         "pyspark.pandas.tests.connect.series",
         "pyspark.pandas.tests.connect.window",
+        "pyspark.logger.tests",
+        "pyspark.logger.tests.connect",
     ]
 
 try:
@@ -175,6 +177,7 @@ try:
         "pyspark.resource",
         "pyspark.errors",
         "pyspark.errors.exceptions",
+        "pyspark.logger",
     ]
 
     setup(

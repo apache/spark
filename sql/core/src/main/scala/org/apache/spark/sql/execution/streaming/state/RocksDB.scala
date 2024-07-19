@@ -189,8 +189,16 @@ class RocksDB(
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
-          lastSnapshotVersion = 0L
+          synchronized {
+            if (latestSnapshot.isDefined) {
+              oldSnapshots += latestSnapshot.get
+              latestSnapshot = None
+            }
+          }
         }
+
+        // reset the last snapshot version to the latest available snapshot version
+        lastSnapshotVersion = latestSnapshotVersion
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {

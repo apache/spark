@@ -102,3 +102,31 @@ select url_decode(null)
 -- !query analysis
 Project [url_decode(cast(null as string)) AS url_decode(NULL)#x]
 +- OneRowRelation
+
+
+-- !query
+select try_url_decode('https%3A%2F%2Fspark.apache.org')
+-- !query analysis
+Project [try_url_decode(https%3A%2F%2Fspark.apache.org) AS try_url_decode(https%3A%2F%2Fspark.apache.org)#x]
++- OneRowRelation
+
+
+-- !query
+select try_url_decode('http%3A%2F%2spark.apache.org')
+-- !query analysis
+Project [try_url_decode(http%3A%2F%2spark.apache.org) AS try_url_decode(http%3A%2F%2spark.apache.org)#x]
++- OneRowRelation
+
+
+-- !query
+select try_url_decode('inva lid://user:pass@host/file\\;param?query\\;p2')
+-- !query analysis
+Project [try_url_decode(inva lid://user:pass@host/file\;param?query\;p2) AS try_url_decode(inva lid://user:pass@host/file\;param?query\;p2)#x]
++- OneRowRelation
+
+
+-- !query
+select try_url_decode(null)
+-- !query analysis
+Project [try_url_decode(null) AS try_url_decode(NULL)#x]
++- OneRowRelation
