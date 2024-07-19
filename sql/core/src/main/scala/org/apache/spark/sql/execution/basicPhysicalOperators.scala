@@ -119,28 +119,27 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     copy(child = newChild)
 }
 
-case class TransposeExec(child: SparkPlan) extends UnaryExecNode {
-  override def output: Seq[Attribute] = child.output
+case class TransposeExec(
+    indexColumn: Attribute,
+    child: SparkPlan,
+    originalColNames: Seq[String],
+    override val output: Seq[Attribute]) extends UnaryExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
     // scalastyle:off println
     val collectedRows = child.executeCollect()
-    val numCols = if (collectedRows.nonEmpty) collectedRows.head.numFields else 0
-    val numRows = collectedRows.length
 
-    val originalMatrix = Array.ofDim[String](numRows + 1, numCols)
-    for (j <- 0 until numCols) {
-      originalMatrix(0)(j) = child.output(j).name
-    }
-    for (i <- 0 until numRows) {
+    val matrixNumCols = if (collectedRows.nonEmpty) collectedRows.head.numFields else 0
+    val matrixNumRows = collectedRows.length
+
+    val originalMatrix = Array.ofDim[Any](matrixNumRows, matrixNumCols)
+    for (i <- 0 until matrixNumRows) {
       val row = collectedRows(i)
-      for (j <- 0 until numCols) {
-        originalMatrix(i + 1)(j) = row.get(j, child.output(j).dataType).toString
+      for (j <- 0 until matrixNumCols) {
+        originalMatrix(i)(j) = row.get(j, child.output(j).dataType)
       }
     }
 
-    val matrixNumRows = originalMatrix.length
-    val matrixNumCols = if (numRows > 0) originalMatrix(0).length else 0
     val transposedMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows)
     for (i <- 0 until matrixNumRows) {
       for (j <- 0 until matrixNumCols) {
@@ -150,9 +149,20 @@ case class TransposeExec(child: SparkPlan) extends UnaryExecNode {
       }
     }
 
-    val data = transposedMatrix.tail.map { row =>
-      val utf8Row = row.map(value => UTF8String.fromString(value.toString))
-      InternalRow.fromSeq(utf8Row.toIndexedSeq)
+    // Insert the first column with originalColNames
+    val finalMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows + 1)
+    for (i <- 0 until matrixNumCols) {
+      finalMatrix(i)(0) = originalColNames(i)
+    }
+    for (i <- 0 until matrixNumCols) {
+      for (j <- 1 until matrixNumRows + 1) {
+        finalMatrix(i)(j) = transposedMatrix(i)(j - 1)
+      }
+    }
+
+    // Convert to RDD[InternalRow]
+    val data = finalMatrix.tail.map { row =>
+      InternalRow.fromSeq(row.toIndexedSeq)
     }
     sparkContext.parallelize(data.toSeq, 1)
   }
