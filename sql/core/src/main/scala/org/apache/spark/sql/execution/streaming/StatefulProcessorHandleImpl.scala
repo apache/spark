@@ -87,7 +87,7 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
-  extends StatefulProcessorHandleImplBase(timeMode) with Logging {
+  extends StatefulProcessorHandleImplBase(timeMode, keyEncoder) with Logging {
   import StatefulProcessorHandleState._
 
   /**
@@ -297,8 +297,8 @@ class StatefulProcessorHandleImpl(
  * actually done. We need this class because we can only collect the schemas after
  * the StatefulProcessor is initialized.
  */
-class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
-  extends StatefulProcessorHandleImplBase(timeMode) {
+class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
+  extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
 
   private[sql] val columnFamilySchemaUtils = ColumnFamilySchemaUtilsV1
 
@@ -312,7 +312,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
-      getValueStateSchema(stateName, false)
+      getValueStateSchema(stateName, keyExprEnc, valEncoder, false)
     columnFamilySchemas.put(stateName, colFamilySchema)
     null.asInstanceOf[ValueState[T]]
   }
@@ -323,7 +323,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
-      getValueStateSchema(stateName, true)
+      getValueStateSchema(stateName, keyExprEnc, valEncoder, true)
     columnFamilySchemas.put(stateName, colFamilySchema)
     null.asInstanceOf[ValueState[T]]
   }
@@ -331,7 +331,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
-      getListStateSchema(stateName, false)
+      getListStateSchema(stateName, keyExprEnc, valEncoder, false)
     columnFamilySchemas.put(stateName, colFamilySchema)
     null.asInstanceOf[ListState[T]]
   }
@@ -342,7 +342,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       ttlConfig: TTLConfig): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
-      getListStateSchema(stateName, true)
+      getListStateSchema(stateName, keyExprEnc, valEncoder, true)
     columnFamilySchemas.put(stateName, colFamilySchema)
     null.asInstanceOf[ListState[T]]
   }
@@ -353,7 +353,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
-      getMapStateSchema(stateName, userKeyEnc, false)
+      getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, false)
     columnFamilySchemas.put(stateName, colFamilySchema)
     null.asInstanceOf[MapState[K, V]]
   }
@@ -365,7 +365,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
-      getMapStateSchema(stateName, userKeyEnc, true)
+      getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, true)
     columnFamilySchemas.put(stateName, colFamilySchema)
     null.asInstanceOf[MapState[K, V]]
   }

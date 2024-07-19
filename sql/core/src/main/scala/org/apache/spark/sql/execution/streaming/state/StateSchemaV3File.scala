@@ -50,7 +50,7 @@ class StateSchemaV3File(
     fileManager.mkdirs(metadataPath)
   }
 
-  private def deserialize(in: InputStream): List[ColumnFamilySchema] = {
+  private[sql] def deserialize(in: InputStream): List[ColumnFamilySchema] = {
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
 
     if (!lines.hasNext) {
@@ -63,7 +63,7 @@ class StateSchemaV3File(
     lines.map(ColumnFamilySchemaV1.fromJson).toList
   }
 
-  private def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
+  private[sql] def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
     out.write(s"v${StateSchemaV3File.VERSION}".getBytes(UTF_8))
     out.write('\n')
     out.write(schemas.map(_.json).mkString("\n").getBytes(UTF_8))
