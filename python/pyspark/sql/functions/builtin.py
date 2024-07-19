@@ -3674,12 +3674,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
@@ -3690,12 +3685,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
@@ -3706,12 +3696,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
@@ -3722,12 +3707,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
@@ -3738,12 +3718,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
@@ -3779,12 +3754,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
     +---------------+------+
     |regr_avgy(y, x)|avg(y)|
@@ -3795,12 +3765,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
     +---------------+------+
     |regr_avgy(y, x)|avg(y)|
@@ -3811,12 +3776,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
     +---------------+------+
     |regr_avgy(y, x)|avg(y)|
@@ -3827,33 +3787,23 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
     +------------------+------+
     |   regr_avgy(y, x)|avg(y)|
     +------------------+------+
-    |1.6666666666666667|  1.75|
+    |1.6666666666666...|  1.75|
     +------------------+------+
 
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
     +---------------+------------------+
     |regr_avgy(y, x)|            avg(y)|
     +---------------+------------------+
-    |            1.5|1.6666666666666667|
+    |            1.5|1.6666666666666...|
     +---------------+------------------+
     """
     return _invoke_function_over_columns("regr_avgy", y, x)
@@ -3884,12 +3834,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
@@ -3900,12 +3845,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
@@ -3916,12 +3856,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
@@ -3932,12 +3867,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
@@ -3948,12 +3878,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
     >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
@@ -3990,12 +3915,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 1), (2, 2), (3, 3), (4, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
@@ -4006,12 +3926,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
@@ -4022,12 +3937,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
@@ -4038,12 +3948,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 1), (2, None), (3, 3), (4, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
@@ -4054,12 +3959,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 1), (2, None), (None, 3), (4, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
@@ -4095,28 +3995,18 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_r2("y", "x")).show()
-    +------------------+
-    |     regr_r2(y, x)|
-    +------------------+
-    |0.2727272727272726|
-    +------------------+
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
 
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_r2("y", "x")).show()
     +-------------+
     |regr_r2(y, x)|
@@ -4127,12 +4017,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_r2("y", "x")).show()
     +-------------+
     |regr_r2(y, x)|
@@ -4143,28 +4028,18 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_r2("y", "x")).show()
-    +------------------+
-    |     regr_r2(y, x)|
-    +------------------+
-    |0.7500000000000001|
-    +------------------+
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
 
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_r2("y", "x")).show()
     +-------------+
     |regr_r2(y, x)|
@@ -4200,12 +4075,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 1), (2, 2), (3, 3), (4, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_slope("y", "x")).show()
     +----------------+
     |regr_slope(y, x)|
@@ -4216,12 +4086,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_slope("y", "x")).show()
     +----------------+
     |regr_slope(y, x)|
@@ -4232,12 +4097,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_slope("y", "x")).show()
     +----------------+
     |regr_slope(y, x)|
@@ -4248,12 +4108,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 1), (2, None), (3, 3), (4, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_slope("y", "x")).show()
     +----------------+
     |regr_slope(y, x)|
@@ -4264,12 +4119,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 1), (2, None), (None, 3), (4, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_slope("y", "x")).show()
     +----------------+
     |regr_slope(y, x)|
@@ -4305,28 +4155,18 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_sxx("y", "x")).show()
-    +------------------+
-    |    regr_sxx(y, x)|
-    +------------------+
-    |2.7499999999999996|
-    +------------------+
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
 
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_sxx("y", "x")).show()
     +--------------+
     |regr_sxx(y, x)|
@@ -4337,12 +4177,7 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_sxx("y", "x")).show()
     +--------------+
     |regr_sxx(y, x)|
@@ -4353,33 +4188,23 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_sxx("y", "x")).show()
-    +--------------+
-    |regr_sxx(y, x)|
-    +--------------+
-    |           2.0|
-    +--------------+
+    +-----------------+
+    |   regr_sxx(y, x)|
+    +-----------------+
+    |4.666666666666...|
+    +-----------------+
 
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_sxx("y", "x")).show()
     +--------------+
     |regr_sxx(y, x)|
     +--------------+
-    |           2.0|
+    |           4.5|
     +--------------+
     """
     return _invoke_function_over_columns("regr_sxx", y, x)
@@ -4410,28 +4235,18 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_sxy("y", "x")).show()
-    +------------------+
-    |    regr_sxy(y, x)|
-    +------------------+
-    |0.7499999999999998|
-    +------------------+
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
 
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_sxy("y", "x")).show()
     +--------------+
     |regr_sxy(y, x)|
@@ -4442,12 +4257,7 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_sxy("y", "x")).show()
     +--------------+
     |regr_sxy(y, x)|
@@ -4458,33 +4268,23 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_sxy("y", "x")).show()
-    +--------------+
-    |regr_sxy(y, x)|
-    +--------------+
-    |           1.0|
-    +--------------+
+    +-----------------+
+    |   regr_sxy(y, x)|
+    +-----------------+
+    |4.666666666666...|
+    +-----------------+
 
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_sxy("y", "x")).show()
     +--------------+
     |regr_sxy(y, x)|
     +--------------+
-    |           1.0|
+    |           4.5|
     +--------------+
     """
     return _invoke_function_over_columns("regr_sxy", y, x)
@@ -4515,28 +4315,18 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 1: All paris are non-null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, 2), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_syy("y", "x")).show()
-    +------------------+
-    |    regr_syy(y, x)|
-    +------------------+
-    |0.7499999999999999|
-    +------------------+
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
 
     Example 2: All paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, None)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
     >>> df.select(sf.regr_syy("y", "x")).show()
     +--------------+
     |regr_syy(y, x)|
@@ -4547,12 +4337,7 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 3: All paris's y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(None, 1)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
     >>> df.select(sf.regr_syy("y", "x")).show()
     +--------------+
     |regr_syy(y, x)|
@@ -4563,33 +4348,23 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Example 4: Some paris's x values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (2, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_syy("y", "x")).show()
-    +------------------+
-    |    regr_syy(y, x)|
-    +------------------+
-    |0.6666666666666666|
-    +------------------+
+    +-----------------+
+    |   regr_syy(y, x)|
+    +-----------------+
+    |4.666666666666...|
+    +-----------------+
 
     Example 5: Some paris's x or y values are null
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import IntegerType, StructField, StructType
-    >>> schema = StructType([
-    ...   StructField('y', IntegerType(), True),
-    ...   StructField('x', IntegerType(), True)
-    ... ])
-    >>> df = spark.createDataFrame([(1, 2), (2, None), (None, 3), (2, 4)], schema)
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
     >>> df.select(sf.regr_syy("y", "x")).show()
     +--------------+
     |regr_syy(y, x)|
     +--------------+
-    |           0.5|
+    |           4.5|
     +--------------+
     """
     return _invoke_function_over_columns("regr_syy", y, x)
