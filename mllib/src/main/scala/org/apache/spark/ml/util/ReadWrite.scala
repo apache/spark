@@ -411,8 +411,10 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue] = None): Unit = {
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = getMetadataToSave(instance, sc, extraMetadata, paramMap)
-    val spark = SparkSession.getActiveSession.get
-    spark.createDataFrame(Seq(Tuple1(metadataJson))).repartition(1).write.text(metadataPath)
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    // Note that we should write single file. If there are more than one row
+    // it produces more partitions.
+    spark.createDataFrame(Seq(Tuple1(metadataJson))).write.text(metadataPath)
   }
 
   /**

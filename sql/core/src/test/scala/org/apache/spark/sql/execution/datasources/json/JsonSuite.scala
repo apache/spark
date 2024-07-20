@@ -4010,3 +4010,8 @@ class JsonLegacyTimeParserSuite extends JsonSuite {
       .sparkConf
       .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
 }
+
+class JsonUnsafeRowSuite extends JsonSuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.JSON_USE_UNSAFE_ROW, true)
+}

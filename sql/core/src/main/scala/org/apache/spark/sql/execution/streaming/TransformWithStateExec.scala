@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -80,6 +80,9 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
+  // dummy value schema, the real schema will get during state variable init time
+  private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
       // TODO: check if we can return true only if actual timers are registered, or there is
@@ -99,7 +102,7 @@ case class TransformWithStateExec(
    * @return a new instance of the driver processor handle
    */
   private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
-    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode)
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -420,9 +423,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              KEY_ROW_SCHEMA,
-              VALUE_ROW_SCHEMA,
-              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+              keyEncoder.schema,
+              DUMMY_VALUE_ROW_SCHEMA,
+              NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
               storeConf = storeConf,
@@ -440,9 +443,9 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          keyEncoder.schema,
+          DUMMY_VALUE_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true
@@ -490,9 +493,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+      keyEncoder.schema,
+      DUMMY_VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
