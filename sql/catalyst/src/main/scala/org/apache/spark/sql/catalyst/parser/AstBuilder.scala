@@ -31,7 +31,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
@@ -385,7 +385,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         val (relationCtx, cols, partition, ifPartitionNotExists, byName)
         = visitInsertIntoTable(table)
         withIdentClause(relationCtx, ident => {
-          InsertIntoStatement(
+          val insertIntoStatement = InsertIntoStatement(
             createUnresolvedRelation(relationCtx, ident),
             partition,
             cols,
@@ -393,6 +393,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
             overwrite = false,
             ifPartitionNotExists,
             byName)
+          val optimizeInsertIntoValues = conf.getConf(
+            SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER)
+          if (optimizeInsertIntoValues) {
+            EvaluateUnresolvedInlineTable.evaluate(insertIntoStatement)
+          } else {
+            insertIntoStatement
+          }
         })
       case table: InsertOverwriteTableContext =>
         val (relationCtx, cols, partition, ifPartitionNotExists, byName)
