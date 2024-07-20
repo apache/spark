@@ -91,9 +91,9 @@ class BucketedRandomProjectionLSHModel private[ml](
   }
 
   override protected[ml] def createHashFunction: Vector => Array[Vector] = {
-    val hashVec = new DenseVector(Array.ofDim[Double](randMatrix.numRows))
     val localBucketLength = $(bucketLength)
     (elems: Vector) => {
+      val hashVec = new DenseVector(Array.ofDim[Double](randMatrix.numRows))
       BLAS.gemv(1.0 / localBucketLength, randMatrix, elems, 0.0, hashVec)
       hashVec.values.map(h => Vectors.dense(h.floor))
     }
