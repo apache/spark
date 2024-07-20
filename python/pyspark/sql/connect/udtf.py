@@ -192,6 +192,14 @@ class UDTFRegistration:
         name: str,
         f: "UserDefinedTableFunction",
     ) -> "UserDefinedTableFunction":
+        if not isinstance(f, UserDefinedTableFunction):
+            raise PySparkTypeError(
+                error_class="CANNOT_REGISTER_UDTF",
+                message_parameters={
+                    "name": name,
+                },
+            )
+
         if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
             raise PySparkTypeError(
                 error_class="INVALID_UDTF_EVAL_TYPE",
