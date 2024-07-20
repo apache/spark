@@ -63,10 +63,7 @@ class TransformWithStateInPandasStateServer(
         val version = inputStream.readInt()
         if (version != -1) {
           assert(version == 0)
-          val messageLen = inputStream.readInt()
-          val messageBytes = new Array[Byte](messageLen)
-          inputStream.read(messageBytes)
-          val message = StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
+          val message = parseProtoMessage()
           handleRequest(message)
           outputStream.flush()
         }
@@ -84,6 +81,13 @@ class TransformWithStateInPandasStateServer(
       }
     }
     logInfo(s"done from the state server thread")
+  }
+
+  private def parseProtoMessage(): StateRequest = {
+    val messageLen = inputStream.readInt()
+    val messageBytes = new Array[Byte](messageLen)
+    inputStream.read(messageBytes)
+    StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
   }
 
   private def handleRequest(message: StateRequest): Unit = {
