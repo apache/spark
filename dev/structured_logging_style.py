@@ -81,9 +81,9 @@ def main():
             for line_number, start_char in issues:
                 print(f"[error] {file_path}:{line_number}:{start_char}", file=sys.stderr)
                 print(
-                    '[error]\tPlease use the Structured Logging Framework for logging messages '
+                    "[error]\tPlease use the Structured Logging Framework for logging messages "
                     'with variables. For example: log"...${{MDC(TASK_ID, taskId)}}..."'
-                    '\n\tRefer to the guidelines in the file `internal/Logging.scala`.',
+                    "\n\tRefer to the guidelines in the file `internal/Logging.scala`.",
                     file=sys.stderr,
                 )
 
