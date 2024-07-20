@@ -76,6 +76,11 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    */
   protected[ml] def hashFunction(elems: Vector): Array[Vector]
 
+  /*
+   * Creates the transform function using the given param map.
+   */
+  protected[ml] def createHashFunction: Vector => Array[Vector] = hashFunction
+
   /**
    * Calculate the distance between two different keys using the distance metric corresponding
    * to the hashFunction.
@@ -96,7 +101,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction(_: Vector))
+    val transformUDF = udf(createHashFunction)
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
