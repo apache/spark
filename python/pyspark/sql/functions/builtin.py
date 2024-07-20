@@ -11538,8 +11538,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        idx = lit(idx) if isinstance(idx, int) else idx
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 @_try_remote_functions
@@ -11575,17 +11574,7 @@ def regexp_replace(
     >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
     [Row(d='-----')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
-    if isinstance(pattern, str):
-        pattern_col = _create_column_from_literal(pattern)
-    else:
-        pattern_col = _to_java_column(pattern)
-    if isinstance(replacement, str):
-        replacement_col = _create_column_from_literal(replacement)
-    else:
-        replacement_col = _to_java_column(replacement)
-    return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 @_try_remote_functions
@@ -11658,8 +11647,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        idx = lit(idx) if isinstance(idx, int) else idx
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 @_try_remote_functions
