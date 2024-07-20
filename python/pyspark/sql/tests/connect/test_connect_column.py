@@ -824,12 +824,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         )
 
         self.assert_eq(
-            cdf.select(
-                cdf.a % cdf["b"], cdf["a"] % 2, CF.try_remainder(CF.lit(12), cdf.c)
-            ).toPandas(),
-            sdf.select(
-                sdf.a % sdf["b"], sdf["a"] % 2, SF.try_remainder(SF.lit(12), sdf.c)
-            ).toPandas(),
+            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2, CF.try_mod(CF.lit(12), cdf.c)).toPandas(),
+            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2, SF.try_mod(SF.lit(12), sdf.c)).toPandas(),
         )
 
         self.assert_eq(
