@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaV3File, TestClass}
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
@@ -265,24 +265,24 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
         val keySchema = new StructType().add("value", StringType)
-        val schema0 = ColumnFamilySchemaV1(
+        val schema0 = StateStoreColFamilySchema(
           "valueStateTTL",
           keySchema,
           new StructType().add("value",
             new StructType()
               .add("value", IntegerType, false))
           .add("ttlExpirationMs", LongType),
-          NoPrefixKeyStateEncoderSpec(keySchema),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
-        val schema1 = ColumnFamilySchemaV1(
+        val schema1 = StateStoreColFamilySchema(
           "valueState",
           keySchema,
           new StructType().add("value", IntegerType, false),
-          NoPrefixKeyStateEncoderSpec(keySchema),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
-        val schema2 = ColumnFamilySchemaV1(
+        val schema2 = StateStoreColFamilySchema(
           "listState",
           keySchema,
           new StructType().add("value",
@@ -290,7 +290,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               .add("id", LongType, false)
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
-          NoPrefixKeyStateEncoderSpec(keySchema),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
 
@@ -300,14 +300,14 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val compositeKeySchema = new StructType()
           .add("key", new StructType().add("value", StringType))
           .add("userKey", userKeySchema)
-        val schema3 = ColumnFamilySchemaV1(
+        val schema3 = StateStoreColFamilySchema(
           "mapState",
           compositeKeySchema,
           new StructType().add("value",
             new StructType()
               .add("value", StringType))
             .add("ttlExpirationMs", LongType),
-          PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
+          Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
           Option(userKeySchema)
         )
 
@@ -333,8 +333,11 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           CheckNewAnswer(),
           Execute { q =>
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val schemaFile = new StateSchemaV3File(hadoopConf, stateSchemaPath.getName)
-            val colFamilySeq = schemaFile.deserialize(fm.open(schemaFilePath))
+            val providerId = StateStoreProviderId(StateStoreId(
+              checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+            val checker = new StateSchemaCompatibilityChecker(providerId,
+              hadoopConf, Some(schemaFilePath))
+            val colFamilySeq = checker.readSchemaFile()
 
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
               q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
