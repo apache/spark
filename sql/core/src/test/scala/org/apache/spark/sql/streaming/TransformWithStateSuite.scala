@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException, TestClass}
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -805,82 +805,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 serialization and deserialization" +
-    " works with one batch") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-        val testKeyEncoder = Encoders.STRING
-        val testValueEncoder = Encoders.scalaInt
-        val schema = List(ColumnFamilySchemaV1(
-          "countState",
-          testKeyEncoder.schema,
-          testValueEncoder.schema,
-          NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
-          None
-        ))
-
-        val schemaFile = new StateSchemaV3File(
-          spark.sessionState.newHadoopConf(), checkpointDir.getCanonicalPath)
-        val path = schemaFile.addWithUUID(0, schema)
-
-        assert(schemaFile.getWithPath(path) == schema)
-      }
-    }
-  }
-
-  test("transformWithState - verify StateSchemaV3 serialization and deserialization" +
-    " works with multiple batches") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-        val testKeyEncoder = Encoders.STRING
-        val testValueEncoder = Encoders.scalaInt
-        val schema0 = List(ColumnFamilySchemaV1(
-          "countState",
-          testKeyEncoder.schema,
-          testValueEncoder.schema,
-          NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
-          None
-        ))
-
-        val schema1 = List(
-          ColumnFamilySchemaV1(
-            "countState",
-            testKeyEncoder.schema,
-            testValueEncoder.schema,
-            NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
-            None
-          ),
-          ColumnFamilySchemaV1(
-            "mostRecent",
-            testKeyEncoder.schema,
-            testValueEncoder.schema,
-            NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
-            None
-          )
-        )
-
-        val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(),
-          checkpointDir.getCanonicalPath)
-        val path0 = schemaFile.addWithUUID(0, schema0)
-
-        assert(schemaFile.getWithPath(path0) == schema0)
-
-        // test the case where we are trying to add the schema after
-        // restarting after a few batches
-        val path1 = schemaFile.addWithUUID(3, schema1)
-        val latestSchema = schemaFile.getWithPath(path1)
-
-        assert(latestSchema == schema1)
-      }
-    }
-  }
-
   test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -894,20 +818,20 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
         val keySchema = new StructType().add("value", StringType)
-        val schema0 = ColumnFamilySchemaV1(
+        val schema0 = StateStoreColFamilySchema(
           "countState",
           keySchema,
           new StructType().add("value", LongType, false),
-          NoPrefixKeyStateEncoderSpec(keySchema),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
-        val schema1 = ColumnFamilySchemaV1(
+        val schema1 = StateStoreColFamilySchema(
           "listState",
           keySchema,
           new StructType()
               .add("id", LongType, false)
               .add("name", StringType),
-          NoPrefixKeyStateEncoderSpec(keySchema),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
 
@@ -917,11 +841,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val compositeKeySchema = new StructType()
           .add("key", new StructType().add("value", StringType))
           .add("userKey", userKeySchema)
-        val schema2 = ColumnFamilySchemaV1(
+        val schema2 = StateStoreColFamilySchema(
           "mapState",
           compositeKeySchema,
           new StructType().add("value", StringType),
-          PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
+          Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
           Option(userKeySchema)
         )
 
@@ -937,9 +861,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a", "b"),
           CheckNewAnswer(("a", "1"), ("b", "1")),
           Execute { q =>
+            q.lastProgress.runId
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val schemaFile = new StateSchemaV3File(hadoopConf, stateSchemaPath.getName)
-            val colFamilySeq = schemaFile.deserialize(fm.open(schemaFilePath))
+            val providerId = StateStoreProviderId(StateStoreId(
+              checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+            val checker = new StateSchemaCompatibilityChecker(providerId,
+              hadoopConf, Some(schemaFilePath))
+            val colFamilySeq = checker.readSchemaFile()
 
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
               q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)

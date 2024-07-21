@@ -19,52 +19,32 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
 
-trait ColumnFamilySchemaUtils {
-  def getValueStateSchema[T](
-      stateName: String,
-      keyEncoder: ExpressionEncoder[Any],
-      valEncoder: Encoder[T],
-      hasTtl: Boolean): ColumnFamilySchema
-
-  def getListStateSchema[T](
-      stateName: String,
-      keyEncoder: ExpressionEncoder[Any],
-      valEncoder: Encoder[T],
-      hasTtl: Boolean): ColumnFamilySchema
-
-  def getMapStateSchema[K, V](
-      stateName: String,
-      keyEncoder: ExpressionEncoder[Any],
-      userKeyEnc: Encoder[K],
-      valEncoder: Encoder[V],
-      hasTtl: Boolean): ColumnFamilySchema
-}
-object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
+object StateStoreColumnFamilySchemaUtils {
 
   def getValueStateSchema[T](
       stateName: String,
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
-      hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
+      hasTtl: Boolean): StateStoreColFamilySchema = {
+   StateStoreColFamilySchema(
       stateName,
       keyEncoder.schema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      NoPrefixKeyStateEncoderSpec(keyEncoder.schema))
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
   }
 
   def getListStateSchema[T](
       stateName: String,
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
-      hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
+      hasTtl: Boolean): StateStoreColFamilySchema = {
+  StateStoreColFamilySchema(
       stateName,
       keyEncoder.schema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      NoPrefixKeyStateEncoderSpec(keyEncoder.schema))
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
   }
 
   def getMapStateSchema[K, V](
@@ -72,13 +52,13 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       keyEncoder: ExpressionEncoder[Any],
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
-      hasTtl: Boolean): ColumnFamilySchemaV1 = {
+      hasTtl: Boolean): StateStoreColFamilySchema = {
     val compositeKeySchema = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
-    new ColumnFamilySchemaV1(
+    StateStoreColFamilySchema(
       stateName,
       compositeKeySchema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
+      Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
       Some(userKeyEnc.schema))
   }
 }
