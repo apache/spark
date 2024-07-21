@@ -1950,7 +1950,7 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
+  def try_mod(left: Column, right: Column): Column = Column.fn("try_mod", left, right)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
