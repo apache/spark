@@ -3349,19 +3349,15 @@ def unix_timestamp(
 unix_timestamp.__doc__ = pysparkfuncs.unix_timestamp.__doc__
 
 
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("from_utc_timestamp", timestamp, tz)
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 from_utc_timestamp.__doc__ = pysparkfuncs.from_utc_timestamp.__doc__
 
 
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("to_utc_timestamp", timestamp, tz)
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 to_utc_timestamp.__doc__ = pysparkfuncs.to_utc_timestamp.__doc__

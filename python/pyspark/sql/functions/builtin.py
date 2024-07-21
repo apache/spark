@@ -9144,7 +9144,7 @@ def unix_timestamp(
 
 
 @_try_remote_functions
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
@@ -9192,11 +9192,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    if isinstance(tz, Column):
-        tz = _to_java_column(tz)
-    return _invoke_function("from_utc_timestamp", _to_java_column(timestamp), tz)
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 @_try_remote_functions
@@ -9248,11 +9244,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    if isinstance(tz, Column):
-        tz = _to_java_column(tz)
-    return _invoke_function("to_utc_timestamp", _to_java_column(timestamp), tz)
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 @_try_remote_functions
