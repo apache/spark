@@ -25,6 +25,7 @@ object StateSchemaUtils {
   def getValueStateSchema[T](stateName: String, hasTtl: Boolean): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
       stateName,
+      -1,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
         VALUE_ROW_SCHEMA_WITH_TTL
@@ -37,6 +38,7 @@ object StateSchemaUtils {
   def getListStateSchema[T](stateName: String, hasTtl: Boolean): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
       stateName,
+      -1,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
         VALUE_ROW_SCHEMA_WITH_TTL
@@ -52,6 +54,7 @@ object StateSchemaUtils {
       hasTtl: Boolean): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
       stateName,
+      -1,
       COMPOSITE_KEY_ROW_SCHEMA,
       if (hasTtl) {
         VALUE_ROW_SCHEMA_WITH_TTL

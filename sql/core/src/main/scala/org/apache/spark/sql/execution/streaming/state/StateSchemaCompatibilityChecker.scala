@@ -33,12 +33,14 @@ import org.apache.spark.sql.types.{DataType, StructType}
 // Result returned after validating the schema of the state store for schema changes
 case class StateSchemaValidationResult(
     evolvedSchema: Boolean,
-    schemaPath: String
+    schemaPath: String,
+    newColFamilySchemas: List[StateStoreColFamilySchema] = List.empty
 )
 
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(
     colFamilyName: String,
+    colFamilyId: Short,
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None
@@ -127,7 +129,7 @@ class StateSchemaCompatibilityChecker(
   private def check(
       oldSchema: StateStoreColFamilySchema,
       newSchema: StateStoreColFamilySchema,
-      ignoreValueSchema: Boolean) : Unit = {
+      ignoreValueSchema: Boolean) : Boolean = {
     val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
       oldSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
@@ -135,6 +137,7 @@ class StateSchemaCompatibilityChecker(
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
+      false
     } else if (!schemasCompatible(storedKeySchema, keySchema)) {
       throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
         keySchema.toString)
@@ -143,26 +146,38 @@ class StateSchemaCompatibilityChecker(
         valueSchema.toString)
     } else {
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
+      true
     }
   }
 
   def validateAndMaybeEvolveStateSchema(
       newStateSchema: List[StateStoreColFamilySchema],
-      ignoreValueSchema: Boolean): Boolean = {
+      ignoreValueSchema: Boolean): (Boolean, List[StateStoreColFamilySchema]) = {
     val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
     val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName)
 
+    // get maxId of existingStateSchemaList
+    var maxId = existingStateSchemaList.map(_.colFamilyId).maxOption.getOrElse(-1)
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
       createSchemaFile(newStateSchemaList)
-      true
+      (true, newStateSchemaList)
     } else {
       // validate if the new schema is compatible with the existing schema
+      val newList = existingStateSchemaList.lazyZip(newStateSchemaList).map {
+        case (existingStateSchema, newStateSchema) =>
+          if (check(existingStateSchema, newStateSchema, ignoreValueSchema)) {
+            maxId += 1
+            newStateSchema.copy(colFamilyId = maxId)
+          } else {
+            existingStateSchema
+          }
+      }
       existingStateSchemaList.lazyZip(newStateSchemaList).foreach {
         case (existingStateSchema, newStateSchema) =>
           check(existingStateSchema, newStateSchema, ignoreValueSchema)
       }
-      false
+      (false, newList)
     }
   }
 
@@ -229,12 +244,15 @@ object StateSchemaCompatibilityChecker {
     // compatibility checker for value schema as well.
 
     var evolvedSchema = false
+    var evolvedSchemas: List[StateStoreColFamilySchema] = List.empty
     val result = Try(
       checker.validateAndMaybeEvolveStateSchema(newStateSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue)
     ).toEither.fold(Some(_),
-      hasEvolvedSchema => {
+      result => {
+        val (hasEvolvedSchema, schemas) = result
         evolvedSchema = hasEvolvedSchema
+        evolvedSchemas = schemas
         None
       })
 

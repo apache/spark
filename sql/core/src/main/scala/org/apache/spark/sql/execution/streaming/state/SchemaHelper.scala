@@ -63,9 +63,11 @@ object SchemaHelper {
     override def version: Int = 1
 
     override def read(inputStream: FSDataInputStream): List[StateStoreColFamilySchema] = {
+      val colFamilyId = inputStream.readShort()
       val keySchemaStr = inputStream.readUTF()
       val valueSchemaStr = inputStream.readUTF()
       List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        colFamilyId,
         StructType.fromString(keySchemaStr),
         StructType.fromString(valueSchemaStr)))
     }
@@ -75,10 +77,12 @@ object SchemaHelper {
     override def version: Int = 2
 
     override def read(inputStream: FSDataInputStream): List[StateStoreColFamilySchema] = {
+      val colFamilyId = inputStream.readShort()
       val keySchemaStr = readJsonSchema(inputStream)
       val valueSchemaStr = readJsonSchema(inputStream)
 
       List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        colFamilyId,
         StructType.fromString(keySchemaStr),
         StructType.fromString(valueSchemaStr)))
     }
@@ -91,9 +95,11 @@ object SchemaHelper {
       val numEntries = inputStream.readInt()
       (0 until numEntries).map { _ =>
         val colFamilyName = inputStream.readUTF()
+        val colFamilyId = inputStream.readShort()
         val keySchemaStr = readJsonSchema(inputStream)
         val valueSchemaStr = readJsonSchema(inputStream)
         StateStoreColFamilySchema(colFamilyName,
+          colFamilyId,
           StructType.fromString(keySchemaStr),
           StructType.fromString(valueSchemaStr))
       }.toList
@@ -156,6 +162,7 @@ object SchemaHelper {
         outputStream: FSDataOutputStream): Unit = {
       assert(stateStoreColFamilySchema.length == 1)
       val stateSchema = stateStoreColFamilySchema.head
+      outputStream.writeShort(0)
       outputStream.writeUTF(stateSchema.keySchema.json)
       outputStream.writeUTF(stateSchema.valueSchema.json)
     }
@@ -169,7 +176,7 @@ object SchemaHelper {
         outputStream: FSDataOutputStream): Unit = {
       assert(stateStoreColFamilySchema.length == 1)
       val stateSchema = stateStoreColFamilySchema.head
-
+      outputStream.writeShort(0)
       writeJsonSchema(outputStream, stateSchema.keySchema.json)
       writeJsonSchema(outputStream, stateSchema.valueSchema.json)
     }
@@ -184,6 +191,7 @@ object SchemaHelper {
       outputStream.writeInt(stateStoreColFamilySchema.size)
       stateStoreColFamilySchema.foreach { colFamilySchema =>
         outputStream.writeUTF(colFamilySchema.colFamilyName)
+        outputStream.writeShort(colFamilySchema.colFamilyId)
         writeJsonSchema(outputStream, colFamilySchema.keySchema.json)
         writeJsonSchema(outputStream, colFamilySchema.valueSchema.json)
       }
