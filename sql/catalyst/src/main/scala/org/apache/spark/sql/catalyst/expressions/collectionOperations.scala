@@ -5206,6 +5206,9 @@ case class ArrayCompact(child: Expression)
 
   override def prettyName: String = "array_compact"
 
+  override def dataType: ArrayType =
+    child.dataType.asInstanceOf[ArrayType].copy(containsNull = false)
+
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
     copy(child = newChild)
 }
