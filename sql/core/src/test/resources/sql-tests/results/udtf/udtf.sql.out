@@ -1096,6 +1096,29 @@ NULL	1.0
 
 
 -- !query
+SELECT * FROM
+    InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(SELECT 1 AS X), unresolved_column)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unresolved_column`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 93,
+    "stopIndex" : 109,
+    "fragment" : "unresolved_column"
+  } ]
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

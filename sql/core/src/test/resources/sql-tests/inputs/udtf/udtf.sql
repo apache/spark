@@ -159,6 +159,12 @@ SELECT * FROM UDTFPartitionByIndexingBug(
             1.0 AS double_col
     )
 );
+-- Exercise a query with both a valid TABLE argument and an invalid unresolved column reference.
+-- The 'eval' method of this UDTF would later throw an exception, but that is not relevant here
+-- because the analysis of this query should fail before that point. We just want to make sure that
+-- this analysis failure returns a reasonable error message.
+SELECT * FROM
+    InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(SELECT 1 AS X), unresolved_column);
 
 -- cleanup
 DROP VIEW t1;
