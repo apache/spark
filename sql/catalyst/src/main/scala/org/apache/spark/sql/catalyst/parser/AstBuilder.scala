@@ -204,10 +204,11 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
 
-
-
     WhileStatement(
-      expression(ctx.booleanExpression()),
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(ctx.booleanExpression()), "condition")()),
+          OneRowRelation())),
       visitCompoundBody(ctx.compoundBody()),
       Some(labelText))
   }
