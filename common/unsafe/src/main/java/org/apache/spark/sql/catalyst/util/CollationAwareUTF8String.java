@@ -188,13 +188,45 @@ public class CollationAwareUTF8String {
       final UTF8String target,
       final UTF8String lowercasePattern,
       int endPos) {
-    assert endPos <= target.numChars();
-    for (int len = 0; len <= endPos; ++len) {
-      if (target.substring(endPos - len, endPos).toLowerCase().equals(lowercasePattern)) {
-        return len;
+    assert endPos >= 0;
+    // Use code point iterators for efficient string search.
+    Iterator<Integer> targetIterator = target.reverseCodePointIterator();
+    Iterator<Integer> patternIterator = lowercasePattern.reverseCodePointIterator();
+    // Skip to startPos in the target string.
+    for (int i = endPos; i < target.numChars(); ++i) {
+      if (targetIterator.hasNext()) {
+        targetIterator.next();
+      } else {
+        return MATCH_NOT_FOUND;
       }
     }
-    return MATCH_NOT_FOUND;
+    // Compare the characters in the target and pattern strings.
+    int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
+    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+      if (codePointBuffer != -1) {
+        targetCodePoint = codePointBuffer;
+        codePointBuffer = -1;
+      } else {
+        // Use buffered lowercase code point iteration to handle one-to-many case mappings.
+        targetCodePoint = getLowercaseCodePoint(targetIterator.next());
+        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
+          targetCodePoint = CODE_POINT_COMBINING_DOT;
+          codePointBuffer = CODE_POINT_LOWERCASE_I;
+        }
+        ++matchLength;
+      }
+      patternCodePoint = patternIterator.next();
+      if (targetCodePoint != patternCodePoint) {
+        return MATCH_NOT_FOUND;
+      }
+    }
+    // If the pattern string has more characters, or the match is found at the middle of a
+    // character that maps to multiple characters in lowercase, then match is not found.
+    if (patternIterator.hasNext() || codePointBuffer != -1) {
+      return MATCH_NOT_FOUND;
+    }
+    // If all characters are equal, return the length of the match in the target string.
+    return matchLength;
   }
 
   /**
