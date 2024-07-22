@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
@@ -62,6 +62,33 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
     }
   }
 }
+
+class RunningCountStatefulProcessorInt extends StatefulProcessor[String, String, (String, String)]
+  with Logging {
+  @transient protected var _countState: ValueState[Int] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+}
+
 
 // Class to verify stateful processor usage with adding processing time timers
 class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
@@ -882,6 +909,104 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             ).map(_.toString))
           },
           StopStream
+        )
+      }
+    }
+  }
+
+  test("transformWithState - verify that OperatorStateMetadataV2" +
+    " file is being written correctly") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+
+        val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+        checkAnswer(df, Seq(
+          Row(0, "transformWithStateExec", "default", 5, 0L, 0L,
+           """{"timeMode":"NoTime","outputMode":"Update"}"""),
+          Row(0, "transformWithStateExec", "default", 5, 1L, 1L,
+           """{"timeMode":"NoTime","outputMode":"Update"}""")
+        ))
+      }
+    }
+  }
+
+  test("transformWithState - verify OperatorStateMetadataV2 serialization and deserialization" +
+    " works") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val metadata = OperatorStateMetadataV2(
+          OperatorInfoV1(0, "transformWithStateExec"),
+          Array(StateStoreMetadataV2("default", 0, 0, "path")),
+          """{"timeMode":"NoTime","outputMode":"Update"}""")
+        val metadataLog = new OperatorStateMetadataLog(
+          spark.sessionState.newHadoopConf(),
+          checkpointDir.getCanonicalPath)
+        metadataLog.add(0, metadata)
+        assert(metadataLog.get(0).isDefined)
+        // assert that each of the fields are the same
+        val metadataV2 = metadataLog.get(0).get.asInstanceOf[OperatorStateMetadataV2]
+        assert(metadataV2.operatorInfo == metadata.operatorInfo)
+        assert(metadataV2.stateStoreInfo.sameElements(metadata.stateStoreInfo))
+        assert(metadataV2.operatorPropertiesJson == metadata.operatorPropertiesJson)
+      }
+    }
+  }
+
+  test("test that invalid schema evolution fails query for column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorInt(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreValueSchemaNotCompatible] {
+            (t: Throwable) => {
+              assert(t.getMessage.contains("Please check number and type of fields."))
+            }
+          }
         )
       }
     }
