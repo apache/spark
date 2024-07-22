@@ -119,6 +119,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitCompoundOrSingleStatement(
       ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!SQLConf.get.sqlScriptingEnabled) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled()
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())

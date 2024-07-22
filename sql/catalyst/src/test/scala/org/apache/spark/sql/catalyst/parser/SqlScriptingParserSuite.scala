@@ -324,4 +324,20 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .replace("END", "")
       .trim
   }
+
+  test("SQL Scripting not enabled") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+      parameters = Map("sqlScriptingEnabled" -> "test"))
+  }
 }
