@@ -42,7 +42,7 @@ private[sql] object SqlScriptingErrors extends QueryErrorsBase {
 
   def sqlScriptingNotEnabled(): Throwable = {
     new SparkException(
-      errorClass = "SQL_SCRIPTING_NOT_ENABLED",
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
       cause = null,
       messageParameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
   }
