@@ -124,7 +124,7 @@
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.25.1</protobuf.version>
+    <protobuf.version>3.25.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.2</zookeeper.version>
@@ -225,7 +225,7 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>16.1.0</arrow.version>
+    <arrow.version>17.0.0</arrow.version>
     <ammonite.version>3.0.0-M2</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->

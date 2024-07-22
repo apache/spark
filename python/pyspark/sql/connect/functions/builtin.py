@@ -934,11 +934,11 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
 
-def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("try_remainder", left, right)
+def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_mod", left, right)
 
 
-try_remainder.__doc__ = pysparkfuncs.try_remainder.__doc__
+try_mod.__doc__ = pysparkfuncs.try_mod.__doc__
 
 
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
@@ -2565,9 +2565,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
@@ -2576,13 +2574,7 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 def regexp_replace(
     string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    if isinstance(replacement, str):
-        replacement = lit(replacement)
-
-    return _invoke_function("regexp_replace", _to_col(string), pattern, replacement)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
@@ -2601,9 +2593,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
@@ -3359,19 +3349,15 @@ def unix_timestamp(
 unix_timestamp.__doc__ = pysparkfuncs.unix_timestamp.__doc__
 
 
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("from_utc_timestamp", timestamp, tz)
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 from_utc_timestamp.__doc__ = pysparkfuncs.from_utc_timestamp.__doc__
 
 
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("to_utc_timestamp", timestamp, tz)
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 to_utc_timestamp.__doc__ = pysparkfuncs.to_utc_timestamp.__doc__

@@ -105,7 +105,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("session vars - set and read") {
+  test("session vars - set and read (SET VAR)") {
     val sqlScript =
       """
         |BEGIN
@@ -118,6 +118,24 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Array.empty[Row], // declare var
       Array.empty[Row], // set var
       Array(Row(2)), // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("session vars - set and read (SET)") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE var = 1;
+        |SET var = var + 1;
+        |SELECT var;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare var
+      Seq.empty[Row], // set var
+      Seq(Row(2)), // select
+      Seq.empty[Row] // drop var
     )
     verifySqlScriptResult(sqlScript, expected)
   }
