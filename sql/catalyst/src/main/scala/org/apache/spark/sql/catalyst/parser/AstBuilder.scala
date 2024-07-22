@@ -143,31 +143,33 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val compoundStatements = buff.toList
 
     if (allowVarDeclare) {
-      val declareAfterPrefix = compoundStatements
+      val declareVarStatement = compoundStatements
         .dropWhile(statement => statement.isInstanceOf[SingleStatement] &&
           statement.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
         .filter(_.isInstanceOf[SingleStatement])
         .find(_.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
 
-      declareAfterPrefix match {
+      declareVarStatement match {
         case Some(SingleStatement(parsedPlan)) =>
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            parsedPlan.asInstanceOf[CreateVariable].name.
-              asInstanceOf[UnresolvedIdentifier].nameParts.last,
+            parsedPlan.asInstanceOf[CreateVariable]
+              .name.asInstanceOf[UnresolvedIdentifier]
+              .nameParts.last,
             parsedPlan.origin.line.get.toString)
         case _ =>
       }
 
     } else {
-      val declare = compoundStatements
+      val declareVarStatement = compoundStatements
         .filter(_.isInstanceOf[SingleStatement])
         .find(_.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
 
-      declare match {
+      declareVarStatement match {
         case Some(SingleStatement(parsedPlan)) =>
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            parsedPlan.asInstanceOf[CreateVariable].name.
-              asInstanceOf[UnresolvedIdentifier].nameParts.last,
+            parsedPlan.asInstanceOf[CreateVariable]
+              .name.asInstanceOf[UnresolvedIdentifier]
+              .nameParts.last,
             parsedPlan.origin.line.get.toString)
         case _ =>
       }
