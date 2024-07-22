@@ -137,22 +137,6 @@ private[sql] class AvroOptions(
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
 
-  /**
-   * Adds support for recursive fields. If this option is not specified or is set to 1, recursive
-   * fields are not permitted. Setting it to 1 allows recursive field to be recursed once,
-   * and 2 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
-   * allowed in order avoid inadvertently creating very large schemas. If a avro message has depth
-   * beyond this limit, the Spark struct returned is truncated after the recursion limit.
-   *
-   * Examples: Consider an Avro schema with a recursive field:
-   * {"type" : "record", "name" : "node", "fields" : [{"name": "Id", "type": "int"},
-   * {"name": "Next", "type": ["null", "node"]}]}
-   * The following lists the parsed schema with different values for this setting.
-   *  1:  `struct<Id: int>`
-   *  2:  `struct<Id: int, Next: struct<Id: int>>`
-   *  3:  `struct<Id: int, Next: struct<Id: int, Next: struct<Id: int>>>`
-   * and so on.
-   */
   val recursiveFieldMaxDepth: Int =
     parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
 }
@@ -190,5 +174,22 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // of Avro Union type.
   val STABLE_ID_PREFIX_FOR_UNION_TYPE = newOption("stableIdentifierPrefixForUnionType")
 
+  /**
+   * Adds support for recursive fields. If this option is not specified or is set to 0, recursive
+   * fields are not permitted. Setting it to 1 drops all recursive fields, 2 allows recursive
+   * fields to be recursed once, and 3 allows it to be recursed twice and so on, up to 10.
+   * Values larger than 10 are not allowed in order avoid inadvertently creating very large schemas.
+   * If an avro message has depth beyond this limit, the Spark struct returned is truncated after
+   * the recursion limit.
+   *
+   * Examples: Consider an Avro schema with a recursive field:
+   * {"type" : "record", "name" : "Node", "fields" : [{"name": "Id", "type": "int"},
+   * {"name": "Next", "type": ["null", "Node"]}]}
+   * The following lists the parsed schema with different values for this setting.
+   *  1:  `struct<Id: int>`
+   *  2:  `struct<Id: int, Next: struct<Id: int>>`
+   *  3:  `struct<Id: int, Next: struct<Id: int, Next: struct<Id: int>>>`
+   * and so on.
+   */
   val RECURSIVE_FIELD_MAX_DEPTH = newOption("recursiveFieldMaxDepth")
 }
