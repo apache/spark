@@ -54,7 +54,7 @@ public abstract class BlockStoreClient implements Closeable {
   protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
 
   private static final ScheduledExecutorService scheduledExecutor =
-          Executors.newScheduledThreadPool(16,
+          Executors.newSingleThreadScheduledExecutor(
                   NettyUtils.createThreadFactory("Block Store Client Retry"));
 
   protected volatile TransportClientFactory clientFactory;
