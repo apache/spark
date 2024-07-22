@@ -144,10 +144,11 @@ object OperatorStateMetadataV2 {
   private implicit val manifest = Manifest
     .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
-  def baseMetadataPath(stateCheckpointPath: Path): Path =
+  def metadataDirPath(stateCheckpointPath: Path): Path =
     new Path(new Path(new Path(stateCheckpointPath, "_metadata"), "metadata"), "v2")
+
   def metadataFilePath(stateCheckpointPath: Path, currentBatchId: Long): Path =
-    new Path(baseMetadataPath(stateCheckpointPath), currentBatchId.toString)
+    new Path(metadataDirPath(stateCheckpointPath), currentBatchId.toString)
 
   def deserialize(in: BufferedReader): OperatorStateMetadata = {
     Serialization.read[OperatorStateMetadataV2](in)
@@ -238,7 +239,6 @@ class OperatorStateMetadataV2Writer(
 
     fm.mkdirs(metadataFilePath.getParent)
     val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
-    logError(s"### We are writing to ${metadataFilePath}")
     try {
       outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
       OperatorStateMetadataUtils.serialize(outputStream, operatorMetadata)
@@ -257,19 +257,23 @@ class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration) extends OperatorStateMetadataReader with Logging {
 
-  private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
+  private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
+  private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
-  fm.mkdirs(stateCheckpointPath.getParent)
+  fm.mkdirs(metadataDirPath.getParent)
   override def version: Int = 2
 
   private def listBatches(): Array[Long] = {
-    fm.list(stateCheckpointPath).map(_.getPath.getName.toLong).sorted
+    if (!fm.exists(metadataDirPath)) {
+      return Array.empty
+    }
+    fm.list(metadataDirPath).map(_.getPath.getName.toLong).sorted
   }
 
   override def read(): Option[OperatorStateMetadata] = {
     val batches = listBatches()
     if (batches.isEmpty) {
-      None
+      return None
     }
     val lastBatchId = batches.last
     val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(

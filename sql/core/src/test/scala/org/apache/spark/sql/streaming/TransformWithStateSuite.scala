@@ -941,9 +941,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val df = spark.read.format("state-metadata").load(checkpointDir.toString)
         checkAnswer(df, Seq(
-          Row(0, "transformWithStateExec", "default", 5, 0L, 0L,
-           """{"timeMode":"NoTime","outputMode":"Update"}"""),
-          Row(0, "transformWithStateExec", "default", 5, 1L, 1L,
+          Row(0, "transformWithStateExec", "default", 5, 0L, 1L,
            """{"timeMode":"NoTime","outputMode":"Update"}""")
         ))
       }

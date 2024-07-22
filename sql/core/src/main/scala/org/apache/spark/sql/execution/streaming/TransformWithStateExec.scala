@@ -392,8 +392,7 @@ case class TransformWithStateExec(
     val stateSchemaDir = stateSchemaDirPath()
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
-    val metadataPath = OperatorStateMetadataV2.baseMetadataPath(
-      new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}"))
+    val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
     val metadataReader = new OperatorStateMetadataV2Reader(metadataPath, hadoopConf)
     val operatorStateMetadata = metadataReader.read()
     val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
@@ -405,7 +404,6 @@ case class TransformWithStateExec(
         }
       case None => None
     }
-    logError(s"### oldStateSchemaFilePath: $oldStateSchemaFilePath")
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,

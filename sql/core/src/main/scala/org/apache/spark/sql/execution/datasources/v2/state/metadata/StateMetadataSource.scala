@@ -199,7 +199,7 @@ class StateMetadataPartitionReader(
       val operatorIdPath = new Path(stateDir, opId.toString)
       // check if OperatorStateMetadataV2 path exists, if it does, read it
       // otherwise, fall back to OperatorStateMetadataV1
-      val operatorStateMetadataV2Path = OperatorStateMetadataV2.baseMetadataPath(operatorIdPath)
+      val operatorStateMetadataV2Path = OperatorStateMetadataV2.metadataDirPath(operatorIdPath)
       if (fileManager.exists(operatorStateMetadataV2Path)) {
         new OperatorStateMetadataV2Reader(operatorIdPath, hadoopConf).read()
       } else {
@@ -233,7 +233,7 @@ class StateMetadataPartitionReader(
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
               v2.operatorPropertiesJson,
-              stateStoreMetadata.numColsPrefixKey
+              -1 // numColsPrefixKey is not available in OperatorStateMetadataV2
             )
           }
         }
