@@ -250,7 +250,10 @@ class ParseException private(
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     if (queryContext.nonEmpty) {
-      builder ++= queryContext.head.summary()
+      builder ++= "\n"
+      queryContext.foreach { ctx =>
+        builder ++= ctx.summary()
+      }
     } else {
       start match {
         case Origin(Some(l), Some(p), _, _, _, _, _, _, _) =>
