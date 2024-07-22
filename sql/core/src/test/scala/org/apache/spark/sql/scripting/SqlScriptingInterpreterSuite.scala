@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -37,6 +38,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       case (actualAnswer, expectedAnswer) =>
         assert(actualAnswer.sameElements(expectedAnswer))
     }
+  }
+
+  protected override def beforeAll(): Unit = {
+    System.setProperty(IS_TESTING.key, "true")
+    super.beforeAll()
   }
 
   // Tests
@@ -132,10 +138,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop var
+      Array.empty[Row], // declare var
+      Array.empty[Row], // set var
+      Array(Row(2)), // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }

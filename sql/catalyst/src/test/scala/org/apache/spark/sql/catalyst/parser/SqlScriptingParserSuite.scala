@@ -18,10 +18,17 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
+
+  protected override def beforeAll(): Unit = {
+    System.setProperty(IS_TESTING.key, "true")
+    super.beforeAll()
+  }
 
   test("single select") {
     val sqlScriptText = "SELECT 1;"
@@ -326,18 +333,18 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SQL Scripting not enabled") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  DECLARE totalInsCnt = 0;
-        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
-        |END""".stripMargin
-
-    checkError(
-      exception = intercept[SparkException] {
-        parseScript(sqlScriptText)
-      },
-      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
-      parameters = Map("sqlScriptingEnabled" -> "test"))
+    withSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key -> "false") {
+      val sqlScriptText =
+        """
+          |BEGIN
+          |  SELECT 1;
+          |END""".stripMargin
+      checkError(
+        exception = intercept[SparkException] {
+          parseScript(sqlScriptText)
+        },
+        errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+        parameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
+    }
   }
 }
