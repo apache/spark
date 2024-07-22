@@ -66,10 +66,6 @@ class StateSchemaCompatibilityChecker(
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
-      // Ensure that version 3 format has schema file path provided explicitly
-      if (versionStr == "v3" && oldSchemaFilePath.isEmpty) {
-        throw new IllegalStateException("Schema file path is required for schema version 3")
-      }
       val schemaReader = SchemaReader.createSchemaReader(versionStr)
       schemaReader.read(inStream)
     } catch {
