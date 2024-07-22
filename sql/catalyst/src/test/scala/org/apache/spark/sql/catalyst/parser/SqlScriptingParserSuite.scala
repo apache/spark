@@ -18,17 +18,11 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
-
-  protected override def beforeAll(): Unit = {
-    System.setProperty(IS_TESTING.key, "true")
-    super.beforeAll()
-  }
 
   test("single select") {
     val sqlScriptText = "SELECT 1;"

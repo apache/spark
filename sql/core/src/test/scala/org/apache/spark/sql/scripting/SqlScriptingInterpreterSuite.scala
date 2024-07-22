@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -27,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Output from the interpreter (iterator over executable statements) is then checked - statements
  *   are executed and output DataFrames are compared with expected outputs.
  */
-class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession {
   // Helpers
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Array[Row]]): Unit = {
     val interpreter = SqlScriptingInterpreter(spark)
@@ -41,8 +42,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
   protected override def beforeAll(): Unit = {
-    System.setProperty(IS_TESTING.key, "true")
     super.beforeAll()
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "false")
+    super.afterAll()
   }
 
   // Tests

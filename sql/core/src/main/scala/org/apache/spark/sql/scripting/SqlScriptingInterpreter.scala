@@ -37,7 +37,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+  private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
@@ -71,7 +71,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true, collectResult = false))
+          .map(new SingleStatementExec(_, Origin(), isInternal = true, shouldCollectResult = false))
           .reverse
         new CompoundBodyExec(
           body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables, session)
@@ -85,7 +85,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
   def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
     val executionPlan = buildExecutionPlan(compoundBody)
     executionPlan.flatMap {
-      case statement: SingleStatementExec if statement.collectResult
+      case statement: SingleStatementExec if statement.shouldCollectResult
         && !statement.isInternal => statement.result
       case _ => None
     }
