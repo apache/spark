@@ -71,7 +71,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true, shouldCollectResult = false))
+          .map(new SingleStatementExec(_, Origin(), isInternal = true))
           .reverse
         new CompoundBodyExec(
           body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables, session)
@@ -79,14 +79,13 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
-          isInternal = false)
+          shouldCollectResult = true)
     }
 
   def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
     val executionPlan = buildExecutionPlan(compoundBody)
     executionPlan.flatMap {
-      case statement: SingleStatementExec if statement.shouldCollectResult
-        && !statement.isInternal => statement.result
+      case statement: SingleStatementExec if statement.shouldCollectResult => statement.result
       case _ => None
     }
   }

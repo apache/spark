@@ -47,7 +47,7 @@ trait LeafStatementExec extends CompoundStatementExec {
 
   /**
    * Whether this statement has been executed during the interpretation phase.
-   * Example: Statements in conditions of If/Else, While, etc.
+   * This is used to avoid re-execution of the same statement.
    */
   var isExecuted = false
 
@@ -85,8 +85,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
-    override val isInternal: Boolean,
-    val shouldCollectResult: Boolean = true)
+    override val isInternal: Boolean = false,
+    val shouldCollectResult: Boolean = false)
   extends LeafStatementExec with WithOrigin {
 
   /**
