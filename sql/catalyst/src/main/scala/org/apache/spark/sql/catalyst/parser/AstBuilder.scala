@@ -209,7 +209,7 @@ class AstBuilder extends DataTypeAstBuilder
         }
     }
 
-  override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement ={
+  override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement = {
     IfElseStatement(
       conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
         SingleStatement(
