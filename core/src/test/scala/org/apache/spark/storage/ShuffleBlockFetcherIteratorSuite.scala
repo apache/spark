@@ -427,6 +427,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
           case e: ExecutionException =>
             assert(e.getCause.isInstanceOf[IOException])
             assert(!success)
+            assert(sendRpcThrowIOExceptionIdx == sendRpcThrowIOExceptionMaxCnt)
         }
       }
     } finally {
