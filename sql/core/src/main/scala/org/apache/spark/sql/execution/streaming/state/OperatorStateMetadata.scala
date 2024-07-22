@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, Metadata
 /**
  * Metadata for a state store instance.
  */
-trait StateStoreMetadata {
+trait StateStoreMetadata extends Serializable {
   def storeName: String
   def numPartitions: Int
 }
@@ -39,24 +41,35 @@ trait StateStoreMetadata {
 case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int,
   numPartitions: Int) extends StateStoreMetadata
 
-case class StateStoreMetadataV2(storeName: String,
-  numPartitions: Int, stateSchemaPath: String) extends StateStoreMetadata
+case class StateStoreMetadataV2(
+    storeName: String,
+    numColsPrefixKey: Int,
+    numPartitions: Int,
+    stateSchemaFilePath: String)
+  extends StateStoreMetadata with Serializable
+
+object StateStoreMetadataV2 {
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  @scala.annotation.nowarn
+  private implicit val manifest = Manifest
+    .classType[StateStoreMetadataV2](implicitly[ClassTag[StateStoreMetadataV2]].runtimeClass)
+}
 
 /**
  * Information about a stateful operator.
  */
-trait OperatorInfo {
+trait OperatorInfo extends Serializable {
   def operatorId: Long
   def operatorName: String
 }
 
 case class OperatorInfoV1(operatorId: Long, operatorName: String) extends OperatorInfo
 
-case class OperatorInfoV2(operatorId: Long, operatorName: String, operatorProperties: String)
-  extends OperatorInfo
-
-trait OperatorStateMetadata {
+trait OperatorStateMetadata extends Serializable {
   def version: Int
+
+  def operatorInfo: OperatorInfo
 }
 
 case class OperatorStateMetadataV1(
@@ -66,8 +79,9 @@ case class OperatorStateMetadataV1(
 }
 
 case class OperatorStateMetadataV2(
-    operatorInfo: OperatorInfoV2,
-    stateStoreInfo: Array[StateStoreMetadataV2]) extends OperatorStateMetadata {
+    operatorInfo: OperatorInfoV1,
+    stateStoreInfo: Array[StateStoreMetadataV2],
+    operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
 }
 
@@ -84,6 +98,8 @@ object OperatorStateMetadataUtils {
     version match {
       case 1 =>
         Serialization.read[OperatorStateMetadataV1](in)
+      case 2 =>
+        Serialization.read[OperatorStateMetadataV2](in)
 
       case 2 =>
         Serialization.read[OperatorStateMetadataV2](in)
@@ -108,6 +124,27 @@ object OperatorStateMetadataUtils {
         throw new IllegalArgumentException(s"Failed to serialize operator metadata with " +
           s"version=${operatorStateMetadata.version}")
     }
+  }
+}
+
+object OperatorStateMetadataV2 {
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  @scala.annotation.nowarn
+  private implicit val manifest = Manifest
+    .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
+
+  def metadataFilePath(stateCheckpointPath: Path): Path =
+    new Path(new Path(new Path(stateCheckpointPath, "_metadata"), "metadata"), "v2")
+
+  def deserialize(in: BufferedReader): OperatorStateMetadata = {
+    Serialization.read[OperatorStateMetadataV2](in)
+  }
+
+  def serialize(
+      out: FSDataOutputStream,
+      operatorStateMetadata: OperatorStateMetadata): Unit = {
+    Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
   }
 }
 
@@ -141,7 +178,9 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
 }
 
 /**
- * Read OperatorStateMetadata from the state checkpoint directory.
+ * Read OperatorStateMetadata from the state checkpoint directory. This class will only be
+ * used to read OperatorStateMetadataV1.
+ * OperatorStateMetadataV2 will be read by the OperatorStateMetadataLog.
  */
 class OperatorStateMetadataReader(stateCheckpointPath: Path, hadoopConf: Configuration) {
 
