@@ -449,13 +449,15 @@ class RocksDBFileManager(
 
   /**
    * Delete old versions by deleting the associated version and SST files.
-   * At a high-level, this method finds which versions to delete, and which SST files that were
+   * At a high-level, when enough stale version files are present for batch deletion,
+   * this method finds which versions to delete, and which SST files that were
    * last used in those versions. It's safe to delete these SST files because a SST file can
    * be reused only in successive versions. Therefore, if a SST file F was last used in version
    * V, then it won't be used in version V+1 or later, and if version V can be deleted, then
    * F can safely be deleted as well.
    *
-   * To find old files, it does the following.
+   * First, it checks whether enough stale version files are present for batch deletion.
+   * If true, it does the following to find old files.
    * - List all the existing [version].zip files
    * - Find the min version that needs to be retained based on the given `numVersionsToRetain`.
    * - Accordingly decide which versions should be deleted.
