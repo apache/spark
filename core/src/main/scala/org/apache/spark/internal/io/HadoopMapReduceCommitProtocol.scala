@@ -236,6 +236,13 @@ class HadoopMapReduceCommitProtocol(
           }
         }
       }
+      // create the _SUCCESS file at the final location if created in staging
+      val stagingSuccessPath = new Path(stagingDir, "_SUCCESS")
+      if (fs.exists(stagingSuccessPath)) {
+        val finalSuccessPath = new Path(path, "_SUCCESS")
+        // create the _SUCCESS file at the final location, overwrite true
+        fs.create(finalSuccessPath, true).close()
+      }
 
       fs.delete(stagingDir, true)
     }
