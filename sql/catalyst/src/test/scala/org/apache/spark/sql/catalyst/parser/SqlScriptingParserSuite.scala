@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -203,11 +204,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
-    val e = intercept[SparkException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "INTERNAL_ERROR")
-    assert(e.getMessage.contains("Both labels should be same."))
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "LABELS_MISMATCH",
+      parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
   }
 
   test("compound: endLabel") {
@@ -220,11 +223,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl""".stripMargin
-    val e = intercept[SparkException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "INTERNAL_ERROR")
-    assert(e.getMessage.contains("End label can't exist without begin label."))
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
+      parameters = Map("endLabel" -> "lbl"))
   }
 
   test("compound: beginLabel + endLabel with different casing") {
@@ -257,6 +262,59 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.nonEmpty)
+  }
+
+  test("SET VAR statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET VARIABLE statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VARIABLE totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET statement test - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET totalInsCnt = (SELECT x FROMERROR y WHERE id = 1);
+        |END""".stripMargin
+    val e = intercept[ParseException] {
+      parseScript(sqlScriptText)
+    }
+    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
   }
 
   test("declare condition: default sqlstate") {
@@ -303,6 +361,22 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parseScript(sqlScriptText)
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+  }
+
+  test("SQL Scripting not enabled") {
+    withSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key -> "false") {
+      val sqlScriptText =
+        """
+          |BEGIN
+          |  SELECT 1;
+          |END""".stripMargin
+      checkError(
+        exception = intercept[SparkException] {
+          parseScript(sqlScriptText)
+        },
+        errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+        parameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
+    }
   }
 
   // Helper methods

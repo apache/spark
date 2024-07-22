@@ -449,7 +449,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.coefficients, instance.intercept)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 

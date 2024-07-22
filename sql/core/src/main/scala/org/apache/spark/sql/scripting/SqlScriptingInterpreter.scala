@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.sql.{Row, SparkSession}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
@@ -40,7 +41,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+  private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
@@ -74,7 +75,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true, collectResult = false))
+          .map(new SingleStatementExec(_, Origin(), isInternal = true))
           .reverse
 
         val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
@@ -102,15 +103,13 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
-          isInternal = false)
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"Unsupported operation in the execution plan.")
+          shouldCollectResult = true)
     }
 
-  def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {
+  def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val executionPlan = buildExecutionPlan(compoundBody)
     executionPlan.flatMap {
-      case statement: SingleStatementExec if statement.collectResult => statement.data
+      case statement: SingleStatementExec if statement.shouldCollectResult => statement.result
       case _ => None
     }
   }

@@ -134,6 +134,11 @@
       "Metadata can only be provided for a single column."
     ]
   },
+  "CANNOT_REGISTER_UDTF": {
+    "message": [
+      "Cannot register the UDTF '<name>': expected a 'UserDefinedTableFunction'. Please make sure the UDTF is correctly defined as a class, and then either wrap it in the `udtf()` function or annotate it with `@udtf(...)`."
+    ]
+  },
   "CANNOT_SET_TOGETHER": {
     "message": [
       "<arg_list> should not be set together."
@@ -906,6 +911,11 @@
   "SLICE_WITH_STEP": {
     "message": [
       "Slice with step is not supported."
+    ]
+  },
+  "SQL_SCRIPTING_NOT_ENABLED": {
+    "message": [
+      "SQL Scripting is under development and not all features are supported. To enable existing features set <sqlScriptingEnabled> to `true`."
     ]
   },
   "STATE_NOT_EXISTS": {

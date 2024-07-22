@@ -3675,7 +3675,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       messageParameters = Map(
-        "explicitTypes" -> toSQLId(explicitTypes)
+        "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
       )
     )
   }
@@ -3823,6 +3823,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
+  }
+
+  def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> dt.sql))
   }
 
   def funcBuildError(funcName: String, cause: Exception): Throwable = {

@@ -402,7 +402,7 @@ case class UnclosedCommentProcessor(
   override def exitSingleStatement(ctx: SqlBaseParser.SingleStatementContext): Unit = {
     // SET command uses a wildcard to match anything, and we shouldn't parse the comments, e.g.
     // `SET myPath =/a/*`.
-    if (!ctx.statement().isInstanceOf[SqlBaseParser.SetConfigurationContext]) {
+    if (!ctx.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext]) {
       checkUnclosedComment(tokenStream, command)
     }
   }

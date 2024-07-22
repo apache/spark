@@ -325,6 +325,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
         self._query_contexts: List[BaseQueryContext] = query_contexts
+        self._log_exception()
 
     def getSqlState(self) -> Optional[str]:
         if self._sql_state is not None:

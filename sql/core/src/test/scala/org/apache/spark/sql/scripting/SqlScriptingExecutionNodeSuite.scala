@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -31,13 +32,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
   // Helpers
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
+
+    override def execute(session: SparkSession): Unit = ()
   }
 
-  case class TestNestedStatementIterator(statements: Seq[CompoundStatementExec])
-    extends CompoundNestedStatementIteratorExec(statements)
-
   case class TestBody(statements: Seq[CompoundStatementExec])
-    extends CompoundBodyExec(None, statements)
+    extends CompoundBodyExec(statements, null)
 
   case class TestSparkStatementWithPlan(testVal: String)
     extends SingleStatementExec(
@@ -47,7 +47,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
 
   // Tests
   test("test body - single statement") {
-    val iter = TestNestedStatementIterator(Seq(TestLeafStatement("one"))).getTreeIterator
+    val iter = TestBody(Seq(TestLeafStatement("one"))).getTreeIterator
     val statements = iter.map {
       case TestLeafStatement(v) => v
       case _ => fail("Unexpected statement type")
@@ -57,7 +57,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
   }
 
   test("test body - no nesting") {
-    val iter = TestNestedStatementIterator(
+    val iter = TestBody(
       Seq(
         TestLeafStatement("one"),
         TestLeafStatement("two"),
@@ -72,11 +72,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
   }
 
   test("test body - nesting") {
-    val iter = TestNestedStatementIterator(
+    val iter = TestBody(
       Seq(
-        TestNestedStatementIterator(Seq(TestLeafStatement("one"), TestLeafStatement("two"))),
+        TestBody(Seq(TestLeafStatement("one"), TestLeafStatement("two"))),
         TestLeafStatement("three"),
-        TestNestedStatementIterator(Seq(TestLeafStatement("four"), TestLeafStatement("five")))))
+        TestBody(Seq(TestLeafStatement("four"), TestLeafStatement("five")))))
       .getTreeIterator
     val statements = iter.map {
       case TestLeafStatement(v) => v

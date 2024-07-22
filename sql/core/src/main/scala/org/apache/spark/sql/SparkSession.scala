@@ -636,8 +636,7 @@ class SparkSession private(
 
   private def executeScript(compoundBody: CompoundBody): Iterator[Array[Row]] = {
     val interpreter = sessionState.sqlScriptingInterpreter
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody)
-    interpreter.execute(executionPlan)
+    interpreter.execute(compoundBody)
   }
 
   /**
@@ -660,10 +659,10 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
         parsedPlan match {
-          case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) if args.nonEmpty =>
-            CompoundBody(List(SingleStatement(
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
+            CompoundBody(Seq(SingleStatement(
               PosParameterizedQuery(
-                singleStmtPlan.parsedPlan, args.map(lit(_).expr).toImmutableArraySeq))))
+                singleStmtPlan.parsedPlan, args.map(lit(_).expr).toImmutableArraySeq))), label)
           case p =>
             assert(args.isEmpty, "Named parameters are not supported for batch queries")
             p
@@ -671,7 +670,7 @@ class SparkSession private(
       }
 
       plan match {
-        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) =>
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _) =>
           Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
         case _ =>
           // execute the plan directly if it is not a single statement
@@ -680,8 +679,6 @@ class SparkSession private(
           Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow.toIndexedSeq))
       }
     }
-
-
 
   /**
    * Executes a SQL query substituting positional parameters by the given arguments,
@@ -728,11 +725,10 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
         parsedPlan match {
-          case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) if args.nonEmpty =>
-            CompoundBody(List(SingleStatement(
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
+            CompoundBody(Seq(SingleStatement(
               NameParameterizedQuery(
-                singleStmtPlan.parsedPlan, args.transform((_, v) => lit(v).expr))))
-            )
+                singleStmtPlan.parsedPlan, args.transform((_, v) => lit(v).expr)))), label)
           case p =>
             assert(args.isEmpty, "Positional parameters are not supported for batch queries")
             p
@@ -740,7 +736,7 @@ class SparkSession private(
       }
 
       plan match {
-        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) =>
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _) =>
           Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
         case _ =>
           // execute the plan directly if it is not a single statement
