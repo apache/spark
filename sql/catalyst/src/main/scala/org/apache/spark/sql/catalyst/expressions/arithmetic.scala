@@ -904,7 +904,7 @@ case class Remainder(
 
   override def inputType: AbstractDataType = NumericType
 
-  // `try_remainder` has exactly the same behavior as the legacy divide, so here it only executes
+  // `try_mod` has exactly the same behavior as the legacy divide, so here it only executes
   // the error code path when `evalMode` is `ANSI`.
   protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
 
