@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 
@@ -74,3 +75,18 @@ case class IfElseStatement(
     elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
 }
+
+/**
+ * Logical operator for while statement.
+ * @param condition Any expression evaluating to a Boolean.
+ *                  While the condition is evaluated true compound body is executed.
+ * @param body Compound body is a collection of statements that is executed if condition is true.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the LOOP statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class WhileStatement(
+                           condition: Expression,
+                           body: CompoundBody,
+                           label: Option[String]) extends CompoundPlanStatement

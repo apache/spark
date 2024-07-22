@@ -201,6 +201,17 @@ class AstBuilder extends DataTypeAstBuilder
     visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
   }
 
+  override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
+    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+
+
+
+    WhileStatement(
+      expression(ctx.booleanExpression()),
+      visitCompoundBody(ctx.compoundBody()),
+      Some(labelText))
+  }
+
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
     visitCompoundBodyImpl(ctx, None, allowVarDeclare = false)
   }
