@@ -71,7 +71,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
     // if the operator is transformWithState, but the operator properties are empty, then
     // the user has not defined any state variables for the operator
-    val operatorProperties = opMetadata.operatorProperties
+    val operatorProperties = opMetadata.operatorPropertiesJson
     if (operatorProperties.isEmpty) {
       throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
         "No state variable names are defined for the transformWithState operator")
@@ -120,8 +120,13 @@ class StateDataSource extends TableProvider with DataSourceRegister {
           val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
             partitionId, sourceOptions.storeName)
           val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
+          println("I am here before state schema compatibility checker, stateCheckpointLocation: " +
+          stateCheckpointLocation)
           val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-          val stateSchema = manager.readSchemaFile().head
+          println("I am here after state schema compatibility checker, manager is ok")
+          val h = manager.readSchemaFile()
+          val stateSchema = h.head
+          println("after readSchemaFile, state Schema: " + stateSchema)
           (stateSchema.keySchema, stateSchema.valueSchema)
       }
 

@@ -53,8 +53,20 @@ class StateSchemaCompatibilityChecker(
 
   private val schemaFileLocation = if (oldSchemaFilePath.isEmpty) {
     val storeCpLocation = providerId.storeId.storeCheckpointLocation()
-    schemaFile(storeCpLocation)
+    val f = CheckpointFileManager.create(storeCpLocation.getParent, hadoopConf)
+
+    val schemaDir = new Path(storeCpLocation.getParent, "default/_metadata/schema")
+    if (f.exists(schemaDir)) {
+      val schemaSeq = f.list(schemaDir).toSeq
+      assert(!schemaSeq.isEmpty, "schema file directory is empty")
+      println("I am here, schemaSeq is not empty")
+      // TODO get schema files from latest batch
+      schemaSeq.head.getPath
+    } else {
+      schemaFile(storeCpLocation)
+    }
   } else {
+    println("I am here, oldSchemaPath is not empty")
     oldSchemaFilePath.get
   }
 
@@ -63,13 +75,19 @@ class StateSchemaCompatibilityChecker(
   fm.mkdirs(schemaFileLocation.getParent)
 
   def readSchemaFile(): List[StateStoreColFamilySchema] = {
+    println("I am here inside readSchemaFile, schemaFileLocation: " + schemaFileLocation)
+    println("I am here inside readSchemaFile, exists: " + fm.exists(schemaFileLocation))
+    println("I am here inside readSchemaFile, list: " +
+      fm.list(schemaFileLocation).toSeq)
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
+      println("I am here inside readSchemaFile, version: " + versionStr)
       // Ensure that version 3 format has schema file path provided explicitly
-      if (versionStr == "v3" && oldSchemaFilePath.isEmpty) {
+      /*
+      if (versionStr == "v3" && newSchemaFilePath.isEmpty) {
         throw new IllegalStateException("Schema file path is required for schema version 3")
-      }
+      } */
       val schemaReader = SchemaReader.createSchemaReader(versionStr)
       schemaReader.read(inStream)
     } catch {
