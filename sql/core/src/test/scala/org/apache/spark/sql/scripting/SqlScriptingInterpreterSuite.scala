@@ -228,6 +228,23 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
+  test("if nested") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   IF 2=1 THEN
+        |     SELECT 41;
+        |   ELSE
+        |     SELECT 42;
+        |   END IF;
+        | END IF;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
   test("if else going in if") {
     val commands =
       """
