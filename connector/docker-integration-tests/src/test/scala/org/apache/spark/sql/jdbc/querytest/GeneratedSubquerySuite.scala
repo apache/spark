@@ -363,7 +363,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         limit => offsetValues.map(
           offset => LimitAndOffset(limit, offset)
         )
-      ).filter(lo => !(lo._1 == 0 && lo._2 == 0))
+      ).filter(lo => !(lo.limitValue == 0 && lo.offsetValue == 0))
     }
 
     case class SubquerySpec(query: String, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
