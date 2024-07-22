@@ -659,7 +659,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
         parsedPlan match {
-          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label, _, _) if args.nonEmpty =>
             CompoundBody(Seq(SingleStatement(
               PosParameterizedQuery(
                 singleStmtPlan.parsedPlan, args.map(lit(_).expr).toImmutableArraySeq))), label)
@@ -670,7 +670,7 @@ class SparkSession private(
       }
 
       plan match {
-        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _) =>
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) =>
           Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
         case _ =>
           // execute the plan directly if it is not a single statement
@@ -725,7 +725,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
         parsedPlan match {
-          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label, _, _) if args.nonEmpty =>
             CompoundBody(Seq(SingleStatement(
               NameParameterizedQuery(
                 singleStmtPlan.parsedPlan, args.transform((_, v) => lit(v).expr)))), label)
@@ -736,7 +736,7 @@ class SparkSession private(
       }
 
       plan match {
-        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _) =>
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) =>
           Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
         case _ =>
           // execute the plan directly if it is not a single statement

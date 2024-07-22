@@ -59,6 +59,16 @@ trait LeafStatementExec extends CompoundStatementExec {
   * @param session Spark session.
   */
   def execute(session: SparkSession): Unit
+
+  /**
+   * Whether an error was raised during the execution of this statement.
+   */
+  var raisedError: Boolean = false
+
+  /**
+   * Error state of the statement.
+   */
+  var errorState: Option[String] = None
 }
 
 /**
@@ -101,16 +111,6 @@ class SingleStatementExec(
   var result: Option[Array[Row]] = None
 
   /**
-   * Whether an error was raised during the execution of this statement.
-   */
-  var raisedError = false
-
-  /**
-   * Error state of the statement.
-   */
-  var errorState: Option[String] = None
-
-  /**
    * Get the SQL query text corresponding to this statement.
    * @return
    *   SQL query text.
@@ -149,9 +149,15 @@ class SingleStatementExec(
  *   Spark session.
  */
 class CompoundBodyExec(
+      label: Option[String],
       statements: Seq[CompoundStatementExec],
+      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
       session: SparkSession)
   extends NonLeafStatementExec {
+
+  private def getHandler(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+  }
 
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
   private var curr: Option[CompoundStatementExec] =
@@ -188,6 +194,12 @@ class CompoundBodyExec(
             if (!statement.isExecuted) {
               statement.execute(session)  // Execute the leaf statement
             }
+            if (statement.raisedError) {
+              val handler = getHandler(statement.errorState.get).get
+              // Reset handler body to execute it again
+              handler.getHandlerBody.reset()
+              return handler.getTreeIterator.next()
+            }
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
@@ -201,4 +213,27 @@ class CompoundBodyExec(
         }
       }
     }
+}
+
+class ErrorHandlerExec(
+      body: CompoundBodyExec,
+      handlerType: HandlerType) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  def getHandlerType: HandlerType = handlerType
+
+  def getHandlerBody: CompoundBodyExec = body
+
+  def executeAndReset(): Unit = {
+    execute()
+    reset()
+  }
+
+  private def execute(): Unit = {
+    val iterator = body.getTreeIterator
+    while (iterator.hasNext) iterator.next()
+  }
+
+  override def reset(): Unit = body.reset()
 }

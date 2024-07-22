@@ -23,6 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
 
+import scala.collection.mutable
+
 /**
  * Unit tests for execution nodes from SqlScriptingExecutionNode.scala.
  * Execution nodes are constructed manually and iterated through.
@@ -37,7 +39,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
   }
 
   case class TestBody(statements: Seq[CompoundStatementExec])
-    extends CompoundBodyExec(statements, null)
+    extends CompoundBodyExec(None, statements, mutable.HashMap(), null)
 
   case class TestSparkStatementWithPlan(testVal: String)
     extends SingleStatementExec(

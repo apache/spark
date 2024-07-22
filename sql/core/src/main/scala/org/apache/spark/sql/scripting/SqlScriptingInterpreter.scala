@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.{Row, SparkSession}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
@@ -96,14 +95,17 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
         new CompoundBodyExec(
           body.label,
-          body.collection.
-            map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
-            conditionHandlerMap, session)
+          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
+          conditionHandlerMap,
+          session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           shouldCollectResult = true)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Unsupported operation in the execution plan.")
     }
 
   def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
