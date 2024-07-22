@@ -166,8 +166,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -175,8 +175,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={"arg_name": "fractions", "arg_type": "list"},
+            errorClass="NOT_DICT",
+            messageParameters={"arg_name": "fractions", "arg_type": "list"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -184,8 +184,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
-            message_parameters={
+            errorClass="DISALLOWED_TYPE_FOR_CONTAINER",
+            messageParameters={
                 "arg_name": "fractions",
                 "arg_type": "dict",
                 "allowed_types": "float, int, str",
@@ -203,8 +203,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "col1", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "col1", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -212,8 +212,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "col2", "arg_type": "bool"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "col2", "arg_type": "bool"},
         )
 
     def test_crosstab(self):
@@ -349,8 +349,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_SAME_TYPE",
-            message_parameters={
+            errorClass="NOT_SAME_TYPE",
+            messageParameters={
                 "arg_name1": "startPos",
                 "arg_name2": "length",
                 "arg_type1": "int",
@@ -363,8 +363,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "startPos",
                 "arg_type": "str",
             },
@@ -683,8 +683,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "least", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "least", "num_cols": "2"},
         )
 
     def test_overlay(self):
@@ -729,8 +729,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "pos", "arg_type": "float"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "pos", "arg_type": "float"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -738,8 +738,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "len", "arg_type": "float"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "len", "arg_type": "float"},
         )
 
     def test_percentile(self):
@@ -859,8 +859,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>"},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>"},
         )
 
         # Should fail with kwargs
@@ -869,8 +869,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>"},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>"},
         )
 
         # Should fail with nullary function
@@ -879,8 +879,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>", "num_args": "0"},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>", "num_args": "0"},
         )
 
         # Should fail with quaternary function
@@ -889,8 +889,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>", "num_args": "4"},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>", "num_args": "4"},
         )
 
         # Should fail if function doesn't return Column
@@ -899,8 +899,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"func_name": "<lambda>", "return_type": "int"},
+            errorClass="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            messageParameters={"func_name": "<lambda>", "return_type": "int"},
         )
 
     def test_nested_higher_order_function(self):
@@ -1098,8 +1098,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": "int"},
         )
 
     def test_raise_error(self):
@@ -1119,8 +1119,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
     def test_sum_distinct(self):
@@ -1179,8 +1179,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="COLUMN_IN_LIST",
-            message_parameters={"func_name": "lit"},
+            errorClass="COLUMN_IN_LIST",
+            messageParameters={"func_name": "lit"},
         )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
@@ -1255,8 +1255,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-            message_parameters={
+            errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+            messageParameters={
                 "dtype": "uint64",
             },
         )
@@ -1336,8 +1336,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=ex.exception,
-            error_class="INVALID_VARIANT_CAST",
-            message_parameters={"value": "1", "dataType": '"BINARY"'},
+            errorClass="INVALID_VARIANT_CAST",
+            messageParameters={"value": "1", "dataType": '"BINARY"'},
         )
 
         check(df.select(F.try_variant_get(v, "$.a", "int")), [1, None])
@@ -1351,8 +1351,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "json", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "json", "arg_type": "int"},
         )
 
     def test_try_parse_json(self):
@@ -1369,8 +1369,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "csv", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "csv", "arg_type": "int"},
         )
 
     def test_from_csv(self):
@@ -1380,8 +1380,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
     def test_schema_of_xml(self):
@@ -1390,8 +1390,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "xml", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "xml", "arg_type": "int"},
         )
 
     def test_from_xml(self):
@@ -1401,8 +1401,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
     def test_greatest(self):
@@ -1412,8 +1412,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "greatest", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "greatest", "num_cols": "2"},
         )
 
     def test_when(self):
@@ -1422,8 +1422,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "condition", "arg_type": "str"},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "condition", "arg_type": "str"},
         )
 
     def test_window(self):
@@ -1432,8 +1432,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "windowDuration", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "windowDuration", "arg_type": "int"},
         )
 
     def test_session_window(self):
@@ -1442,8 +1442,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "gapDuration", "arg_type": "int"},
         )
 
     def test_current_user(self):
@@ -1461,8 +1461,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 
     def test_to_timestamp_ltz(self):
@@ -1546,8 +1546,8 @@ class FunctionsTestsMixin:
         for i in range(3):
             self.check_error(
                 exception=from_avro_pes[i].exception,
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
             )
 
         # test to_avro type checks for each parameter
@@ -1559,8 +1559,8 @@ class FunctionsTestsMixin:
         for i in range(2):
             self.check_error(
                 exception=to_avro_pes[i].exception,
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
             )
 
 
