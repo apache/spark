@@ -158,7 +158,7 @@ class LibSVMRelationSuite
       StructField("labelFoo", DoubleType, false),
       StructField("featuresBar", VectorType, false))
     )
-    val df = spark.sqlContext.createDataFrame(rawData, struct)
+    val df = spark.createDataFrame(rawData, struct)
 
     val writePath = Utils.createTempDir().getPath
 

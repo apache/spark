@@ -621,9 +621,9 @@ class BaseUDTFTestsMixin:
                 yield str(args),
 
         self.spark.udtf.register("test_udtf", TestUDTF)
-        self.assertEqual(
+        self.assertIn(
             self.spark.sql("select * from test_udtf(array(1, 2, 3))").collect(),
-            [Row(x="[1, 2, 3]")],
+            [[Row(x="[1, 2, 3]")], [Row(x="[np.int32(1), np.int32(2), np.int32(3)]")]],
         )
 
     def test_udtf_with_map_input_type(self):
@@ -935,10 +935,23 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_EVAL_TYPE",
+            error_class="CANNOT_REGISTER_UDTF",
             message_parameters={
                 "name": "test_udf",
-                "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
+            },
+        )
+
+        class TestUDTF:
+            ...
+
+        with self.assertRaises(PySparkTypeError) as e:
+            self.spark.udtf.register("test_udtf", TestUDTF)
+
+        self.check_error(
+            exception=e.exception,
+            error_class="CANNOT_REGISTER_UDTF",
+            message_parameters={
+                "name": "test_udtf",
             },
         )
 

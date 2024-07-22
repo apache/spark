@@ -20,6 +20,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -30,10 +31,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -79,6 +80,9 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
+  // dummy value schema, the real schema will get during state variable init time
+  private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
       // TODO: check if we can return true only if actual timers are registered, or there is
@@ -90,6 +94,39 @@ case class TransformWithStateExec(
     } else {
       false
     }
+  }
+
+  /**
+   * We initialize this processor handle in the driver to run the init function
+   * and fetch the schemas of the state variables initialized in this processor.
+   * @return a new instance of the driver processor handle
+   */
+  private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    driverProcessorHandle
+  }
+
+  /**
+   * Fetching the columnFamilySchemas from the StatefulProcessorHandle
+   * after init is called.
+   */
+  private def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    closeProcessorHandle()
+    columnFamilySchemas
+  }
+
+  /**
+   * This method is used for the driver-side stateful processor after we
+   * have collected all the necessary schemas.
+   * This instance of the stateful processor won't be used again.
+   */
+  private def closeProcessorHandle(): Unit = {
+    statefulProcessor.close()
+    statefulProcessor.setHandle(null)
   }
 
   /**
@@ -340,11 +377,27 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
-    // TODO: transformWithState is special because we don't have the schema of the state directly
-    // within the passed args. We need to gather this after running the init function
-    // within the stateful processor on the driver. This also requires a schema format change
-    // when recording this information persistently.
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    assert(stateSchemaVersion >= 3)
+    val newColumnFamilySchemas = getColFamilySchemas()
+    val stateSchemaDir = stateSchemaDirPath()
+    val stateSchemaFilePath = new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newColumnFamilySchemas.values.toList, session.sessionState, stateSchemaVersion,
+      schemaFilePath = Some(stateSchemaFilePath)))
+  }
+
+  private def stateSchemaDirPath(): Path = {
+    val storeName = StateStoreId.DEFAULT_STORE_NAME
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation,
+        s"${getStateInfo.operatorId.toString}")
+
+    val storeNamePath = new Path(stateCheckpointPath, storeName)
+    new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -353,14 +406,14 @@ case class TransformWithStateExec(
     validateTimeMode()
 
     if (hasInitialState) {
-      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val storeConf = new StateStoreConf(session.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+        new SerializableConfiguration(session.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -370,9 +423,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              KEY_ROW_SCHEMA,
-              VALUE_ROW_SCHEMA,
-              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+              keyEncoder.schema,
+              DUMMY_VALUE_ROW_SCHEMA,
+              NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
               storeConf = storeConf,
@@ -390,11 +443,11 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          session.sqlContext.sessionState,
-          Some(session.sqlContext.streams.stateStoreCoordinator),
+          keyEncoder.schema,
+          DUMMY_VALUE_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+          session.sessionState,
+          Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
@@ -404,7 +457,7 @@ case class TransformWithStateExec(
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
         val hadoopConfBroadcast = sparkContext.broadcast(
-          new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+          new SerializableConfiguration(session.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
@@ -440,9 +493,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+      keyEncoder.schema,
+      DUMMY_VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,

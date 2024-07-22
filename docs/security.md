@@ -214,7 +214,7 @@ The following table describes the different options available for configuring th
     Cipher mode to use. Defaults "AES/CTR/NoPadding" for backward compatibility, which is not authenticated. 
     Recommended to use "AES/GCM/NoPadding", which is an authenticated encryption mode.
   </td>
-  <td>4.0.0</td>
+  <td>4.0.0, 3.5.2, 3.4.4</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.authEngineVersion</code></td>
