@@ -658,7 +658,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns the remainder after `dividend`/`divisor`.  Its result is
     always null if `divisor` is 0.
@@ -679,14 +679,14 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
-    ... ).select(sf.try_remainder("a", "b")).show()
-    +-------------------+
-    |try_remainder(a, b)|
-    +-------------------+
-    |                  0|
-    |                  1|
-    |               NULL|
-    +-------------------+
+    ... ).select(sf.try_mod("a", "b")).show()
+    +-------------+
+    |try_mod(a, b)|
+    +-------------+
+    |            0|
+    |            1|
+    |         NULL|
+    +-------------+
 
     Example 2: Exception during division, resulting in NULL when ANSI mode is on
 
@@ -695,16 +695,16 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
     ...     df = spark.range(1)
-    ...     df.select(sf.try_remainder(df.id, sf.lit(0))).show()
+    ...     df.select(sf.try_mod(df.id, sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
-    +--------------------+
-    |try_remainder(id, 0)|
-    +--------------------+
-    |                NULL|
-    +--------------------+
+    +--------------+
+    |try_mod(id, 0)|
+    +--------------+
+    |          NULL|
+    +--------------+
     """
-    return _invoke_function_over_columns("try_remainder", left, right)
+    return _invoke_function_over_columns("try_mod", left, right)
 
 
 @_try_remote_functions
@@ -9144,7 +9144,7 @@ def unix_timestamp(
 
 
 @_try_remote_functions
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
@@ -9192,11 +9192,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    if isinstance(tz, Column):
-        tz = _to_java_column(tz)
-    return _invoke_function("from_utc_timestamp", _to_java_column(timestamp), tz)
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 @_try_remote_functions
@@ -9248,11 +9244,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    if isinstance(tz, Column):
-        tz = _to_java_column(tz)
-    return _invoke_function("to_utc_timestamp", _to_java_column(timestamp), tz)
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 @_try_remote_functions
@@ -11538,8 +11530,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        idx = lit(idx) if isinstance(idx, int) else idx
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 @_try_remote_functions
@@ -11575,17 +11566,7 @@ def regexp_replace(
     >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
     [Row(d='-----')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
-    if isinstance(pattern, str):
-        pattern_col = _create_column_from_literal(pattern)
-    else:
-        pattern_col = _to_java_column(pattern)
-    if isinstance(replacement, str):
-        replacement_col = _create_column_from_literal(replacement)
-    else:
-        replacement_col = _to_java_column(replacement)
-    return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 @_try_remote_functions
@@ -11658,8 +11639,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        idx = lit(idx) if isinstance(idx, int) else idx
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 @_try_remote_functions
