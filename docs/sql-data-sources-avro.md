@@ -353,6 +353,13 @@ Data source options of Avro can be set via:
     <td>read</td>
     <td>4.0.0</td>
   </tr>
+  <tr>
+    <td><code>recursiveFieldMaxDepth</code></td>
+    <td>-1</td>
+    <td>If this option is specified to negative or is set to 0, recursive fields are not permitted. Setting it to 1 drops all recursive fields, 2 allows recursive fields to be recursed once, and 3 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not allowed in order avoid inadvertently creating very large schemas. If an avro message has depth beyond this limit, the Spark struct returned is truncated after the recursion limit.</td>
+    <td>read</td>
+    <td>4.0.0</td>
+  </tr>
 </table>
 
 ## Configuration
