@@ -108,11 +108,16 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(tableMetadata.schema.nonEmpty, "bad test")
     assert(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
     assert(tableMetadata.bucketSpec.isDefined, "bad test")
+    assert(tableMetadata.clusterBySpec.isDefined, "bad test")
     assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
     val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
+    val clusteringColumnNames = tableMetadata.clusterBySpec.map { clusterBySpec =>
+      clusterBySpec.columnNames.map(_.toString)
+    }.getOrElse(Nil).toSet
     columns.collect().foreach { col =>
       assert(col.isPartition == tableMetadata.partitionColumnNames.contains(col.name))
       assert(col.isBucket == bucketColumnNames.contains(col.name))
+      assert(col.isCluster == clusteringColumnNames.contains(col.name))
     }
 
     dbName.foreach { db =>
@@ -406,10 +411,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("SPARK-39615: qualified name with catalog - listColumns") {
     val answers = Map(
-      "col1" -> ("int", true, false, true),
-      "col2" -> ("string", true, false, false),
-      "a" -> ("int", true, true, false),
-      "b" -> ("string", true, true, false)
+      "col1" -> ("int", true, false, true, false),
+      "col2" -> ("string", true, false, false, false),
+      "a" -> ("int", true, true, false, false),
+      "b" -> ("string", true, true, false, false)
     )
 
     assert(spark.catalog.currentCatalog() === "spark_catalog")
@@ -417,26 +422,31 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
     val columns1 = spark.catalog.listColumns("my_table1").collect()
     assert(answers ===
-      columns1.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+      columns1.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket,
+        c.isCluster)).toMap)
 
     val columns2 = spark.catalog.listColumns("default.my_table1").collect()
     assert(answers ===
-      columns2.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+      columns2.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket,
+        c.isCluster)).toMap)
 
     val columns3 = spark.catalog.listColumns("spark_catalog.default.my_table1").collect()
     assert(answers ===
-      columns3.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+      columns3.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket,
+        c.isCluster)).toMap)
 
     createDatabase("my_db1")
     createTable("my_table2", Some("my_db1"))
 
     val columns4 = spark.catalog.listColumns("my_db1.my_table2").collect()
     assert(answers ===
-      columns4.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+      columns4.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket,
+        c.isCluster)).toMap)
 
     val columns5 = spark.catalog.listColumns("spark_catalog.my_db1.my_table2").collect()
     assert(answers ===
-      columns5.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+      columns5.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket,
+        c.isCluster)).toMap)
 
     val catalogName = "testcat"
     val dbName = "my_db2"
@@ -476,13 +486,13 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("Column.toString") {
     assert(new Column("namama", "descaca", "datatapa",
-      nullable = true, isPartition = false, isBucket = true).toString ==
+      nullable = true, isPartition = false, isBucket = true, isCluster = false).toString ==
         "Column[name='namama', description='descaca', dataType='datatapa', " +
-          "nullable='true', isPartition='false', isBucket='true']")
+          "nullable='true', isPartition='false', isBucket='true', isCluster='false']")
     assert(new Column("namama", null, "datatapa",
-      nullable = false, isPartition = true, isBucket = true).toString ==
+      nullable = false, isPartition = true, isBucket = true, isCluster = true).toString ==
       "Column[name='namama', dataType='datatapa', " +
-        "nullable='false', isPartition='true', isBucket='true']")
+        "nullable='false', isPartition='true', isBucket='true', isCluster='true']")
   }
 
   test("catalog classes format in Dataset.show") {
@@ -491,7 +501,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       isTemporary = false)
     val function = new Function("nama", "cataloa", Array("databasa"), "descripta", "classa", false)
     val column = new Column(
-      "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
+      "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true,
+      isCluster = true)
     val dbFields = getConstructorParameterValues(db)
     val tableFields = getConstructorParameterValues(table)
     val functionFields = getConstructorParameterValues(function)
@@ -503,7 +514,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert((functionFields(0), functionFields(1), functionFields(3), functionFields(4),
       functionFields(5)) == ("nama", "cataloa", "descripta", "classa", false))
     assert(functionFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
-    assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
+    assert(columnFields == Seq("nama", "descripta", "typa", false, true, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
     val tableString = CatalogImpl.makeDataset(Seq(table), spark).showString(10)
     val functionString = CatalogImpl.makeDataset(Seq(function), spark).showString(10)
