@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
@@ -37,6 +38,13 @@ private[sql] object SqlScriptingErrors extends QueryErrorsBase {
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
       messageParameters = Map("endLabel" -> endLabel))
+  }
+
+  def sqlScriptingNotEnabled(): Throwable = {
+    new SparkException(
+      errorClass = "SQL_SCRIPTING_NOT_ENABLED",
+      cause = null,
+      messageParameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
   }
 
 }
