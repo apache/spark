@@ -58,3 +58,13 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String]) extends CompoundPlanStatement
+
+/**
+ * Logical operator for IF ELSE statement.
+ * @param conditions Collection of conditions. First condition corresponds to IF clause,
+ *                   while others (if any) correspond to following ELSE IF clauses.
+ * @param bodies Collection of bodies.
+ */
+case class IfElseStatement(
+    conditions: Seq[SingleStatement],
+    bodies: Seq[CompoundBody]) extends CompoundPlanStatement

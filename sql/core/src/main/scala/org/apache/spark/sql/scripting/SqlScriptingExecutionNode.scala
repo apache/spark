@@ -19,8 +19,10 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -155,3 +157,98 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  */
 class CompoundBodyExec(statements: Seq[CompoundStatementExec])
   extends CompoundNestedStatementIteratorExec(statements)
+
+/**
+ * Executable node for IfElseStatement.
+ * @param conditions Collection of executable conditions. First condition corresponds to IF clause,
+ *                   while others (if any) correspond to following ELSE IF clauses.
+ * @param bodies  Collection of executable bodies.
+ * @param booleanEvaluator Evaluator for Boolean conditions.
+ */
+class IfElseStatementExec(
+    conditions: Seq[SingleStatementExec],
+    bodies: Seq[CompoundBodyExec],
+    booleanEvaluator: StatementBooleanEvaluator) extends NonLeafStatementExec {
+  private object IfElseState extends Enumeration {
+    val Condition, Body = Value
+  }
+
+  private var state = IfElseState.Condition
+  private var curr: Option[CompoundStatementExec] = Some(conditions.head)
+
+  private var clauseIdx: Int = 0
+  private val conditionsCount: Int = conditions.length
+  private val bodiesCount: Int = bodies.length
+  assert(conditionsCount == bodiesCount || conditionsCount + 1 == bodiesCount)
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = curr.nonEmpty
+
+      override def next(): CompoundStatementExec = state match {
+        case IfElseState.Condition =>
+          assert(curr.get.isInstanceOf[SingleStatementExec])
+          val condition = curr.get.asInstanceOf[SingleStatementExec]
+          if (booleanEvaluator.eval(condition)) {
+            state = IfElseState.Body
+            curr = Some(bodies(clauseIdx))
+          } else {
+            clauseIdx += 1
+            if (clauseIdx < conditionsCount) {
+              // There are ELSE IF clauses remaining.
+              state = IfElseState.Condition
+              curr = Some(conditions(clauseIdx))
+            } else if (conditionsCount < bodiesCount) {
+              // ELSE clause exists.
+              state = IfElseState.Body
+              curr = Some(bodies(clauseIdx))
+            } else {
+              // No remaining clauses.
+              curr = None
+            }
+          }
+          condition
+        case IfElseState.Body =>
+          val retStmt = bodies(clauseIdx).getTreeIterator.next()
+          if (!bodies(clauseIdx).getTreeIterator.hasNext) {
+            curr = None
+          }
+          retStmt
+      }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = IfElseState.Condition
+    curr = Some(conditions.head)
+    clauseIdx = 0
+    conditions.foreach(c => c.reset())
+    bodies.foreach(b => b.reset())
+  }
+}
+
+trait StatementBooleanEvaluator {
+  def eval(statement: LeafStatementExec): Boolean
+}
+
+case class DataFrameEvaluator(session: SparkSession) extends StatementBooleanEvaluator {
+  override def eval(statement: LeafStatementExec): Boolean = statement match {
+    case statement: SingleStatementExec =>
+      assert(!statement.isExecuted)
+      statement.isExecuted = true
+
+      // DataFrame evaluates to True if it is single row, single column
+      //  of boolean type with value True.
+      val df = Dataset.ofRows(session, statement.parsedPlan)
+      df.schema.fields match {
+        case Array(field) if field.dataType == BooleanType =>
+          df.limit(2).collect() match {
+            case Array(row) => row.getBoolean(0)
+            case _ => false
+          }
+        case _ => false
+      }
+    case _ => false
+  }
+}

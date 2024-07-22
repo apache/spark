@@ -205,9 +205,21 @@ class AstBuilder extends DataTypeAstBuilder
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
-          visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+          visitChildren(ctx).asInstanceOf[CompoundPlanStatement]
         }
     }
+
+  override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement ={
+    IfElseStatement(
+      conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+        SingleStatement(
+          Project(
+            Seq(Alias(expression(boolExpr), "condition")()),
+            OneRowRelation()))
+      }),
+      bodies = ctx.compoundBody().asScala.toList.map(body => visitCompoundBody(body))
+    )
+  }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
