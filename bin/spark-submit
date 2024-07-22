@@ -21,7 +21,78 @@ if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
 
+# In order to start Spark Connect shell, we should identify if spark.remote
+# or --remote is set. Spark Connect does not support loading configurations
+# yet.
+connect_shell=false
+run_jvm=false
+cur_arg="$0"
+for arg in "${@:1}"
+do
+    # Those shell have their own implementation. SparkR does not support Spark Connect.
+    if [[ $cur_arg == "pyspark-shell" || \
+          $cur_arg == "pyspark-shell-main" || \
+          $cur_arg == "sparkr-shell-main" || \
+          $cur_arg == "sparkr-shell" || \
+          $cur_arg == "spark-shell" ]]; then
+        connect_shell=false
+        break
+    fi
+
+    # --conf spark.local.connect=... should always start the server locally.
+    if [[ $cur_arg == "--conf" || $cur_arg == "-c" ]]; then
+        if [[ $arg == "spark.local.connect"* ]]; then
+            connect_shell=false
+            break
+        fi
+    fi
+
+    # --conf spark.remote=... or -c spark.remote=...
+    if [[ $cur_arg == "--conf" || $cur_arg == "-c" ]]; then
+        if [[ $arg == "spark.remote"* ]]; then
+            connect_shell=true
+        fi
+    fi
+
+    # --conf=spark.remote=... or -c=spark.remote=...
+    if [[ $arg == "--conf=spark.remote"* || $arg == "-c=spark.remote"* ]]; then
+        connect_shell=true
+    fi
+
+    # --remote= or --remote
+    if [[ $arg == "--remote"* ]]; then
+        connect_shell=true
+    fi
+
+    # --class specified means to run Java/Scala application
+    if [[ $arg == "--class" ]]; then
+        run_jvm=true
+    fi
+    cur_arg=$arg
+done
+
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
 
-exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
+if $connect_shell && $run_jvm; then
+    export SPARK_SUBMIT_OPTS
+    export SPARK_CONNECT_DEPS=1
+    if [ -d "${SPARK_HOME}/jars" ]; then
+        # Production code path
+        coordinate=$(find "${SPARK_HOME}/jars" -type f -name 'spark-connect_*')
+        coordinate=$(basename $coordinate)
+        sparkver=${${${coordinate##*_}%.jar*}#*-}
+        scalaver=${${${coordinate##*_}%.jar*}%%-*}
+        "${SPARK_HOME}"/bin/spark-class \
+            org.apache.spark.deploy.SparkSubmit \
+            --packages org.apache.spark:spark-connect-client-jvm_$scalaver:$sparkver "$@"
+    else
+        # Development code path
+        SCCLASSPATH=$(connector/connect/bin/spark-connect-scala-client-classpath)
+        "${SPARK_HOME}"/bin/spark-class \
+            org.apache.spark.deploy.SparkSubmit \
+            --conf spark.driver.extraClassPath=$SCCLASSPATH "$@"
+    fi
+else
+    exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
+fi

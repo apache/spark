@@ -25,6 +25,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.{Py4JServer, PythonUtils}
 import org.apache.spark.internal.config._
@@ -74,6 +77,16 @@ object PythonRunner {
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
+    if (!Utils.isLocalRemote(sparkConf)) {
+      // For non-local remote, pass configurations to environment variables so
+      // Spark Connect client sets them. For local remotes, they will be set
+      // via Py4J.
+      // For PySpark specifically, we can't send other configurations through properties.
+      // So, here we should send it together.
+      val confs = sparkConf.getAll.filter(p =>
+        p._1.startsWith("spark.sql.") && p._2.nonEmpty || p._1.startsWith("spark.remote")).toMap
+      env.put("PYSPARK_REMOTE_INIT_CONF", compact(render(confs)))
+    }
     sparkConf.getOption("spark.remote").foreach(url => env.put("SPARK_REMOTE", url))
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:

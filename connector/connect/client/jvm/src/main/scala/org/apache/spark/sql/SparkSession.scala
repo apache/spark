@@ -18,12 +18,14 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
@@ -827,7 +829,6 @@ class SparkSession private[sql] (
 object SparkSession extends Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
-
   private val sessions = CacheBuilder
     .newBuilder()
     .weakValues()
@@ -890,7 +891,49 @@ object SparkSession extends Logging {
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
     private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+    private var server: Option[Process] = None
+    private[this] lazy val options = {
+      val configs: Map[String, String] =
+        sys.props.filter(p => p._1.startsWith("spark.sql.") && p._2.nonEmpty).toMap
+      val map = new scala.collection.mutable.HashMap[String, String]
+      map.addAll(configs)
+    }
+    private def remoteString: Option[String] = {
+      options
+        .get("spark.remote")
+        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+    }
+
+    private def withLocalConnectServer[T](f: => T): T = {
+      if (remoteString.exists(_.startsWith("local"))) {
+        val sparkHome = System.getenv("SPARK_HOME")
+        server = Some {
+          val args = Seq(
+            Paths.get(sparkHome, "sbin", "start-connect-server.sh").toString,
+            "--master",
+            remoteString.get) ++ options.flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
+          val pb = new ProcessBuilder(args: _*)
+          // So don't exclude spark-sql jar in classpath
+          pb.environment().put("SPARK_CONNECT_DEPS", "0")
+          pb.start()
+        }
+        // Let the server start. We will directly request to set the configurations
+        // and this sleep makes less noisy with retries.
+        Thread.sleep(2000L)
+        System.setProperty("spark.remote", "sc://localhost")
+
+        // scalastyle:off runtimeaddshutdownhook
+        Runtime.getRuntime.addShutdownHook(new Thread() {
+          if (server.isDefined) {
+            new ProcessBuilder(Paths.get(sparkHome, "sbin", "stop-connect-server.sh").toString)
+              .start()
+          }
+        })
+        // scalastyle:on runtimeaddshutdownhook
+      }
+      f
+    }
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
@@ -1002,7 +1045,9 @@ object SparkSession extends Logging {
 
     private def applyOptions(session: SparkSession): Unit = {
       options.foreach { case (key, value) =>
-        session.conf.set(key, value)
+        // The configurations might not be all runtime configurations.
+        // Try to set them with ignoring failures for now.
+        Try(session.conf.set(key, value))
       }
     }
 
@@ -1023,7 +1068,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def create(): SparkSession = {
+    def create(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
@@ -1043,7 +1088,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def getOrCreate(): SparkSession = {
+    def getOrCreate(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse({
           var existingSession = sessions.get(builder.configuration)

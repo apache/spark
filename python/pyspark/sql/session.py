@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 import os
 import sys
 import warnings
@@ -474,7 +475,8 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
-            opts = dict(self._options)
+            opts = json.loads(os.environ.get("PYSPARK_REMOTE_INIT_CONF", "{}"))
+            opts.update(self._options)
 
             if is_remote_only():
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -570,7 +572,9 @@ class SparkSession(SparkConversionMixin):
             -----
             This method will update the default and/or active session if they are not set.
             """
-            opts = dict(self._options)
+            opts = json.loads(os.environ.get("PYSPARK_REMOTE_INIT_CONF", "{}"))
+            opts.update(self._options)
+
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
