@@ -162,7 +162,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
    * @param subqueryAlias
    * @param subqueryLocation The clause of the main query where the subquery is located.
    * @param subqueryType The type of subquery, such as SCALAR, RELATION, PREDICATE
-   * @param isCorrelated Whether the subquery is to be correlated.
+   * @param correlationConditions The correlated conditions of subquery.
    * @param isDistinct Whether subquery results is to be de-duplicated, i.e. have a DISTINCT clause.
    * @param operatorInSubquery The operator to be included in the subquery.
    */
@@ -172,18 +172,15 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       subqueryAlias: String,
       subqueryLocation: SubqueryLocation.Value,
       subqueryType: SubqueryType.Value,
-      isCorrelated: Boolean,
+      correlationConditions: Seq[Predicate],
       isDistinct: Boolean,
       operatorInSubquery: Operator): Query = {
 
-    // Correlation conditions, this is hardcoded for now.
-    val correlationConditions = if (isCorrelated) {
-      Seq(Equals(innerTable.output.head, outerTable.output.head))
-    } else {
-      Seq()
-    }
-    val isScalarSubquery = Seq(SubqueryType.ATTRIBUTE, SubqueryType.SCALAR_PREDICATE_EQUALS,
-      SubqueryType.SCALAR_PREDICATE_LESS_THAN).contains(subqueryType)
+    val isScalarSubquery = Seq(SubqueryType.ATTRIBUTE,
+      SubqueryType.SCALAR_PREDICATE_EQUALS, SubqueryType.SCALAR_PREDICATE_NOT_EQUALS,
+      SubqueryType.SCALAR_PREDICATE_LESS_THAN, SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+      SubqueryType.SCALAR_PREDICATE_GREATER_THAN,
+      SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS).contains(subqueryType)
     val subqueryOrganization = generateSubquery(
       innerTable, correlationConditions, isDistinct, operatorInSubquery, isScalarSubquery)
 
@@ -218,8 +215,16 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         val whereClausePredicate = subqueryType match {
           case SubqueryType.SCALAR_PREDICATE_EQUALS =>
             Equals(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_NOT_EQUALS =>
+            NotEquals(expr, Subquery(subqueryOrganization))
           case SubqueryType.SCALAR_PREDICATE_LESS_THAN =>
             LessThan(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS =>
+            LessThanOrEquals(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_GREATER_THAN =>
+            GreaterThan(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS =>
+            GreaterThanOrEquals(expr, Subquery(subqueryOrganization))
           case SubqueryType.EXISTS => Exists(subqueryOrganization)
           case SubqueryType.NOT_EXISTS => Not(Exists(subqueryOrganization))
           case SubqueryType.IN => In(expr, subqueryOrganization)
@@ -294,7 +299,11 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         case SubqueryLocation.FROM => Seq(SubqueryType.RELATION)
         case SubqueryLocation.WHERE => Seq(
           SubqueryType.SCALAR_PREDICATE_LESS_THAN,
+          SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+          SubqueryType.SCALAR_PREDICATE_GREATER_THAN,
+          SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
           SubqueryType.SCALAR_PREDICATE_EQUALS,
+          SubqueryType.SCALAR_PREDICATE_NOT_EQUALS,
           SubqueryType.IN,
           SubqueryType.NOT_IN,
           SubqueryType.EXISTS,
@@ -309,9 +318,23 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         case _ => Seq(true, false)
       }
 
+    def generateCorrelationConditions(innerTable: Relation, outerTable: Relation,
+                                      isCorrelated: Boolean): Seq[Seq[Predicate]] = {
+      if (isCorrelated) {
+        Seq(Seq(Equals(innerTable.output.head, outerTable.output.head)),
+          Seq(NotEquals(innerTable.output.head, outerTable.output.head)),
+          Seq(LessThan(innerTable.output.head, outerTable.output.head)),
+          Seq(LessThanOrEquals(innerTable.output.head, outerTable.output.head)),
+          Seq(GreaterThan(innerTable.output.head, outerTable.output.head)),
+          Seq(GreaterThanOrEquals(innerTable.output.head, outerTable.output.head)))
+      } else {
+        Seq(Seq())
+      }
+    }
+
     def distinctChoices(subqueryOperator: Operator): Seq[Boolean] = {
       subqueryOperator match {
-        // Don't do DISTINCT if there is no group by because it is redundant.
+        // Don't do DISTINCT if there is group by because it is redundant.
         case Aggregate(_, groupingExpressions) if groupingExpressions.isEmpty => Seq(false)
         case _ => Seq(true, false)
       }
@@ -328,6 +351,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         Seq(SubqueryLocation.WHERE, SubqueryLocation.SELECT, SubqueryLocation.FROM)
       subqueryType <- subqueryTypeChoices(subqueryLocation)
       isCorrelated <- correlationChoices(subqueryLocation)
+      correlationCondition <- generateCorrelationConditions(innerTable, outerTable, isCorrelated)
     } {
       // Hardcoded aggregation column and group by column.
       val (aggColumn, groupByColumn) = innerTable.output.head -> innerTable.output(1)
@@ -346,7 +370,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         isDistinct <- distinctChoices(subqueryOperator)
       } {
         generatedQuerySpecs += SubquerySpec(generateQuery(innerTable, outerTable,
-          subqueryAlias, subqueryLocation, subqueryType, isCorrelated, isDistinct,
+          subqueryAlias, subqueryLocation, subqueryType, correlationCondition, isDistinct,
           subqueryOperator).toString + ";", isCorrelated, subqueryType)
       }
     }

@@ -1947,7 +1947,7 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
+  def try_mod(left: Column, right: Column): Column = Column.fn("try_mod", left, right)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
@@ -4587,6 +4587,15 @@ object functions {
    * @since 3.5.0
    */
   def url_decode(str: Column): Column = Column.fn("url_decode", str)
+
+  /**
+   * This is a special version of `url_decode` that performs the same operation, but returns a
+   * NULL value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_url_decode(str: Column): Column = Column.fn("try_url_decode", str)
 
   /**
    * Translates a string into 'application/x-www-form-urlencoded' format using a specific encoding
