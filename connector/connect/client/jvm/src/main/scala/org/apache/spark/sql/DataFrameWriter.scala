@@ -202,8 +202,8 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
   }
 
   /**
-   * Clusters the output by the given columns on the storage. The rows with matching values in
-   * the specified clustering columns will be consolidated within the same group.
+   * Clusters the output by the given columns on the storage. The rows with matching values in the
+   * specified clustering columns will be consolidated within the same group.
    *
    * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
    * together in a file. This arrangement improves query efficiency when you apply selective
