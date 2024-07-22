@@ -175,19 +175,15 @@ public abstract class BlockStoreClient implements Closeable {
     int maxRetries = transportConf.maxIORetries();
     int retryWaitTime = transportConf.ioRetryWaitTimeMs();
     boolean enableSaslRetries = transportConf.enableSaslRetries();
-    retry(0, 0, maxRetries, enableSaslRetries, retryWaitTime, () -> {
-      CompletableFuture<Map<String, String[]>> tempHostLocalDirsCompletable =
-              new CompletableFuture<>();
-      getHostLocalDirsInternal(host, port, execIds, tempHostLocalDirsCompletable);
-      return tempHostLocalDirsCompletable;
-    }, hostLocalDirsCompletable);
+    retry(0, 0, maxRetries, enableSaslRetries, retryWaitTime,
+      () -> getHostLocalDirsInternal(host, port, execIds), hostLocalDirsCompletable);
   }
 
-  private void getHostLocalDirsInternal(
+  private CompletableFuture<Map<String, String[]>> getHostLocalDirsInternal(
       String host,
       int port,
-      String[] execIds,
-      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
+      String[] execIds) {
+    CompletableFuture<Map<String, String[]>> result = new CompletableFuture<>();
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
     try {
       TransportClient client = clientFactory.createClient(host, port);
@@ -196,12 +192,12 @@ public abstract class BlockStoreClient implements Closeable {
         public void onSuccess(ByteBuffer response) {
           try {
             BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
-            hostLocalDirsCompletable.complete(
+            result.complete(
               ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
             logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
               MDC.of(LogKeys.EXECUTOR_IDS$.MODULE$, Arrays.toString(getLocalDirsMessage.execIds)));
-            hostLocalDirsCompletable.completeExceptionally(t);
+            result.completeExceptionally(t);
           }
         }
 
@@ -209,12 +205,13 @@ public abstract class BlockStoreClient implements Closeable {
         public void onFailure(Throwable t) {
           logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
             MDC.of(LogKeys.EXECUTOR_IDS$.MODULE$, Arrays.toString(getLocalDirsMessage.execIds)));
-          hostLocalDirsCompletable.completeExceptionally(t);
+          result.completeExceptionally(t);
         }
       });
     } catch (IOException | InterruptedException e) {
-      hostLocalDirsCompletable.completeExceptionally(e);
+      result.completeExceptionally(e);
     }
+    return result;
   }
 
   private <T> void retry(
