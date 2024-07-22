@@ -946,6 +946,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TABLE(SELECT 1 AS X)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'1'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query analysis
 DropTempViewCommand t1
