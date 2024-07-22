@@ -341,6 +341,7 @@ VALUES	false
 VAR	false
 VARCHAR	false
 VARIABLE	false
+VARIABLES	false
 VARIANT	false
 VERSION	false
 VIEW	false
