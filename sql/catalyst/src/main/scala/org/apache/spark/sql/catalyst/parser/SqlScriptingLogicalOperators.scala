@@ -87,6 +87,6 @@ case class IfElseStatement(
  *              The label can be used to LEAVE or ITERATE the loop.
  */
 case class WhileStatement(
-                           condition: Expression,
+                           condition: SingleStatement,
                            body: CompoundBody,
                            label: Option[String]) extends CompoundPlanStatement
