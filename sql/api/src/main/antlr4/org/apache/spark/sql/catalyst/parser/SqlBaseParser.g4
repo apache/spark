@@ -72,6 +72,10 @@ setStatementWithOptionalVarKeyword
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
     ;
 
+whileStatement
+    : beginLabel? WHILE booleanExpression DO compoundBody END WHILE endLabel?
+    ;
+
 ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
         (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
