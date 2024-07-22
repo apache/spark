@@ -441,7 +441,7 @@ class RocksDBFileManager(
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
    */
-  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Int = 0): Unit = {
+  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Long = 0): Unit = {
     // If minVersionsToDelete <= 0, we call list every time maintenance is invoked
     // This is the original behaviour without list api call optimization
     if (minVersionsToDelete > 0) {
@@ -450,14 +450,15 @@ class RocksDBFileManager(
       // We still proceed with deletion if maxSeenVersion isn't set to ensure the fallback
       // is to clean up files if maxSeenVersion fails to be initialized
       if (maxSeenVersion.isDefined) {
+        logInfo(log"Estimated maximum version is " +
+          log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
+          log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
         val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
         if (versionsToDelete < minVersionsToDelete) {
           logInfo(log"Skipping deleting files." +
-            log"${MDC(LogKeys.VERSIONS_TO_DELETE, versionsToDelete)}" +
-            log" stale versions are not enough for batch deletion.")
-          logInfo(log"Estimated maximum version is " +
-            log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
-            log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
+            log" Need at least ${MDC(LogKeys.MIN_VERSIONS_TO_DELETE, minVersionsToDelete)}" +
+            log" stale versions for batch deletion but found only" +
+            log" ${MDC(LogKeys.VERSIONS_TO_DELETE, versionsToDelete)}.")
           return
         }
       }

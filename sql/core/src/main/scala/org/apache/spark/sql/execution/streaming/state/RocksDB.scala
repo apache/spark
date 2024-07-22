@@ -903,7 +903,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
  */
 case class RocksDBConf(
     minVersionsToRetain: Int,
-    minVersionsToDelete: Int,
+    minVersionsToDelete: Long,
     minDeltasForSnapshot: Int,
     compactOnCommit: Boolean,
     enableChangelogCheckpointing: Boolean,

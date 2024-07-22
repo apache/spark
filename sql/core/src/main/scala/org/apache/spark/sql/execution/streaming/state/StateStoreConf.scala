@@ -46,7 +46,8 @@ class StateStoreConf(
    * checkpoint directory for old state checkpoint version deletion to be invoked.
    * This is to amortize the cost of discovering and deleting old checkpoint versions.
    */
-  val minVersionsToDelete: Int = sqlConf.minVersionsToDelete
+  val minVersionsToDelete: Long =
+    Math.round(sqlConf.ratioExtraSpaceAllowedInCheckpoint * sqlConf.minBatchesToRetain)
 
   /** Maximum count of versions a State Store implementation should retain in memory */
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
