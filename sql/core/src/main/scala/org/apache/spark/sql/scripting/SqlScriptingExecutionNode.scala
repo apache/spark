@@ -81,6 +81,9 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
  *   compound.
+ * @param shouldCollectResult
+ *   Whether we should collect result after statement execution. Example: results from conditions
+ *   in if-else or loops should not be collected.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
@@ -106,7 +109,7 @@ class SingleStatementExec(
 
   override def reset(): Unit = isExecuted = false
 
-  def execute(session: SparkSession): Unit = {
+  override def execute(session: SparkSession): Unit = {
     isExecuted = true
     val rows = Some(Dataset.ofRows(session, parsedPlan).collect())
     if (shouldCollectResult) {
@@ -127,8 +130,8 @@ class CompoundBodyExec(
       session: SparkSession)
   extends NonLeafStatementExec {
 
-  protected var localIterator: Iterator[CompoundStatementExec] = statements.iterator
-  protected var curr: Option[CompoundStatementExec] =
+  private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
+  private var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
 
   def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
@@ -139,7 +142,7 @@ class CompoundBodyExec(
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
   }
 
-  protected lazy val treeIterator: Iterator[CompoundStatementExec] =
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = {
         val childHasNext = curr match {
