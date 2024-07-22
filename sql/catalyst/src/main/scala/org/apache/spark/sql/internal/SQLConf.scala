@@ -3333,6 +3333,14 @@ object SQLConf {
       .version("2.3.0")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
+  val SQL_SCRIPTING_ENABLED =
+    buildConf("spark.sql.scripting.enabled")
+      .doc("SQL Scripting feature is under development and its use should be done under this" +
+        "feature flag.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string.")
@@ -5502,6 +5510,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 
   def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
+
+  def sqlScriptingEnabled: Boolean = getConf(SQL_SCRIPTING_ENABLED)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
