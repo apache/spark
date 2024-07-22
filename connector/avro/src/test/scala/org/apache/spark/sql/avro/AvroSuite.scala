@@ -566,7 +566,7 @@ abstract class AvroSuite
       dataFileWriter.flush()
       dataFileWriter.close()
 
-      val df = spark.sqlContext.read.format("avro").load(nativeWriterPath)
+      val df = spark.read.format("avro").load(nativeWriterPath)
       assertResult(Row(field1, null, null, null))(df.selectExpr("field1.*").first())
       assertResult(Row(null, field2, null, null))(df.selectExpr("field2.*").first())
       assertResult(Row(null, null, field3, null))(df.selectExpr("field3.*").first())
@@ -575,7 +575,7 @@ abstract class AvroSuite
 
       df.write.format("avro").option("avroSchema", schema.toString).save(sparkWriterPath)
 
-      val df2 = spark.sqlContext.read.format("avro").load(nativeWriterPath)
+      val df2 = spark.read.format("avro").load(nativeWriterPath)
       assertResult(Row(field1, null, null, null))(df2.selectExpr("field1.*").first())
       assertResult(Row(null, field2, null, null))(df2.selectExpr("field2.*").first())
       assertResult(Row(null, null, field3, null))(df2.selectExpr("field3.*").first())

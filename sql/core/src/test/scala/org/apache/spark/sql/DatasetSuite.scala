@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExam
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -542,25 +543,20 @@ class DatasetSuite extends QueryTest
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
-    val e1 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
-    }.getMessage
-    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+    def checkJoinWithJoinType(joinType: String): Unit = {
+      val semiErrorParameters = Map("joinType" -> JoinType(joinType).sql)
+      checkError(
+        exception = intercept[AnalysisException](
+          ds1.joinWith(ds2, $"a.value" === $"b.value", joinType)
+        ),
+        errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
+        sqlState = "42613",
+        parameters = semiErrorParameters
+      )
+    }
 
-    val e2 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "semi")
-    }.getMessage
-    assert(e2.contains("Invalid join type in joinWith: " + LeftSemi.sql))
-
-    val e3 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
-    }.getMessage
-    assert(e3.contains("Invalid join type in joinWith: " + LeftAnti.sql))
-
-    val e4 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
-    }.getMessage
-    assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
+    Seq("leftsemi", "left_semi", "semi", "leftanti", "left_anti", "anti")
+      .foreach(checkJoinWithJoinType(_))
   }
 
   test("groupBy function, keys") {
@@ -955,6 +951,25 @@ class DatasetSuite extends QueryTest
       case (row, iterator, iterator1) => iterator.toSeq ++ iterator1.toSeq
     }(ExpressionEncoder(inputType)).collect()
     assert(result2.length == 3)
+  }
+
+  test("SPARK-48718: cogroup deserializer expr is resolved before dedup relation") {
+    val lhs = spark.createDataFrame(
+      List(Row(123L)).asJava,
+      StructType(Seq(StructField("GROUPING_KEY", LongType)))
+    )
+    val rhs = spark.createDataFrame(
+      List(Row(0L, 123L)).asJava,
+      StructType(Seq(StructField("ID", LongType), StructField("GROUPING_KEY", LongType)))
+    )
+
+    val lhsKV = lhs.groupByKey((r: Row) => r.getAs[Long]("GROUPING_KEY"))
+    val rhsKV = rhs.groupByKey((r: Row) => r.getAs[Long]("GROUPING_KEY"))
+    val cogrouped = lhsKV.cogroup(rhsKV)(
+      (a: Long, b: Iterator[Row], c: Iterator[Row]) => Iterator(0L)
+    )
+    val joined = rhs.join(cogrouped, col("ID") === col("value"), "left")
+    checkAnswer(joined, Row(0L, 123L, 0L) :: Nil)
   }
 
   test("SPARK-34806: observation on datasets") {

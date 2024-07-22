@@ -18,7 +18,7 @@ import datetime
 import json
 from typing import Tuple, Optional
 
-from pyspark.sql.types import DateType, Row, StructType
+from pyspark.sql.types import Row, StructType, TimestampType
 from pyspark.sql.utils import has_numpy
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
 
@@ -198,7 +198,7 @@ class GroupState:
                 error_class="VALUE_NOT_POSITIVE",
                 message_parameters={
                     "arg_name": "durationMs",
-                    "arg_type": type(durationMs).__name__,
+                    "arg_value": type(durationMs).__name__,
                 },
             )
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
@@ -220,14 +220,14 @@ class GroupState:
             )
 
         if isinstance(timestampMs, datetime.datetime):
-            timestampMs = DateType().toInternal(timestampMs)
+            timestampMs = TimestampType().toInternal(timestampMs) / 1000
 
         if timestampMs <= 0:
             raise PySparkValueError(
                 error_class="VALUE_NOT_POSITIVE",
                 message_parameters={
                     "arg_name": "timestampMs",
-                    "arg_type": type(timestampMs).__name__,
+                    "arg_value": type(timestampMs).__name__,
                 },
             )
 

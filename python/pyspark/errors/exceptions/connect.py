@@ -91,7 +91,10 @@ def convert_exception(
         )
         query_contexts = []
         for query_context in resp.errors[resp.root_error_idx].spark_throwable.query_contexts:
-            query_contexts.append(QueryContext(query_context))
+            if query_context.context_type == pb2.FetchErrorDetailsResponse.QueryContext.SQL:
+                query_contexts.append(SQLQueryContext(query_context))
+            else:
+                query_contexts.append(DataFrameQueryContext(query_context))
 
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(
@@ -322,6 +325,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
         self._query_contexts: List[BaseQueryContext] = query_contexts
+        self._log_exception()
 
     def getSqlState(self) -> Optional[str]:
         if self._sql_state is not None:
@@ -430,17 +434,12 @@ class SparkNoSuchElementException(SparkConnectGrpcException, BaseNoSuchElementEx
     """
 
 
-class QueryContext(BaseQueryContext):
+class SQLQueryContext(BaseQueryContext):
     def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
         self._q = q
 
     def contextType(self) -> QueryContextType:
-        context_type = self._q.context_type
-
-        if int(context_type) == QueryContextType.DataFrame.value:
-            return QueryContextType.DataFrame
-        else:
-            return QueryContextType.SQL
+        return QueryContextType.SQL
 
     def objectType(self) -> str:
         return str(self._q.object_type)
@@ -453,6 +452,75 @@ class QueryContext(BaseQueryContext):
 
     def stopIndex(self) -> int:
         return int(self._q.stop_index)
+
+    def fragment(self) -> str:
+        return str(self._q.fragment)
+
+    def callSite(self) -> str:
+        raise UnsupportedOperationException(
+            "",
+            error_class="UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+            message_parameters={"className": "SQLQueryContext", "methodName": "callSite"},
+            sql_state="0A000",
+            server_stacktrace=None,
+            display_server_stacktrace=False,
+            query_contexts=[],
+        )
+
+    def summary(self) -> str:
+        return str(self._q.summary)
+
+
+class DataFrameQueryContext(BaseQueryContext):
+    def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
+        self._q = q
+
+    def contextType(self) -> QueryContextType:
+        return QueryContextType.DataFrame
+
+    def objectType(self) -> str:
+        raise UnsupportedOperationException(
+            "",
+            error_class="UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+            message_parameters={"className": "DataFrameQueryContext", "methodName": "objectType"},
+            sql_state="0A000",
+            server_stacktrace=None,
+            display_server_stacktrace=False,
+            query_contexts=[],
+        )
+
+    def objectName(self) -> str:
+        raise UnsupportedOperationException(
+            "",
+            error_class="UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+            message_parameters={"className": "DataFrameQueryContext", "methodName": "objectName"},
+            sql_state="0A000",
+            server_stacktrace=None,
+            display_server_stacktrace=False,
+            query_contexts=[],
+        )
+
+    def startIndex(self) -> int:
+        raise UnsupportedOperationException(
+            "",
+            error_class="UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+            message_parameters={"className": "DataFrameQueryContext", "methodName": "startIndex"},
+            sql_state="0A000",
+            server_stacktrace=None,
+            display_server_stacktrace=False,
+            query_contexts=[],
+        )
+
+    def stopIndex(self) -> int:
+        raise UnsupportedOperationException(
+            "",
+            error_class="UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+            message_parameters={"className": "DataFrameQueryContext", "methodName": "stopIndex"},
+            sql_state="0A000",
+            server_stacktrace=None,
+            display_server_stacktrace=False,
+            query_contexts=[],
+        )
 
     def fragment(self) -> str:
         return str(self._q.fragment)

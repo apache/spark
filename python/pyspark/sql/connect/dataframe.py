@@ -73,6 +73,7 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
@@ -101,6 +102,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 class DataFrame(ParentDataFrame):
@@ -137,6 +139,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._execution_info: Optional["ExecutionInfo"] = None
 
     def __reduce__(self) -> Tuple:
         """
@@ -206,7 +209,10 @@ class DataFrame(ParentDataFrame):
 
     @property
     def write(self) -> "DataFrameWriter":
-        return DataFrameWriter(self._plan, self._session)
+        def cb(qe: "ExecutionInfo") -> None:
+            self._execution_info = qe
+
+        return DataFrameWriter(self._plan, self._session, cb)
 
     @functools.cache
     def isEmpty(self) -> bool:
@@ -1828,7 +1834,10 @@ class DataFrame(ParentDataFrame):
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
 
-        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        # not all datatypes are supported in arrow based collect
+        # here always verify the schema by from_arrow_schema
+        schema2 = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        schema = schema or schema2
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1836,7 +1845,9 @@ class DataFrame(ParentDataFrame):
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query, self._plan.observations)
+        table, schema, self._execution_info = self._session.client.to_table(
+            query, self._plan.observations
+        )
         assert table is not None
         return (table, schema)
 
@@ -1847,7 +1858,9 @@ class DataFrame(ParentDataFrame):
 
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        self._execution_info = ei
+        return pdf
 
     @property
     def schema(self) -> StructType:
@@ -1963,7 +1976,6 @@ class DataFrame(ParentDataFrame):
         query = self._plan.to_proto(self._session.client)
         return self._session.client.explain_string(query, explain_mode)
 
-    @functools.cache
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
@@ -1973,25 +1985,29 @@ class DataFrame(ParentDataFrame):
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def createOrReplaceTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def createGlobalTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def cache(self) -> ParentDataFrame:
         return self.persist()
@@ -2166,14 +2182,27 @@ class DataFrame(ParentDataFrame):
         )
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
-        return DataFrameWriterV2(self._plan, self._session, table)
+        def cb(ei: "ExecutionInfo") -> None:
+            self._execution_info = ei
+
+        return DataFrameWriterV2(self._plan, self._session, table, cb)
+
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        def cb(ei: "ExecutionInfo") -> None:
+            self._execution_info = ei
+
+        return MergeIntoWriter(
+            self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
+        )
 
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> "DataFrame":
         cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
-        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        _, properties, self._execution_info = self._session.client.execute_command(
+            cmd.command(self._session.client)
+        )
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
@@ -2181,7 +2210,9 @@ class DataFrame(ParentDataFrame):
 
     def localCheckpoint(self, eager: bool = True) -> "DataFrame":
         cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
-        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        _, properties, self._execution_info = self._session.client.execute_command(
+            cmd.command(self._session.client)
+        )
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
@@ -2201,6 +2232,10 @@ class DataFrame(ParentDataFrame):
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={"feature": "rdd"},
             )
+
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        return self._execution_info
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):

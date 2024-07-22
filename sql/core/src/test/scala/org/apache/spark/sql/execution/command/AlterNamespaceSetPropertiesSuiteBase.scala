@@ -50,7 +50,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> s"`$ns`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   test("basic test") {
@@ -83,10 +83,19 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
           sql(s"CREATE NAMESPACE $ns")
-          val exception = intercept[ParseException] {
-            sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='dummyVal')")
-          }
-          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+          val sqlText = s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='dummyVal')"
+          checkErrorMatchPVals(
+            exception = intercept[ParseException] {
+              sql(sqlText)
+            },
+            errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
+            parameters = Map("property" -> key, "msg" -> ".*"),
+            sqlState = None,
+            context = ExpectedContext(
+              fragment = sqlText,
+              start = 0,
+              stop = 46 + ns.length + key.length)
+          )
         }
       }
     }

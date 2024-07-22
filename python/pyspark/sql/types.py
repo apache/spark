@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -193,16 +194,7 @@ class DataType:
         >>> DataType.fromDDL("b: string, a: int")
         StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
         """
-        from pyspark.sql import SparkSession
-        from pyspark.sql.functions import udf
-
-        # Intentionally uses SparkSession so one implementation can be shared with/without
-        # Spark Connect.
-        schema = (
-            SparkSession.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
-        )
-        assert len(schema) == 1
-        return schema[0].dataType
+        return _parse_datatype_string(ddl)
 
     @classmethod
     def _data_type_build_formatted_string(
@@ -433,8 +425,8 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.utcfromtimestamp(ts // 1000000).replace(
-                microsecond=ts % 1000000
+            return datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
             )
 
 
@@ -586,7 +578,12 @@ class DayTimeIntervalType(AnsiIntervalType):
 
 
 class YearMonthIntervalType(AnsiIntervalType):
-    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard
+
+    Notes
+    -----
+    This data type doesn't support collection: df.collect/take/head.
+    """
 
     YEAR = 0
     MONTH = 1
@@ -628,6 +625,24 @@ class YearMonthIntervalType(AnsiIntervalType):
 
     jsonValue = _str_repr
 
+    def needConversion(self) -> bool:
+        # If PYSPARK_YM_INTERVAL_LEGACY is not set, needConversion is true,
+        # 'df.collect' fails with PySparkNotImplementedError;
+        # otherwise, no conversion is needed, and 'df.collect' returns the internal integers.
+        return not os.environ.get("PYSPARK_YM_INTERVAL_LEGACY") == "1"
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.fromInternal"},
+        )
+
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
 
@@ -644,6 +659,21 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     @classmethod
     def typeName(cls) -> str:
         return "interval"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "CalendarIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "CalendarIntervalType.fromInternal"},
+        )
 
 
 class ArrayType(DataType):
@@ -1538,6 +1568,12 @@ class VariantType(AtomicType):
         if obj is None or not all(key in obj for key in ["value", "metadata"]):
             return None
         return VariantVal(obj["value"], obj["metadata"])
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "VariantType.toInternal"},
+        )
 
 
 class UserDefinedType(DataType):

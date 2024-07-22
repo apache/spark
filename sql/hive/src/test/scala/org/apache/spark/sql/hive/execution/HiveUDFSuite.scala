@@ -35,6 +35,7 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
@@ -93,7 +94,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         """.
             stripMargin.format(classOf[PairSerDe].getName))
 
-      val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
+      val location = getWorkspaceFilePath(
+        "hive", "src", "test", "resources", "data", "files", "testUDF").toUri.toURL.getFile
       sql(s"""
         ALTER TABLE hiveUDFTestTable
         ADD IF NOT EXISTS PARTITION(partition='testUDF')
@@ -797,6 +799,28 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             "reason" -> reason
           )
         )
+      }
+    }
+  }
+
+  test("SPARK-48845: GenericUDF catch exceptions from child UDFs") {
+    withTable("test_catch_exception") {
+      withUserDefinedFunction("udf_throw_exception" -> true, "udf_catch_exception" -> true) {
+        Seq("9", "9-1").toDF("a").write.saveAsTable("test_catch_exception")
+        sql("CREATE TEMPORARY FUNCTION udf_throw_exception AS " +
+          s"'${classOf[UDFThrowException].getName}'")
+        sql("CREATE TEMPORARY FUNCTION udf_catch_exception AS " +
+          s"'${classOf[UDFCatchException].getName}'")
+        Seq(
+          CodegenObjectFactoryMode.FALLBACK.toString,
+          CodegenObjectFactoryMode.NO_CODEGEN.toString
+        ).foreach { codegenMode =>
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+            val df = sql(
+              "SELECT udf_catch_exception(udf_throw_exception(a)) FROM test_catch_exception")
+            checkAnswer(df, Seq(Row("9"), Row(null)))
+          }
+        }
       }
     }
   }

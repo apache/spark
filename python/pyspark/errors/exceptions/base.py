@@ -19,6 +19,7 @@ from enum import Enum
 from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.utils import ErrorClassesReader
+from pyspark.logger import PySparkLogger
 from pickle import PicklingError
 
 if TYPE_CHECKING:
@@ -128,6 +129,28 @@ class PySparkException(Exception):
         :meth:`PySparkException.getSqlState`
         """
         return self._query_contexts
+
+    def _log_exception(self) -> None:
+        query_contexts = self.getQueryContext()
+        query_context = query_contexts[0] if len(query_contexts) != 0 else None
+        if query_context:
+            if query_context.contextType().name == "DataFrame":
+                logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
+                call_site = query_context.callSite().split(":")
+                line_no = call_site[1] if len(call_site) == 2 else ""
+                logger.exception(
+                    self.getMessage(),
+                    file=call_site[0],
+                    line_no=line_no,
+                    fragment=query_context.fragment(),
+                    error_class=self.getErrorClass(),
+                )
+            else:
+                logger = PySparkLogger.getLogger("SQLQueryContextLogger")
+                logger.exception(
+                    self.getMessage(),
+                    error_class=self.getErrorClass(),
+                )
 
     def __str__(self) -> str:
         if self.getErrorClass() is not None:

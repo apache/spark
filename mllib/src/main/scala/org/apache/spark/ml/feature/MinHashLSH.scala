@@ -223,7 +223,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.randCoefficients.flatMap(tuple => Array(tuple._1, tuple._2)))
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 

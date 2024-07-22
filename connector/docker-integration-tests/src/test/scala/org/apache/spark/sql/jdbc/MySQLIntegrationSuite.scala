@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * To run this test suite for a specific version (e.g., mysql:9.0.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
@@ -355,9 +355,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
 
 /**
- * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * To run this test suite for a specific version (e.g., mysql:9.0.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
  * }}}

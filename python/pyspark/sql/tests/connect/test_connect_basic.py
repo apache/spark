@@ -630,6 +630,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df2 = self.spark.sql(sqlText, args={"minId": 7, "m": SF.create_map(SF.lit("a"), SF.lit(1))})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
+    def test_namedargs_with_global_limit(self):
+        sqlText = """SELECT * FROM VALUES (TIMESTAMP('2022-12-25 10:30:00'), 1) as tab(date, val)
+         where val = :val"""
+        df = self.connect.sql(sqlText, args={"val": 1})
+        df2 = self.spark.sql(sqlText, args={"val": 1})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
     def test_sql_with_pos_args(self):
         sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
         df = self.connect.sql(sqlText, args=[CF.array(CF.lit(1)), 7])
