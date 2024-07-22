@@ -44,9 +44,19 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult("SELECT 1;", Seq(Array(Row(1))))
   }
 
-  // Tests
   test("select 1; select 2;") {
-    verifySqlScriptResult("BEGIN SELECT 1; SELECT 2; END", Seq(Array(Row(1)), Array(Row(2))))
+    val sqlScript =
+      """
+        |BEGIN
+        |SELECT 1;
+        |SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array(Row(1)),
+      Array(Row(2))
+    )
+    verifySqlScriptResult(sqlScript, expected)
   }
 
   test("multi statement - simple") {
