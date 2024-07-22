@@ -29,6 +29,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
  * Metadata for a state store instance.
@@ -88,10 +89,18 @@ case class OperatorStateMetadataV2(
 
 object OperatorStateMetadataUtils {
 
-  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+  sealed trait OperatorStateMetadataReader {
+    def version: Int
 
-  def metadataFilePath(stateCheckpointPath: Path): Path =
-    new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
+    def read(): Option[OperatorStateMetadata]
+  }
+
+  sealed trait OperatorStateMetadataWriter {
+    def version: Int
+    def write(operatorMetadata: OperatorStateMetadata): Unit
+  }
+
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   def deserialize(
       version: Int,
@@ -123,6 +132,11 @@ object OperatorStateMetadataUtils {
   }
 }
 
+object OperatorStateMetadataV1 {
+  def metadataFilePath(stateCheckpointPath: Path): Path =
+    new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
+}
+
 object OperatorStateMetadataV2 {
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -130,8 +144,10 @@ object OperatorStateMetadataV2 {
   private implicit val manifest = Manifest
     .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
-  def metadataFilePath(stateCheckpointPath: Path): Path =
+  def baseMetadataPath(stateCheckpointPath: Path): Path =
     new Path(new Path(new Path(stateCheckpointPath, "_metadata"), "metadata"), "v2")
+  def metadataFilePath(stateCheckpointPath: Path, currentBatchId: Long): Path =
+    new Path(baseMetadataPath(stateCheckpointPath), currentBatchId.toString)
 
   def deserialize(in: BufferedReader): OperatorStateMetadata = {
     Serialization.read[OperatorStateMetadataV2](in)
@@ -147,12 +163,16 @@ object OperatorStateMetadataV2 {
 /**
  * Write OperatorStateMetadata into the state checkpoint directory.
  */
-class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configuration)
-  extends Logging {
+class OperatorStateMetadataV1Writer(
+    stateCheckpointPath: Path,
+    hadoopConf: Configuration)
+  extends OperatorStateMetadataWriter with Logging {
 
-  private val metadataFilePath = OperatorStateMetadataUtils.metadataFilePath(stateCheckpointPath)
+  private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
 
   private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
+
+  override def version: Int = 1
 
   def write(operatorMetadata: OperatorStateMetadata): Unit = {
     if (fm.exists(metadataFilePath)) return
@@ -178,20 +198,89 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
  * used to read OperatorStateMetadataV1.
  * OperatorStateMetadataV2 will be read by the OperatorStateMetadataLog.
  */
-class OperatorStateMetadataReader(stateCheckpointPath: Path, hadoopConf: Configuration) {
+class OperatorStateMetadataV1Reader(
+    stateCheckpointPath: Path,
+    hadoopConf: Configuration) extends OperatorStateMetadataReader {
+  override def version: Int = 1
 
-  private val metadataFilePath = OperatorStateMetadataUtils.metadataFilePath(stateCheckpointPath)
+  private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
 
   private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
 
-  def read(): OperatorStateMetadata = {
+  def read(): Option[OperatorStateMetadata] = {
     val inputStream = fm.open(metadataFilePath)
     val inputReader =
       new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
     try {
       val versionStr = inputReader.readLine()
       val version = MetadataVersionUtil.validateVersion(versionStr, 1)
-      OperatorStateMetadataUtils.deserialize(version, inputReader)
+      Some(OperatorStateMetadataUtils.deserialize(version, inputReader))
+    } finally {
+      inputStream.close()
+    }
+  }
+}
+
+class OperatorStateMetadataV2Writer(
+    stateCheckpointPath: Path,
+    hadoopConf: Configuration,
+    currentBatchId: Long) extends OperatorStateMetadataWriter with Logging {
+
+  private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
+    stateCheckpointPath, currentBatchId)
+
+  private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
+
+  override def version: Int = 2
+
+  override def write(operatorMetadata: OperatorStateMetadata): Unit = {
+    if (fm.exists(metadataFilePath)) return
+
+    fm.mkdirs(metadataFilePath.getParent)
+    val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
+    logError(s"### We are writing to ${metadataFilePath}")
+    try {
+      outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
+      OperatorStateMetadataUtils.serialize(outputStream, operatorMetadata)
+      outputStream.close()
+    } catch {
+      case e: Throwable =>
+        logError(
+          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}", e)
+        outputStream.cancel()
+        throw e
+    }
+  }
+}
+
+class OperatorStateMetadataV2Reader(
+    stateCheckpointPath: Path,
+    hadoopConf: Configuration) extends OperatorStateMetadataReader with Logging {
+
+  private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
+
+  fm.mkdirs(stateCheckpointPath.getParent)
+  override def version: Int = 2
+
+  private def listBatches(): Array[Long] = {
+    fm.list(stateCheckpointPath).map(_.getPath.getName.toLong).sorted
+  }
+
+  override def read(): Option[OperatorStateMetadata] = {
+    val batches = listBatches()
+    if (batches.isEmpty) {
+      None
+    }
+    val lastBatchId = batches.last
+    val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
+      stateCheckpointPath, lastBatchId)
+    val inputStream = fm.open(metadataFilePath)
+    val inputReader =
+      new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+    try {
+      val versionStr = inputReader.readLine()
+      val version = MetadataVersionUtil.validateVersion(versionStr, 2)
+      Some(OperatorStateMetadataUtils.deserialize(version, inputReader))
     } finally {
       inputStream.close()
     }

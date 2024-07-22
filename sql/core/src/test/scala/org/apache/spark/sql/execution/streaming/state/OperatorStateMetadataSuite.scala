@@ -40,7 +40,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       operatorId: Int,
       expectedMetadata: OperatorStateMetadataV1): Unit = {
     val statePath = new Path(checkpointDir, s"state/$operatorId")
-    val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
+    val operatorMetadata = new OperatorStateMetadataV1Reader(statePath, hadoopConf).read()
       .asInstanceOf[OperatorStateMetadataV1]
     assert(operatorMetadata.operatorInfo == expectedMetadata.operatorInfo &&
       operatorMetadata.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
@@ -52,7 +52,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val stateStoreInfo = (1 to 4).map(i => StateStoreMetadataV1(s"store$i", 1, 200))
       val operatorInfo = OperatorInfoV1(1, "Join")
       val operatorMetadata = OperatorStateMetadataV1(operatorInfo, stateStoreInfo.toArray)
-      new OperatorStateMetadataWriter(statePath, hadoopConf).write(operatorMetadata)
+      new OperatorStateMetadataV1Writer(statePath, hadoopConf).write(operatorMetadata)
       checkOperatorStateMetadata(checkpointDir.toString, 0, operatorMetadata)
       val df = spark.read.format("state-metadata").load(checkpointDir.toString)
       // Commit log is empty, there is no available batch id.

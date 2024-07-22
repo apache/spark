@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV1Writer, OperatorStateMetadataV2, OperatorStateMetadataV2Writer}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -211,22 +211,22 @@ class IncrementalExecution(
         val stateSchemaPaths = schemaValidationResult.map(_.schemaPath)
         // write out the state schema paths to the metadata file
         statefulOp match {
-          case stateStoreWriter: StateStoreWriter =>
-            val metadata = stateStoreWriter.operatorStateMetadata(stateSchemaPaths)
-            stateStoreWriter match {
-              case tws: TransformWithStateExec =>
-                val metadataPath = OperatorStateMetadataV2.metadataFilePath(new Path(
-                  checkpointLocation, tws.getStateInfo.operatorId.toString))
-                val operatorStateMetadataLog = new OperatorStateMetadataLog(sparkSession,
-                  metadataPath.toString)
-                operatorStateMetadataLog.add(currentBatchId, metadata)
-              case _ =>
-                val metadataWriter = new OperatorStateMetadataWriter(new Path(
+          case ssw: StateStoreWriter =>
+            val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
+            val metadataWriter = ssw.operatorStateMetadataVersion match {
+              case 1 =>
+                  new OperatorStateMetadataV1Writer(new Path(
                   checkpointLocation,
-                  stateStoreWriter.getStateInfo.operatorId.toString),
+                  ssw.getStateInfo.operatorId.toString),
                   hadoopConf)
-                metadataWriter.write(metadata)
+              case 2 =>
+                  new OperatorStateMetadataV2Writer(new Path(
+                  checkpointLocation,
+                  ssw.getStateInfo.operatorId.toString),
+                  hadoopConf,
+                  currentBatchId)
             }
+            metadataWriter.write(metadata)
           case _ =>
         }
         statefulOp
@@ -469,9 +469,9 @@ class IncrementalExecution(
               new SerializableConfiguration(hadoopConf))
             val opMetadataList = reader.allOperatorStateMetadata
             ret = opMetadataList.map {
-              case (OperatorStateMetadataV1(operatorInfo, _), _) =>
+              case OperatorStateMetadataV1(operatorInfo, _) =>
                 operatorInfo.operatorId -> operatorInfo.operatorName
-              case (OperatorStateMetadataV2(operatorInfo, _, _), _) =>
+              case OperatorStateMetadataV2(operatorInfo, _, _) =>
                 operatorInfo.operatorId -> operatorInfo.operatorName
             }.toMap
           } catch {

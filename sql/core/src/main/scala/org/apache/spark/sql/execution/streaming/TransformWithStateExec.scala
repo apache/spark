@@ -359,15 +359,6 @@ case class TransformWithStateExec(
     })
   }
 
-  private def fetchOperatorStateMetadataLog(
-      hadoopConf: Configuration,
-      checkpointDir: String,
-      operatorId: Long): OperatorStateMetadataLog = {
-    val checkpointPath = new Path(checkpointDir, operatorId.toString)
-    val operatorStateMetadataPath = OperatorStateMetadataV2.metadataFilePath(checkpointPath)
-    new OperatorStateMetadataLog(hadoopConf, operatorStateMetadataPath.toString)
-  }
-
   // operator specific metrics
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
     Seq(
@@ -401,10 +392,12 @@ case class TransformWithStateExec(
     val stateSchemaDir = stateSchemaDirPath()
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
-    val operatorStateMetadata = fetchOperatorStateMetadataLog(hadoopConf,
-      getStateInfo.checkpointLocation, getStateInfo.operatorId).getLatest()
+    val metadataPath = OperatorStateMetadataV2.baseMetadataPath(
+      new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}"))
+    val metadataReader = new OperatorStateMetadataV2Reader(metadataPath, hadoopConf)
+    val operatorStateMetadata = metadataReader.read()
     val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
-      case Some((_, metadata)) =>
+      case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
             Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
@@ -412,6 +405,7 @@ case class TransformWithStateExec(
         }
       case None => None
     }
+    logError(s"### oldStateSchemaFilePath: $oldStateSchemaFilePath")
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,

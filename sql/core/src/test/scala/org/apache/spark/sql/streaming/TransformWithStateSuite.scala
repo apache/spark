@@ -950,31 +950,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify OperatorStateMetadataV2 serialization and deserialization" +
-    " works") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-        val metadata = OperatorStateMetadataV2(
-          OperatorInfoV1(0, "transformWithStateExec"),
-          Array(StateStoreMetadataV2("default", 0, 0, "path")),
-          """{"timeMode":"NoTime","outputMode":"Update"}""")
-        val metadataLog = new OperatorStateMetadataLog(
-          spark.sessionState.newHadoopConf(),
-          checkpointDir.getCanonicalPath)
-        metadataLog.add(0, metadata)
-        assert(metadataLog.get(0).isDefined)
-        // assert that each of the fields are the same
-        val metadataV2 = metadataLog.get(0).get.asInstanceOf[OperatorStateMetadataV2]
-        assert(metadataV2.operatorInfo == metadata.operatorInfo)
-        assert(metadataV2.stateStoreInfo.sameElements(metadata.stateStoreInfo))
-        assert(metadataV2.operatorPropertiesJson == metadata.operatorPropertiesJson)
-      }
-    }
-  }
-
   test("test that invalid schema evolution fails query for column family") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,

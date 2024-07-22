@@ -31,8 +31,8 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, OperatorStateMetadataLog}
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataV1, OperatorStateMetadataV1Reader, OperatorStateMetadataV2, OperatorStateMetadataV2Reader}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -191,7 +191,7 @@ class StateMetadataPartitionReader(
     } else Array.empty
   }
 
-  private[sql] def allOperatorStateMetadata: Array[(OperatorStateMetadata, Long)] = {
+  private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
     val stateDir = new Path(checkpointLocation, "state")
     val opIds = fileManager
       .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
@@ -199,21 +199,17 @@ class StateMetadataPartitionReader(
       val operatorIdPath = new Path(stateDir, opId.toString)
       // check if OperatorStateMetadataV2 path exists, if it does, read it
       // otherwise, fall back to OperatorStateMetadataV1
-      val operatorStateMetadataV2Path = OperatorStateMetadataV2.metadataFilePath(operatorIdPath)
+      val operatorStateMetadataV2Path = OperatorStateMetadataV2.baseMetadataPath(operatorIdPath)
       if (fileManager.exists(operatorStateMetadataV2Path)) {
-        val operatorStateMetadataLog = new OperatorStateMetadataLog(
-          hadoopConf, operatorStateMetadataV2Path.toString)
-        operatorStateMetadataLog.listBatchesOnDisk.flatMap { batchId =>
-          operatorStateMetadataLog.get(batchId).map((_, batchId))
-        }
+        new OperatorStateMetadataV2Reader(operatorIdPath, hadoopConf).read()
       } else {
-        Array((new OperatorStateMetadataReader(operatorIdPath, hadoopConf).read(), -1L))
+        new OperatorStateMetadataV1Reader(operatorIdPath, hadoopConf).read()
       }
     }
   }
 
   private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
-    allOperatorStateMetadata.flatMap { case (operatorStateMetadata, batchId) =>
+    allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)
       operatorStateMetadata match {
         case v1: OperatorStateMetadataV1 =>
@@ -234,8 +230,8 @@ class StateMetadataPartitionReader(
               v2.operatorInfo.operatorName,
               stateStoreMetadata.storeName,
               stateStoreMetadata.numPartitions,
-              batchId,
-              batchId,
+              if (batchIds.nonEmpty) batchIds.head else -1,
+              if (batchIds.nonEmpty) batchIds.last else -1,
               v2.operatorPropertiesJson,
               stateStoreMetadata.numColsPrefixKey
             )
