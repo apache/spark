@@ -23,22 +23,32 @@ on:
   workflow_dispatch:
     inputs:
       class:
+        type: environment
         description: 'Benchmark class'
         required: true
         default: '*'
       jdk:
+        type: choice
         description: 'JDK version: 17 or 21'
         required: true
         default: '17'
+        options:
+        - '17'
+        - '21'
       scala:
+        type: choice
         description: 'Scala version: 2.13'
         required: true
         default: '2.13'
+        options:
+          - '2.13'
       failfast:
+        type: boolean
         description: 'Failfast: true or false'
         required: true
-        default: 'true'
+        default: true
       num-splits:
+        type: environment
         description: 'Number of job splits'
         required: true
         default: '1'
