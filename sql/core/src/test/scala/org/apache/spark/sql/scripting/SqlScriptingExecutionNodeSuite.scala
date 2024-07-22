@@ -38,21 +38,39 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
 
   case class TestBody(statements: Seq[CompoundStatementExec]) extends CompoundBodyExec(statements)
 
-  case class TestSparkStatementWithPlan(testVal: String)
+  case class TestSingleStatement(testVal: String)
     extends SingleStatementExec(
       parsedPlan = Project(Seq(Alias(Literal(testVal), "condition")()), OneRowRelation()),
       Origin(startIndex = Some(0), stopIndex = Some(testVal.length)),
       isInternal = false)
 
+  case class TestIfElse(
+      conditions: Seq[TestSingleStatement],
+      bodies: Seq[TestBody],
+      booleanEvaluator: StatementBooleanEvaluator)
+    extends IfElseStatementExec(conditions, bodies, booleanEvaluator)
+
+  // Repeat retValue reps times, then return !retValue once.
+  case class RepEval(retValue: Boolean, reps: Int) extends StatementBooleanEvaluator {
+    private var callCount: Int = 0;
+    override def eval(statement: LeafStatementExec): Boolean = {
+      callCount += 1
+      if (callCount % (reps + 1) == 0) !retValue else retValue
+    }
+  }
+
+  private def extractStatementValue(statement: CompoundStatementExec): String =
+    statement match {
+      case TestLeafStatement(testVal) => testVal
+      case TestSingleStatement(testVal) => testVal
+      case _ => fail("Unexpected statement type")
+    }
+
   // Tests
   test("test body - single statement") {
     val iter = TestNestedStatementIterator(Seq(TestLeafStatement("one"))).getTreeIterator
-    val statements = iter.map {
-      case TestLeafStatement(v) => v
-      case _ => fail("Unexpected statement type")
-    }.toList
-
-    assert(statements === List("one"))
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("one"))
   }
 
   test("test body - no nesting") {
@@ -62,11 +80,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         TestLeafStatement("two"),
         TestLeafStatement("three")))
       .getTreeIterator
-    val statements = iter.map {
-      case TestLeafStatement(v) => v
-      case _ => fail("Unexpected statement type")
-    }.toList
-
+    val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "two", "three"))
   }
 
@@ -77,11 +91,119 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         TestLeafStatement("three"),
         TestNestedStatementIterator(Seq(TestLeafStatement("four"), TestLeafStatement("five")))))
       .getTreeIterator
-    val statements = iter.map {
-      case TestLeafStatement(v) => v
-      case _ => fail("Unexpected statement type")
-    }.toList
-
+    val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "two", "three", "four", "five"))
+  }
+
+  test("if else - enter body of the IF clause") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1")
+        ),
+        bodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2")))
+        ),
+        booleanEvaluator = RepEval(retValue = false, reps = 0)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1"))
+  }
+
+  test("if else - enter body of the ELSE clause") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1")
+        ),
+        bodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2")))
+        ),
+        booleanEvaluator = RepEval(retValue = false, reps = 1)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body2"))
+  }
+
+  test("if else if - enter body of the IF clause") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1"),
+          TestSingleStatement("con2")
+        ),
+        bodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2"))),
+          TestBody(Seq(TestLeafStatement("body3")))
+        ),
+        booleanEvaluator = RepEval(retValue = false, reps = 0)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1"))
+  }
+
+  test("if else if - enter body of the ELSE IF clause") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1"),
+          TestSingleStatement("con2")
+        ),
+        bodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2"))),
+          TestBody(Seq(TestLeafStatement("body3")))
+        ),
+        booleanEvaluator = RepEval(retValue = false, reps = 1)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body2"))
+  }
+
+  test("if else if - enter body of the second ELSE IF clause") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1"),
+          TestSingleStatement("con2"),
+          TestSingleStatement("con3")
+        ),
+        bodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2"))),
+          TestBody(Seq(TestLeafStatement("body3"))),
+          TestBody(Seq(TestLeafStatement("body4")))
+        ),
+        booleanEvaluator = RepEval(retValue = false, reps = 2)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "con3", "body3"))
+  }
+
+  test("if else if - enter body of the ELSE clause") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1"),
+          TestSingleStatement("con2")
+        ),
+        bodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2"))),
+          TestBody(Seq(TestLeafStatement("body3")))
+        ),
+        booleanEvaluator = RepEval(retValue = false, reps = 2)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body3"))
   }
 }
