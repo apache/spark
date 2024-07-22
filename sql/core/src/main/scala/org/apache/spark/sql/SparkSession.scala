@@ -660,7 +660,7 @@ class SparkSession private(
         val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
         parsedPlan match {
           case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
-            CompoundBody(List(SingleStatement(
+            CompoundBody(Seq(SingleStatement(
               PosParameterizedQuery(
                 singleStmtPlan.parsedPlan, args.map(lit(_).expr).toImmutableArraySeq))), label)
           case p =>
@@ -726,7 +726,7 @@ class SparkSession private(
         val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
         parsedPlan match {
           case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
-            CompoundBody(List(SingleStatement(
+            CompoundBody(Seq(SingleStatement(
               NameParameterizedQuery(
                 singleStmtPlan.parsedPlan, args.transform((_, v) => lit(v).expr)))), label)
           case p =>
