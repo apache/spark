@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataV2FileManager, OperatorStateMetadataWriter, StateStoreId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -58,7 +58,7 @@ class IncrementalExecution(
     val offsetSeqMetadata: OffsetSeqMetadata,
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean)
-  extends QueryExecution(sparkSession, logicalPlan) with Logging {
+  extends QueryExecution(sparkSession, logicalPlan) with Logging with AsyncLogPurge {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
@@ -78,6 +78,38 @@ class IncrementalExecution(
       StreamingGlobalLimitStrategy(outputMode) ::
       StreamingTransformWithStateStrategy ::
       TransformWithStateInPandasStrategy :: Nil
+  }
+
+  // Methods to enable the use of AsyncLogPurge
+  protected val minLogEntriesToMaintain: Int =
+    sparkSession.sessionState.conf.minBatchesToRetain
+
+  val errorNotifier: ErrorNotifier = new ErrorNotifier()
+
+  override protected def purge(threshold: Long): Unit = {}
+
+  override protected def purgeOldest(planWithStateOpId: SparkPlan): Unit = {
+    planWithStateOpId.collect {
+      case ssw: StateStoreWriter =>
+        ssw.operatorStateMetadataVersion match {
+          case 2 =>
+            val fileManager = new OperatorStateMetadataV2FileManager(
+              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+              ssw.stateSchemaFilePath(Some(StateStoreId.DEFAULT_STORE_NAME)),
+              hadoopConf)
+              fileManager.keepNEntries(minLogEntriesToMaintain)
+          case _ =>
+        }
+      case _ =>
+    }
+  }
+
+  def purgeMetadataFiles(planWithStateOpId: SparkPlan): Unit = {
+    if (useAsyncPurge) {
+      purgeOldestAsync(planWithStateOpId)
+    } else {
+      purgeOldest(planWithStateOpId)
+    }
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -540,6 +572,7 @@ class IncrementalExecution(
       // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
       planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      purgeMetadataFiles(planWithStateOpId)
 
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule

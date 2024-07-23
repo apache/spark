@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
@@ -356,5 +356,91 @@ class OperatorStateMetadataV2Reader(
       val inputStream = fm.open(metadataFilePath)
       OperatorStateMetadataUtils.readMetadata(inputStream, version)
     }
+  }
+}
+
+class OperatorStateMetadataV2FileManager(
+    stateCheckpointPath: Path,
+    stateSchemaPath: Path,
+    hadoopConf: Configuration) extends Logging {
+
+  private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
+  private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
+
+  protected def isBatchFile(path: Path) = {
+    try {
+      path.getName.toLong
+      true
+    } catch {
+      case _: NumberFormatException => false
+    }
+  }
+
+  /**
+   * A `PathFilter` to filter only batch files
+   */
+  protected val batchFilesFilter = new PathFilter {
+    override def accept(path: Path): Boolean = isBatchFile(path)
+  }
+
+  /** List the available batches on file system. */
+  protected def listBatches: Array[Long] = {
+    val batchIds = fm.list(metadataDirPath, batchFilesFilter)
+      // Batches must be files
+      .filter(f => f.isFile)
+      .map(f => pathToBatchId(f.getPath))
+    logInfo(log"BatchIds found from listing: ${MDC(BATCH_ID, batchIds.sorted.mkString(", "))}")
+
+    batchIds.sorted
+  }
+
+  private def pathToBatchId(path: Path): Long = {
+    path.getName.toLong
+  }
+
+  def keepNEntries(minLogEntriesToMaintain: Int): Unit = {
+    val thresholdBatchId = findThresholdBatchId(minLogEntriesToMaintain)
+    if (thresholdBatchId != -1) {
+      deleteSchemaFiles(thresholdBatchId)
+      deleteMetadataFiles(thresholdBatchId)
+    }
+  }
+
+  private def findThresholdBatchId(minLogEntriesToMaintain: Int): Long = {
+    val metadataFiles = listBatches
+    if (metadataFiles.length > minLogEntriesToMaintain) {
+      metadataFiles.sorted.take(metadataFiles.length - minLogEntriesToMaintain).last + 1
+    } else {
+      -1
+    }
+  }
+
+  private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
+    val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
+    val filesBeforeThreshold = schemaFiles.filter { path =>
+      val batchIdInPath = path.getName.split("_").head.toLong
+      batchIdInPath < thresholdBatchId
+    }
+    filesBeforeThreshold.foreach { path =>
+      fm.delete(path)
+    }
+  }
+
+  private def deleteMetadataFiles(thresholdBatchId: Long): Unit = {
+      val metadataFiles = fm.list(metadataDirPath, batchFilesFilter)
+      metadataFiles.foreach { batchFile =>
+      val batchId = pathToBatchId(batchFile.getPath)
+      if (batchId < thresholdBatchId) {
+          fm.delete(batchFile.getPath)
+      }
+    }
+  }
+
+  private[sql] def listSchemaFiles(): Array[Path] = {
+    fm.list(stateSchemaPath).sorted.map(_.getPath)
+  }
+
+  private[sql] def listMetadataFiles(): Array[Path] = {
+    fm.list(metadataDirPath, batchFilesFilter).sorted.map(_.getPath)
   }
 }
