@@ -24,8 +24,6 @@ import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
@@ -41,7 +39,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.util.{SparkFatalException, ThreadUtils}
+import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
 
 /**
  * Common trait for all broadcast exchange implementations to facilitate pattern matching.
@@ -233,7 +231,7 @@ case class BroadcastExchangeExec(
         logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
           sparkContext.cancelJobsWithTag(jobTag,
-            s"Could not execute broadcast in ${timeout} secs: " + ExceptionUtils.getStackTrace(ex))
+            s"Could not execute broadcast in ${timeout} secs: " + Utils.exceptionString(ex))
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

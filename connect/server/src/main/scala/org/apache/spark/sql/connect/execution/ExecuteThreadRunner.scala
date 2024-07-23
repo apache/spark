@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
@@ -117,7 +116,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           logDebug(s"Exception in execute: $e")
           // Always cancel all remaining execution after error.
           executeHolder.sessionHolder.session.sparkContext.cancelJobsWithTag(executeHolder.jobTag,
-            "Exception in execute:" + ExceptionUtils.getStackTrace(e))
+            "Exception in execute: " + Utils.exceptionString(e))
           // Rely on an internal interrupted flag, because Thread.interrupted() could be cleared,
           // and different exceptions like InterruptedException, ClosedByInterruptException etc.
           // could be thrown.

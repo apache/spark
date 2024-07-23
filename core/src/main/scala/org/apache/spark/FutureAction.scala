@@ -44,6 +44,11 @@ trait FutureAction[T] extends Future[T] {
   def cancel(reason: Option[String]): Unit
 
   /**
+   * Cancels the execution of this action with an optional reason.
+   */
+  def cancel(): Unit = cancel(None)
+
+  /**
    * Blocks until this action completes.
    *
    * @param atMost maximum wait time, which may be negative (no waiting is done), Duration.Inf
@@ -293,7 +298,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
     } else {
       // We're limited in terms of the semantics we can provide here; our cancellation is
       // asynchronous and doesn't provide a mechanism to not cancel if the job is running.
-      futureAction.cancel(reason = None)
+      futureAction.cancel()
       true
     }
   }
