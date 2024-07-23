@@ -104,7 +104,7 @@ class IncrementalExecution(
     }
   }
 
-  def purgeMetadataFiles(planWithStateOpId: SparkPlan): Unit = {
+  private def purgeMetadataFiles(planWithStateOpId: SparkPlan): Unit = {
     if (useAsyncPurge) {
       purgeOldestAsync(planWithStateOpId)
     } else {
