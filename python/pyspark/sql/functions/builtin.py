@@ -3671,16 +3671,59 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_avgx("y", "x"), sf.avg("x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
     +---------------+------+
-    |          0.999| 0.999|
+    |           2.75|  2.75|
+    +---------------+------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |           NULL|  NULL|
+    +---------------+------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |           NULL|   1.0|
+    +---------------+------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |            3.0|   3.0|
+    +---------------+------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |            3.0|   3.0|
     +---------------+------+
     """
     return _invoke_function_over_columns("regr_avgx", y, x)
@@ -3708,17 +3751,60 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_avgy("y", "x"), sf.avg("y")
-    ... ).show()
-    +-----------------+-----------------+
-    |  regr_avgy(y, x)|           avg(y)|
-    +-----------------+-----------------+
-    |9.980732994136...|9.980732994136...|
-    +-----------------+-----------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------+
+    |regr_avgy(y, x)|avg(y)|
+    +---------------+------+
+    |           1.75|  1.75|
+    +---------------+------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------+
+    |regr_avgy(y, x)|avg(y)|
+    +---------------+------+
+    |           NULL|   1.0|
+    +---------------+------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------+
+    |regr_avgy(y, x)|avg(y)|
+    +---------------+------+
+    |           NULL|  NULL|
+    +---------------+------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +------------------+------+
+    |   regr_avgy(y, x)|avg(y)|
+    +------------------+------+
+    |1.6666666666666...|  1.75|
+    +------------------+------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------------------+
+    |regr_avgy(y, x)|            avg(y)|
+    +---------------+------------------+
+    |            1.5|1.6666666666666...|
+    +---------------+------------------+
     """
     return _invoke_function_over_columns("regr_avgy", y, x)
 
@@ -3745,16 +3831,59 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_count("y", "x"), sf.count(sf.lit(0))
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
     +----------------+--------+
-    |            1000|    1000|
+    |               4|       4|
+    +----------------+--------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               0|       1|
+    +----------------+--------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               0|       1|
+    +----------------+--------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               3|       4|
+    +----------------+--------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               2|       4|
     +----------------+--------+
     """
     return _invoke_function_over_columns("regr_count", y, x)
@@ -3783,16 +3912,59 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_intercept("y", "x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
     +--------------------+
-    |-0.04961745990969568|
+    |                 0.0|
+    +--------------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                 0.0|
+    +--------------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                 0.0|
     +--------------------+
     """
     return _invoke_function_over_columns("regr_intercept", y, x)
@@ -3820,17 +3992,60 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_r2("y", "x")
-    ... ).show()
-    +------------------+
-    |     regr_r2(y, x)|
-    +------------------+
-    |0.9851908293645...|
-    +------------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |         NULL|
+    +-------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |         NULL|
+    +-------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
     """
     return _invoke_function_over_columns("regr_r2", y, x)
 
@@ -3857,17 +4072,60 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_slope("y", "x")
-    ... ).show()
-    +------------------+
-    |  regr_slope(y, x)|
-    +------------------+
-    |10.040390844891...|
-    +------------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |             1.0|
+    +----------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |            NULL|
+    +----------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |            NULL|
+    +----------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |             1.0|
+    +----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |             1.0|
+    +----------------+
     """
     return _invoke_function_over_columns("regr_slope", y, x)
 
@@ -3894,17 +4152,60 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_sxx("y", "x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
     +-----------------+
     |   regr_sxx(y, x)|
     +-----------------+
-    |666.9989999999...|
+    |4.666666666666...|
     +-----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |           4.5|
+    +--------------+
     """
     return _invoke_function_over_columns("regr_sxx", y, x)
 
@@ -3931,17 +4232,60 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_sxy("y", "x")
-    ... ).show()
-    +----------------+
-    |  regr_sxy(y, x)|
-    +----------------+
-    |6696.93065315...|
-    +----------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +-----------------+
+    |   regr_sxy(y, x)|
+    +-----------------+
+    |4.666666666666...|
+    +-----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |           4.5|
+    +--------------+
     """
     return _invoke_function_over_columns("regr_sxy", y, x)
 
@@ -3968,17 +4312,60 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_syy("y", "x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
     +-----------------+
     |   regr_syy(y, x)|
     +-----------------+
-    |68250.53503811...|
+    |4.666666666666...|
     +-----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |           4.5|
+    +--------------+
     """
     return _invoke_function_over_columns("regr_syy", y, x)
 
