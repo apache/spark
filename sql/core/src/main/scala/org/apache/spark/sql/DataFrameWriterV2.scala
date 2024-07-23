@@ -348,6 +348,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
 
   /**
@@ -360,6 +361,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 4.0.0
    */
+  @scala.annotation.varargs
   def clusterBy(colName: String, colNames: String*): CreateTableWriter[T]
 
   /**

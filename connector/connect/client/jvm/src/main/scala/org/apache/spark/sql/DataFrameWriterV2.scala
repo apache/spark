@@ -281,11 +281,12 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 3.4.0
    */
+  @scala.annotation.varargs
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
 
   /**
-   * Clusters the output by the given columns on the file system. The rows with matching values in
-   * the specified clustering columns will be consolidated within the same file.
+   * Clusters the output by the given columns on the storage. The rows with matching values in the
+   * specified clustering columns will be consolidated within the same group.
    *
    * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
    * together in a file. This arrangement improves query efficiency when you apply selective
@@ -293,6 +294,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 4.0.0
    */
+  @scala.annotation.varargs
   def clusterBy(colName: String, colNames: String*): CreateTableWriter[T]
 
   /**
