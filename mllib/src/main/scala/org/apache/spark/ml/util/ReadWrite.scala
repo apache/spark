@@ -588,7 +588,7 @@ private[ml] object DefaultParamsReader {
    */
   def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val spark = SparkSession.getActiveSession.get
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     val metadataStr = spark.read.text(metadataPath).first().getString(0)
     parseMetadata(metadataStr, expectedClassName)
   }
