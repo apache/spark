@@ -361,12 +361,6 @@ object SchemaConverters extends Logging {
       schema
     }
   }
-
-//  private def convertEmptyAvroToStructWithDummyField(fieldName: String): SchemaType = {
-//    log.info(s"Keep $fieldName which is empty struct by inserting a dummy field.")
-//    SchemaType(
-//     StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil), nullable = true)
-//  }
 }
 
 private[avro] class IncompatibleSchemaException(
