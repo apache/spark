@@ -290,7 +290,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
           parseScript(sqlScriptText)
         },
         errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
-        parameters = Map("varName" -> "testVariable", "lineNumber" -> "4"))
+        parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
   }
 
   // TODO Add test for INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE exception

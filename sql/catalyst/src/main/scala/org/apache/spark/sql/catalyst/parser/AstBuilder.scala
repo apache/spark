@@ -48,8 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
@@ -62,7 +61,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
+class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
+                  with Logging with DataTypeErrorsBase {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -142,37 +142,31 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     val compoundStatements = buff.toList
 
-    if (allowVarDeclare) {
-      val declareVarStatement = compoundStatements
-        .dropWhile(statement => statement.isInstanceOf[SingleStatement] &&
-          statement.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
-        .filter(_.isInstanceOf[SingleStatement])
-        .find(_.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
-
-      declareVarStatement match {
-        case Some(SingleStatement(parsedPlan)) =>
-          throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            parsedPlan.asInstanceOf[CreateVariable]
-              .name.asInstanceOf[UnresolvedIdentifier]
-              .nameParts.last,
-            parsedPlan.origin.line.get.toString)
-        case _ =>
+    val candidates = if (allowVarDeclare) {
+      compoundStatements.dropWhile {
+        case SingleStatement(_: CreateVariable) => true
+        case _ => false
       }
-
     } else {
-      val declareVarStatement = compoundStatements
-        .filter(_.isInstanceOf[SingleStatement])
-        .find(_.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
+      compoundStatements
+    }
 
-      declareVarStatement match {
-        case Some(SingleStatement(parsedPlan)) =>
+    val declareVarStatement = candidates.collectFirst {
+      case SingleStatement(c: CreateVariable) => c
+    }
+
+    declareVarStatement match {
+      case Some(c: CreateVariable) =>
+        if (allowVarDeclare) {
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            parsedPlan.asInstanceOf[CreateVariable]
-              .name.asInstanceOf[UnresolvedIdentifier]
-              .nameParts.last,
-            parsedPlan.origin.line.get.toString)
-        case _ =>
-      }
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
+            c.origin.line.get.toString)
+        } else {
+          throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
+            c.origin.line.get.toString)
+        }
+      case _ =>
     }
 
     CompoundBody(buff.toSeq, label)
