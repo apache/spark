@@ -2983,12 +2983,6 @@
     ],
     "sqlState" : "22023"
   },
-  "INVALID_VIEW_TEXT" : {
-    "message" : [
-      "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
-    ],
-    "sqlState" : "XX000"
-  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
