@@ -724,9 +724,15 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM v")
         },
-        errorClass = "INVALID_VIEW_TEXT",
-        parameters = Map(
-          "viewText" -> "DROP VIEW v", "viewName" -> tableIdentifier("v").quotedString)
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'DROP'", "hint" -> ""),
+        context = ExpectedContext(
+          objectType = "VIEW",
+          objectName = "spark_catalog.default.v",
+          startIndex = 14,
+          stopIndex = 14,
+          fragment = "v"
+        )
       )
     }
   }
