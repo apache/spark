@@ -319,11 +319,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val blockManager = spark.sparkContext.env.blockManager
     blockManager.diskBlockManager.getAllBlocks().foreach {
       case ShuffleIndexBlockId(shuffleId, _, _) =>
-        if (spark.sparkContext.isLocal) {
-          spark.sparkContext.env.shuffleManager.unregisterShuffle(shuffleId)
-        } else {
-          spark.sparkContext.shuffleDriverComponents.removeShuffle(shuffleId, false)
-        }
+        spark.sparkContext.shuffleDriverComponents.removeShuffle(shuffleId, true)
       case _ =>
     }
   }
