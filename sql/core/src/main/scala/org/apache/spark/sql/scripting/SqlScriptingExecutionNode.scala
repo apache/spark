@@ -49,12 +49,6 @@ sealed trait CompoundStatementExec extends Logging {
 trait LeafStatementExec extends CompoundStatementExec {
 
   /**
-   * Whether this statement has been executed during the interpretation phase.
-   * This is used to avoid re-execution of the same statement.
-   */
-  var isExecuted = false
-
-  /**
   * Execute the statement.
   * @param session Spark session.
   */
@@ -125,11 +119,10 @@ class SingleStatementExec(
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 
-  override def reset(): Unit = isExecuted = false
+  override def reset(): Unit = ()
 
   def execute(session: SparkSession): Unit = {
     try {
-      isExecuted = true
       val rows = Some(Dataset.ofRows(session, parsedPlan).collect())
       if (shouldCollectResult) {
         result = rows
@@ -197,9 +190,7 @@ class CompoundBodyExec(
             "No more elements to iterate through in the current SQL compound statement.")
           case Some(statement: LeafStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-            if (!statement.isExecuted) {
-              statement.execute(session)  // Execute the leaf statement
-            }
+            statement.execute(session)  // Execute the leaf statement
             if (statement.raisedError) {
               val handler = getHandler(statement.errorState.get)
               if (handler.isDefined) {
