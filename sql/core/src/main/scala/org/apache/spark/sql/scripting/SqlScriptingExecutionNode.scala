@@ -69,6 +69,11 @@ trait LeafStatementExec extends CompoundStatementExec {
    * Error state of the statement.
    */
   var errorState: Option[String] = None
+
+  /**
+   * Error raised during statement execution.
+   */
+  var error: Option[SparkThrowable] = None
 }
 
 /**
@@ -134,6 +139,7 @@ class SingleStatementExec(
         // TODO: check handlers for error conditions
         raisedError = true
         errorState = Some(e.getSqlState)
+        error = Some(e)
       case _: Throwable =>
         raisedError = true
         errorState = Some("UNKNOWN")
@@ -195,10 +201,11 @@ class CompoundBodyExec(
               statement.execute(session)  // Execute the leaf statement
             }
             if (statement.raisedError) {
-              val handler = getHandler(statement.errorState.get).get
-              // Reset handler body to execute it again
-              handler.getHandlerBody.reset()
-              return handler.getTreeIterator.next()
+              val handler = getHandler(statement.errorState.get)
+              if (handler.isDefined) {
+                handler.get.getHandlerBody.reset()
+                return handler.get.getTreeIterator.next()
+              }
             }
             statement
           case Some(body: NonLeafStatementExec) =>
