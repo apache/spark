@@ -2124,54 +2124,48 @@ sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
 def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(csv, (str, Column)):
-        _csv = lit(csv)
-    else:
+    if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_csv", _csv)
+        return _invoke_function("schema_of_csv", lit(csv))
     else:
-        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
+        return _invoke_function("schema_of_csv", lit(csv), _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
 def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(json, (str, Column)):
-        _json = lit(json)
-    else:
+    if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_json", _json)
+        return _invoke_function("schema_of_json", lit(json))
     else:
-        return _invoke_function("schema_of_json", _json, _options_to_col(options))
+        return _invoke_function("schema_of_json", lit(json), _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
 def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(xml, (str, Column)):
-        _xml = lit(xml)
-    else:
+    if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_xml", _xml)
+        return _invoke_function("schema_of_xml", lit(xml))
     else:
-        return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
+        return _invoke_function("schema_of_xml", lit(xml), _options_to_col(options))
 
 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
@@ -3742,8 +3736,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("assert_true", _to_col(col), _err_msg)
+    return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
 
 assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
@@ -3755,8 +3748,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("raise_error", _err_msg)
+    return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
 raise_error.__doc__ = pysparkfuncs.raise_error.__doc__
