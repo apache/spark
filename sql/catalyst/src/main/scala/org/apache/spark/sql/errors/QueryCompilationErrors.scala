@@ -3464,14 +3464,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("errorMessage" -> errorMessage))
   }
 
-  def invalidViewText(viewText: String, viewName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_VIEW_TEXT",
-      messageParameters = Map(
-        "viewText" -> viewText,
-        "viewName" -> toSQLId(viewName)))
-  }
-
   def invalidTimeTravelSpecError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_TIME_TRAVEL_SPEC",

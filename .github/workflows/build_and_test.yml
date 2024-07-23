@@ -693,6 +693,11 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
+    - name: Scala structured logging check
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.9 ./dev/structured_logging_style.py
+        fi
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
