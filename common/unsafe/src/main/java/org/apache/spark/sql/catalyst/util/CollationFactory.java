@@ -505,8 +505,8 @@ public final class CollationFactory {
           try {
             int collationId = CollationSpecUTF8.collationNameToId(
               collationName, collationName.toUpperCase());
-            Meta collationMeta = CollationSpecUTF8.fromCollationId(collationId).buildMeta();
-            metas.add(collationMeta);
+            Meta meta = CollationSpecUTF8.fromCollationId(collationId).buildMeta();
+            metas.add(meta);
           } catch (SparkException ignored) {
             // ignore
           }
