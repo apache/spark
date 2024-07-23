@@ -1,0 +1,8 @@
+# From 4.0.0
+
+- [SPARK-48392][CORE] Also load `spark-defaults.conf` when provided `--properties-file
+
+# From 3.5.x
+
+
+# Internal changes
