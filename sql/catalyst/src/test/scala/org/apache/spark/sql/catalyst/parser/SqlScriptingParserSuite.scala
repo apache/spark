@@ -527,6 +527,32 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 42")
   }
 
+
+  test("while") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: WHILE 1 = 1 DO
+        |  SELECT 1;
+        |END WHILE lbl;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+    assert(whileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(whileStmt.label.contains("lbl"))
+
+  }
+
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {
     statementStr

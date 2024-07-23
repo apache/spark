@@ -64,6 +64,7 @@ compoundStatement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
     | ifElseStatement
+    | whileStatement
     ;
 
 setStatementWithOptionalVarKeyword

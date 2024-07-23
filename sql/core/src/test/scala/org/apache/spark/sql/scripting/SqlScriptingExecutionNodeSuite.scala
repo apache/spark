@@ -40,6 +40,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       isInternal = false)
 
+  case class TestWhile(
+                        condition: TestSingleStatement,
+                        body: TestBody,
+                        reps: Int)
+    extends WhileStatementExec(condition, body, RepEval(retValue = true, reps))
+
   private def extractStatementValue(statement: CompoundStatementExec): String =
     statement match {
       case TestLeafStatement(testVal) => testVal
@@ -225,4 +231,63 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
   }
+
+  test("while - doesn't enter body") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestWhile(
+        condition = TestSingleStatement("con1"),
+        body = TestBody(Seq(TestLeafStatement("body1"))),
+        reps = 0
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1"))
+  }
+
+  test("while - enters body once") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestWhile(
+        condition = TestSingleStatement("con1"),
+        body = TestBody(Seq(TestLeafStatement("body1"))),
+        reps = 1
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1", "con1"))
+  }
+
+  test("while - enters body with multiple statements multiple times") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestWhile(
+        condition = TestSingleStatement("con1"),
+        body = TestBody(Seq(TestLeafStatement("statement1"), TestLeafStatement("statement2"))),
+        reps = 2
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "statement1", "statement2",
+                              "con1", "statement1", "statement2", "con1"))
+  }
+
+  test("nested while - 2 times outer 2 times inner") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestWhile(
+        condition = TestSingleStatement("con1"),
+        body = TestBody(Seq(
+          TestWhile(
+            condition = TestSingleStatement("con2"),
+            body = TestBody(Seq(TestLeafStatement("body1"))),
+            reps = 2
+          )
+        )),
+        reps = 2
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body1",
+                                      "con2", "body1", "con2",
+                              "con1", "con2", "body1",
+                                      "con2", "body1", "con2", "con1"))
+  }
+
 }
