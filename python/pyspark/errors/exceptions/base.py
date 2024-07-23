@@ -137,11 +137,11 @@ class PySparkException(Exception):
             if query_context.contextType().name == "DataFrame":
                 logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
                 call_site = query_context.callSite().split(":")
-                line_no = call_site[1] if len(call_site) == 2 else ""
+                line = call_site[1] if len(call_site) == 2 else ""
                 logger.exception(
                     self.getMessage(),
                     file=call_site[0],
-                    line_no=line_no,
+                    line=line,
                     fragment=query_context.fragment(),
                     error_class=self.getErrorClass(),
                 )
