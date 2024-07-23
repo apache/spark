@@ -68,6 +68,12 @@ trait TimeZoneAwareExpression extends Expression {
     case _ => zoneId
   }
 }
+private[catalyst] object TimeZoneAwareExpression {
+  def convertExpressionToUnit(e: Expression, source: String): String = e match {
+    case StringLiteral(unit) => unit
+    case _ => throw QueryExecutionErrors.invalidDatetimeUnitError(source, e.sql)
+  }
+}
 
 trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 
@@ -3189,6 +3195,12 @@ case class TimestampAdd(
   def this(unit: String, quantity: Expression, timestamp: Expression) =
     this(unit, quantity, timestamp, None)
 
+  def this(unit: Expression, quantity: Expression, timestamp: Expression) =
+    this(
+      TimeZoneAwareExpression.convertExpressionToUnit(unit, "TIMESTAMP_ADD"),
+      quantity,
+      timestamp)
+
   override def left: Expression = quantity
   override def right: Expression = timestamp
 
@@ -3269,8 +3281,14 @@ case class TimestampDiff(
   with NullIntolerant
   with TimeZoneAwareExpression {
 
-  def this(unit: String, quantity: Expression, timestamp: Expression) =
-    this(unit, quantity, timestamp, None)
+  def this(unit: String, startTimestamp: Expression, endTimestamp: Expression) =
+    this(unit, startTimestamp, endTimestamp, None)
+
+  def this(unit: Expression, startTimestamp: Expression, endTimestamp: Expression) =
+    this(
+      TimeZoneAwareExpression.convertExpressionToUnit(unit, "TIMESTAMP_DIFF"),
+      startTimestamp,
+      endTimestamp)
 
   override def left: Expression = startTimestamp
   override def right: Expression = endTimestamp

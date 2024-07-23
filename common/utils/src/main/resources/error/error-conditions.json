@@ -2637,6 +2637,26 @@
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
         ]
+      },
+      "BOOLEAN" : {
+        "message" : [
+          "expects a boolean literal, but got <invalidValue>."
+        ]
+      },
+      "INTEGER" : {
+        "message" : [
+          "expects an integer literal, but got <invalidValue>."
+        ]
+      },
+      "LONG" : {
+        "message" : [
+          "expects a long literal, but got <invalidValue>."
+        ]
+      },
+      "IN_LIST" : {
+        "message" : [
+          "expects an array of literals, but got <invalidValue>."
+        ]
       }
     },
     "sqlState" : "22023"

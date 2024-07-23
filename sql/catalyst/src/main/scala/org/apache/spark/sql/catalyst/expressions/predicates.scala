@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -445,6 +446,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
 
+  def this(value: Expression, list: Expression) = {
+    this(value, In.extractInListValuesFromExpression(list))
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
       ignoreNullability = true))
@@ -592,6 +597,13 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): In =
     copy(value = newChildren.head, list = newChildren.tail)
+}
+
+object In {
+  def extractInListValuesFromExpression(values: Expression): Seq[Expression] = values match {
+    case CreateArray(values, _) => values
+    case _ => throw QueryCompilationErrors.invalidInListParameter(values)
+  }
 }
 
 /**

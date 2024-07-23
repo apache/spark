@@ -519,6 +519,8 @@ object FunctionRegistry {
     expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
+    expression[Product]("product"),
+    expression[CollectTopK]("collect_top_k"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -680,6 +682,8 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
+    expression[TimestampAdd]("timestamp_add"),
+    expression[TimestampDiff]("timestamp_diff"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -767,6 +771,7 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[UnwrapUDT]("unwrap_udt"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -869,7 +874,14 @@ object FunctionRegistry {
 
     // Avro
     expression[FromAvro]("from_avro"),
-    expression[ToAvro]("to_avro")
+    expression[ToAvro]("to_avro"),
+
+    // Partitioning
+    expression[Years]("years"),
+    expression[Months]("months"),
+    expression[Days]("days"),
+    expression[Hours]("hours"),
+    expression[Bucket]("bucket")
   )
 
   val builtin: SimpleFunctionRegistry = {
