@@ -222,15 +222,15 @@ object ClusterBySpec {
   }
 
   /**
-   * Converts a ClusterBySpec to a map of table properties used to store the clustering
-   * information in the table catalog.
+   * Converts a ClusterBySpec to a clustering column property map entry, without validating
+   * the column names against the schema.
    *
    * @param clusterBySpec existing ClusterBySpec to be converted to properties.
-   * @return Map of properties to be stored in the CatalogTable.
+   * @return a map entry for the clustering column property.
    */
-  def toProperties(clusterBySpec: ClusterBySpec): Map[String, String] = {
+  def toPropertyWithoutValidation(clusterBySpec: ClusterBySpec): (String, String) = {
     val columnValue = mapper.writeValueAsString(clusterBySpec.columnNames.map(_.fieldNames))
-    Map(CatalogTable.PROP_CLUSTERING_COLUMNS -> columnValue)
+    (CatalogTable.PROP_CLUSTERING_COLUMNS -> columnValue)
   }
 
   private def normalizeClusterBySpec(

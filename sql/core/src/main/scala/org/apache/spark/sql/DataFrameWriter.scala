@@ -721,7 +721,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val properties = if (clusteringColumns.isEmpty) {
       Map.empty[String, String]
     } else {
-      ClusterBySpec.toProperties(ClusterBySpec.fromColumnNames(clusteringColumns.get))
+      Map(ClusterBySpec.toPropertyWithoutValidation(
+        ClusterBySpec.fromColumnNames(clusteringColumns.get)))
     }
 
     val tableDesc = CatalogTable(
