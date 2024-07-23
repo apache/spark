@@ -39,7 +39,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
     // Collect rows from the child plan
     val queryExecution = sparkSession.sessionState.executePlan(child)
-    val collectedRows = queryExecution.toRdd.collect()
+    val collectedRows = queryExecution.executedPlan.executeCollect()
 
     println(s"collectedRows ${collectedRows.mkString("Array(", ", ", ")")}")
 
@@ -108,7 +108,8 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       val projectPlan = Project(
         Seq(namedIndexColumnAsString.asInstanceOf[NamedExpression]), child)
       val queryExecution = sparkSession.sessionState.executePlan(projectPlan)
-      val collectedValues = queryExecution.toRdd.collect().map(row => row.getString(0)).toSeq
+      val collectedValues = queryExecution.executedPlan
+        .executeCollect().map(row => row.getUTF8String(0)).toSeq
 
       // Determine the least common type of the non-index columns
       val nonIndexColumnsAttr = child.output.filterNot(
@@ -143,6 +144,6 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       println(s"valueAttrs: ${valueAttrs}")
 
       LocalRelation(
-        valueAttrs :+ keyAttr.toAttribute, transposedInternalRows.toIndexedSeq)
+        keyAttr +: valueAttrs, transposedInternalRows.toIndexedSeq)
   }
 }
