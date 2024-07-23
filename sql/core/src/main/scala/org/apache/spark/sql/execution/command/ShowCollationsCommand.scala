@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.regex.PatternSyntaxException
-
-import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.catalyst.util.CollationFactory.Collation
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.StringType
 
 /**
  * A command for `SHOW COLLATIONS`.
@@ -38,37 +34,27 @@ import org.apache.spark.sql.types.{BooleanType, StringType}
  */
 case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCommand {
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("name", StringType, nullable = false)(),
-    AttributeReference("provider", StringType, nullable = false)(),
-    AttributeReference("version", StringType, nullable = false)(),
-    AttributeReference("binaryEquality", BooleanType, nullable = false)(),
-    AttributeReference("binaryOrdering", BooleanType, nullable = false)(),
-    AttributeReference("lowercaseEquality", BooleanType, nullable = false)())
+    AttributeReference("COLLATION_CATALOG", StringType, nullable = false)(),
+    AttributeReference("COLLATION_SCHEMA", StringType, nullable = false)(),
+    AttributeReference("COLLATION_NAME", StringType, nullable = false)(),
+    AttributeReference("LANGUAGE", StringType)(),
+    AttributeReference("COUNTRY", StringType)(),
+    AttributeReference("ACCENT_SENSITIVITY", StringType, nullable = false)(),
+    AttributeReference("CASE_SENSITIVITY", StringType, nullable = false)(),
+    AttributeReference("PAD_ATTRIBUTE", StringType, nullable = false)(),
+    AttributeReference("ICU_VERSION", StringType)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val allCollations = CollationFactory.fetchAllCollations().asScala.toSeq
-    val filteredCollations = pattern.map(filterPattern(allCollations, _)).getOrElse(allCollations)
-    filteredCollations.map(c => Row(
-      c.collationName,
-      c.provider,
-      c.version,
-      c.supportsBinaryEquality,
-      c.supportsBinaryOrdering,
-      c.supportsLowercaseEquality))
-  }
-
-  private def filterPattern(collations: Seq[Collation], pattern: String): Seq[Collation] = {
-    val filteredCollations = mutable.SortedSet.empty[Collation]
-    pattern.trim().split("\\|").foreach { subPattern =>
-      try {
-        val regex = ("(?i)" + subPattern.replaceAll("\\*", ".*")).r
-        filteredCollations ++= collations.filter {
-          collation => regex.pattern.matcher(collation.collationName).matches()
-        }
-      } catch {
-        case _: PatternSyntaxException =>
-      }
-    }
-    filteredCollations.toSeq
+    CollationFactory.listCollationMetas(pattern.getOrElse("*")).asScala.map(m => Row(
+      m.catalog,
+      m.schema,
+      m.collationName,
+      m.language,
+      m.country,
+      if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE",
+      if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE",
+      m.padAttribute,
+      m.icuVersion
+    )).toSeq
   }
 }

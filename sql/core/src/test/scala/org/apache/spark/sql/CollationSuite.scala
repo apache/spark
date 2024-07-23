@@ -1470,12 +1470,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     assert(sql("SHOW COLLATIONS").collect().length == 562)
 
     checkAnswer(sql("SHOW COLLATIONS LIKE '*UTF8_BINARY*'"),
-      Row("UTF8_BINARY", "spark", "1.0", true, true, false))
+      Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null))
+
     checkAnswer(sql("SHOW COLLATIONS '*zh_Hant_HKG*'"),
-      Seq(Row("zh_Hant_HKG", "icu", "153.120.0.0", false, false, false),
-        Row("zh_Hant_HKG_CI", "icu", "153.120.0.0", false, false, false),
-        Row("zh_Hant_HKG_AI", "icu", "153.120.0.0", false, false, false),
-        Row("zh_Hant_HKG_CI_AI", "icu", "153.120.0.0", false, false, false)))
+      Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "zh", "HK",
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "zh", "HK",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "zh", "HK",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "zh", "HK",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
+
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
