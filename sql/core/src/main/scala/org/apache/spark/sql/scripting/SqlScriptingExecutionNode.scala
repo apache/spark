@@ -216,6 +216,14 @@ class CompoundBodyExec(
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
+          case Some(leave: LeaveStatementExec) =>
+            if (leave.used) {
+              curr = None
+              if (label.getOrElse("").equals(leave.getLabel)) {
+                leave.execute(session)
+              }
+            }
+            leave
           case Some(statement: LeafStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement.execute(session)  // Execute the leaf statement
@@ -244,4 +252,15 @@ class ErrorHandlerExec(
   def getHandlerType: HandlerType = handlerType
 
   override def reset(): Unit = body.reset()
+}
+
+class LeaveStatementExec(val label: String) extends LeafStatementExec {
+
+  var used: Boolean = false
+
+  def getLabel: String = label
+
+  override def execute(session: SparkSession): Unit = used = true
+
+  override def reset(): Unit = used = false
 }

@@ -227,13 +227,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   override def visitDeclareHandler(ctx: DeclareHandlerContext): ErrorHandler = {
     val conditions = visit(ctx.conditionValueList()).asInstanceOf[Seq[String]]
+    val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)
 
     val body = Option(ctx.compoundBody()).map(visit).getOrElse {
       val logicalPlan = visit(ctx.statement()).asInstanceOf[LogicalPlan]
       CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
     }.asInstanceOf[CompoundBody]
-
-    val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)
 
     ErrorHandler(conditions, body, handlerType)
   }

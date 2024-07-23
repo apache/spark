@@ -88,3 +88,9 @@ case class ErrorHandler(
     conditions: Seq[String],
     body: CompoundBody,
     handlerType: HandlerType) extends CompoundPlanStatement
+
+/**
+ * Logical operator for a leave statement.
+ * @param label Label of the CompoundBody leave statement should exit.
+ */
+case class BatchLeaveStatement(label: String) extends CompoundPlanStatement
