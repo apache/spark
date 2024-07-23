@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils
 /**
  * Metadata for a state store instance.
  */
-trait StateStoreMetadata extends Serializable {
+trait StateStoreMetadata {
   def storeName: String
   def numColsPrefixKey: Int
   def numPartitions: Int
@@ -61,14 +61,14 @@ object StateStoreMetadataV2 {
 /**
  * Information about a stateful operator.
  */
-trait OperatorInfo extends Serializable {
+trait OperatorInfo {
   def operatorId: Long
   def operatorName: String
 }
 
 case class OperatorInfoV1(operatorId: Long, operatorName: String) extends OperatorInfo
 
-trait OperatorStateMetadata extends Serializable {
+trait OperatorStateMetadata {
   def version: Int
 
   def operatorInfo: OperatorInfo
@@ -128,6 +128,44 @@ object OperatorStateMetadataUtils {
       case _ =>
         throw new IllegalArgumentException(s"Failed to serialize operator metadata with " +
           s"version=${operatorStateMetadata.version}")
+    }
+  }
+}
+
+object OperatorStateMetadataReader {
+  def createReader(
+      stateCheckpointPath: Path,
+      hadoopConf: Configuration,
+      version: Int): OperatorStateMetadataReader = {
+    version match {
+      case 1 =>
+        new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
+      case 2 =>
+        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf)
+      case _ =>
+        throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
+          s"with version=$version")
+    }
+  }
+}
+
+object OperatorStateMetadataWriter {
+  def createWriter(
+      stateCheckpointPath: Path,
+      hadoopConf: Configuration,
+      version: Int,
+      currentBatchId: Option[Long] = None): OperatorStateMetadataWriter = {
+    version match {
+      case 1 =>
+        new OperatorStateMetadataV1Writer(stateCheckpointPath, hadoopConf)
+      case 2 =>
+        if (currentBatchId.isEmpty) {
+          throw new IllegalArgumentException("currentBatchId is required for version 2")
+        }
+        new OperatorStateMetadataV2Writer(stateCheckpointPath, hadoopConf, currentBatchId.get)
+      case _ =>
+          throw new IllegalArgumentException(s"Failed to create writer for operator metadata " +
+          s"with version=$version")
     }
   }
 }

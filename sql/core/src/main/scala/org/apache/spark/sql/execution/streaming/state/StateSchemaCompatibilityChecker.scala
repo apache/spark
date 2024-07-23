@@ -134,7 +134,7 @@ class StateSchemaCompatibilityChecker(
    * @param newSchema - new state schema
    * @param ignoreValueSchema - whether to ignore value schema or not
    */
-  def check(
+  private def check(
       oldSchema: StateStoreColFamilySchema,
       newSchema: StateStoreColFamilySchema,
       ignoreValueSchema: Boolean) : Unit = {
@@ -188,7 +188,7 @@ class StateSchemaCompatibilityChecker(
     new Path(new Path(storeCpLocation, "_metadata"), "schema")
 }
 
-object StateSchemaCompatibilityChecker extends Logging {
+object StateSchemaCompatibilityChecker {
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
       throw new SparkUnsupportedOperationException(
@@ -211,7 +211,10 @@ object StateSchemaCompatibilityChecker extends Logging {
    * @param stateSchemaVersion - version of the state schema to be used
    * @param extraOptions - any extra options to be passed for StateStoreConf creation
    * @param storeName - optional state store name
-   * @param schemaFilePath - optional schema file path
+   * @param oldSchemaFilePath - optional path to the old schema file. If not provided, will default
+   *                          to the schema file location
+   * @param newSchemaFilePath - optional path to the destination schema file.
+   *                          Needed for schema version 3
    * @return - StateSchemaValidationResult containing the result of the schema validation
    */
   def validateAndMaybeEvolveStateSchema(

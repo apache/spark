@@ -393,7 +393,8 @@ case class TransformWithStateExec(
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
-    val metadataReader = new OperatorStateMetadataV2Reader(metadataPath, hadoopConf)
+    val metadataReader = OperatorStateMetadataReader.createReader(
+      metadataPath, hadoopConf, operatorStateMetadataVersion)
     val operatorStateMetadata = metadataReader.read()
     val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
       case Some(metadata) =>

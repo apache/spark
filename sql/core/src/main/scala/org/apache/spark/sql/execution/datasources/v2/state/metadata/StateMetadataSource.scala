@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataV1, OperatorStateMetadataV1Reader, OperatorStateMetadataV2, OperatorStateMetadataV2Reader}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -200,11 +200,13 @@ class StateMetadataPartitionReader(
       // check if OperatorStateMetadataV2 path exists, if it does, read it
       // otherwise, fall back to OperatorStateMetadataV1
       val operatorStateMetadataV2Path = OperatorStateMetadataV2.metadataDirPath(operatorIdPath)
-      if (fileManager.exists(operatorStateMetadataV2Path)) {
-        new OperatorStateMetadataV2Reader(operatorIdPath, hadoopConf).read()
+      val operatorStateMetadataVersion = if (fileManager.exists(operatorStateMetadataV2Path)) {
+        2
       } else {
-        new OperatorStateMetadataV1Reader(operatorIdPath, hadoopConf).read()
+        1
       }
+      OperatorStateMetadataReader.createReader(
+        operatorIdPath, hadoopConf, operatorStateMetadataVersion).read()
     }
   }
 
