@@ -465,7 +465,7 @@ class DefaultParamsWriter(MLWriter):
             instance, sc, extraMetadata, paramMap
         )
         spark = SparkSession._getActiveSessionOrCreate()
-        spark.createDataFrame(  # type: ignore[union-attr]
+        spark.createDataFrame(
             [(metadataJson,)], schema=["value"]
         ).coalesce(1).write.text(metadataPath)
 
@@ -581,7 +581,7 @@ class DefaultParamsReader(MLReader[RL]):
         """
         metadataPath = os.path.join(path, "metadata")
         spark = SparkSession._getActiveSessionOrCreate()
-        metadataStr = spark.read.text(metadataPath).first()[0]  # type: ignore[union-attr,index]
+        metadataStr = spark.read.text(metadataPath).first()[0]  # type: ignore[index]
         loadedVals = DefaultParamsReader._parseMetaData(metadataStr, expectedClassName)
         return loadedVals
 
