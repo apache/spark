@@ -118,59 +118,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     copy(child = newChild)
 }
 
-case class TransposeExec(
-    indexColumn: Expression,
-    child: SparkPlan,
-    originalColNames: Seq[String],
-    override val output: Seq[Attribute]) extends UnaryExecNode {
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    // scalastyle:off println
-    val collectedRows = child.executeCollect()
-
-    val matrixNumCols = if (collectedRows.nonEmpty) collectedRows.head.numFields else 0
-    val matrixNumRows = collectedRows.length
-
-    val originalMatrix = Array.ofDim[Any](matrixNumRows, matrixNumCols)
-    for (i <- 0 until matrixNumRows) {
-      val row = collectedRows(i)
-      for (j <- 0 until matrixNumCols) {
-        originalMatrix(i)(j) = row.get(j, child.output(j).dataType)
-      }
-    }
-
-    val transposedMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows)
-    for (i <- 0 until matrixNumRows) {
-      for (j <- 0 until matrixNumCols) {
-        println(s"Transposing element at row $i, col $j: ${originalMatrix(i)(j)}")
-        transposedMatrix(j)(i) = originalMatrix(i)(j)
-        println(s"transposedMatrix row $j, col $i: ${transposedMatrix(j)(i)}")
-      }
-    }
-
-    // Insert the first column with originalColNames
-    val finalMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows + 1)
-    for (i <- 0 until matrixNumCols) {
-      finalMatrix(i)(0) = originalColNames(i)
-    }
-    for (i <- 0 until matrixNumCols) {
-      for (j <- 1 until matrixNumRows + 1) {
-        finalMatrix(i)(j) = transposedMatrix(i)(j - 1)
-      }
-    }
-
-    // Convert to RDD[InternalRow]
-    val data = finalMatrix.tail.map { row =>
-      InternalRow.fromSeq(row.toIndexedSeq)
-    }
-    sparkContext.parallelize(data.toSeq, 1)
-  }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): TransposeExec = {
-    copy(child = newChild)
-  }
-}
-
 trait GeneratePredicateHelper extends PredicateHelper {
   self: CodegenSupport =>
 
