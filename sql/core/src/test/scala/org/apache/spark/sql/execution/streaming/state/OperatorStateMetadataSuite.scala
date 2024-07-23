@@ -41,9 +41,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       expectedMetadata: OperatorStateMetadataV1): Unit = {
     val statePath = new Path(checkpointDir, s"state/$operatorId")
     val operatorMetadata = new OperatorStateMetadataV1Reader(statePath, hadoopConf).read()
-      .asInstanceOf[OperatorStateMetadataV1]
-    assert(operatorMetadata.operatorInfo == expectedMetadata.operatorInfo &&
-      operatorMetadata.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
+      .asInstanceOf[Option[OperatorStateMetadataV1]]
+    assert(operatorMetadata.isDefined)
+    assert(operatorMetadata.get.operatorInfo == expectedMetadata.operatorInfo &&
+      operatorMetadata.get.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
   }
 
   test("Serialize and deserialize stateful operator metadata") {
