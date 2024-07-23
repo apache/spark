@@ -824,12 +824,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         )
 
         self.assert_eq(
-            cdf.select(
-                cdf.a % cdf["b"], cdf["a"] % 2, CF.try_remainder(CF.lit(12), cdf.c)
-            ).toPandas(),
-            sdf.select(
-                sdf.a % sdf["b"], sdf["a"] % 2, SF.try_remainder(SF.lit(12), sdf.c)
-            ).toPandas(),
+            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2, CF.try_mod(CF.lit(12), cdf.c)).toPandas(),
+            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2, SF.try_mod(SF.lit(12), sdf.c)).toPandas(),
         )
 
         self.assert_eq(
@@ -1045,6 +1041,21 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
                 """isNull(y_1)) THEN 0 ELSE -(length(y_1), length(x_0)) END, x_0, y_1))'>"""
             ),
         )
+
+    def test_cast_default_column_name(self):
+        cdf = self.connect.range(1).select(
+            CF.lit(b"123").cast("STRING"),
+            CF.lit(123).cast("STRING"),
+            CF.lit(123).cast("LONG"),
+            CF.lit(123).cast("DOUBLE"),
+        )
+        sdf = self.spark.range(1).select(
+            SF.lit(b"123").cast("STRING"),
+            SF.lit(123).cast("STRING"),
+            SF.lit(123).cast("LONG"),
+            SF.lit(123).cast("DOUBLE"),
+        )
+        self.assertEqual(cdf.columns, sdf.columns)
 
 
 if __name__ == "__main__":

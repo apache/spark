@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
 
@@ -29,7 +28,7 @@ import org.apache.spark.sql.streaming.ListState
  *
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
- * @param keyEnc - Spark SQL encoder for key
+ * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
  * @tparam S - data type of object that will be stored in the list
  */
@@ -40,12 +39,10 @@ class ListStateImpl[S](
      valEncoder: Encoder[S])
   extends ListState[S] with Logging {
 
-  private val keySerializer = keyExprEnc.createSerializer()
+  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
 
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
-
-  store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
-    NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), useMultipleValuesPerKey = true)
+  store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+    NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
 
   /** Whether state exists or not. */
    override def exists(): Boolean = {

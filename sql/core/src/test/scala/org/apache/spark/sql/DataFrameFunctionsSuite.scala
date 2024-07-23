@@ -5811,13 +5811,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Array[Integer](null, null, null), null, null)
     ).toDF("a", "b", "c")
 
-    checkAnswer(
-      df.select(array_compact($"a"),
-        array_compact($"b"), array_compact($"c")),
+    val df2 = df.select(
+      array_compact($"a").alias("a"),
+      array_compact($"b").alias("b"),
+      array_compact($"c").alias("c"))
+
+    checkAnswer(df2,
       Seq(Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "")),
         Row(Seq.empty[Integer], Seq("1.0", "2.2", "3.0"), Seq.empty[String]),
         Row(Seq.empty[Integer], null, null))
     )
+
+    val expectedSchema = StructType(
+      StructField("a", ArrayType(IntegerType, containsNull = false), true) ::
+        StructField("b", ArrayType(StringType, containsNull = false), true) ::
+        StructField("c", ArrayType(StringType, containsNull = false), true) :: Nil)
+    assert(df2.schema === expectedSchema)
 
     checkAnswer(
       OneRowRelation().selectExpr("array_compact(array(1.0D, 2.0D, null))"),

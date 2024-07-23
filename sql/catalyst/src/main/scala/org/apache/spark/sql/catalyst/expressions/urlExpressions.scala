@@ -52,7 +52,7 @@ import org.apache.spark.unsafe.types.UTF8String
 case class UrlEncode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
@@ -89,7 +89,7 @@ case class UrlEncode(child: Expression)
 case class UrlDecode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
@@ -104,6 +104,37 @@ case class UrlDecode(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def prettyName: String = "url_decode"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - This is a special version of `url_decode` that performs the same operation, but returns a NULL value instead of raising an error if the decoding cannot be performed.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression to decode
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('https%3A%2F%2Fspark.apache.org');
+       https://spark.apache.org
+  """,
+  since = "4.0.0",
+  group = "url_funcs")
+// scalastyle:on line.size.limit
+case class TryUrlDecode(expr: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(expr: Expression) = this(expr, TryEval(UrlDecode(expr)))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(expr)
+
+  override def prettyName: String = "try_url_decode"
 }
 
 object UrlCodec {
