@@ -217,16 +217,6 @@ object OperatorStateMetadataV2 {
 
   def metadataFilePath(stateCheckpointPath: Path, currentBatchId: Long): Path =
     new Path(metadataDirPath(stateCheckpointPath), currentBatchId.toString)
-
-  def deserialize(in: BufferedReader): OperatorStateMetadata = {
-    Serialization.read[OperatorStateMetadataV2](in)
-  }
-
-  def serialize(
-      out: FSDataOutputStream,
-      operatorStateMetadata: OperatorStateMetadata): Unit = {
-    Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
-  }
 }
 
 /**
