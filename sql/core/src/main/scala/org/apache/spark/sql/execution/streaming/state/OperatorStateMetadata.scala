@@ -23,12 +23,13 @@ import java.nio.charset.StandardCharsets
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
@@ -87,7 +88,7 @@ case class OperatorStateMetadataV2(
   override def version: Int = 2
 }
 
-object OperatorStateMetadataUtils {
+object OperatorStateMetadataUtils extends Logging {
 
   sealed trait OperatorStateMetadataReader {
     def version: Int
@@ -101,6 +102,35 @@ object OperatorStateMetadataUtils {
   }
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  def readMetadata(inputStream: FSDataInputStream): Option[OperatorStateMetadata] = {
+    val inputReader =
+      new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+    try {
+      val versionStr = inputReader.readLine()
+      val version = MetadataVersionUtil.validateVersion(versionStr, 2)
+      Some(deserialize(version, inputReader))
+    } finally {
+      inputStream.close()
+    }
+  }
+
+  def writeMetadata(
+    outputStream: CancellableFSDataOutputStream,
+    operatorMetadata: OperatorStateMetadata,
+    metadataFilePath: Path): Unit = {
+    try {
+      outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
+      OperatorStateMetadataUtils.serialize(outputStream, operatorMetadata)
+      outputStream.close()
+    } catch {
+      case e: Throwable =>
+        logError(
+          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}", e)
+        outputStream.cancel()
+        throw e
+    }
+  }
 
   def deserialize(
       version: Int,
@@ -218,17 +248,7 @@ class OperatorStateMetadataV1Writer(
 
     fm.mkdirs(metadataFilePath.getParent)
     val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
-    try {
-      outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
-      OperatorStateMetadataUtils.serialize(outputStream, operatorMetadata)
-      outputStream.close()
-    } catch {
-      case e: Throwable =>
-        logError(
-          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}", e)
-        outputStream.cancel()
-        throw e
-    }
+    OperatorStateMetadataUtils.writeMetadata(outputStream, operatorMetadata, metadataFilePath)
   }
 }
 
@@ -248,15 +268,7 @@ class OperatorStateMetadataV1Reader(
 
   def read(): Option[OperatorStateMetadata] = {
     val inputStream = fm.open(metadataFilePath)
-    val inputReader =
-      new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
-    try {
-      val versionStr = inputReader.readLine()
-      val version = MetadataVersionUtil.validateVersion(versionStr, 1)
-      Some(OperatorStateMetadataUtils.deserialize(version, inputReader))
-    } finally {
-      inputStream.close()
-    }
+    OperatorStateMetadataUtils.readMetadata(inputStream)
   }
 }
 
@@ -277,17 +289,7 @@ class OperatorStateMetadataV2Writer(
 
     fm.mkdirs(metadataFilePath.getParent)
     val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
-    try {
-      outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
-      OperatorStateMetadataUtils.serialize(outputStream, operatorMetadata)
-      outputStream.close()
-    } catch {
-      case e: Throwable =>
-        logError(
-          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}", e)
-        outputStream.cancel()
-        throw e
-    }
+    OperatorStateMetadataUtils.writeMetadata(outputStream, operatorMetadata, metadataFilePath)
   }
 }
 
@@ -317,14 +319,6 @@ class OperatorStateMetadataV2Reader(
     val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
       stateCheckpointPath, lastBatchId)
     val inputStream = fm.open(metadataFilePath)
-    val inputReader =
-      new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
-    try {
-      val versionStr = inputReader.readLine()
-      val version = MetadataVersionUtil.validateVersion(versionStr, 2)
-      Some(OperatorStateMetadataUtils.deserialize(version, inputReader))
-    } finally {
-      inputStream.close()
-    }
+    OperatorStateMetadataUtils.readMetadata(inputStream)
   }
 }
