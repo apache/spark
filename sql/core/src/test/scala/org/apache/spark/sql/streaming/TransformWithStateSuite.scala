@@ -63,8 +63,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   }
 }
 
-class RunningCountStatefulProcessorInt extends StatefulProcessor[String, String, (String, String)]
-  with Logging {
+class RunningCountStatefulProcessorInt
+  extends StatefulProcessor[String, String, (String, String)] {
   @transient protected var _countState: ValueState[Int] = _
 
   override def init(
@@ -88,7 +88,6 @@ class RunningCountStatefulProcessorInt extends StatefulProcessor[String, String,
     }
   }
 }
-
 
 // Class to verify stateful processor usage with adding processing time timers
 class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
