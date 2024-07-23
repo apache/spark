@@ -10584,8 +10584,6 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     java.lang.RuntimeException: My error msg
     ...
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
@@ -10593,11 +10591,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-
-    errMsg = (
-        _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
-    )
-    return _invoke_function("assert_true", _to_java_column(col), errMsg)
+    return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
 
 @_try_remote_functions
@@ -10628,18 +10622,12 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     java.lang.RuntimeException: My error message
     ...
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-
-    errMsg = (
-        _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
-    )
-    return _invoke_function("raise_error", errMsg)
+    return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
 # ---------------------- String/Binary functions ------------------------------
@@ -11187,8 +11175,6 @@ def overlay(
     >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
     [Row(overlayed='SPARK_COREL')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_INT_OR_STR",
@@ -11200,10 +11186,12 @@ def overlay(
             message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
-    pos = _create_column_from_literal(pos) if isinstance(pos, int) else _to_java_column(pos)
-    len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
+    if isinstance(pos, int):
+        pos = lit(pos)
+    if isinstance(len, int):
+        len = lit(len)
 
-    return _invoke_function("overlay", _to_java_column(src), _to_java_column(replace), pos, len)
+    return _invoke_function_over_columns("overlay", src, replace, pos, len)
 
 
 @_try_remote_functions
@@ -16599,19 +16587,15 @@ def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] =
     |       STRUCT<a: BIGINT>|     STRUCT<a: BIGINT>|
     +------------------------+----------------------+
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(json, str):
-        col = _create_column_from_literal(json)
-    elif isinstance(json, Column):
-        col = _to_java_column(json)
-    else:
+    if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
-    return _invoke_function("schema_of_json", col, _options_to_str(options))
+    return _invoke_function("schema_of_json", _to_java_column(lit(json)), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -16831,19 +16815,15 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = N
     ... ).collect()
     [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(xml, str):
-        col = _create_column_from_literal(xml)
-    elif isinstance(xml, Column):
-        col = _to_java_column(xml)
-    else:
+    if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
-    return _invoke_function("schema_of_xml", col, _options_to_str(options))
+    return _invoke_function("schema_of_xml", _to_java_column(lit(xml)), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -16955,19 +16935,15 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     |STRUCT<_c0: INT, _c1: STRING, _c2: BOOLEAN>|
     +-------------------------------------------+
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(csv, str):
-        col = _create_column_from_literal(csv)
-    elif isinstance(csv, Column):
-        col = _to_java_column(csv)
-    else:
+    if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
-    return _invoke_function("schema_of_csv", col, _options_to_str(options))
+    return _invoke_function("schema_of_csv", _to_java_column(lit(csv)), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -18502,20 +18478,17 @@ def from_csv(
     |      {1, 2, 3}|
     +---------------+
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    _get_active_spark_context()
-    if isinstance(schema, str):
-        schema = _create_column_from_literal(schema)
-    elif isinstance(schema, Column):
-        schema = _to_java_column(schema)
-    else:
+    if not isinstance(schema, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
-    return _invoke_function("from_csv", _to_java_column(col), schema, _options_to_str(options))
+    return _invoke_function(
+        "from_csv", _to_java_column(col), _to_java_column(lit(schema)), _options_to_str(options)
+    )
 
 
 def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
