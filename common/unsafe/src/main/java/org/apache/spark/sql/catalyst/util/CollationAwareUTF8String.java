@@ -190,10 +190,9 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Lowercase UTF8String comparison used for UTF8_LCASE collation. While the default
-   * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
-   * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
-   * as well as handling special rules for one-to-many case mappings (see: lowerCaseCodePoints).
+   * Lowercase UTF8String comparison used for UTF8_LCASE collation. This method uses lowercased
+   * code points to compare the strings in a case-insensitive manner using ICU rules, taking into
+   * account special rules for one-to-many case mappings (see: lowerCaseCodePoints).
    *
    * @param left The first UTF8String to compare.
    * @param right The second UTF8String to compare.
