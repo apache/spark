@@ -94,35 +94,33 @@ INSERT INTO employees VALUES ("Paul", "Engineering", 29000, 23);
 INSERT INTO employees VALUES ("Chloe", "Engineering", 23000, 25);
 
 SELECT * FROM employees;
-+-----+-----------+------+-----+
-| name|       dept|salary|  age|
-+-----+-----------+------+-----+
-|Chloe|Engineering| 23000|   25|
-| Fred|Engineering| 21000|   28|
-| Paul|Engineering| 29000|   23|
-|Helen|  Marketing| 29000|   40|
-|  Tom|Engineering| 23000|   33|
-| Jane|  Marketing| 29000|   28|
-| Jeff|  Marketing| 35000|   38|
-| Evan|      Sales| 32000|   38|
-| Lisa|      Sales| 10000|   35|
-| Alex|      Sales| 30000|   33|
-+-----+-----------+------+-----+
++-----+-----------+------+---+
+| name|       dept|salary|age|
++-----+-----------+------+---+
+|Chloe|Engineering| 23000| 25|
+| Paul|Engineering| 29000| 23|
+| Fred|Engineering| 21000| 28|
+|  Tom|Engineering| 23000| 33|
+| Jeff|  Marketing| 35000| 38|
+| Jane|  Marketing| 29000| 28|
+| Evan|      Sales| 32000| 38|
+| Alex|      Sales| 30000| 33|
+| Lisa|      Sales| 10000| 35|
++-----+-----------+------+---+
 
 SELECT name, dept, salary, RANK() OVER (PARTITION BY dept ORDER BY salary) AS rank FROM employees;
 +-----+-----------+------+----+
 | name|       dept|salary|rank|
 +-----+-----------+------+----+
+| Fred|Engineering| 21000|   1|
+|Chloe|Engineering| 23000|   2|
+|  Tom|Engineering| 23000|   2|
+| Paul|Engineering| 29000|   4|
+| Jane|  Marketing| 29000|   1|
+| Jeff|  Marketing| 35000|   2|
 | Lisa|      Sales| 10000|   1|
 | Alex|      Sales| 30000|   2|
 | Evan|      Sales| 32000|   3|
-| Fred|Engineering| 21000|   1|
-|  Tom|Engineering| 23000|   2|
-|Chloe|Engineering| 23000|   2|
-| Paul|Engineering| 29000|   4|
-|Helen|  Marketing| 29000|   1|
-| Jane|  Marketing| 29000|   1|
-| Jeff|  Marketing| 35000|   3|
 +-----+-----------+------+----+
 
 SELECT name, dept, salary, DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary ROWS BETWEEN
@@ -130,70 +128,77 @@ SELECT name, dept, salary, DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary 
 +-----+-----------+------+----------+
 | name|       dept|salary|dense_rank|
 +-----+-----------+------+----------+
+| Fred|Engineering| 21000|         1|
+|Chloe|Engineering| 23000|         2|
+|  Tom|Engineering| 23000|         2|
+| Paul|Engineering| 29000|         3|
+| Jane|  Marketing| 29000|         1|
+| Jeff|  Marketing| 35000|         2|
 | Lisa|      Sales| 10000|         1|
 | Alex|      Sales| 30000|         2|
 | Evan|      Sales| 32000|         3|
-| Fred|Engineering| 21000|         1|
-|  Tom|Engineering| 23000|         2|
-|Chloe|Engineering| 23000|         2|
-| Paul|Engineering| 29000|         3|
-|Helen|  Marketing| 29000|         1|
-| Jane|  Marketing| 29000|         1|
-| Jeff|  Marketing| 35000|         2|
 +-----+-----------+------+----------+
 
 SELECT name, dept, age, CUME_DIST() OVER (PARTITION BY dept ORDER BY age
     RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cume_dist FROM employees;
-+-----+-----------+------+------------------+
-| name|       dept|age   |         cume_dist|
-+-----+-----------+------+------------------+
-| Alex|      Sales|    33|0.3333333333333333|
-| Lisa|      Sales|    35|0.6666666666666666|
-| Evan|      Sales|    38|               1.0|
-| Paul|Engineering|    23|              0.25|
-|Chloe|Engineering|    25|              0.75|
-| Fred|Engineering|    28|              0.25|
-|  Tom|Engineering|    33|               1.0|
-| Jane|  Marketing|    28|0.3333333333333333|
-| Jeff|  Marketing|    38|0.6666666666666666|
-|Helen|  Marketing|    40|               1.0|
-+-----+-----------+------+------------------+
++-----+-----------+---+------------------+
+| name|       dept|age|         cume_dist|
++-----+-----------+---+------------------+
+| Paul|Engineering| 23|              0.25|
+|Chloe|Engineering| 25|               0.5|
+| Fred|Engineering| 28|              0.75|
+|  Tom|Engineering| 33|               1.0|
+| Jane|  Marketing| 28|               0.5|
+| Jeff|  Marketing| 38|               1.0|
+| Alex|      Sales| 33|0.3333333333333333|
+| Lisa|      Sales| 35|0.6666666666666666|
+| Evan|      Sales| 38|               1.0|
++-----+-----------+---+------------------+
 
 SELECT name, dept, salary, MIN(salary) OVER (PARTITION BY dept ORDER BY salary) AS min
     FROM employees;
 +-----+-----------+------+-----+
 | name|       dept|salary|  min|
 +-----+-----------+------+-----+
+| Fred|Engineering| 21000|21000|
+|Chloe|Engineering| 23000|21000|
+|  Tom|Engineering| 23000|21000|
+| Paul|Engineering| 29000|21000|
+| Jane|  Marketing| 29000|29000|
+| Jeff|  Marketing| 35000|29000|
 | Lisa|      Sales| 10000|10000|
 | Alex|      Sales| 30000|10000|
 | Evan|      Sales| 32000|10000|
-|Helen|  Marketing| 29000|29000|
-| Jane|  Marketing| 29000|29000|
-| Jeff|  Marketing| 35000|29000|
-| Fred|Engineering| 21000|21000|
-|  Tom|Engineering| 23000|21000|
-|Chloe|Engineering| 23000|21000|
-| Paul|Engineering| 29000|21000|
 +-----+-----------+------+-----+
 
-SELECT name, salary,
+SELECT name, dept, salary,
     LAG(salary) OVER (PARTITION BY dept ORDER BY salary) AS lag,
     LEAD(salary, 1, 0) OVER (PARTITION BY dept ORDER BY salary) AS lead
     FROM employees;
 +-----+-----------+------+-----+-----+
 | name|       dept|salary|  lag| lead|
 +-----+-----------+------+-----+-----+
-| Lisa|      Sales| 10000|NULL |30000|
-| Alex|      Sales| 30000|10000|32000|
-| Evan|      Sales| 32000|30000|    0|
 | Fred|Engineering| 21000| NULL|23000|
 |Chloe|Engineering| 23000|21000|23000|
 |  Tom|Engineering| 23000|23000|29000|
 | Paul|Engineering| 29000|23000|    0|
-|Helen|  Marketing| 29000| NULL|29000|
-| Jane|  Marketing| 29000|29000|35000|
+| Jane|  Marketing| 29000| NULL|35000|
 | Jeff|  Marketing| 35000|29000|    0|
+| Lisa|      Sales| 10000| NULL|30000|
+| Alex|      Sales| 30000|10000|32000|
+| Evan|      Sales| 32000|30000|    0|
 +-----+-----------+------+-----+-----+
+
+CREATE TABLE test_ignore_null (content STRING, id INT, v STRING);
+INSERT INTO test_ignore_null VALUES ('a', 0, null);
+INSERT INTO test_ignore_null VALUES ('a', 1, 'x');
+INSERT INTO test_ignore_null VALUES ('b', 2, null);
+INSERT INTO test_ignore_null VALUES ('c', 3, null);
+INSERT INTO test_ignore_null VALUES ('a', 4, 'y');
+INSERT INTO test_ignore_null VALUES ('b', 5, null);
+INSERT INTO test_ignore_null VALUES ('a', 6, 'z');
+INSERT INTO test_ignore_null VALUES ('a', 7, 'v');
+INSERT INTO test_ignore_null VALUES ('a', 8, null);
 
 SELECT id, v,
     LEAD(v, 0) IGNORE NULLS OVER w lead,
@@ -204,19 +209,19 @@ SELECT id, v,
     FROM test_ignore_null
     WINDOW w AS (ORDER BY id)
     ORDER BY id;
-+--+----+----+----+---------+-----------+----------+
-|id|   v|lead| lag|nth_value|first_value|last_value|
-+--+----+----+----+---------+-----------+----------+
-| 0|NULL|NULL|NULL|     NULL|       NULL|      NULL|
-| 1|   x|   x|   x|     NULL|          x|         x|
-| 2|NULL|NULL|NULL|     NULL|          x|         x|
-| 3|NULL|NULL|NULL|     NULL|          x|         x|
-| 4|   y|   y|   y|        y|          x|         y|
-| 5|NULL|NULL|NULL|        y|          x|         y|
-| 6|   z|   z|   z|        y|          x|         z|
-| 7|   v|   v|   v|        y|          x|         v|
-| 8|NULL|NULL|NULL|        y|          x|         v|
-+--+----+----+----+---------+-----------+----------+
++---+----+----+----+---------+-----------+----------+
+| id|   v|lead| lag|nth_value|first_value|last_value|
++---+----+----+----+---------+-----------+----------+
+|  0|NULL|NULL|NULL|     NULL|       NULL|      NULL|
+|  1|   x|   x|   x|     NULL|          x|         x|
+|  2|NULL|NULL|NULL|     NULL|          x|         x|
+|  3|NULL|NULL|NULL|     NULL|          x|         x|
+|  4|   y|   y|   y|        y|          x|         y|
+|  5|NULL|NULL|NULL|        y|          x|         y|
+|  6|   z|   z|   z|        y|          x|         z|
+|  7|   v|   v|   v|        y|          x|         v|
+|  8|NULL|NULL|NULL|        y|          x|         v|
++---+----+----+----+---------+-----------+----------+
 ```
 
 ### Related Statements
