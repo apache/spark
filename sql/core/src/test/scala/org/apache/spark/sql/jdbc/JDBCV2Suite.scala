@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, avg, ceil, coalesce, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sqrt, sum, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -1258,25 +1258,29 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    val df16 = spark.table("h2.test.employee")
-      .filter(sin($"bonus") < -0.08)
-      .filter(sinh($"bonus") > 200)
-      .filter(cos($"bonus") > 0.9)
-      .filter(cosh($"bonus") > 200)
-      .filter(tan($"bonus") < -0.08)
-      .filter(tanh($"bonus") === 1)
-      .filter(cot($"bonus") < -11)
-      .filter(asin($"bonus") > 0.1)
-      .filter(acos($"bonus") > 1.4)
-      .filter(atan($"bonus") > 1.4)
-      .filter(atan2($"bonus", $"bonus") > 0.7)
+    val df16 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE sin(bonus) < -0.08
+        |AND sinh(bonus) > 200
+        |AND cos(bonus) > 0.9
+        |AND cosh(bonus) > 200
+        |AND tan(bonus) < -0.08
+        |AND tanh(bonus) = 1
+        |AND cot(bonus) < -11
+        |AND asin(bonus / salary) > 0.13
+        |AND acos(bonus / salary) < 1.47
+        |AND atan(bonus) > 1.4
+        |AND atan2(bonus, bonus) > 0.7
+        |""".stripMargin)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
-      "BONUS IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, COS(BONUS) > 0.9, " +
-      "COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, COT(BONUS) < -11.0, " +
-      "ASIN(BONUS) > 0.1, ACOS(BONUS) > 1.4, ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
-      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+      "BONUS IS NOT NULL, SALARY IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
+      "COS(BONUS) > 0.9, COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
+      "COT(BONUS) < -11.0, ASIN(BONUS / CAST(SALARY AS double)) > 0.13, " +
+      "ACOS(BONUS / CAST(SALARY AS double)) < 1.47, " +
+      "ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
+    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
     val df17 = sql(
@@ -1292,6 +1296,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df17,
       "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
+  }
+
+  test("SPARK-48943: arguments for asin and acos are invalid (< -1 || > 1) in H2") {
+    val df1 = spark.table("h2.test.employee").filter(acos($"bonus") > 1.4)
+    val e1 = intercept[SparkException] {
+      checkAnswer(df1, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e1.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e1.getCause.getMessage.contains("Invalid value")
+      && e1.getCause.getMessage.contains("ACOS"))
+
+    val df2 = spark.table("h2.test.employee").filter(asin($"bonus") > 0.1)
+    val e2 = intercept[SparkException] {
+      checkAnswer(df2, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e2.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e2.getCause.getMessage.contains("Invalid value")
+      && e2.getCause.getMessage.contains("ASIN"))
   }
 
   test("SPARK-38432: escape the single quote, _ and % for DS V2 pushdown") {
