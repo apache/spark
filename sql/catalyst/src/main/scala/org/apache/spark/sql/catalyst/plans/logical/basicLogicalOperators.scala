@@ -1477,13 +1477,17 @@ case class Pivot(
 case class Transpose(
     indexColumn: Expression,
     child: LogicalPlan,
-    originalColNames: Seq[String] = Seq.empty,
-    override val output: Seq[Attribute] = Seq.empty
-) extends UnresolvedUnaryNode {
+    originalColNames: Option[Seq[String]] = None,
+    output: Seq[Attribute] = Seq.empty
+) extends UnaryNode {
 
-  override lazy val resolved: Boolean = true
+  // indexColumn, child, originalColNames
+  override lazy val resolved: Boolean = {
+    indexColumn.resolved && child.resolved && originalColNames != null && output.nonEmpty
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
+
   override def withNewChildInternal(newChild: LogicalPlan): Transpose = copy(child = newChild)
 }
 

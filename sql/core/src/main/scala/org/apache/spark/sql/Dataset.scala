@@ -2190,7 +2190,7 @@ class Dataset[T] private[sql](
    * @since 4.0.0
    */
   def transpose(indexColumn: Option[Column] = None): DataFrame = withPlan {
-    if (this.isEmpty) {
+    if (this.isEmpty) {  // 0 rows, might with column header
       this.logicalPlan
     } else {
       val actualIndexColumn = indexColumn.getOrElse(col(this.columns.head))
