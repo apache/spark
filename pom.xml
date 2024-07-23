@@ -326,7 +326,7 @@
     <mysql.connector.version>9.0.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>12.6.2.jre11</mssql.jdbc.version>
+    <mssql.jdbc.version>12.6.3.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.4.0.24.05</ojdbc11.version>
   </properties>
   <repositories>
@@ -801,7 +801,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-3</version>
+        <version>1.5.6-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
