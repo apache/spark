@@ -24,6 +24,7 @@ import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
@@ -253,7 +254,7 @@ private[hive] class SparkExecuteStatementOperation(
         // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
           session.sparkContext.cancelJobGroup(statementId,
-            s"failed to execute statement ${redactedStatement}: ${e}")
+            s"failed to execute statement ${redactedStatement}: " + ExceptionUtils.getStackTrace(e))
         }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {

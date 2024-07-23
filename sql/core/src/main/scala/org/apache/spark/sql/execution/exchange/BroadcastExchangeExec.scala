@@ -24,6 +24,8 @@ import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
+
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
@@ -231,7 +233,7 @@ case class BroadcastExchangeExec(
         logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
           sparkContext.cancelJobsWithTag(jobTag,
-            s"Could not execute broadcast in ${timeout} secs. ${ex}")
+            s"Could not execute broadcast in ${timeout} secs: " + ExceptionUtils.getStackTrace(ex))
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))
