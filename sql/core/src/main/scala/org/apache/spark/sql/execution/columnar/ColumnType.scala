@@ -819,7 +819,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
  * Used to append/extract Java VariantVals into/from the underlying [[ByteBuffer]] of a column.
  *
  * Variants are encoded in `append` as:
- * | total data size (excluding this portion) | value size | value binary | metadata binary |
+ * | value size | metadata size | value binary | metadata binary |
  * and are only expected to be decoded in `extract`.
  */
 private[columnar] object VARIANT
@@ -835,20 +835,21 @@ private[columnar] object VARIANT
     row.update(ordinal, value)
 
   override def append(v: VariantVal, buffer: ByteBuffer): Unit = {
-    val varLenSize: Int = 4 + v.getValue().length + v.getMetadata().length
-    ByteBufferHelper.putInt(buffer, varLenSize)
-    ByteBufferHelper.putInt(buffer, v.getValue().length)
-    ByteBufferHelper.copyMemory(ByteBuffer.wrap(v.getValue()), buffer, v.getValue().length)
-    ByteBufferHelper.copyMemory(ByteBuffer.wrap(v.getMetadata()), buffer, v.getMetadata().length)
+    val valueSize = v.getValue().length
+    val metadataSize = v.getMetadata().length
+    ByteBufferHelper.putInt(buffer, valueSize)
+    ByteBufferHelper.putInt(buffer, metadataSize)
+    ByteBufferHelper.copyMemory(ByteBuffer.wrap(v.getValue()), buffer, valueSize)
+    ByteBufferHelper.copyMemory(ByteBuffer.wrap(v.getMetadata()), buffer, metadataSize)
   }
 
   override def extract(buffer: ByteBuffer): VariantVal = {
-    val varLenSize = ByteBufferHelper.getInt(buffer)
     val valueSize = ByteBufferHelper.getInt(buffer)
+    val metadataSize = ByteBufferHelper.getInt(buffer)
     val valueBuffer = ByteBuffer.allocate(valueSize)
     ByteBufferHelper.copyMemory(buffer, valueBuffer, valueSize)
-    val metadataBuffer = ByteBuffer.allocate(varLenSize - 4 - valueSize)
-    ByteBufferHelper.copyMemory(buffer, metadataBuffer, varLenSize - 4 - valueSize)
+    val metadataBuffer = ByteBuffer.allocate(metadataSize)
+    ByteBufferHelper.copyMemory(buffer, metadataBuffer, metadataSize)
     new VariantVal(valueBuffer.array(), metadataBuffer.array())
   }
 }
