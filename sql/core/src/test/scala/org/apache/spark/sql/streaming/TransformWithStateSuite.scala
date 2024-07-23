@@ -1231,6 +1231,57 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       }
     }
   }
+
+  private def getOperatorStateMetadataFileManager(
+      stateCheckpointPath: Path,
+      stateSchemaPath: Path): OperatorStateMetadataV2FileManager = {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    new OperatorStateMetadataV2FileManager(stateCheckpointPath, stateSchemaPath, hadoopConf)
+  }
+
+  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+    new Path(stateCheckpointPath, "default/_metadata/schema")
+  }
+
+  test("transformWithState - verify that metadata and schema logs are purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream,
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream,
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(),
+          StopStream
+        )
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val fm = getOperatorStateMetadataFileManager(
+          stateOpIdPath,
+          stateSchemaPath)
+        assert(fm.listSchemaFiles().length == 1)
+        assert(fm.listMetadataFiles().length == 1)
+      }
+    }
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {

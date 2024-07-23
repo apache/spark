@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
 import org.apache.spark.sql.internal.SQLConf
@@ -690,6 +691,9 @@ abstract class StreamExecution(
     offsetLog.purge(threshold)
     commitLog.purge(threshold)
   }
+
+  // This is to fulfill the interface of AsyncLogPurge
+  protected def purgeOldest(plan: SparkPlan): Unit = {}
 }
 
 object StreamExecution {

@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -40,7 +41,14 @@ trait AsyncLogPurge extends Logging {
 
   private val purgeRunning = new AtomicBoolean(false)
 
+  private val purgeOldestRunning = new AtomicBoolean(false)
+
   protected def purge(threshold: Long): Unit
+
+  // This method is used to purge the oldest OperatorStateMetadata and StateSchema files
+  // which are written per run. Unlike purge(), which is called per microbatch, this is
+  // called at the planning stage of each query run.
+  protected def purgeOldest(plan: SparkPlan): Unit
 
   protected lazy val useAsyncPurge: Boolean = sparkSession.conf.get(SQLConf.ASYNC_LOG_PURGE)
 
@@ -55,6 +63,24 @@ trait AsyncLogPurge extends Logging {
             errorNotifier.markError(throwable)
         } finally {
           purgeRunning.set(false)
+        }
+      })
+    } else {
+      log.debug("Skipped log purging since there is already one in progress.")
+    }
+  }
+
+  protected def purgeOldestAsync(plan: SparkPlan): Unit = {
+    if (purgeOldestRunning.compareAndSet(false, true)) {
+      asyncPurgeExecutorService.execute(() => {
+        try {
+          purgeOldest(plan)
+        } catch {
+          case throwable: Throwable =>
+            logError("Encountered error while performing async log purge", throwable)
+            errorNotifier.markError(throwable)
+        } finally {
+          purgeOldestRunning.set(false)
         }
       })
     } else {
