@@ -38,31 +38,31 @@ trait ShowVariablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     withVariable("name1", "name2", "name_3") {
       sql("DECLARE VARIABLE name1 INT DEFAULT 1")
       sql("SET VARIABLE name1=2")
-      checkAnswer(sql("SHOW VARIABLES"), Seq(Row("name1", "1", "INT", "2")))
+      checkAnswer(sql("SHOW VARIABLES"), Seq(Row("name1", "INT", "1", "2")))
 
       sql("DECLARE VARIABLE name2 = 'spark'")
       sql("SET VARIABLE name2='baidu'")
       checkAnswer(sql("SHOW VARIABLES"),
-        Seq(Row("name1", "1", "INT", "2"), Row("name2", "'spark'", "STRING", "baidu")))
+        Seq(Row("name1", "INT", "1", "2"), Row("name2", "STRING", "'spark'", "baidu")))
 
       sql("DROP TEMPORARY VARIABLE IF EXISTS name2")
-      checkAnswer(sql("SHOW VARIABLES"), Seq(Row("name1", "1", "INT", "2")))
+      checkAnswer(sql("SHOW VARIABLES"), Seq(Row("name1", "INT", "1", "2")))
 
       sql("DECLARE VARIABLE name2 STRING")
       sql("SET VARIABLE name2='databricks'")
       checkAnswer(sql("SHOW VARIABLES"),
-        Seq(Row("name1", "1", "INT", "2"), Row("name2", "null", "STRING", "databricks")))
+        Seq(Row("name1", "INT", "1", "2"), Row("name2", "STRING", "null", "databricks")))
 
       sql("DECLARE VARIABLE name_3 STRING")
       sql("SET VARIABLE name_3='spark'")
       checkAnswer(sql("SHOW VARIABLES"),
         Seq(
-          Row("name1", "1", "INT", "2"),
-          Row("name2", "null", "STRING", "databricks"),
-          Row("name_3", "null", "STRING", "spark")))
+          Row("name1", "INT", "1", "2"),
+          Row("name2", "STRING", "null", "databricks"),
+          Row("name_3", "STRING", "null", "spark")))
 
       checkAnswer(sql("SHOW VARIABLES LIKE 'name_*'"),
-        Seq(Row("name_3", "null", "STRING", "spark")))
+        Seq(Row("name_3", "STRING", "null", "spark")))
     }
   }
 }

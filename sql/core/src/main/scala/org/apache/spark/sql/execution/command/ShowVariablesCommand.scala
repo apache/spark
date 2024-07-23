@@ -41,8 +41,8 @@ case class ShowVariablesCommand(pattern: Option[String]) extends LeafRunnableCom
     variableManager.listViewNames(pattern.getOrElse("*")).map {
       case (name, vd) =>
         Row(name,
-          vd.defaultValueSQL,
           vd.currentValue.dataType.sql,
+          vd.defaultValueSQL,
           ToPrettyString(vd.currentValue).eval(null))
     }
   }

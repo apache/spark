@@ -118,5 +118,6 @@ ability to generate logical and physical plan for a given query using
  * [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
  * [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
  * [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
+ * [SHOW VARIABLES](sql-ref-syntax-aux-show-variables.html)
  * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
  * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
