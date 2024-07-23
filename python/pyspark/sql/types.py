@@ -298,7 +298,7 @@ class StringType(AtomicType):
         if self.isUTF8BinaryCollation():
             return "string"
 
-        return f"string collate ${self.collation}"
+        return f"string collate {self.collation}"
 
     # For backwards compatibility and compatibility with other readers all string types
     # are serialized in json as regular strings and the collation info is written to
