@@ -68,6 +68,8 @@ trait LeafStatementExec extends CompoundStatementExec {
    * Error raised during statement execution.
    */
   var error: Option[SparkThrowable] = None
+
+  var rethrow: Option[Throwable] = None
 }
 
 /**
@@ -119,7 +121,12 @@ class SingleStatementExec(
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 
-  override def reset(): Unit = ()
+  override def reset(): Unit = {
+    raisedError = false
+    errorState = None
+    error = None
+    result = None // Should we do this?
+  }
 
   def execute(session: SparkSession): Unit = {
     try {
@@ -133,9 +140,15 @@ class SingleStatementExec(
         raisedError = true
         errorState = Some(e.getSqlState)
         error = Some(e)
-      case _: Throwable =>
+        e match {
+          case throwable: Throwable =>
+            rethrow = Some(throwable)
+          case _ =>
+        }
+      case thr: Throwable =>
         raisedError = true
         errorState = Some("UNKNOWN")
+        rethrow = Some(thr)
     }
   }
 }
@@ -155,7 +168,22 @@ class CompoundBodyExec(
   extends NonLeafStatementExec {
 
   private def getHandler(condition: String): Option[ErrorHandlerExec] = {
-    conditionHandlerMap.get(condition)
+    var ret = conditionHandlerMap.get(condition)
+    if (ret.isEmpty) {
+      ret = conditionHandlerMap.get("UNKNOWN")
+    }
+    ret
+  }
+
+  private def handleError(statement: LeafStatementExec): CompoundStatementExec = {
+    if (statement.raisedError) {
+      getHandler(statement.errorState.get).foreach { handler =>
+        statement.reset() // Clear all flags and result
+        handler.reset()
+        return handler.getTreeIterator.next()
+      }
+    }
+    statement
   }
 
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
@@ -191,17 +219,11 @@ class CompoundBodyExec(
           case Some(statement: LeafStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement.execute(session)  // Execute the leaf statement
-            if (statement.raisedError) {
-              val handler = getHandler(statement.errorState.get)
-              if (handler.isDefined) {
-                handler.get.getHandlerBody.reset()
-                return handler.get.getTreeIterator.next()
-              }
-            }
-            statement
+            handleError(statement)
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
-              body.getTreeIterator.next()
+              val statement = body.getTreeIterator.next()
+              handleError(statement.asInstanceOf[LeafStatementExec])
             } else {
               curr = if (localIterator.hasNext) Some(localIterator.next()) else None
               next()
@@ -220,18 +242,6 @@ class ErrorHandlerExec(
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
 
   def getHandlerType: HandlerType = handlerType
-
-  def getHandlerBody: CompoundBodyExec = body
-
-  def executeAndReset(): Unit = {
-    execute()
-    reset()
-  }
-
-  private def execute(): Unit = {
-    val iterator = body.getTreeIterator
-    while (iterator.hasNext) iterator.next()
-  }
 
   override def reset(): Unit = body.reset()
 }

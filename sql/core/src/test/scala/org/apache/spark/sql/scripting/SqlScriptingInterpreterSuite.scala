@@ -227,4 +227,34 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
     )
     verifySqlScriptResult(sqlScript, expected)
   }
+
+  test("handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  BEGIN
+        |    SELECT 1;
+        |    BEGIN
+        |      SELECT 2;
+        |      SELECT 1/0;
+        |    END;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array.empty[Row], // declare var
+      Array(Row(1)), // select
+      Array(Row(2)), // select
+      Array.empty[Row], // select 1/0 (error)
+      Array(Row(1)), // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
 }
