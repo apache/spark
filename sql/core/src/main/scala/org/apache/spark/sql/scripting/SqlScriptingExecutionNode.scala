@@ -299,6 +299,7 @@ class WhileStatementExec(
             if (booleanEvaluator.eval(condition)) {
               state = WhileState.Body
               curr = Some(body)
+              body.reset()
             } else {
               curr = None
             }
@@ -306,7 +307,9 @@ class WhileStatementExec(
           case WhileState.Body =>
             val retStmt = body.getTreeIterator.next()
             if (!body.getTreeIterator.hasNext) {
+              state = WhileState.Condition
               curr = Some(condition)
+              condition.reset()
             }
             retStmt
         }
