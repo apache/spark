@@ -208,9 +208,10 @@ class AstBuilder extends DataTypeAstBuilder
       withOrigin(boolExpr) { SingleStatement(
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
-          OneRowRelation()))},
-      visitCompoundBody(ctx.compoundBody()),
-      Some(labelText))
+          OneRowRelation()))}
+    val body = visitCompoundBody(ctx.compoundBody())
+
+    WhileStatement(condition, body, Some(labelText))
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
