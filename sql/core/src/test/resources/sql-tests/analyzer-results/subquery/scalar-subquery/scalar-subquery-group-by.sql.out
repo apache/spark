@@ -127,6 +127,22 @@ Project [x1#x, x2#x, scalar-subquery#x [x1#x && x1#x] AS scalarsubquery(x1, x1)#
 
 
 -- !query
+select *, (select count(*) from y where y2 + 1 = x1 + x2 group by y2 + 1) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x && x2#x] AS scalarsubquery(x1, x2)#xL]
+:  +- Aggregate [(y2#x + 1)], [count(1) AS count(1)#xL]
+:     +- Filter ((y2#x + 1) = (outer(x1#x) + outer(x2#x)))
+:        +- SubqueryAlias y
+:           +- View (`y`, [y1#x, y2#x])
+:              +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException

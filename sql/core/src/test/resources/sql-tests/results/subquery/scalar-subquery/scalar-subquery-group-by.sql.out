@@ -104,6 +104,15 @@ struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
 
 
 -- !query
+select *, (select count(*) from y where y2 + 1 = x1 + x2 group by y2 + 1) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1, x2):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1
 -- !query schema
 struct<>

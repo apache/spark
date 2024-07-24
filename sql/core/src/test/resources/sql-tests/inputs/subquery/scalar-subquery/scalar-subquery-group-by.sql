@@ -18,6 +18,8 @@ select *, (select count(*) from y where x1 = y1 and y2 = x1 + 1 group by y2) fro
 -- Group-by expression is the same as the one we filter on - legal
 select *, (select count(*) from y where x1 = y1 and cast(y2 as double) = x1 + 1
            group by cast(y2 as double)) from x;
+-- Group-by expression equal to an expression that depends on 2 outer refs -- legal
+select *, (select count(*) from y where y2 + 1 = x1 + x2 group by y2 + 1) from x;
 
 
 -- Illegal queries
