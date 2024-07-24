@@ -16,6 +16,7 @@
 #
 import time
 import os
+import unittest
 
 import pyspark.cloudpickle
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
