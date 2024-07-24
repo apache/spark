@@ -550,6 +550,31 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
 
     assert(whileStmt.label.contains("lbl"))
+  }
+
+  test("while with complex condition") {
+    val sqlScriptText =
+    """
+      |BEGIN
+      |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+      |WHILE (SELECT COUNT(*) < 2 FROM t) DO
+      |  SELECT 42;
+      |END WHILE;
+      |END
+      |""".stripMargin
+
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection(1).isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection(1).asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "(SELECT COUNT(*) < 2 FROM t)")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+    assert(whileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
   }
 

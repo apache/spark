@@ -291,8 +291,7 @@ class WhileStatementExec(
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = curr.nonEmpty
 
-      override def next(): CompoundStatementExec = {
-        state match {
+      override def next(): CompoundStatementExec = state match {
           case WhileState.Condition =>
             assert(curr.get.isInstanceOf[SingleStatementExec])
             val condition = curr.get.asInstanceOf[SingleStatementExec]
@@ -313,7 +312,6 @@ class WhileStatementExec(
             }
             retStmt
         }
-      }
     }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
