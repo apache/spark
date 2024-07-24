@@ -230,8 +230,7 @@ case class BroadcastExchangeExec(
       case ex: TimeoutException =>
         logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobsWithTag(jobTag,
-            s"Could not execute broadcast in ${timeout} secs: " + Utils.exceptionString(ex))
+          sparkContext.cancelJobsWithTag(jobTag, "The corresponding broadcast query has failed.")
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

@@ -43,6 +43,9 @@ trait FutureAction[T] extends Future[T] {
    */
   def cancel(reason: Option[String]): Unit
 
+  /**
+   * Cancels the execution of this action.
+   */
   def cancel(): Unit = cancel(None)
 
   /**

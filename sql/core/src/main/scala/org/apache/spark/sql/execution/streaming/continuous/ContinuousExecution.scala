@@ -335,7 +335,7 @@ class ContinuousExecution(
           epochUpdateThread.join()
           // The following line must be the last line because it may fail if SparkContext is stopped
           sparkSession.sparkContext.cancelJobGroup(runId.toString,
-            s"continuous execution finished for query $prettyIdString")
+            s"Continuous execution finished for query $prettyIdString")
         }
       }
       Thread.interrupted()

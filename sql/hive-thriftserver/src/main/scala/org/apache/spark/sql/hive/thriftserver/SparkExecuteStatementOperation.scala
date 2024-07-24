@@ -253,7 +253,7 @@ private[hive] class SparkExecuteStatementOperation(
         // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
           session.sparkContext.cancelJobGroup(statementId,
-            s"failed to execute statement ${redactedStatement}: " + SparkUtils.exceptionString(e))
+            "The corresponding Thriftserver query has failed.")
         }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
