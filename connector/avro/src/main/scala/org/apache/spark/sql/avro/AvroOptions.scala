@@ -23,6 +23,7 @@ import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
@@ -141,7 +142,8 @@ private[sql] class AvroOptions(
     parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
 
   if (recursiveFieldMaxDepth > 15) {
-    throw new IllegalArgumentException(s"Valid range of $RECURSIVE_FIELD_MAX_DEPTH is 0 - 15.")
+    throw AvroOptionsError.avroInvalidOptionValue(
+      RECURSIVE_FIELD_MAX_DEPTH, "Should not be greater than 15.")
   }
 }
 
@@ -197,3 +199,24 @@ private[sql] object AvroOptions extends DataSourceOptions {
    */
   val RECURSIVE_FIELD_MAX_DEPTH = newOption("recursiveFieldMaxDepth")
 }
+
+abstract class AvroOptionsException(
+  errorClass: String,
+  messageParameters: Map[String, String],
+  cause: Throwable)
+  extends SparkRuntimeException(
+    errorClass,
+    messageParameters,
+    cause)
+
+object AvroOptionsError {
+  def avroInvalidOptionValue(optionName: String, message: String): AvroInvalidOptionValue = {
+    new AvroInvalidOptionValue(optionName, message)
+  }
+}
+
+class AvroInvalidOptionValue(optionName: String, message: String)
+  extends AvroOptionsException(
+    "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+    Map("optionName" -> optionName, "message" -> message),
+    cause = null)

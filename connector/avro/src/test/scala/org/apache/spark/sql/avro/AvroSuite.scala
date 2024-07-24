@@ -2187,7 +2187,8 @@ abstract class AvroSuite
     }
   }
 
-  private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
+  private def checkSchemaWithRecursiveLoop(avroSchema: String, recursiveFieldMaxDepth: Int):
+    Unit = {
     val message = intercept[IncompatibleSchemaException] {
       SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false, "")
     }.getMessage
@@ -2196,60 +2197,66 @@ abstract class AvroSuite
   }
 
   test("Detect recursive loop") {
-    checkSchemaWithRecursiveLoop("""
-      |{
-      |  "type": "record",
-      |  "name": "LongList",
-      |  "fields" : [
-      |    {"name": "value", "type": "long"},             // each element has a long
-      |    {"name": "next", "type": ["null", "LongList"]} // optional next element
-      |  ]
-      |}
-    """.stripMargin)
+    for (recursiveFieldMaxDepth <- Seq(-1, 0)) {
+      checkSchemaWithRecursiveLoop(
+        """
+          |{
+          |  "type": "record",
+          |  "name": "LongList",
+          |  "fields" : [
+          |    {"name": "value", "type": "long"},             // each element has a long
+          |    {"name": "next", "type": ["null", "LongList"]} // optional next element
+          |  ]
+          |}
+    """.stripMargin, recursiveFieldMaxDepth)
 
-    checkSchemaWithRecursiveLoop("""
-      |{
-      |  "type": "record",
-      |  "name": "LongList",
-      |  "fields": [
-      |    {
-      |      "name": "value",
-      |      "type": {
-      |        "type": "record",
-      |        "name": "foo",
-      |        "fields": [
-      |          {
-      |            "name": "parent",
-      |            "type": "LongList"
-      |          }
-      |        ]
-      |      }
-      |    }
-      |  ]
-      |}
-    """.stripMargin)
+      checkSchemaWithRecursiveLoop(
+        """
+          |{
+          |  "type": "record",
+          |  "name": "LongList",
+          |  "fields": [
+          |    {
+          |      "name": "value",
+          |      "type": {
+          |        "type": "record",
+          |        "name": "foo",
+          |        "fields": [
+          |          {
+          |            "name": "parent",
+          |            "type": "LongList"
+          |          }
+          |        ]
+          |      }
+          |    }
+          |  ]
+          |}
+    """.stripMargin, recursiveFieldMaxDepth)
 
-    checkSchemaWithRecursiveLoop("""
-      |{
-      |  "type": "record",
-      |  "name": "LongList",
-      |  "fields" : [
-      |    {"name": "value", "type": "long"},
-      |    {"name": "array", "type": {"type": "array", "items": "LongList"}}
-      |  ]
-      |}
-    """.stripMargin)
+      checkSchemaWithRecursiveLoop(
+        """
+          |{
+          |  "type": "record",
+          |  "name": "LongList",
+          |  "fields" : [
+          |    {"name": "value", "type": "long"},
+          |    {"name": "array", "type": {"type": "array", "items": "LongList"}}
+          |  ]
+          |}
+    """.stripMargin, recursiveFieldMaxDepth)
 
-    checkSchemaWithRecursiveLoop("""
-      |{
-      |  "type": "record",
-      |  "name": "LongList",
-      |  "fields" : [
-      |    {"name": "value", "type": "long"},
-      |    {"name": "map", "type": {"type": "map", "values": "LongList"}}
-      |  ]
-      |}
-    """.stripMargin)
+      checkSchemaWithRecursiveLoop(
+        """
+          |{
+          |  "type": "record",
+          |  "name": "LongList",
+          |  "fields" : [
+          |    {"name": "value", "type": "long"},
+          |    {"name": "map", "type": {"type": "map", "values": "LongList"}}
+          |  ]
+          |}
+    """.stripMargin, recursiveFieldMaxDepth)
+    }
   }
 
   private def checkSparkSchemaEquals(
@@ -2379,6 +2386,16 @@ abstract class AvroSuite
 
     withTempPath { tempDir =>
       df.write.format("avro").save(tempDir.getPath)
+
+      val exc = intercept[AvroInvalidOptionValue] {
+        spark.read
+          .format("avro")
+          .option("avroSchema", avroSchema)
+          .option("recursiveFieldMaxDepth", 16)
+          .load(tempDir.getPath)
+      }
+      assert(exc.getMessage.contains("Should not be greater than 15."))
+
       checkAnswer(
         spark.read
           .format("avro")
