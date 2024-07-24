@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import time
+import os
 
 import pyspark.cloudpickle
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
@@ -44,6 +45,9 @@ class TestListenerSpark(StreamingQueryListener):
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
     def test_listener_events(self):
         test_listener = TestListenerSpark()
 
