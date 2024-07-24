@@ -28,6 +28,8 @@ import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{FIELD_NAME, FIELD_TYPE, RECURSIVE_DEPTH}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
@@ -143,9 +145,10 @@ object SchemaConverters extends Logging {
             | to 1 - 15. Going beyond 15 levels of recursion is not allowed.
           """.stripMargin)
         } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {
-          log.info(
-            s"The field ${avroSchema.getFullName} of type ${avroSchema.getType.getName} is " +
-              s"dropped at recursive depth $recursiveDepth."
+          logInfo(
+            log"The field ${MDC(FIELD_NAME, avroSchema.getFullName)} of type " +
+              log"${MDC(FIELD_TYPE, avroSchema.getType.getName)} is dropped at recursive depth " +
+              log"${MDC(RECURSIVE_DEPTH, recursiveDepth)}."
           )
           null
         } else {
@@ -177,9 +180,10 @@ object SchemaConverters extends Logging {
           stableIdPrefixForUnionType,
           recursiveFieldMaxDepth)
         if (schemaType == null) {
-          log.info(
-            s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
-              "does not have any fields left likely due to recursive depth limit."
+          logInfo(
+            log"Dropping ${MDC(FIELD_NAME, avroSchema.getFullName)} of type " +
+              log"${MDC(FIELD_TYPE, avroSchema.getType.getName)} as it does not have any " +
+              log"fields left likely due to recursive depth limit."
           )
           null
         } else {
@@ -193,9 +197,10 @@ object SchemaConverters extends Logging {
           existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType,
           recursiveFieldMaxDepth)
         if (schemaType == null) {
-          log.info(
-            s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
-              "does not have any fields left likely due to recursive depth limit."
+          logInfo(
+            log"Dropping ${MDC(FIELD_NAME, avroSchema.getFullName)} of type " +
+              log"${MDC(FIELD_TYPE, avroSchema.getType.getName)} as it does not have any " +
+              log"fields left likely due to recursive depth limit."
           )
           null
         } else {
@@ -225,9 +230,10 @@ object SchemaConverters extends Logging {
                 recursiveFieldMaxDepth)
             }
           if (schemaType == null) {
-            log.info(
-              s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
-                "does not have any fields left likely due to recursive depth limit."
+            logInfo(
+              log"Dropping ${MDC(FIELD_NAME, avroSchema.getFullName)} of type " +
+                log"${MDC(FIELD_TYPE, avroSchema.getType.getName)} as it does not have any " +
+                log"fields left likely due to recursive depth limit."
             )
             null
           } else {
