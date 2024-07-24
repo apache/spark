@@ -417,8 +417,8 @@ public class VariantUtil {
       this.endField = endField;
     }
 
-    public byte startField;
-    public byte endField;
+    public final byte startField;
+    public final byte endField;
   }
 
   // Get the start and end fields of a variant value representing a year-month interval value. The
