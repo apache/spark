@@ -650,6 +650,19 @@ abstract class FileStreamSinkSuite extends StreamTest {
       }
     }
   }
+
+  test("SPARK-48991: Move path initialization into try-catch block") {
+    val logAppender = new LogAppender("Assume no metadata directory.")
+    Seq(null, "", "file:tmp").foreach { path =>
+      withLogAppender(logAppender) {
+        assert(!FileStreamSink.hasMetadata(Seq(path), spark.sessionState.newHadoopConf(), conf))
+      }
+
+      assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
+        "Assume no metadata directory. Error while looking for metadata directory in the path:" +
+        s" $path."))
+    }
+  }
 }
 
 object PendingCommitFilesTrackingManifestFileCommitProtocol {
