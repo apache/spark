@@ -210,7 +210,7 @@ class StateMetadataPartitionReader(
         operatorIdPath, hadoopConf, operatorStateMetadataVersion).read() match {
         case Some(metadata) => metadata
         case None => OperatorStateMetadataV1(OperatorInfoV1(opId, null),
-          Array(StateStoreMetadataV1(null, null, null)))
+          Array(StateStoreMetadataV1(null, -1, -1)))
       }
     }
   }
