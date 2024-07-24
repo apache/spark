@@ -296,8 +296,8 @@ class DataSourcesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "schema"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "schema"},
         )
 
         with self.assertRaises(PySparkNotImplementedError) as pe:
@@ -305,8 +305,8 @@ class DataSourcesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "reader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "reader"},
         )
 
         with self.assertRaises(PySparkNotImplementedError) as pe:
@@ -314,8 +314,8 @@ class DataSourcesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "writer"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "writer"},
         )
 
     def test_input_partition(self):
