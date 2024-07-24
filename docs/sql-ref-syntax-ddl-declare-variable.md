@@ -72,6 +72,17 @@ DECLARE [ OR REPLACE ] [ VARIABLE ]
 -- The dense form of declaring a variable with default
 DECLARE five = 5;
 
+-- Declare a defined variable
+DECLARE five = 55;
+[VARIABLE_ALREADY_EXISTS] Cannot create the variable `system`.`session`.`five` because it already exists.
+Choose a different name, or drop or replace the existing variable. SQLSTATE: 42723
+
+-- Use `DECLARE OR REPLACE` to declare a defined variable
+DECLARE OR REPLACE five = 55;
+
+-- Explicitly declare the default value of a variable using the keyword `DEFAULT`
+DECLARE VARIABLE size DEFAULT 6;
+
 -- STRING variable initialialized to `NULL`
 DECLARE some_var STRING;
 ```
