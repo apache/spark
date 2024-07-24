@@ -613,6 +613,12 @@ class TypesTestsMixin:
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
+    def test_string_type_simple_string(self):
+        self.assertEqual(StringType().simpleString(), "string")
+        self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
+        self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
+        self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
