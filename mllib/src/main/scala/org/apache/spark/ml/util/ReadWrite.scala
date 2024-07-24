@@ -403,15 +403,43 @@ private[ml] object DefaultParamsWriter {
    *                  Otherwise, all [[org.apache.spark.ml.param.Param]]s are encoded using
    *                  [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
+  @deprecated("use saveMetadata with SparkSession", "4.0.0")
   def saveMetadata(
       instance: Params,
       path: String,
       sc: SparkContext,
       extraMetadata: Option[JObject] = None,
+      paramMap: Option[JValue] = None): Unit =
+    saveMetadata(
+      instance,
+      path,
+      SparkSession.builder().sparkContext(sc).getOrCreate(),
+      extraMetadata,
+      paramMap)
+
+  /**
+   * Saves metadata + Params to: path + "/metadata"
+   *  - class
+   *  - timestamp
+   *  - sparkVersion
+   *  - uid
+   *  - defaultParamMap
+   *  - paramMap
+   *  - (optionally, extra metadata)
+   *
+   * @param extraMetadata  Extra metadata to be saved at same level as uid, paramMap, etc.
+   * @param paramMap  If given, this is saved in the "paramMap" field.
+   *                  Otherwise, all [[org.apache.spark.ml.param.Param]]s are encoded using
+   *                  [[org.apache.spark.ml.param.Param.jsonEncode()]].
+   */
+  def saveMetadata(
+      instance: Params,
+      path: String,
+      spark: SparkSession,
+      extraMetadata: Option[JObject] = None,
       paramMap: Option[JValue] = None): Unit = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataJson = getMetadataToSave(instance, sc, extraMetadata, paramMap)
-    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    val metadataJson = getMetadataToSave(instance, spark.sparkContext, extraMetadata, paramMap)
     // Note that we should write single file. If there are more than one row
     // it produces more partitions.
     spark.createDataFrame(Seq(Tuple1(metadataJson))).write.text(metadataPath)
@@ -586,9 +614,18 @@ private[ml] object DefaultParamsReader {
    * @param expectedClassName  If non empty, this is checked against the loaded metadata.
    * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
    */
-  def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata = {
+  @deprecated("use loadMetadata with SparkSession", "4.0.0")
+  def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata =
+    loadMetadata(path, SparkSession.builder().sparkContext(sc).getOrCreate(), expectedClassName)
+
+  /**
+   * Load metadata saved using [[DefaultParamsWriter.saveMetadata()]]
+   *
+   * @param expectedClassName  If non empty, this is checked against the loaded metadata.
+   * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
+   */
+  def loadMetadata(path: String, spark: SparkSession, expectedClassName: String = ""): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     val metadataStr = spark.read.text(metadataPath).first().getString(0)
     parseMetadata(metadataStr, expectedClassName)
   }
