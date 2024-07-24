@@ -649,8 +649,8 @@ private[spark] object LogKeys {
   case object RECEIVER_ID extends LogKey
   case object RECEIVER_IDS extends LogKey
   case object RECORDS extends LogKey
-  case object RECURSIVE_DEPTH extends LogKey
   case object RECOVERY_STATE extends LogKey
+  case object RECURSIVE_DEPTH extends LogKey
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
   case object REGEX extends LogKey
