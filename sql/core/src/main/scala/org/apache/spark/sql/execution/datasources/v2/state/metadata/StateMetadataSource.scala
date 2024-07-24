@@ -191,6 +191,7 @@ class StateMetadataPartitionReader(
     } else Array.empty
   }
 
+  // Need this to be accessible from IncrementalExecution for the planning rule.
   private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
     val stateDir = new Path(checkpointLocation, "state")
     val opIds = fileManager
@@ -222,7 +223,7 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
-              "",
+              null,
               stateStoreMetadata.numColsPrefixKey
             )
           }

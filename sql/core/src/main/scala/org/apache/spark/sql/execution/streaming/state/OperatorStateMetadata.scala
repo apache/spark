@@ -70,6 +70,7 @@ trait OperatorInfo {
 case class OperatorInfoV1(operatorId: Long, operatorName: String) extends OperatorInfo
 
 trait OperatorStateMetadata {
+
   def version: Int
 
   def operatorInfo: OperatorInfo
@@ -116,9 +117,9 @@ object OperatorStateMetadataUtils extends Logging {
   }
 
   def writeMetadata(
-    outputStream: CancellableFSDataOutputStream,
-    operatorMetadata: OperatorStateMetadata,
-    metadataFilePath: Path): Unit = {
+      outputStream: CancellableFSDataOutputStream,
+      operatorMetadata: OperatorStateMetadata,
+      metadataFilePath: Path): Unit = {
     try {
       outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
       OperatorStateMetadataUtils.serialize(outputStream, operatorMetadata)
@@ -265,7 +266,7 @@ class OperatorStateMetadataV1Reader(
 class OperatorStateMetadataV2Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    currentBatchId: Long) extends OperatorStateMetadataWriter with Logging {
+    currentBatchId: Long) extends OperatorStateMetadataWriter {
 
   private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
     stateCheckpointPath, currentBatchId)
@@ -285,7 +286,7 @@ class OperatorStateMetadataV2Writer(
 
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
-    hadoopConf: Configuration) extends OperatorStateMetadataReader with Logging {
+    hadoopConf: Configuration) extends OperatorStateMetadataReader {
 
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
