@@ -343,12 +343,8 @@ public final class Variant {
       case DAY_TIME_INTERVAL:
         IntervalFields dtFields = VariantUtil.getDayTimeIntervalFields(value, pos);
         long dtValue = VariantUtil.getLong(value, pos);
-        try {
-          appendQuoted(sb, DayTimeIntervalUtils.toDayTimeIntervalANSIString(dtValue,
-                  dtFields.startField, dtFields.endField));
-        } catch(Exception e) {
-          throw malformedVariant();
-        }
+        appendQuoted(sb, DayTimeIntervalUtils.toDayTimeIntervalANSIString(dtValue,
+                dtFields.startField, dtFields.endField));
         break;
     }
   }
