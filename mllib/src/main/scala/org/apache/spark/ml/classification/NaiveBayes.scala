@@ -580,7 +580,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
+      DefaultParamsWriter.saveMetadataV2(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
 
       instance.getModelType match {
@@ -602,7 +602,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
     override def load(path: String): NaiveBayesModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
+      val metadata = DefaultParamsReader.loadMetadataV2(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString

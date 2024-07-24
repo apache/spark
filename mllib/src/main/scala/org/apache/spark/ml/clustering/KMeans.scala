@@ -220,7 +220,7 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
     val instance = stage.asInstanceOf[KMeansModel]
     // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
+    DefaultParamsWriter.saveMetadataV2(instance, path, sparkSession)
     // Save model data: cluster centers
     val data: Array[ClusterData] = instance.clusterCenters.zipWithIndex.map {
       case (center, idx) =>
@@ -271,7 +271,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
 
-      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
+      val metadata = DefaultParamsReader.loadMetadataV2(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
