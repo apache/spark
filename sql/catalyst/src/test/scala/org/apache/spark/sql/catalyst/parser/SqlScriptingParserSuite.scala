@@ -294,7 +294,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
   }
 
-  // TODO Add test for INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE exception
 
   test("declare in wrong scope") {
     val sqlScriptText =
@@ -309,7 +308,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parseScript(sqlScriptText)
       },
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
-      parameters = Map("varName" -> "testVariable", "lineNumber" -> "4"))
+      parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
   }
 
   test("SET VAR statement test") {
