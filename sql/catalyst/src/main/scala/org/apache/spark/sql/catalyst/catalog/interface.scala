@@ -229,8 +229,7 @@ object ClusterBySpec {
    * @return a map entry for the clustering column property.
    */
   def toPropertyWithoutValidation(clusterBySpec: ClusterBySpec): (String, String) = {
-    val columnValue = mapper.writeValueAsString(clusterBySpec.columnNames.map(_.fieldNames))
-    (CatalogTable.PROP_CLUSTERING_COLUMNS -> columnValue)
+    (CatalogTable.PROP_CLUSTERING_COLUMNS -> clusterBySpec.toJson)
   }
 
   private def normalizeClusterBySpec(
