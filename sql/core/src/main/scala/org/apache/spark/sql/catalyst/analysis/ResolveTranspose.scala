@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPOSE
 import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
@@ -77,7 +78,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     // Insert the first column with originalColNames
     val finalMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows + 1)
     for (i <- 0 until matrixNumCols) {
-      finalMatrix(i)(0) = nonIndexColumnNames(i)
+      finalMatrix(i)(0) = UTF8String.fromString(nonIndexColumnNames(i))
     }
     for (i <- 0 until matrixNumCols) {
       for (j <- 1 until matrixNumRows + 1) {
@@ -109,7 +110,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         Seq(namedIndexColumnAsString.asInstanceOf[NamedExpression]), child)
       val queryExecution = sparkSession.sessionState.executePlan(projectPlan)
       val collectedValues = queryExecution.executedPlan
-        .executeCollect().map(row => row.getUTF8String(0)).toSeq
+        .executeCollect().map(row => row.getString(0)).toSeq
 
       // Determine the least common type of the non-index columns
       val nonIndexColumnsAttr = child.output.filterNot(
@@ -128,6 +129,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // Collect as matrix and flip
       val nonIndexColumnNames = nonIndexColumnsAttr.map(_.name)
       val transposedData = collectAndTranspose(castedChild, nonIndexColumnNames)
+
       val transposedInternalRows = transposedData.map { row =>
         InternalRow.fromSeq(row.toIndexedSeq)
       }
