@@ -177,8 +177,9 @@ object SQLExecution extends Logging {
             shuffleIds.foreach { shuffleId =>
               queryExecution.shuffleCleanupMode match {
                 case RemoveShuffleFiles =>
-                  // Do not unregister the shuffle on MapOutputTracker here to trigger stage retry.
-                  // Otherwise, downstream tasks will fail with MetadataFetchFailedException.
+                  // Same as what we do in ContextCleaner.doCleanupShuffle, but do not unregister
+                  // the shuffle on MapOutputTracker, so that stage retries would be triggered.
+                  // Set blocking to Utils.isTesting to deflake unit tests.
                   sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
                 case SkipMigration =>
                   SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
