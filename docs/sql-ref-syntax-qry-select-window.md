@@ -98,11 +98,11 @@ SELECT * FROM employees;
 | name|       dept|salary|age|
 +-----+-----------+------+---+
 |Chloe|Engineering| 23000| 25|
-| Paul|Engineering| 29000| 23|
 | Fred|Engineering| 21000| 28|
+| Paul|Engineering| 29000| 23|
 |  Tom|Engineering| 23000| 33|
-| Jeff|  Marketing| 35000| 38|
 | Jane|  Marketing| 29000| 28|
+| Jeff|  Marketing| 35000| 38|
 | Evan|      Sales| 32000| 38|
 | Alex|      Sales| 30000| 33|
 | Lisa|      Sales| 10000| 35|
