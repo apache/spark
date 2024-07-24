@@ -335,29 +335,29 @@ The Decimal type contains a scale, but no precision. The implied precision of a 
 | Object       | `2` | A collection of (string-key, variant-value) pairs |
 | Array        | `3` | An ordered sequence of variant values             |
 
-| Primitive Type              | Type ID | Equivalent Parquet Type                       | Binary format                                                                                                       |
-|-----------------------------|---------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
-| null                        | `0`     | any                                           | none                                                                                                                |
-| boolean (True)              | `1`     | BOOLEAN                                       | none                                                                                                                |
-| boolean (False)             | `2`     | BOOLEAN                                       | none                                                                                                                |
-| int8                        | `3`     | INT(8, signed)                                | 1 byte                                                                                                              |
-| int16                       | `4`     | INT(16, signed)                               | 2 byte little-endian                                                                                                |
-| int32                       | `5`     | INT(32, signed)                               | 4 byte little-endian                                                                                                |
-| int64                       | `6`     | INT(64, signed)                               | 8 byte little-endian                                                                                                |
-| double                      | `7`     | DOUBLE                                        | IEEE little-endian                                                                                                  |
-| decimal4                    | `8`     | DECIMAL(precision, scale)                     | 1 byte scale in range [0, 38], followed by little-endian unscaled value (see decimal table)                         |
-| decimal8                    | `9`     | DECIMAL(precision, scale)                     | 1 byte scale in range [0, 38], followed by little-endian unscaled value (see decimal table)                         |
-| decimal16                   | `10`    | DECIMAL(precision, scale)                     | 1 byte scale in range [0, 38], followed by little-endian unscaled value (see decimal table)                         |
-| date                        | `11`    | DATE                                          | 4 byte little-endian                                                                                                |
-| timestamp                   | `12`    | TIMESTAMP(true, MICROS)                       | 8-byte little-endian                                                                                                |
-| timestamp without time zone | `13`    | TIMESTAMP(false, MICROS)                      | 8-byte little-endian                                                                                                |
-| float                       | `14`    | FLOAT                                         | IEEE little-endian                                                                                                  |
-| binary                      | `15`    | BINARY                                        | 4 byte little-endian size, followed by bytes                                                                        |
-| string                      | `16`    | STRING                                        | 4 byte little-endian size, followed by UTF-8 encoded bytes                                                          |
-| binary from metadata        | `17`    | BINARY                                        | Little-endian index into the metadata dictionary. Number of bytes is equal to the metadata `offset_size`.           |
-| string from metadata        | `18`    | STRING                                        | Little-endian index into the metadata dictionary. Number of bytes is equal to the metadata `offset_size`.           |
-| year-month interval         | `19`    | YearMonthIntervalType(start_field, end_field) | 1 byte denoting start field (1 bit) and end field (1 bit) starting at LSB followed by 4-byte little-endian value.   |
-| day-time interval           | `20`    | DayTimeIntervalType(start_field, end_field)   | 1 byte denoting start field (2 bits) and end field (2 bits) starting at LSB followed by 8-byte little-endian value. |
+| Primitive Type              | Type ID | Equivalent Parquet Type   | Binary format                                                                                                       |
+|-----------------------------|---------|---------------------------|---------------------------------------------------------------------------------------------------------------------|
+| null                        | `0`     | any                       | none                                                                                                                |
+| boolean (True)              | `1`     | BOOLEAN                   | none                                                                                                                |
+| boolean (False)             | `2`     | BOOLEAN                   | none                                                                                                                |
+| int8                        | `3`     | INT(8, signed)            | 1 byte                                                                                                              |
+| int16                       | `4`     | INT(16, signed)           | 2 byte little-endian                                                                                                |
+| int32                       | `5`     | INT(32, signed)           | 4 byte little-endian                                                                                                |
+| int64                       | `6`     | INT(64, signed)           | 8 byte little-endian                                                                                                |
+| double                      | `7`     | DOUBLE                    | IEEE little-endian                                                                                                  |
+| decimal4                    | `8`     | DECIMAL(precision, scale) | 1 byte scale in range [0, 38], followed by little-endian unscaled value (see decimal table)                         |
+| decimal8                    | `9`     | DECIMAL(precision, scale) | 1 byte scale in range [0, 38], followed by little-endian unscaled value (see decimal table)                         |
+| decimal16                   | `10`    | DECIMAL(precision, scale) | 1 byte scale in range [0, 38], followed by little-endian unscaled value (see decimal table)                         |
+| date                        | `11`    | DATE                      | 4 byte little-endian                                                                                                |
+| timestamp                   | `12`    | TIMESTAMP(true, MICROS)   | 8-byte little-endian                                                                                                |
+| timestamp without time zone | `13`    | TIMESTAMP(false, MICROS)  | 8-byte little-endian                                                                                                |
+| float                       | `14`    | FLOAT                     | IEEE little-endian                                                                                                  |
+| binary                      | `15`    | BINARY                    | 4 byte little-endian size, followed by bytes                                                                        |
+| string                      | `16`    | STRING                    | 4 byte little-endian size, followed by UTF-8 encoded bytes                                                          |
+| binary from metadata        | `17`    | BINARY                    | Little-endian index into the metadata dictionary. Number of bytes is equal to the metadata `offset_size`.           |
+| string from metadata        | `18`    | STRING                    | Little-endian index into the metadata dictionary. Number of bytes is equal to the metadata `offset_size`.           |
+| year-month interval         | `19`    |                           | 1 byte denoting start field (1 bit) and end field (1 bit) starting at LSB followed by 4-byte little-endian value.   |
+| day-time interval           | `20`    |                           | 1 byte denoting start field (2 bits) and end field (2 bits) starting at LSB followed by 8-byte little-endian value. |
 
 | Decimal Precision     | Decimal value type |
 |-----------------------|--------------------|

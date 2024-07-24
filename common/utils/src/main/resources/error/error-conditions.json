@@ -4188,7 +4188,7 @@
   },
   "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
     "message" : [
-      "Unknown primitive type with id <id> was found in a variant value. The type might be supported in a newer version."
+      "Unknown primitive type with id <id> was found in a variant value."
     ],
     "sqlState" : "22023"
   },

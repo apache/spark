@@ -380,9 +380,12 @@ public class VariantUtil {
 
   // Get a long value from variant value `value[pos...]`.
   // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIMESTAMP/
-  // TIMESTAMP_NTZ`. If the type is `DATE`, the return value is guaranteed to fit into an int and
-  // represents the number of days from the Unix epoch. If the type is `TIMESTAMP/TIMESTAMP_NTZ`,
-  // the return value represents the number of microseconds from the Unix epoch.
+  // TIMESTAMP_NTZ/YEAR_MONTH_INTERVAL/DAY_TIME_INTERVAL`. If the type is `DATE`, the return value
+  // is guaranteed to fit into an int and represents the number of days from the Unix epoch.
+  // If the type is `TIMESTAMP/TIMESTAMP_NTZ`, the return value represents the number of
+  // microseconds from the Unix epoch. If the type is `YEAR_MONTH_INTERVAL`, the return value
+  // represents the number of months in the interval. If the type is `DAY_TIME_INTERVAL`, the
+  // return value represents the number of microseconds in the interval.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
     checkIndex(pos, value.length);
@@ -411,6 +414,7 @@ public class VariantUtil {
     }
   }
 
+  // Class used to pass around start and end fields of year-month and day-time interval values.
   public static class IntervalFields {
     public IntervalFields(byte startField, byte endField) {
       this.startField = startField;
