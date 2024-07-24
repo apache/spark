@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
@@ -390,7 +391,7 @@ case class CaseWhen(
 }
 
 /** Factory methods for CaseWhen. */
-object CaseWhen {
+object CaseWhen extends ExpressionBuilder {
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))
   }
@@ -407,6 +408,14 @@ object CaseWhen {
     }.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
+  }
+
+  override val functionSignature: Option[FunctionSignature] = {
+    Option(FunctionSignature(Seq(InputParameter("branches"), InputParameter("elseValue"))))
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): CaseWhen = {
+    createFromParser(expressions)
   }
 }
 

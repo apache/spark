@@ -1833,10 +1833,6 @@ class SparkConnectPlanner(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
     fun.getFunctionName match {
 
-      case "when" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(CaseWhen.createFromParser(children))
-
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         // [col, expectedNumItems: Long, numBits: Long]
         val children = fun.getArgumentsList.asScala.map(transformExpression)
