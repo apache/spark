@@ -51,7 +51,7 @@ class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
         cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "1")
+        cfg.set("spark.sql.shuffle.partitions", "5")
         cfg.set("spark.sql.streaming.stateStore.providerClass",
                 "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         return cfg
