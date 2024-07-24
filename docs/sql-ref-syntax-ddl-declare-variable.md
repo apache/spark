@@ -34,7 +34,7 @@ column default expressions, and generated column expressions.
 ### Syntax
 
 ```sql
-DECLARE [ OR REPLACE ] [ VARIABLE ]
+DECLARE [ OR REPLACE ] [ VAR | VARIABLE ]
     variable_name [ data_type ] [ { DEFAULT | = } default_expr ]
 ```
 
