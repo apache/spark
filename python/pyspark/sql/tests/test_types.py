@@ -818,6 +818,38 @@ class TypesTestsMixin:
             PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
         )
 
+    def test_array_type_from_json(self):
+        arrayWithoutCollations = ArrayType(StringType(), True)
+        arrayWithCollations = ArrayType(StringType("UNICODE"), True)
+        array_json = {"type": "array", "elementType": "string", "containsNull": True}
+        collationsMap = {"element": "UNICODE"}
+
+        self.assertEqual(arrayWithoutCollations, ArrayType.fromJson(array_json))
+        self.assertEqual(
+            arrayWithCollations,
+            ArrayType.fromJson(array_json, fieldPath="", collationsMap=collationsMap),
+        )
+        self.assertEqual(
+            arrayWithCollations, ArrayType.fromJson(array_json, collationsMap=collationsMap)
+        )
+
+    def test_map_type_from_json(self):
+        mapWithoutCollations = MapType(StringType(), StringType(), True)
+        mapWithCollations = MapType(StringType("UNICODE"), StringType("UNICODE"), True)
+        map_json = {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "string",
+            "valueContainsNull": True,
+        }
+        collationsMap = {"key": "UNICODE", "value": "UNICODE"}
+
+        self.assertEqual(mapWithoutCollations, MapType.fromJson(map_json))
+        self.assertEqual(
+            mapWithCollations, MapType.fromJson(map_json, fieldPath="", collationsMap=collationsMap)
+        )
+        self.assertEqual(mapWithCollations, MapType.fromJson(map_json, collationsMap=collationsMap))
+
     def test_schema_with_bad_collations_provider(self):
         from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
 
