@@ -2941,6 +2941,24 @@
     ],
     "sqlState" : "22029"
   },
+  "INVALID_VARIABLE_DECLARATION" : {
+    "message" : [
+      "Invalid variable declaration."
+    ],
+    "subClass" : {
+      "NOT_ALLOWED_IN_SCOPE" : {
+        "message" : [
+          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+        ]
+      },
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+        ]
+      }
+    },
+    "sqlState" : "42K0M"
+  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."
