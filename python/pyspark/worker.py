@@ -32,7 +32,7 @@ from pyspark.accumulators import (
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
-from pyspark.sql.streaming.state_api_client import StateApiClient
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.util import PythonEvalType, local_connect_and_auth
@@ -492,10 +492,10 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    def wrapped(state_api_client, key, value_series_gen):
+    def wrapped(stateful_processor_api_client, key, value_series_gen):
         import pandas as pd
         values = (pd.concat(x, axis=1) for x in value_series_gen)
-        result_iter = f(state_api_client, key, values)
+        result_iter = f(stateful_processor_api_client, key, values)
 
         # TODO: add verification that elements in result_iter are
         # indeed of type pd.DataFrame and confirm to assigned cols
@@ -1661,7 +1661,7 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
-        state_api_client = StateApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
         # Create function like this:
         #   mapper a: f([a[0]], [a[0], a[1]])
@@ -1674,7 +1674,7 @@ def read_udfs(pickleSer, infile, eval_type):
                     yield retVal
 
             # This must be generator comprehension - do not materialize.
-            return f(state_api_client, key, values_gen())
+            return f(stateful_processor_api_client, key, values_gen())
     
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         import pyarrow as pa

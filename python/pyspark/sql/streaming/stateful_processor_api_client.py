@@ -35,7 +35,7 @@ class StatefulProcessorHandleState(Enum):
     CLOSED = 4
 
 
-class StateApiClient:
+class StatefulProcessorApiClient:
     def __init__(
             self,
             state_server_port: int,

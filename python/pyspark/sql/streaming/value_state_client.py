@@ -17,7 +17,7 @@
 
 from typing import Any, Union, cast, Tuple
 
-from pyspark.sql.streaming.state_api_client import StateApiClient
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 from pyspark.sql.types import Row, StructType, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
@@ -26,8 +26,8 @@ from pyspark.errors import PySparkRuntimeError
 class ValueStateClient:
     def __init__(
             self,
-            state_api_client: StateApiClient, ) -> None:
-        self._state_api_client = state_api_client
+            stateful_processor_api_client: StatefulProcessorApiClient) -> None:
+        self._stateful_processor_api_client = stateful_processor_api_client
 
     def exists(self, state_name: str) -> bool:
         exists_call = stateMessage.Exists()
@@ -35,8 +35,8 @@ class ValueStateClient:
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
-        self._state_api_client._send_proto_message(message)
-        response_message = self._state_api_client._receive_proto_message()
+        self._stateful_processor_api_client._send_proto_message(message)
+        response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status == 0):
             return True
@@ -53,26 +53,26 @@ class ValueStateClient:
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
-        self._state_api_client._send_proto_message(message)
-        response_message = self._state_api_client._receive_proto_message()
+        self._stateful_processor_api_client._send_proto_message(message)
+        response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status == 0):
-            return self._state_api_client._receive_and_deserialize()
+            return self._stateful_processor_api_client._receive_and_deserialize()
         else:
             raise PySparkRuntimeError(f"Error getting value state: {response_message.errorMessage}")
 
     def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
-        bytes = self._state_api_client._serialize_to_bytes(schema, value)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
         update_call = stateMessage.ValueStateUpdate(schema=schema.json(), value=bytes)
         value_state_call = stateMessage.ValueStateCall(stateName=state_name,
                                                        valueStateUpdate=update_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
-        self._state_api_client._send_proto_message(message)
-        response_message = self._state_api_client._receive_proto_message()
+        self._stateful_processor_api_client._send_proto_message(message)
+        response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
             raise PySparkRuntimeError(f"Error updating value state: "
@@ -84,8 +84,8 @@ class ValueStateClient:
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
-        self._state_api_client._send_proto_message(message)
-        response_message = self._state_api_client._receive_proto_message()
+        self._stateful_processor_api_client._send_proto_message(message)
+        response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
             raise PySparkRuntimeError(f"Error clearing value state: "

@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.python
 
 import scala.concurrent.duration.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
@@ -29,7 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreOps}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaValidationResult, StateStore, StateStoreOps}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.CompletionIterator
@@ -90,6 +92,13 @@ case class TransformWithStateInPandasExec(
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    List.empty
+  }
 
   /**
    * Produces the result of the query as an `RDD[InternalRow]`

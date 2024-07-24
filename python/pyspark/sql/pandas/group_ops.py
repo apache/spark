@@ -24,7 +24,8 @@ from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions.builtin import udf
 from pyspark.sql.streaming.state import GroupStateTimeout
-from pyspark.sql.streaming.state_api_client import StateApiClient, StatefulProcessorHandleState
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient, \
+    StatefulProcessorHandleState
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
 
@@ -97,12 +98,12 @@ class PandasGroupedOpsMixin:
         """
         # Columns are special because hasattr always return True
         if (
-            isinstance(udf, Column)
-            or not hasattr(udf, "func")
-            or (
+                isinstance(udf, Column)
+                or not hasattr(udf, "func")
+                or (
                 udf.evalType  # type: ignore[attr-defined]
                 != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-            )
+        )
         ):
             raise PySparkTypeError(
                 errorClass="INVALID_UDF_EVAL_TYPE",
@@ -119,7 +120,7 @@ class PandasGroupedOpsMixin:
         return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
 
     def applyInPandas(
-        self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
+            self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
@@ -240,12 +241,12 @@ class PandasGroupedOpsMixin:
         return DataFrame(jdf, self.session)
 
     def applyInPandasWithState(
-        self,
-        func: "PandasGroupedMapFunctionWithState",
-        outputStructType: Union[StructType, str],
-        stateStructType: Union[StructType, str],
-        outputMode: str,
-        timeoutConf: str,
+            self,
+            func: "PandasGroupedMapFunctionWithState",
+            outputStructType: Union[StructType, str],
+            stateStructType: Union[StructType, str],
+            outputMode: str,
+            timeoutConf: str,
     ) -> DataFrame:
         """
         Applies the given function to each group of data, while maintaining a user-defined
@@ -363,11 +364,11 @@ class PandasGroupedOpsMixin:
         return DataFrame(jdf, self.session)
 
 
-    def transformWithStateInPandas(self, 
-            stateful_processor: StatefulProcessor,
-            outputStructType: Union[StructType, str],
-            outputMode: str,
-            timeMode: str) -> DataFrame:
+    def transformWithStateInPandas(self,
+                                   statefulProcessor: StatefulProcessor,
+                                   outputStructType: Union[StructType, str],
+                                   outputMode: str,
+                                   timeMode: str) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2.
         We allow the user to act on per-group set of input rows along with keyed state and the
@@ -377,7 +378,7 @@ class PandasGroupedOpsMixin:
         in each trigger and the user's state/state variables will be stored persistently across
         invocations.
 
-        The `stateful_processor` should be a Python class that implements the interface defined in
+        The `statefulProcessor` should be a Python class that implements the interface defined in
         pyspark.sql.streaming.stateful_processor.StatefulProcessor.
 
         The `outputStructType` should be a :class:`StructType` describing the schema of all
@@ -393,7 +394,7 @@ class PandasGroupedOpsMixin:
 
         Parameters
         ----------
-        stateful_processor : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessor`
+        statefulProcessor : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessor`
             Instance of StatefulProcessor whose functions will be invoked by the operator.
         outputStructType : :class:`pyspark.sql.types.DataType` or str
             The type of the output records. The value can be either a
@@ -442,7 +443,7 @@ class PandasGroupedOpsMixin:
         ...   def close(self) -> None:
         ...     pass
         ...
-        >>> df.groupBy("value").transformWithStateInPandas(stateful_processor =
+        >>> df.groupBy("value").transformWithStateInPandas(statefulProcessor =
         ...         SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
         ...         timeMode="None") # doctest: +SKIP
 
@@ -457,17 +458,19 @@ class PandasGroupedOpsMixin:
         from pyspark.sql.functions import pandas_udf
         assert isinstance(self, GroupedData)
 
-        def transformWithStateUDF(state_api_client: StateApiClient, key: Any,
-                                  inputRows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
-            handle = StatefulProcessorHandle(state_api_client)
+        def transformWithStateUDF(statefulProcessorApiClient: StatefulProcessorApiClient, key: Any,
+                                  inputRows: Iterator["PandasDataFrameLike"]
+                                  ) -> Iterator["PandasDataFrameLike"]:
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
-            if (state_api_client.handle_state == StatefulProcessorHandleState.CREATED):
-                stateful_processor.init(handle)
-                state_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
+            if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
+                statefulProcessor.init(handle)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.INITIALIZED)
 
-            state_api_client.set_implicit_key(key)
-            result = stateful_processor.handleInputRows(key, inputRows)
-            
+            statefulProcessorApiClient.set_implicit_key(key)
+            result = statefulProcessor.handleInputRows(key, inputRows)
+
             return result
         
         if isinstance(outputStructType, str):
@@ -654,7 +657,7 @@ class PandasCogroupedOps:
         self._gd2 = gd2
 
     def applyInPandas(
-        self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
+            self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
         Applies a function to each cogroup using pandas and returns the result
@@ -757,7 +760,7 @@ class PandasCogroupedOps:
         return DataFrame(jdf, self._gd1.session)
 
     def applyInArrow(
-        self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
+            self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
         """
         Applies a function to each cogroup using Arrow and returns the result

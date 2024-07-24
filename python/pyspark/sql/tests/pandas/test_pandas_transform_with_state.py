@@ -51,7 +51,7 @@ class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
         cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "5")
+        cfg.set("spark.sql.shuffle.partitions", "1")
         cfg.set("spark.sql.streaming.stateStore.providerClass",
                 "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         return cfg
@@ -102,7 +102,7 @@ class TransformWithStateInPandasTestsMixin:
 
         q = (
             df.groupBy("id")
-                .transformWithStateInPandas(stateful_processor=stateful_processor,
+                .transformWithStateInPandas(statefulProcessor=stateful_processor,
                                             outputStructType=output_schema,
                                             outputMode="Update",
                                             timeMode="None")
@@ -158,7 +158,7 @@ class TransformWithStateInPandasTestsMixin:
 
         base_query = (
             df.groupBy("id")
-                .transformWithStateInPandas(stateful_processor=SimpleStatefulProcessor(),
+                .transformWithStateInPandas(statefulProcessor=SimpleStatefulProcessor(),
                                             outputStructType=output_schema,
                                             outputMode="Update",
                                             timeMode="None")

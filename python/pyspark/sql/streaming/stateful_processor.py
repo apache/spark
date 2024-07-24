@@ -18,7 +18,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, TYPE_CHECKING, Iterator, Union
 
-from pyspark.sql.streaming.state_api_client import StateApiClient
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.value_state_client import ValueStateClient
 
 import pandas as pd
@@ -90,8 +90,8 @@ class StatefulProcessorHandle:
 
     def __init__(
             self,
-            state_api_client: StateApiClient) -> None:
-        self.state_api_client = state_api_client
+            stateful_processor_api_client: StatefulProcessorApiClient) -> None:
+        self.stateful_processor_api_client = stateful_processor_api_client
 
     def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
         """
@@ -109,8 +109,8 @@ class StatefulProcessorHandle:
             The schema of the state variable. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         """
-        self.state_api_client.get_value_state(state_name, schema)
-        return ValueState(ValueStateClient(self.state_api_client), state_name, schema)
+        self.stateful_processor_api_client.get_value_state(state_name, schema)
+        return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
 
 class StatefulProcessor(ABC):
