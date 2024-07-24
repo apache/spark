@@ -8508,10 +8508,10 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Column, e: Column): Column = withExpr {
+    def bucket(numBuckets: Column, e: Column): Column = {
       numBuckets.expr match {
-        case lit @ Literal(_, IntegerType) =>
-          Bucket(lit, e.expr)
+        case IntegerLiteral(_) =>
+          Column.fn("bucket", numBuckets, e)
         case _ =>
           throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
       }
