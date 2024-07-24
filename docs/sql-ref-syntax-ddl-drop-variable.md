@@ -27,7 +27,7 @@ be thrown if the variable does not exist.
 ### Syntax
 
 ```sql
-DROP TEMPORARY VARIABLE [ IF EXISTS ] variable_name
+DROP TEMPORARY { VAR | VARIABLE } [ IF EXISTS ] variable_name
 ```
 
 ### Parameters
