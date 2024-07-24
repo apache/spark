@@ -16,7 +16,7 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
@@ -30,7 +30,9 @@ __all__ = [
     "DataSource",
     "DataSourceReader",
     "DataSourceStreamReader",
+    "SimpleDataSourceStreamReader",
     "DataSourceWriter",
+    "DataSourceStreamWriter",
     "DataSourceRegistration",
     "InputPartition",
     "SimpleDataSourceStreamReader",
@@ -113,8 +115,8 @@ class DataSource(ABC):
         ...   return StructType().add("a", "int").add("b", "string")
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "schema"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "schema"},
         )
 
     def reader(self, schema: StructType) -> "DataSourceReader":
@@ -134,8 +136,8 @@ class DataSource(ABC):
             A reader instance for this data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "reader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "reader"},
         )
 
     def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
@@ -157,8 +159,8 @@ class DataSource(ABC):
             A writer instance for this data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "writer"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "writer"},
         )
 
     def streamWriter(self, schema: StructType, overwrite: bool) -> "DataSourceStreamWriter":
@@ -180,8 +182,8 @@ class DataSource(ABC):
             A writer instance for writing data into a streaming sink.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "streamWriter"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "streamWriter"},
         )
 
     def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
@@ -204,8 +206,8 @@ class DataSource(ABC):
             A reader instance for this data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "simpleStreamReader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "simpleStreamReader"},
         )
 
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
@@ -226,8 +228,8 @@ class DataSource(ABC):
             A reader instance for this streaming data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "streamReader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "streamReader"},
         )
 
 
@@ -326,12 +328,12 @@ class DataSourceReader(ABC):
         ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "partitions"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "partitions"},
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator[Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Tuple]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -396,8 +398,8 @@ class DataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "initialOffset"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "initialOffset"},
         )
 
     def latestOffset(self) -> dict:
@@ -416,8 +418,8 @@ class DataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "latestOffset"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "latestOffset"},
         )
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
@@ -441,12 +443,12 @@ class DataSourceStreamReader(ABC):
             must be an instance of `InputPartition` or a subclass of it.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "partitions"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "partitions"},
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator[Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Tuple]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -473,8 +475,8 @@ class DataSourceStreamReader(ABC):
             in the final DataFrame.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "read"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "read"},
         )
 
     def commit(self, end: dict) -> None:
@@ -532,8 +534,8 @@ class SimpleDataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "initialOffset"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "initialOffset"},
         )
 
     def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
@@ -553,8 +555,8 @@ class SimpleDataSourceStreamReader(ABC):
             The dict is the end offset of this read attempt and the start of next read attempt.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "read"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "read"},
         )
 
     def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
@@ -576,8 +578,8 @@ class SimpleDataSourceStreamReader(ABC):
             All the records between start offset and end offset.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "readBetweenOffsets"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "readBetweenOffsets"},
         )
 
     def commit(self, end: dict) -> None:
@@ -627,7 +629,7 @@ class DataSourceWriter(ABC):
         """
         ...
 
-    def commit(self, messages: List["WriterCommitMessage"]) -> None:
+    def commit(self, messages: List[Optional["WriterCommitMessage"]]) -> None:
         """
         Commits this writing job with a list of commit messages.
 
@@ -639,11 +641,11 @@ class DataSourceWriter(ABC):
         Parameters
         ----------
         messages : list of :class:`WriterCommitMessage`\\s
-            A list of commit messages.
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         """
         ...
 
-    def abort(self, messages: List["WriterCommitMessage"]) -> None:
+    def abort(self, messages: List[Optional["WriterCommitMessage"]]) -> None:
         """
         Aborts this writing job due to task failures.
 
@@ -655,7 +657,7 @@ class DataSourceWriter(ABC):
         Parameters
         ----------
         messages : list of :class:`WriterCommitMessage`\\s
-            A list of commit messages.
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         """
         ...
 
@@ -692,7 +694,7 @@ class DataSourceStreamWriter(ABC):
         """
         ...
 
-    def commit(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
+    def commit(self, messages: List[Optional["WriterCommitMessage"]], batchId: int) -> None:
         """
         Commits this microbatch with a list of commit messages.
 
@@ -703,15 +705,15 @@ class DataSourceStreamWriter(ABC):
 
         Parameters
         ----------
-        messages : List[WriterCommitMessage]
-            A list of commit messages.
+        messages : list of :class:`WriterCommitMessage`\\s
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         batchId: int
             An integer that uniquely identifies a batch of data being written.
             The integer increase by 1 with each microbatch processed.
         """
         ...
 
-    def abort(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
+    def abort(self, messages: List[Optional["WriterCommitMessage"]], batchId: int) -> None:
         """
         Aborts this microbatch due to task failures.
 
@@ -722,8 +724,8 @@ class DataSourceStreamWriter(ABC):
 
         Parameters
         ----------
-        messages : List[WriterCommitMessage]
-            A list of commit messages.
+        messages : list of :class:`WriterCommitMessage`\\s
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         batchId: int
             An integer that uniquely identifies a batch of data being written.
             The integer increase by 1 with each microbatch processed.

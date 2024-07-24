@@ -55,6 +55,7 @@ DataFrame
     DataFrame.dropna
     DataFrame.dtypes
     DataFrame.exceptAll
+    DataFrame.executionInfo
     DataFrame.explain
     DataFrame.fillna
     DataFrame.filter
@@ -130,6 +131,7 @@ DataFrame
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
+    DataFrame.mergeInto
     DataFrame.pandas_api
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill

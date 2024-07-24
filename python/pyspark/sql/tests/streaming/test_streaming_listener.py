@@ -51,7 +51,7 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(event, QueryProgressEvent))
         self.check_streaming_query_progress(event.progress, is_stateful)
 
-    def check_terminated_event(self, event, exception=None, error_class=None):
+    def check_terminated_event(self, event, exception=None, errorClass=None):
         """Check QueryTerminatedEvent"""
         self.assertTrue(isinstance(event, QueryTerminatedEvent))
         self.assertTrue(isinstance(event.id, uuid.UUID))
@@ -61,8 +61,8 @@ class StreamingListenerTestsMixin:
         else:
             self.assertEqual(event.exception, None)
 
-        if error_class:
-            self.assertTrue(error_class in event.errorClassOnException)
+        if errorClass:
+            self.assertTrue(errorClass in event.errorClassOnException)
         else:
             self.assertEqual(event.errorClassOnException, None)
 

@@ -26,6 +26,65 @@ Overview
 The Python Data Source API is a new feature introduced in Spark 4.0, enabling developers to read from custom data sources and write to custom data sinks in Python.
 This guide provides a comprehensive overview of the API and instructions on how to create, use, and manage Python data sources.
 
+Simple Example
+--------------
+Here's a simple Python data source that generates exactly two rows of synthetic data.
+This example demonstrates how to set up a custom data source without using external libraries, focusing on the essentials needed to get it up and running quickly.
+
+**Step 1: Define the data source**
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSource, DataSourceReader
+    from pyspark.sql.types import IntegerType, StringType, StructField, StructType
+
+    class SimpleDataSource(DataSource):
+        """
+        A simple data source for PySpark that generates exactly two rows of synthetic data.
+        """
+
+        @classmethod
+        def name(cls):
+            return "simple"
+
+        def schema(self):
+            return StructType([
+                StructField("name", StringType()),
+                StructField("age", IntegerType())
+            ])
+
+        def reader(self, schema: StructType):
+            return SimpleDataSourceReader()
+
+    class SimpleDataSourceReader(DataSourceReader):
+
+        def read(self, partition):
+            yield ("Alice", 20)
+            yield ("Bob", 30)
+
+**Step 2: Register the data source**
+
+.. code-block:: python
+
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    spark.dataSource.register(SimpleDataSource)
+
+**Step 3: Read from the data source**
+
+.. code-block:: python
+
+    spark.read.format("simple").load().show()
+
+    # +-----+---+
+    # | name|age|
+    # +-----+---+
+    # |Alice| 20|
+    # |  Bob| 30|
+    # +-----+---+
+
 
 Creating a Python Data Source
 -----------------------------

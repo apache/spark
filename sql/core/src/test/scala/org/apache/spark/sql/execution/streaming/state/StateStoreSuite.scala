@@ -30,6 +30,8 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -41,7 +43,6 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProj
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
-import org.apache.spark.sql.execution.streaming.state.StateStoreValueRowFormatValidationFailure
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -362,7 +363,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         getData(provider, snapshotVersion - 1)
       }
       checkError(
-        e.getCause.asInstanceOf[SparkThrowable],
+        e,
         errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
         parameters = Map(
           "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
@@ -1088,14 +1089,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       var e = intercept[SparkException] {
         provider.getStore(2)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+      assert(e.getMessage.contains("does not exist"))
 
       e = intercept[SparkException] {
         getData(provider, 2, useColumnFamilies = colFamiliesEnabled)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+      assert(e.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version
       tryWithProviderResource(newStoreProvider(store.id, colFamiliesEnabled)) { reloadedProvider =>
@@ -1235,19 +1234,37 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   testWithAllCodec(s"getStore with invalid versions") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
-      def checkInvalidVersion(version: Int): Unit = {
+      def checkInvalidVersion(version: Int, isHDFSBackedStoreProvider: Boolean): Unit = {
         val e = intercept[SparkException] {
           provider.getStore(version)
         }
-        checkError(
-          e,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-          parameters = Map.empty
-        )
+        if (version < 0) {
+          checkError(
+            e,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            parameters = Map("version" -> version.toString)
+          )
+        } else {
+          if (isHDFSBackedStoreProvider) {
+            checkError(
+              e,
+              errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+              parameters = Map("fileToRead" -> ".*", "clazz" -> ".*"),
+              matchPVals = true
+            )
+          } else {
+            checkError(
+              e,
+              errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+              parameters = Map("fileToRead" -> ".*"),
+              matchPVals = true
+            )
+          }
+        }
       }
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(1)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
@@ -1257,8 +1274,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(2)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       // Update store version with some data
       val store1 = provider.getStore(1)
@@ -1267,8 +1284,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(store1.commit() === 2)
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(3)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
     }
   }
 
@@ -1443,7 +1460,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
               storeConf, hadoopConf)
           }
           checkError(
-            e.getCause.asInstanceOf[SparkThrowable],
+            e,
             errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
             parameters = Map(
               "fileToRead" -> s"$dir/0/0/1.delta",
@@ -1625,6 +1642,30 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Shouldn't throw
     StateStoreProvider.validateStateRowFormat(
       keyRow, keySchema, valueRow, keySchema, storeConf)
+  }
+
+  test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of PrefixKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of RangeKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
   }
 
   /** Return a new provider with a random id */

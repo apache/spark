@@ -85,8 +85,8 @@ class StreamingQuery:
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_POSITIVE",
+                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             cmd.await_termination.timeout_ms = int(timeout * 1000)
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
@@ -182,7 +182,7 @@ class StreamingQuery:
         cmd.query_id.run_id = self._run_id
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_command.CopyFrom(cmd)
-        (_, properties) = self._session.client.execute_command(exec_cmd)
+        (_, properties, _) = self._session.client.execute_command(exec_cmd)
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
@@ -220,8 +220,8 @@ class StreamingQueryManager:
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_POSITIVE",
+                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             cmd.await_any_termination.timeout_ms = int(timeout * 1000)
             terminated = self._execute_streaming_query_manager_cmd(
@@ -261,7 +261,7 @@ class StreamingQueryManager:
     ) -> pb2.StreamingQueryManagerCommandResult:
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
-        (_, properties) = self._session.client.execute_command(exec_cmd)
+        (_, properties, _) = self._session.client.execute_command(exec_cmd)
         return cast(
             pb2.StreamingQueryManagerCommandResult,
             properties["streaming_query_manager_command_result"],
@@ -402,8 +402,8 @@ class StreamingQueryListenerBus:
             return QueryIdleEvent.fromJson(json.loads(event.event_json))
         else:
             raise PySparkValueError(
-                error_class="UNKNOWN_VALUE_FOR",
-                message_parameters={"var": f"proto.StreamingQueryEventType: {event.event_type}"},
+                errorClass="UNKNOWN_VALUE_FOR",
+                messageParameters={"var": f"proto.StreamingQueryEventType: {event.event_type}"},
             )
 
     def post_to_all(

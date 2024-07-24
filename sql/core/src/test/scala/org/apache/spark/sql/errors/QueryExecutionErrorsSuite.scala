@@ -777,7 +777,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         val row = spark.sparkContext.parallelize(Seq(1, 2)).map(Row(_))
-        spark.sqlContext.createDataFrame(row, StructType.fromString("StructType()"))
+        spark.createDataFrame(row, StructType.fromString("StructType()"))
       },
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map(

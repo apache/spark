@@ -108,7 +108,7 @@
         "usedBy": ["SQL/XML"]
     },
     "01011": {
-        "description": "SQL-Java path too long for infor- mation schema",
+        "description": "SQL-Java path too long for information schema",
         "origin": "SQL/JRT",
         "standard": "Y",
         "usedBy": ["SQL/JRT", "DB2"]
@@ -1584,7 +1584,7 @@
         "usedBy": ["SQL/Foundation"]
     },
     "2201J": {
-        "description": "XQuery sequence cannot be vali- dated",
+        "description": "XQuery sequence cannot be validated",
         "origin": "SQL/XML",
         "standard": "Y",
         "usedBy": ["SQL/XML"]
@@ -1896,7 +1896,7 @@
         "usedBy": ["SQL/MD"]
     },
     "2203L": {
-        "description": "MD-array subset not within MD- extent",
+        "description": "MD-array subset not within MD-extent",
         "origin": "SQL/MD",
         "standard": "Y",
         "usedBy": ["SQL/MD"]
@@ -1926,7 +1926,7 @@
         "usedBy": ["SQL/MD"]
     },
     "2203R": {
-        "description": "MD-array operands with non- matching MD-extents",
+        "description": "MD-array operands with non-matching MD-extents",
         "origin": "SQL/MD",
         "standard": "Y",
         "usedBy": ["SQL/MD"]
@@ -2502,7 +2502,7 @@
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
     },
     "25P01": {
-        "description": "no activ sql transaction",
+        "description": "no active sql transaction",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -2682,7 +2682,7 @@
         "usedBy": ["SQL/Foundation"]
     },
     "33000": {
-        "description": "invalid SQL descriptor nameno subclass)",
+        "description": "invalid SQL descriptor nameno subclass",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "Oracle"]
@@ -4610,6 +4610,18 @@
     "42K0K": {
         "description": "Invalid inverse distribution function",
         "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0L": {
+        "description": "Invalid usage of labels.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0M": {
+        "description": "Invalid variable declaration.",
+        "origin": "Spark,",
         "standard": "N",
         "usedBy": ["Spark"]
     },
@@ -6752,7 +6764,7 @@
         "usedBy": ["SQL/MED", "PostgreSQL"]
     },
     "HV021": {
-        "description": "inconsistent descriptor informa- tion",
+        "description": "inconsistent descriptor information",
         "origin": "SQL/MED",
         "standard": "Y",
         "usedBy": ["SQL/MED", "PostgreSQL"]
@@ -6848,7 +6860,7 @@
         "usedBy": ["SQL/CLI", "SQL Server"]
     },
     "HY007": {
-        "description": "associated statement is not pre- pared",
+        "description": "associated statement is not prepared",
         "origin": "SQL/CLI",
         "standard": "Y",
         "usedBy": ["SQL/CLI", "SQL Server"]

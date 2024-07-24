@@ -123,8 +123,8 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
         if not hasattr(result, "__len__"):
             pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": pd_type,
                     "actual": type(result).__name__,
                 },
@@ -134,8 +134,8 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
     def verify_result_length(result, length):
         if len(result) != length:
             raise PySparkRuntimeError(
-                error_class="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
-                message_parameters={
+                errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                messageParameters={
                     "expected": str(length),
                     "actual": str(len(result)),
                 },
@@ -176,8 +176,8 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type):
     def verify_result_length(result, length):
         if len(result) != length:
             raise PySparkRuntimeError(
-                error_class="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
-                message_parameters={
+                errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                messageParameters={
                     "expected": str(length),
                     "actual": str(len(result)),
                 },
@@ -197,8 +197,8 @@ def wrap_pandas_batch_iter_udf(f, return_type):
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": "iterator of {}".format(iter_type_label),
                     "actual": type(result).__name__,
                 },
@@ -210,8 +210,8 @@ def wrap_pandas_batch_iter_udf(f, return_type):
 
         if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": "iterator of {}".format(iter_type_label),
                     "actual": "iterator of {}".format(type(elem).__name__),
                 },
@@ -234,8 +234,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
     if type(return_type) == StructType:
         if not isinstance(result, pd.DataFrame):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": "pandas.DataFrame",
                     "actual": type(result).__name__,
                 },
@@ -265,8 +265,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                 extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
                 raise PySparkRuntimeError(
-                    error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
-                    message_parameters={
+                    errorClass="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
+                    messageParameters={
                         "missing": missing,
                         "extra": extra,
                     },
@@ -274,8 +274,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
             # otherwise the number of columns of result have to match the return type
             elif len(result_columns) != len(return_type):
                 raise PySparkRuntimeError(
-                    error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
-                    message_parameters={
+                    errorClass="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    messageParameters={
                         "expected": str(len(return_type)),
                         "actual": str(len(result.columns)),
                     },
@@ -283,8 +283,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
     else:
         if not isinstance(result, pd.Series):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={"expected": "pandas.Series", "actual": type(result).__name__},
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={"expected": "pandas.Series", "actual": type(result).__name__},
             )
 
 
@@ -294,8 +294,8 @@ def wrap_arrow_batch_iter_udf(f, return_type):
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": "iterator of pyarrow.RecordBatch",
                     "actual": type(result).__name__,
                 },
@@ -307,8 +307,8 @@ def wrap_arrow_batch_iter_udf(f, return_type):
 
         if not isinstance(elem, pa.RecordBatch):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": "iterator of pyarrow.RecordBatch",
                     "actual": "iterator of {}".format(type(elem).__name__),
                 },
@@ -377,8 +377,8 @@ def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
 
     if not isinstance(table, pa.Table):
         raise PySparkTypeError(
-            error_class="UDF_RETURN_TYPE",
-            message_parameters={
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
                 "expected": "pyarrow.Table",
                 "actual": type(table).__name__,
             },
@@ -404,8 +404,8 @@ def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
                 extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
                 raise PySparkRuntimeError(
-                    error_class="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF",
-                    message_parameters={
+                    errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF",
+                    messageParameters={
                         "missing": missing,
                         "extra": extra,
                     },
@@ -434,8 +434,8 @@ def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
 
         if type_mismatch:
             raise PySparkRuntimeError(
-                error_class="RESULT_TYPE_MISMATCH_FOR_ARROW_UDF",
-                message_parameters={
+                errorClass="RESULT_TYPE_MISMATCH_FOR_ARROW_UDF",
+                messageParameters={
                     "mismatch": ", ".join(
                         "column '{}' (expected {}, actual {})".format(name, expected, actual)
                         for name, expected, actual in type_mismatch
@@ -547,8 +547,8 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
         def verify_element(result):
             if not isinstance(result, pd.DataFrame):
                 raise PySparkTypeError(
-                    error_class="UDF_RETURN_TYPE",
-                    message_parameters={
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
                         "expected": "iterator of pandas.DataFrame",
                         "actual": "iterator of {}".format(type(result).__name__),
                     },
@@ -560,8 +560,8 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
                 or (len(result.columns) == 0 and result.empty)
             ):
                 raise PySparkRuntimeError(
-                    error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
-                    message_parameters={
+                    errorClass="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    messageParameters={
                         "expected": str(len(return_type)),
                         "actual": str(len(result.columns)),
                     },
@@ -571,8 +571,8 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
 
         if isinstance(result_iter, pd.DataFrame):
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
                     "expected": "iterable of pandas.DataFrame",
                     "actual": type(result_iter).__name__,
                 },
@@ -582,8 +582,8 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
             iter(result_iter)
         except TypeError:
             raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={"expected": "iterable", "actual": type(result_iter).__name__},
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={"expected": "iterable", "actual": type(result_iter).__name__},
             )
 
         result_iter_with_validation = (verify_element(x) for x in result_iter)
@@ -624,8 +624,8 @@ def wrap_window_agg_pandas_udf(
         return wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type)
     else:
         raise PySparkRuntimeError(
-            error_class="INVALID_WINDOW_BOUND_TYPE",
-            message_parameters={
+            errorClass="INVALID_WINDOW_BOUND_TYPE",
+            messageParameters={
                 "window_bound_type": window_bound_type,
             },
         )
@@ -734,8 +734,8 @@ def wrap_perf_profiler(f, result_id):
     )
 
     def profiling_func(*args, **kwargs):
-        pr = cProfile.Profile()
-        ret = pr.runcall(f, *args, **kwargs)
+        with cProfile.Profile() as pr:
+            ret = f(*args, **kwargs)
         st = pstats.Stats(pr)
         st.stream = None  # make it picklable
         st.strip_dirs()
@@ -950,8 +950,8 @@ def read_udtf(pickleSer, infile, eval_type):
     if has_pickled_analyze_result:
         if len(udtf_init_args.args) > 2:
             raise PySparkRuntimeError(
-                error_class="UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD",
-                message_parameters={"name": udtf_name},
+                errorClass="UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD",
+                messageParameters={"name": udtf_name},
             )
         elif len(udtf_init_args.args) == 2:
             prev_handler = handler
@@ -963,8 +963,8 @@ def read_udtf(pickleSer, infile, eval_type):
             handler = construct_udtf
     elif len(udtf_init_args.args) > 1:
         raise PySparkRuntimeError(
-            error_class="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
-            message_parameters={"name": udtf_name},
+            errorClass="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
+            messageParameters={"name": udtf_name},
         )
 
     class UDTFWithPartitions:
@@ -1081,8 +1081,8 @@ def read_udtf(pickleSer, infile, eval_type):
             udtf = handler()
     except Exception as e:
         raise PySparkRuntimeError(
-            error_class="UDTF_EXEC_ERROR",
-            message_parameters={"method_name": "__init__", "error": str(e)},
+            errorClass="UDTF_EXEC_ERROR",
+            messageParameters={"method_name": "__init__", "error": str(e)},
         )
 
     # Validate the UDTF
@@ -1099,15 +1099,15 @@ def read_udtf(pickleSer, infile, eval_type):
         inspect.signature(udtf.eval).bind(*args_offsets, **kwargs_offsets)
     except TypeError as e:
         raise PySparkRuntimeError(
-            error_class="UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
-            message_parameters={"name": udtf_name, "reason": str(e)},
+            errorClass="UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
+            messageParameters={"name": udtf_name, "reason": str(e)},
         ) from None
 
     def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None]]:
         def raise_(result_column_index):
             raise PySparkRuntimeError(
-                error_class="UDTF_EXEC_ERROR",
-                message_parameters={
+                errorClass="UDTF_EXEC_ERROR",
+                messageParameters={
                     "method_name": "eval' or 'terminate",
                     "error": f"Column {result_column_index} within a returned row had a "
                     + "value of None, either directly or within array/struct/map "
@@ -1221,8 +1221,8 @@ def read_udtf(pickleSer, infile, eval_type):
             def verify_result(result):
                 if not isinstance(result, pd.DataFrame):
                     raise PySparkTypeError(
-                        error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
-                        message_parameters={
+                        errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
+                        messageParameters={
                             "return_type": type(result).__name__,
                             "value": str(result),
                             "func": f.__name__,
@@ -1236,8 +1236,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 if len(result) > 0 or len(result.columns) > 0:
                     if len(result.columns) != return_type_size:
                         raise PySparkRuntimeError(
-                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
-                            message_parameters={
+                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                            messageParameters={
                                 "expected": str(return_type_size),
                                 "actual": str(len(result.columns)),
                                 "func": f.__name__,
@@ -1258,8 +1258,8 @@ def read_udtf(pickleSer, infile, eval_type):
                     raise
                 except Exception as e:
                     raise PySparkRuntimeError(
-                        error_class="UDTF_EXEC_ERROR",
-                        message_parameters={"method_name": f.__name__, "error": str(e)},
+                        errorClass="UDTF_EXEC_ERROR",
+                        messageParameters={"method_name": f.__name__, "error": str(e)},
                     )
 
             def check_return_value(res):
@@ -1268,8 +1268,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 if res is not None:
                     if not isinstance(res, Iterable):
                         raise PySparkRuntimeError(
-                            error_class="UDTF_RETURN_NOT_ITERABLE",
-                            message_parameters={
+                            errorClass="UDTF_RETURN_NOT_ITERABLE",
+                            messageParameters={
                                 "type": type(res).__name__,
                                 "func": f.__name__,
                             },
@@ -1338,8 +1338,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 if result is not None:
                     if hasattr(result, "__len__") and len(result) != return_type_size:
                         raise PySparkRuntimeError(
-                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
-                            message_parameters={
+                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                            messageParameters={
                                 "expected": str(return_type_size),
                                 "actual": str(len(result)),
                                 "func": f.__name__,
@@ -1348,8 +1348,8 @@ def read_udtf(pickleSer, infile, eval_type):
 
                     if not (isinstance(result, (list, dict, tuple)) or hasattr(result, "__dict__")):
                         raise PySparkRuntimeError(
-                            error_class="UDTF_INVALID_OUTPUT_ROW_TYPE",
-                            message_parameters={
+                            errorClass="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                            messageParameters={
                                 "type": type(result).__name__,
                                 "func": f.__name__,
                             },
@@ -1366,8 +1366,8 @@ def read_udtf(pickleSer, infile, eval_type):
                     raise
                 except Exception as e:
                     raise PySparkRuntimeError(
-                        error_class="UDTF_EXEC_ERROR",
-                        message_parameters={"method_name": f.__name__, "error": str(e)},
+                        errorClass="UDTF_EXEC_ERROR",
+                        messageParameters={"method_name": f.__name__, "error": str(e)},
                     )
 
                 if res is None:
@@ -1378,8 +1378,8 @@ def read_udtf(pickleSer, infile, eval_type):
 
                 if not isinstance(res, Iterable):
                     raise PySparkRuntimeError(
-                        error_class="UDTF_RETURN_NOT_ITERABLE",
-                        message_parameters={
+                        errorClass="UDTF_RETURN_NOT_ITERABLE",
+                        messageParameters={
                             "type": type(res).__name__,
                             "func": f.__name__,
                         },
@@ -1583,14 +1583,14 @@ def read_udfs(pickleSer, infile, eval_type):
                     pass
                 else:
                     raise PySparkRuntimeError(
-                        error_class="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
-                        message_parameters={},
+                        errorClass="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
+                        messageParameters={},
                     )
 
                 if num_output_rows != num_input_rows:
                     raise PySparkRuntimeError(
-                        error_class="RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF",
-                        message_parameters={
+                        errorClass="RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF",
+                        messageParameters={
                             "output_length": str(num_output_rows),
                             "input_length": str(num_input_rows),
                         },
