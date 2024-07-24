@@ -22,7 +22,10 @@ from pyspark.errors import StreamingQueryException, PySparkValueError
 from pyspark.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
-from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.streaming.listener import (
+    StreamingQueryListener,
+    StreamingQueryProgress,
+)
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -251,7 +254,7 @@ class StreamingQuery:
         return json.loads(self._jsq.status().json())
 
     @property
-    def recentProgress(self) -> List[Dict[str, Any]]:
+    def recentProgress(self) -> List[StreamingQueryProgress]:
         """
         Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
         The number of progress updates retained for each stream is configured by Spark session
@@ -280,10 +283,10 @@ class StreamingQuery:
 
         >>> sq.stop()
         """
-        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
+        return [StreamingQueryProgress.fromJObject(p) for p in self._jsq.recentProgress()]
 
     @property
-    def lastProgress(self) -> Optional[Dict[str, Any]]:
+    def lastProgress(self) -> Optional[StreamingQueryProgress]:
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
@@ -311,7 +314,7 @@ class StreamingQuery:
         """
         lastProgress = self._jsq.lastProgress()
         if lastProgress:
-            return json.loads(lastProgress.json())
+            return StreamingQueryProgress.fromJObject(lastProgress)
         else:
             return None
 
