@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
+import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
  * Common trait for all broadcast exchange implementations to facilitate pattern matching.
