@@ -25,6 +25,7 @@ from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
+from pyspark.errors import PySparkRuntimeError
 
 
 class StatefulProcessorHandleState(Enum):
@@ -61,7 +62,8 @@ class StateApiClient:
         if (status == 0):
             self.handle_state = state
         else:
-            raise Exception(f"Error setting handle state: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error setting handle state: "
+                                      f"{response_message.errorMessage}")
 
     def set_implicit_key(self, key: Tuple) -> None:
         key_bytes = self._serialize_to_bytes(self.key_schema, key)
@@ -73,9 +75,11 @@ class StateApiClient:
         response_message = self._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
-            raise Exception(f"Error setting implicit key: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error setting implicit key: "
+                                      f"{response_message.errorMessage}")
 
     def remove_implicit_key(self) -> None:
+        print("calling remove_implicit_key on python side")
         remove_implicit_key = stateMessage.RemoveImplicitKey()
         request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
         message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
@@ -84,7 +88,8 @@ class StateApiClient:
         response_message = self._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
-            raise Exception(f"Error removing implicit key: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error removing implicit key: "
+                                      f"{response_message.errorMessage}")
 
     def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
         if isinstance(schema, str):
@@ -100,7 +105,8 @@ class StateApiClient:
         response_message = self._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
-            raise Exception(f"Error initializing value state: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error initializing value state: "
+                                      f"{response_message.errorMessage}")
 
     def _get_proto_state(self,
                          state: StatefulProcessorHandleState) -> stateMessage.HandleState.ValueType:

@@ -20,6 +20,7 @@ from typing import Any, Union, cast, Tuple
 from pyspark.sql.streaming.state_api_client import StateApiClient
 import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 from pyspark.sql.types import Row, StructType, _parse_datatype_string
+from pyspark.errors import PySparkRuntimeError
 
 
 class ValueStateClient:
@@ -39,11 +40,12 @@ class ValueStateClient:
         status = response_message.statusCode
         if (status == 0):
             return True
-        elif (status == -1):
-            # server returns -1 if the state does not exist
+        elif (status == 1):
+            # server returns 1 if the state does not exist
             return False
         else:
-            raise Exception(f"Error checking value state exists: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error checking value state exists: "
+                                      f"{response_message.errorMessage}")
 
     def get(self, state_name: str) -> Any:
         get_call = stateMessage.Get()
@@ -57,7 +59,7 @@ class ValueStateClient:
         if (status == 0):
             return self._state_api_client._receive_and_deserialize()
         else:
-            raise Exception(f"Error getting value state: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error getting value state: {response_message.errorMessage}")
 
     def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         if isinstance(schema, str):
@@ -73,7 +75,8 @@ class ValueStateClient:
         response_message = self._state_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
-            raise Exception(f"Error updating value state: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error updating value state: "
+                                      f"{response_message.errorMessage}")
 
     def clear(self, state_name: str) -> None:
         clear_call = stateMessage.Clear()
@@ -85,4 +88,5 @@ class ValueStateClient:
         response_message = self._state_api_client._receive_proto_message()
         status = response_message.statusCode
         if (status != 0):
-            raise Exception(f"Error clearing value state: {response_message.errorMessage}")
+            raise PySparkRuntimeError(f"Error clearing value state: "
+                                      f"{response_message.errorMessage}")

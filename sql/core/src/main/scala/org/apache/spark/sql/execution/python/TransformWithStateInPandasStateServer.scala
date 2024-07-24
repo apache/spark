@@ -163,7 +163,7 @@ class TransformWithStateInPandasStateServer(
         if (valueStates.contains(stateName) && valueStates(stateName).exists()) {
           sendResponse(0)
         } else {
-          sendResponse(-1)
+          sendResponse(1, s"state $stateName doesn't exist")
         }
       case ValueStateCall.MethodCase.GET =>
         if (valueStates.contains(stateName)) {

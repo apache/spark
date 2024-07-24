@@ -15,26 +15,24 @@
 # limitations under the License.
 #
 
-import random
-import shutil
-import string
-import sys
 import tempfile
 import pandas as pd
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
+from pyspark.errors import PySparkRuntimeError
 from typing import Iterator
 
 import unittest
 from typing import cast
 
 from pyspark import SparkConf
-from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
+from pyspark.sql.functions import split, col
 from pyspark.sql.types import (
     LongType,
     StringType,
     StructType,
     StructField,
     Row,
+    IntegerType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -43,7 +41,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import eventually
 
 
 @unittest.skipIf(
@@ -59,37 +56,60 @@ class TransformWithStateInPandasTestsMixin:
                 "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         return cfg
 
-    def _test_apply_in_pandas_with_state_basic(self, func, check_results):
+    def _prepare_test_resource1(self, input_path):
+        with open(input_path + "/text-test1.txt", "w") as fw:
+            fw.write("0, 123\n")
+            fw.write("0, 46\n")
+            fw.write("1, 146\n")
+            fw.write("1, 346\n")
+
+    def _prepare_test_resource2(self, input_path):
+        with open(input_path + "/text-test2.txt", "w") as fw:
+            fw.write("0, 123\n")
+            fw.write("0, 223\n")
+            fw.write("0, 323\n")
+            fw.write("1, 246\n")
+            fw.write("1, 6\n")
+
+    def _build_test_df(self, input_path):
+        df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
+        df_split = df.withColumn('split_values', split(df['value'], ','))
+        df_split = df_split.select(
+            df_split.split_values.getItem(0).alias('id'),
+            df_split.split_values.getItem(1).alias('temperature')
+        )
+        df_final = df_split.withColumn("id", col("id").cast("string")) \
+            .withColumn("temperature", col("temperature").cast("int"))
+        return df_final
+
+    def _test_transform_with_state_in_pandas_basic(self, stateful_processor, check_results,
+                                                   single_batch=False):
         input_path = tempfile.mkdtemp()
+        self._prepare_test_resource1(input_path)
+        if not single_batch:
+            self._prepare_test_resource2(input_path)
 
-        def prepare_test_resource():
-            with open(input_path + "/text-test.txt", "w") as fw:
-                fw.write("hello\n")
-                fw.write("this\n")
-
-        prepare_test_resource()
-
-        df = self.spark.readStream.format("text").load(input_path)
+        df = self._build_test_df(input_path)
 
         for q in self.spark.streams.active:
             q.stop()
         self.assertTrue(df.isStreaming)
 
-        output_type = StructType(
-            [StructField("key", StringType()), StructField("countAsString", StringType())]
-        )
-        state_type = StructType([StructField("c", LongType())])
+        output_schema = StructType([
+            StructField("id", StringType(), True),
+            StructField("countAsString", StringType(), True)
+        ])
 
         q = (
-            df.groupBy(df["value"])
-            .transformWithStateInPandas(stateful_processor = SimpleStatefulProcessor(),
-                                        outputStructType=output_type,
-                                        outputMode="Update",
-                                        timeMode="None")
-            .writeStream.queryName("this_query")
-            .foreachBatch(check_results)
-            .outputMode("update")
-            .start()
+            df.groupBy("id")
+                .transformWithStateInPandas(stateful_processor=stateful_processor,
+                                            outputStructType=output_schema,
+                                            outputMode="Update",
+                                            timeMode="None")
+                .writeStream.queryName("this_query")
+                .foreachBatch(check_results)
+                .outputMode("update")
+                .start()
         )
 
         self.assertEqual(q.name, "this_query")
@@ -97,41 +117,139 @@ class TransformWithStateInPandasTestsMixin:
         q.processAllAvailable()
         self.assertTrue(q.exception() is None)
 
-    def test_apply_in_pandas_with_state_basic(self):
-        def func(key, pdf_iter, state):
-            assert isinstance(state, GroupState)
+    def test_transform_with_state_in_pandas_basic(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="2"),
+                    Row(id="1", countAsString="2"),
+                }
+            else:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="3"),
+                    Row(id="1", countAsString="2"),
+                }
+        self._test_transform_with_state_in_pandas_basic(SimpleStatefulProcessor(), check_results)
 
-            total_len = 0
-            for pdf in pdf_iter:
-                total_len += len(pdf)
-
-            state.update((total_len,))
-            assert state.get[0] == 1
-            yield pd.DataFrame({"key": [key[0]], "countAsString": [str(total_len)]})
-
+    def test_transform_with_state_in_pandas_sad_cases(self):
         def check_results(batch_df, _):
-            assert set(batch_df.sort("key").collect()) == {
-                Row(key="hello", countAsString="1"),
-                Row(key="this", countAsString="1"),
-            }
+            assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="0"),
+                    Row(id="1", countAsString="0"),
+                }
+        self._test_transform_with_state_in_pandas_basic(InvalidSimpleStatefulProcessor(),
+                                                        check_results, True)
 
-        self._test_apply_in_pandas_with_state_basic(func, check_results)
+    def test_transform_with_state_in_pandas_query_restarts(self):
+        input_path = tempfile.mkdtemp()
+
+        self._prepare_test_resource1(input_path)
+
+        df = self._build_test_df(input_path)
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType([
+            StructField("id", StringType(), True),
+            StructField("countAsString", StringType(), True)
+        ])
+
+        base_query = (
+            df.groupBy("id")
+                .transformWithStateInPandas(stateful_processor=SimpleStatefulProcessor(),
+                                            outputStructType=output_schema,
+                                            outputMode="Update",
+                                            timeMode="None")
+                .writeStream.queryName("this_query")
+                .format("parquet")
+                .outputMode("append")
+                .option("checkpointLocation", input_path + "/checkpoint")
+                .option("path", input_path + "/output")
+        )
+        q = base_query.start()
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        self.assertTrue(q.exception() is None)
+
+        q.stop()
+
+        self._prepare_test_resource2(input_path)
+
+        q = base_query.start()
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        self.assertTrue(q.exception() is None)
+        result_df = self.spark.read.parquet(input_path + "/output")
+        assert set(result_df.sort("id").collect()) == {
+            Row(id="0", countAsString="2"),
+            Row(id="0", countAsString="3"),
+            Row(id="1", countAsString="2"),
+            Row(id="1", countAsString="2"),
+        }
 
 
 class SimpleStatefulProcessor(StatefulProcessor):
-  def init(self, handle: StatefulProcessorHandle) -> None:
-    state_schema = StructType([
-      StructField("value", StringType(), True)
-    ])
-    self.value_state = handle.getValueState("testValueState", state_schema)
-  def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
-    self.value_state.update("test_value")
-    exists = self.value_state.exists()
-    value = self.value_state.get()
-    self.value_state.clear()
-    return rows
-  def close(self) -> None:
-    pass
+    dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
+    batch_id = 0
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([
+            StructField("value", IntegerType(), True)
+        ])
+        self.num_violations_state = handle.getValueState("numViolations", state_schema)
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        new_violations = 0
+        count = 0
+        key_str = key[0]
+        exists = self.num_violations_state.exists()
+        if exists:
+            existing_violations_pdf = self.num_violations_state.get()
+            existing_violations = existing_violations_pdf.get("value")[0]
+            assert existing_violations == self.dict[0][key_str]
+            self.batch_id = 1
+        else:
+            existing_violations = 0
+        for pdf in rows:
+            pdf_count = pdf.count()
+            count += pdf_count.get('temperature')
+            violations_pdf = pdf.loc[pdf['temperature'] > 100]
+            new_violations += violations_pdf.count().get('temperature')
+        updated_violations = new_violations + existing_violations
+        assert updated_violations == self.dict[self.batch_id][key_str]
+        self.num_violations_state.update((updated_violations,))
+        yield pd.DataFrame({'id': key, 'countAsString': str(count)})
+
+    def close(self) -> None:
+        pass
+
+
+class InvalidSimpleStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([
+            StructField("value", IntegerType(), True)
+        ])
+        self.num_violations_state = handle.getValueState("numViolations", state_schema)
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        count = 0
+        exists = self.num_violations_state.exists()
+        assert not exists
+        # try to get a non-existing state
+        try:
+            self.num_violations_state.get()
+        except Exception as e:
+            assert isinstance(e, PySparkRuntimeError)
+            assert str(e) == "Error getting value state: state numViolations doesn't exist"
+        self.num_violations_state.clear()
+        yield pd.DataFrame({'id': key, 'countAsString': str(count)})
+
+    def close(self) -> None:
+        pass
 
 
 class TransformWithStateInPandasTests(
@@ -141,7 +259,7 @@ class TransformWithStateInPandasTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import *  # noqa: F401
+    from pyspark.sql.tests.pandas.test_pandas_transform_with_state import *  # noqa: F401
 
     try:
         import xmlrunner
