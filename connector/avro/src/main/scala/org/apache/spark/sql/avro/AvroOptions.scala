@@ -22,6 +22,7 @@ import java.net.URI
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.SparkException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -139,6 +140,10 @@ private[sql] class AvroOptions(
 
   val recursiveFieldMaxDepth: Int =
     parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
+
+  if (recursiveFieldMaxDepth > 15) {
+    throw new IllegalArgumentException(s"Valid range of $RECURSIVE_FIELD_MAX_DEPTH is 0 - 15.")
+  }
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
