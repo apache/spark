@@ -214,22 +214,19 @@ object SchemaConverters extends Logging {
         if (avroSchema.getTypes.asScala.exists(_.getType == NULL)) {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
-          val schemaType =
+          val remainingSchema =
             if (remainingUnionTypes.size == 1) {
-              toSqlTypeHelper(
-                remainingUnionTypes.head,
-                existingRecordNames,
-                useStableIdForUnionType,
-                stableIdPrefixForUnionType,
-                recursiveFieldMaxDepth)
+              remainingUnionTypes.head
             } else {
-              toSqlTypeHelper(
-                Schema.createUnion(remainingUnionTypes.asJava),
-                existingRecordNames,
-                useStableIdForUnionType,
-                stableIdPrefixForUnionType,
-                recursiveFieldMaxDepth)
+              Schema.createUnion(remainingUnionTypes.asJava)
             }
+          val schemaType = toSqlTypeHelper(
+            remainingSchema,
+            existingRecordNames,
+            useStableIdForUnionType,
+            stableIdPrefixForUnionType,
+            recursiveFieldMaxDepth)
+
           if (schemaType == null) {
             logInfo(
               log"Dropping ${MDC(FIELD_NAME, avroSchema.getFullName)} of type " +
