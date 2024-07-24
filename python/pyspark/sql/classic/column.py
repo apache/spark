@@ -309,12 +309,16 @@ class Column(ParentColumn):
     def __and__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("and", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("and", self, lit(other))
 
     def __or__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("or", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("or", self, lit(other))
 
     def __invert__(self) -> ParentColumn:
         return _func_op("not", self)
@@ -322,12 +326,16 @@ class Column(ParentColumn):
     def __rand__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("and", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("and", self, lit(other))
 
     def __ror__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("or", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("or", self, lit(other))
 
     # container operators
     def __contains__(self, item: Any) -> None:

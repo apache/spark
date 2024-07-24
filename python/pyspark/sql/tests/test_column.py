@@ -94,6 +94,14 @@ class ColumnTestsMixin:
             cs.startswith("a"),
             cs.endswith("a"),
             ci.eqNullSafe(cs),
+            sf.col("b") & sf.lit(True),
+            sf.col("b") & True,
+            sf.lit(True) & sf.col("b"),
+            True & sf.col("b"),
+            sf.col("b") | sf.lit(True),
+            sf.col("b") | True,
+            sf.lit(True) | sf.col("b"),
+            True | sf.col("b"),
         )
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
