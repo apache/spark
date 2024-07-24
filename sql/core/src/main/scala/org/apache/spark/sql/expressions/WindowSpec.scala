@@ -215,6 +215,6 @@ class WindowSpec private[sql](
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
     val spec = WindowSpecDefinition(partitionSpec, orderSpec, frame)
-    new Column(WindowExpression(aggregate.expr, spec))
+    Column(WindowExpression(aggregate.expr, spec))
   }
 }

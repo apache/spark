@@ -36,9 +36,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LocalRelation}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -1002,7 +1001,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val stream = MemoryStream[Int]
-    val df = stream.toDF().select(new Column(Uuid()))
+    val df = stream.toDF().select(uuid())
     testStream(df)(
       AddData(stream, 1),
       CheckAnswer(collectUuid),
@@ -1022,7 +1021,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val stream = MemoryStream[Int]
-    val df = stream.toDF().select(new Column(new Rand()), new Column(new Randn()))
+    val df = stream.toDF().select(rand(), randn())
     testStream(df)(
       AddData(stream, 1),
       CheckAnswer(collectRand),
@@ -1041,7 +1040,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val stream = MemoryStream[Int]
-    val df = stream.toDF().select(new Column(new Shuffle(Literal.create[Seq[Int]](0 until 100))))
+    val df = stream.toDF().select(shuffle(typedLit[Seq[Int]](0 until 100)))
     testStream(df)(
       AddData(stream, 1),
       CheckAnswer(collectShuffle),

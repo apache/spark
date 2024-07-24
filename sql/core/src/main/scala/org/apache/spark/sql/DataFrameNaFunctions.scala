@@ -468,7 +468,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val branches = replacementMap.flatMap { case (source, target) =>
       Seq(Literal(source), buildExpr(target))
     }.toSeq
-    new Column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
+    Column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
   }
 
   private def convertToDouble(v: Any): Double = v match {
