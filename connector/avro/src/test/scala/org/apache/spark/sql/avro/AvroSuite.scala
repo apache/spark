@@ -2261,7 +2261,7 @@ abstract class AvroSuite
     assert(sparkSchema === expectedSchema)
   }
 
-  test("Translate recursive schema - 1") {
+  test("Translate recursive schema - union") {
     val avroSchema = """
       |{
       |  "type": "record",
@@ -2280,7 +2280,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Translate recursive schema - 2") {
+  test("Translate recursive schema - record") {
     val avroSchema = """
       |{
       |  "type": "record",
@@ -2311,7 +2311,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Translate recursive schema - 3") {
+  test("Translate recursive schema - array") {
     val avroSchema = """
       |{
       |  "type": "record",
@@ -2331,7 +2331,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Translate recursive schema - 4") {
+  test("Translate recursive schema - map") {
     val avroSchema = """
       |{
       |  "type": "record",
