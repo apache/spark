@@ -30,6 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FIELD_NAME, FIELD_TYPE, RECURSIVE_DEPTH}
 import org.apache.spark.internal.MDC
+import org.apache.spark.sql.avro.AvroOptions.RECURSIVE_FIELD_MAX_DEPTH_LIMIT
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
@@ -142,7 +143,7 @@ object SchemaConverters extends Logging {
           throw new IncompatibleSchemaException(s"""
             |Found recursive reference in Avro schema, which can not be processed by Spark by
             | default: ${avroSchema.toString(true)}. Try setting the option `recursiveFieldMaxDepth`
-            | to 1 - 15. Going beyond 15 levels of recursion is not allowed.
+            | to 1 - $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.
           """.stripMargin)
         } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {
           logInfo(

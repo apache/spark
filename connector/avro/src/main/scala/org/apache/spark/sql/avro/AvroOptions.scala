@@ -141,9 +141,10 @@ private[sql] class AvroOptions(
   val recursiveFieldMaxDepth: Int =
     parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
 
-  if (recursiveFieldMaxDepth > 15) {
+  if (recursiveFieldMaxDepth > RECURSIVE_FIELD_MAX_DEPTH_LIMIT) {
     throw AvroOptionsError.avroInvalidOptionValue(
-      RECURSIVE_FIELD_MAX_DEPTH, "Should not be greater than 15.")
+      RECURSIVE_FIELD_MAX_DEPTH,
+      s"Should not be greater than $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.")
   }
 }
 
@@ -198,6 +199,8 @@ private[sql] object AvroOptions extends DataSourceOptions {
    * and so on.
    */
   val RECURSIVE_FIELD_MAX_DEPTH = newOption("recursiveFieldMaxDepth")
+
+  val RECURSIVE_FIELD_MAX_DEPTH_LIMIT: Int = 15
 }
 
 abstract class AvroOptionsException(
