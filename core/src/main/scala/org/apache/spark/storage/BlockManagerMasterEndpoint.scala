@@ -32,7 +32,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{BLOCK_MANAGER_ID, EXECUTOR_ID, OLD_BLOCK_MANAGER_ID}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
@@ -110,7 +110,7 @@ class BlockManagerMasterEndpoint(
     val clazz = Utils.classForName(topologyMapperClassName)
     val mapper =
       clazz.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[TopologyMapper]
-    logInfo(s"Using $topologyMapperClassName for getting topology information")
+    logInfo(log"Using ${MDC(CLASS_NAME, topologyMapperClassName)} for getting topology information")
     mapper
   }
 
@@ -218,7 +218,8 @@ class BlockManagerMasterEndpoint(
       // executor is notified(see BlockManager.decommissionSelf), so we don't need to send the
       // notification here.
       val bms = executorIds.flatMap(blockManagerIdByExecutor.get)
-      logInfo(s"Mark BlockManagers (${bms.mkString(", ")}) as being decommissioning.")
+      logInfo(log"Mark BlockManagers (${MDC(BLOCK_MANAGER_IDS, bms.mkString(", "))}) as " +
+        log"being decommissioning.")
       decommissioningBlockManagerSet ++= bms
       context.reply(true)
 
@@ -314,8 +315,9 @@ class BlockManagerMasterEndpoint(
       defaultValue: T): PartialFunction[Throwable, T] = {
     case e: IOException =>
       if (!SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
-        logWarning(s"Error trying to remove $blockType $blockId" +
-          s" from block manager $bmId", e)
+        logWarning(log"Error trying to remove ${MDC(BLOCK_TYPE, blockType)} " +
+          log"${MDC(BLOCK_ID, blockId)}" +
+          log" from block manager ${MDC(BLOCK_MANAGER_ID, bmId)}", e)
       }
       defaultValue
 
@@ -333,8 +335,9 @@ class BlockManagerMasterEndpoint(
           false
       }
       if (!isAlive) {
-        logWarning(s"Error trying to remove $blockType $blockId. " +
-          s"The executor $executorId may have been lost.", t)
+        logWarning(log"Error trying to remove ${MDC(BLOCK_TYPE, blockType)} " +
+          log"${MDC(BLOCK_ID, blockId)}. " +
+          log"The executor ${MDC(EXECUTOR_ID, executorId)} may have been lost.", t)
         defaultValue
       } else {
         throw t
@@ -516,7 +519,7 @@ class BlockManagerMasterEndpoint(
       // etc.) as replication doesn't make much sense in that context.
       if (locations.isEmpty) {
         blockLocations.remove(blockId)
-        logWarning(s"No more replicas available for $blockId !")
+        logWarning(log"No more replicas available for ${MDC(BLOCK_ID, blockId)}!")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
         // As a heuristic, assume single executor failure to find out the number of replicas that
         // existed before failure
@@ -533,7 +536,7 @@ class BlockManagerMasterEndpoint(
     }
 
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
-    logInfo(s"Removing block manager $blockManagerId")
+    logInfo(log"Removing block manager ${MDC(BLOCK_MANAGER_ID, blockManagerId)}")
 
   }
 
@@ -549,7 +552,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeExecutor(execId: String): Unit = {
-    logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
+    logInfo(log"Trying to remove executor ${MDC(EXECUTOR_ID, execId)} from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
@@ -705,8 +708,9 @@ class BlockManagerMasterEndpoint(
           removeExecutor(id.executorId)
         case None =>
       }
-      logInfo("Registering block manager %s with %s RAM, %s".format(
-        id.hostPort, Utils.bytesToString(maxOnHeapMemSize + maxOffHeapMemSize), id))
+      logInfo(log"Registering block manager ${MDC(HOST_PORT, id.hostPort)} with " +
+        log"${MDC(MEMORY_SIZE, Utils.bytesToString(maxOnHeapMemSize + maxOffHeapMemSize))} RAM, " +
+        log"${MDC(BLOCK_MANAGER_ID, id)}")
 
       blockManagerIdByExecutor(id.executorId) = id
 
@@ -736,8 +740,8 @@ class BlockManagerMasterEndpoint(
       assert(!blockManagerInfo.contains(id),
         "BlockManager re-registration shouldn't succeed when the executor is lost")
 
-      logInfo(s"BlockManager ($id) re-registration is rejected since " +
-        s"the executor (${id.executorId}) has been lost")
+      logInfo(log"BlockManager (${MDC(BLOCK_MANAGER_ID, id)}) re-registration is rejected since " +
+        log"the executor (${MDC(EXECUTOR_ID, id.executorId)}) has been lost")
 
       // Use "invalid" as the return executor id to indicate the block manager that
       // re-registration failed. It's a bit hacky but fine since the returned block
@@ -1055,26 +1059,30 @@ private[spark] class BlockManagerInfo(
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         if (blockExists) {
-          logInfo(s"Updated $blockId in memory on ${blockManagerId.hostPort}" +
-            s" (current size: ${Utils.bytesToString(memSize)}," +
-            s" original size: ${Utils.bytesToString(originalMemSize)}," +
-            s" free: ${Utils.bytesToString(_remainingMem)})")
+          logInfo(log"Updated ${MDC(BLOCK_ID, blockId)} in memory on " +
+            log"${MDC(HOST_PORT, blockManagerId.hostPort)}  (current size: " +
+            log"${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(memSize))}, original " +
+            log"size: ${MDC(ORIGINAL_MEMORY_SIZE, Utils.bytesToString(originalMemSize))}, " +
+            log"free: ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(_remainingMem))})")
         } else {
-          logInfo(s"Added $blockId in memory on ${blockManagerId.hostPort}" +
-            s" (size: ${Utils.bytesToString(memSize)}," +
-            s" free: ${Utils.bytesToString(_remainingMem)})")
+          logInfo(log"Added ${MDC(BLOCK_ID, blockId)} in memory on " +
+            log"${MDC(HOST_PORT, blockManagerId.hostPort)} " +
+            log"(size: ${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(memSize))}, " +
+            log"free: ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(_remainingMem))})")
         }
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
         if (blockExists) {
-          logInfo(s"Updated $blockId on disk on ${blockManagerId.hostPort}" +
-            s" (current size: ${Utils.bytesToString(diskSize)}," +
-            s" original size: ${Utils.bytesToString(originalDiskSize)})")
+          logInfo(log"Updated ${MDC(BLOCK_ID, blockId)} on disk on " +
+            log"${MDC(HOST_PORT, blockManagerId.hostPort)} " +
+            log"(current size: ${MDC(CURRENT_DISK_SIZE, Utils.bytesToString(diskSize))}," +
+            log" original size: ${MDC(ORIGINAL_DISK_SIZE, Utils.bytesToString(originalDiskSize))})")
         } else {
-          logInfo(s"Added $blockId on disk on ${blockManagerId.hostPort}" +
-            s" (size: ${Utils.bytesToString(diskSize)})")
+          logInfo(log"Added ${MDC(BLOCK_ID, blockId)} on disk on " +
+            log"${MDC(HOST_PORT, blockManagerId.hostPort)} (size: " +
+            log"${MDC(CURRENT_DISK_SIZE, Utils.bytesToString(diskSize))})")
         }
       }
 
@@ -1090,13 +1098,15 @@ private[spark] class BlockManagerInfo(
         blockStatus.remove(blockId)
       }
       if (originalLevel.useMemory) {
-        logInfo(s"Removed $blockId on ${blockManagerId.hostPort} in memory" +
-          s" (size: ${Utils.bytesToString(originalMemSize)}," +
-          s" free: ${Utils.bytesToString(_remainingMem)})")
+        logInfo(log"Removed ${MDC(BLOCK_ID, blockId)} on " +
+          log"${MDC(HOST_PORT, blockManagerId.hostPort)} in memory " +
+          log"(size: ${MDC(ORIGINAL_MEMORY_SIZE, Utils.bytesToString(originalMemSize))}, " +
+          log"free: ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(_remainingMem))})")
       }
       if (originalLevel.useDisk) {
-        logInfo(s"Removed $blockId on ${blockManagerId.hostPort} on disk" +
-          s" (size: ${Utils.bytesToString(originalDiskSize)})")
+        logInfo(log"Removed ${MDC(BLOCK_ID, blockId)} on " +
+          log"${MDC(HOST_PORT, blockManagerId.hostPort)} on disk" +
+          log" (size: ${MDC(ORIGINAL_DISK_SIZE, Utils.bytesToString(originalDiskSize))})")
       }
     }
   }

@@ -335,9 +335,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         options = Map.empty)(sparkSession = spark)
 
       val plan = LogicalRelation(relation, tableMeta)
-      spark.sharedState.cacheManager.cacheQuery(Dataset.ofRows(spark, plan))
+      val df = Dataset.ofRows(spark, plan)
+      spark.sharedState.cacheManager.cacheQuery(df)
 
-      assert(spark.sharedState.cacheManager.lookupCachedData(plan).isDefined)
+      assert(spark.sharedState.cacheManager.lookupCachedData(df).isDefined)
 
       val sameCatalog = new CatalogFileIndex(spark, tableMeta, 0)
       val sameRelation = HadoopFsRelation(
@@ -347,9 +348,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         bucketSpec = None,
         fileFormat = new ParquetFileFormat(),
         options = Map.empty)(sparkSession = spark)
-      val samePlan = LogicalRelation(sameRelation, tableMeta)
+      val samePlanDf = Dataset.ofRows(spark, LogicalRelation(sameRelation, tableMeta))
 
-      assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined)
+      assert(spark.sharedState.cacheManager.lookupCachedData(samePlanDf).isDefined)
     }
   }
 

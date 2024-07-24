@@ -41,7 +41,7 @@ object typed {
 
   // TODO: This is pretty hacky. Maybe we should have an object for implicit encoders.
   private val implicits = new SQLImplicits {
-    override protected def _sqlContext: SQLContext = null
+    override protected def session: SparkSession = null
   }
 
   /**

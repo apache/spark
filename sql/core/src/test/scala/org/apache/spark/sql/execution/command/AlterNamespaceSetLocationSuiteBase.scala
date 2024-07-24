@@ -63,7 +63,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`not_exist`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   // Hive catalog does not support "ALTER NAMESPACE ... SET LOCATION", thus

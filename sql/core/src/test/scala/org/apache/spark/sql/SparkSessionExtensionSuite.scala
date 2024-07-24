@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, CompoundBody, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
@@ -183,7 +183,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
       df.collect()
@@ -225,7 +225,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       // perform a join to inject a shuffle exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
@@ -283,7 +283,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       // perform a join to inject a broadcast exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
@@ -327,7 +327,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     try {
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
 
       val input = Seq((100L), (200L), (300L))
       val data = input.toDF("vals").repartition(1)
@@ -581,6 +581,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
+
+  override def parseScript(sqlScriptText: String): CompoundBody =
+    delegate.parseScript(sqlScriptText)
 }
 
 object MyExtensions {

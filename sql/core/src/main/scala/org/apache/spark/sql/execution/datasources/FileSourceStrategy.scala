@@ -160,11 +160,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      val filtersToPush = filters.filter(f =>
-          DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown))
-
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filtersToPush, l.output)
+        filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
         l.resolve(
@@ -216,9 +213,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val readDataColumns = dataColumns
+      val readDataColumns = dataColumnsWithoutPartitionCols
         .filter(requiredAttributes.contains)
-        .filterNot(partitionColumns.contains)
 
       // Metadata attributes are part of a column of type struct up to this point. Here we extract
       // this column from the schema and specify a matcher for that.

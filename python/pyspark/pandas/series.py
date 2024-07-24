@@ -54,7 +54,12 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 from pandas.tseries.frequencies import DateOffset
 
-from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
+from pyspark.sql import (
+    functions as F,
+    Column as PySparkColumn,
+    DataFrame as SparkDataFrame,
+    Window as PySparkWindow,
+)
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -70,7 +75,6 @@ from pyspark.sql.types import (
     NullType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import get_column_class, get_window_class
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
@@ -1889,7 +1893,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index: array-like, optional
             New labels / index to conform to, should be specified using keywords.
             Preferably an Index object to avoid duplicating data
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 
@@ -2257,15 +2261,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
-        Window = get_window_class()
-        window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
-            Window.unboundedPreceding, Window.currentRow
+        window_forward = PySparkWindow.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            PySparkWindow.unboundedPreceding, PySparkWindow.currentRow
         )
         last_non_null_forward = last_non_null.over(window_forward)
         null_index_forward = null_index.over(window_forward)
 
-        window_backward = Window.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
-            Window.unboundedPreceding, Window.currentRow
+        window_backward = PySparkWindow.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
+            PySparkWindow.unboundedPreceding, PySparkWindow.currentRow
         )
         last_non_null_backward = last_non_null.over(window_backward)
         null_index_backward = null_index.over(window_backward)
@@ -4171,11 +4174,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
-        Column = get_column_class()
         if ascending:
-            asc_func = Column.asc
+            asc_func = PySparkColumn.asc
         else:
-            asc_func = Column.desc
+            asc_func = PySparkColumn.desc
 
         if method == "first":
             window = (

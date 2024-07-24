@@ -196,7 +196,7 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      StringType
+      SQLConf.get.defaultStringType
     } else {
       NullType
     }
@@ -244,6 +244,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   override def nullable: Boolean = false
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
+  override def stateful: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     var i = 0
@@ -320,6 +322,8 @@ case class MapFromArrays(left: Expression, right: Expression)
       valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
 
+  override def stateful: Boolean = true
+
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
   override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
@@ -350,7 +354,7 @@ case class MapFromArrays(left: Expression, right: Expression)
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "NamePlaceholder"
   override def toString: String = prettyName
 }
@@ -374,7 +378,8 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
-      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType.isInstanceOf[StringType] =>
+        Seq(e, u)
       case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
@@ -465,7 +470,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
         toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType.isInstanceOf[StringType])
       if (invalidNames.nonEmpty) {
         DataTypeMismatch(
           errorSubClass = "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
@@ -566,6 +571,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   def this(child: Expression) = {
     this(child, Literal(","), Literal(":"))
   }
+
+  override def stateful: Boolean = true
 
   override def first: Expression = text
   override def second: Expression = pairDelim

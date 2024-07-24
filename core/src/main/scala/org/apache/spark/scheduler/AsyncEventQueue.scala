@@ -24,7 +24,7 @@ import com.codahale.metrics.{Gauge, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.EVENT_QUEUE
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -187,8 +187,9 @@ private class AsyncEventQueue(
       if (lastReportTimestamp.compareAndSet(lastReportTime, curTime)) {
         val previous = new java.util.Date(lastReportTime)
         lastDroppedEventsCounter = droppedEventsCount
-        logWarning(s"Dropped $droppedCountIncreased events from $name since " +
-          s"${if (lastReportTime == 0) "the application started" else s"$previous"}.")
+        logWarning(log"Dropped ${MDC(NUM_EVENTS, droppedCountIncreased)} events from " +
+          log"${MDC(EVENT_NAME, name)} since " +
+          (if (lastReportTime == 0) log"the application started" else log"${MDC(TIME, previous)}"))
       }
     }
   }

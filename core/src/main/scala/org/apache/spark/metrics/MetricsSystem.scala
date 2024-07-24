@@ -27,7 +27,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.CLASS_NAME
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
 import org.apache.spark.metrics.source.{Source, StaticSources}
@@ -141,12 +141,13 @@ private[spark] class MetricsSystem private (
         // Only Driver and Executor set spark.app.id and spark.executor.id.
         // Other instance types, e.g. Master and Worker, are not related to a specific application.
         if (metricsNamespace.isEmpty) {
-          logWarning(s"Using default name $defaultName for source because neither " +
-            s"${METRICS_NAMESPACE.key} nor spark.app.id is set.")
+          logWarning(log"Using default name ${MDC(LogKeys.DEFAULT_NAME, defaultName)} " +
+            log"for source because neither " +
+            log"${MDC(LogKeys.CONFIG, METRICS_NAMESPACE.key)} nor spark.app.id is set.")
         }
         if (executorId.isEmpty) {
-          logWarning(s"Using default name $defaultName for source because spark.executor.id is " +
-            s"not set.")
+          logWarning(log"Using default name ${MDC(LogKeys.DEFAULT_NAME, defaultName)} " +
+            log"for source because spark.executor.id is not set.")
         }
         defaultName
       }
@@ -189,7 +190,8 @@ private[spark] class MetricsSystem private (
         registerSource(source)
       } catch {
         case e: Exception =>
-          logError(log"Source class ${MDC(CLASS_NAME, classPath)} cannot be instantiated", e)
+          logError(log"Source class ${MDC(LogKeys.CLASS_NAME, classPath)} " +
+            log"cannot be instantiated", e)
       }
     }
   }
@@ -229,7 +231,8 @@ private[spark] class MetricsSystem private (
           }
         } catch {
           case e: Exception =>
-            logError(log"Sink class ${MDC(CLASS_NAME, classPath)} cannot be instantiated")
+            logError(log"Sink class ${MDC(LogKeys.CLASS_NAME, classPath)} " +
+              log"cannot be instantiated")
             throw e
         }
       }

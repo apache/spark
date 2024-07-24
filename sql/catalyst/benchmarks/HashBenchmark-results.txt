@@ -2,69 +2,69 @@
 single ints
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Hash For single ints:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                2253           2253           0        238.3           4.2       1.0X
-codegen version                                    3602           3608           9        149.1           6.7       0.6X
-codegen version 64-bit                             3457           3466          13        155.3           6.4       0.7X
-codegen HiveHash version                           3002           3005           4        178.8           5.6       0.8X
+interpreted version                                2174           2175           1        246.9           4.1       1.0X
+codegen version                                    3591           3602          17        149.5           6.7       0.6X
+codegen version 64-bit                             3475           3475           0        154.5           6.5       0.6X
+codegen HiveHash version                           2849           2852           4        188.5           5.3       0.8X
 
 
 ================================================================================================
 single longs
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Hash For single longs:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                2886           2890           5        186.0           5.4       1.0X
-codegen version                                    5308           5313           7        101.1           9.9       0.5X
-codegen version 64-bit                             3728           3730           2        144.0           6.9       0.8X
-codegen HiveHash version                           3382           3384           2        158.7           6.3       0.9X
+interpreted version                                3000           3001           2        179.0           5.6       1.0X
+codegen version                                    5207           5220          17        103.1           9.7       0.6X
+codegen version 64-bit                             3619           3645          36        148.3           6.7       0.8X
+codegen HiveHash version                           3408           3456          69        157.6           6.3       0.9X
 
 
 ================================================================================================
 normal
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Hash For normal:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                2491           2493           2          0.8        1188.0       1.0X
-codegen version                                    2253           2253           0          0.9        1074.1       1.1X
-codegen version 64-bit                              699            700           2          3.0         333.2       3.6X
-codegen HiveHash version                           3677           3678           1          0.6        1753.4       0.7X
+interpreted version                                2521           2524           3          0.8        1202.3       1.0X
+codegen version                                    2232           2232           0          0.9        1064.4       1.1X
+codegen version 64-bit                              700            701           2          3.0         333.8       3.6X
+codegen HiveHash version                           3672           3682          14          0.6        1750.8       0.7X
 
 
 ================================================================================================
 array
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Hash For array:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                 936            937           1          0.1        7139.3       1.0X
-codegen version                                    3374           3382          11          0.0       25742.7       0.3X
-codegen version 64-bit                             2282           2284           4          0.1       17406.8       0.4X
-codegen HiveHash version                            686            687           2          0.2        5231.1       1.4X
+interpreted version                                 971            976           4          0.1        7410.9       1.0X
+codegen version                                    3558           3582          34          0.0       27147.3       0.3X
+codegen version 64-bit                             2357           2363           9          0.1       17985.0       0.4X
+codegen HiveHash version                            721            723           4          0.2        5497.9       1.3X
 
 
 ================================================================================================
 map
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Hash For map:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                   0              0           0         90.0          11.1       1.0X
-codegen version                                     229            230           1          0.0       55936.5       0.0X
-codegen version 64-bit                              155            155           0          0.0       37821.3       0.0X
-codegen HiveHash version                             25             25           0          0.2        6172.4       0.0X
+interpreted version                                   0              0           0         90.3          11.1       1.0X
+codegen version                                     213            214           0          0.0       52051.3       0.0X
+codegen version 64-bit                              144            144           1          0.0       35164.7       0.0X
+codegen HiveHash version                             24             24           3          0.2        5812.5       0.0X
 
 

@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -4399,8 +4399,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df,
         Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) ::
           Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
-      assert(df.schema.names.sameElements(
-        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")))
+      assert(df.schema.names ===
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a"))
       checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
         Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
       checkAnswer(df.where("`a.b` > 10"),
@@ -4418,8 +4418,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df,
         Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11) ::
           Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
-      assert(df.schema.names.sameElements(
-        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ",")))
+      assert(df.schema.names ===
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ","))
       checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
         Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
       checkAnswer(df.where("`a.b` > 10"),
@@ -4754,7 +4754,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       df.collect()
         .map(_.getString(0))
         .map(_.replaceAll("#[0-9]+", "#N"))
-        .sameElements(Array(plan.stripMargin))
+        === Array(plan.stripMargin)
     )
 
     checkQueryPlan(
@@ -4855,6 +4855,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |LocalTableScan [x#N, y#N]
         |"""
     )
+  }
+
+  test("SPARK-36680: Files hint options should be put into resolveDataSource function") {
+    val df1 = spark.range(100).toDF()
+    withTempPath { f =>
+      df1.write.json(f.getCanonicalPath)
+      val df2 = sql(
+        s"""
+           |SELECT id
+           |FROM json.`${f.getCanonicalPath}`
+           |WITH (`key1` = 1, `key2` = 2)
+        """.stripMargin
+      )
+      checkAnswer(df2, df1)
+      val relations = df2.queryExecution.analyzed.collect {
+        case LogicalRelation(fs: HadoopFsRelation, _, _, _) => fs
+      }
+      assert(relations.size == 1)
+      assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))
+    }
   }
 }
 

@@ -536,7 +536,7 @@ class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
 }
 
 class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
-  private def db: String = spark.sharedState.globalTempViewManager.database
+  private def db: String = spark.sharedState.globalTempDB
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {
     s"$db.$viewName"
@@ -724,9 +724,15 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM v")
         },
-        errorClass = "INVALID_VIEW_TEXT",
-        parameters = Map(
-          "viewText" -> "DROP VIEW v", "viewName" -> tableIdentifier("v").quotedString)
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'DROP'", "hint" -> ""),
+        context = ExpectedContext(
+          objectType = "VIEW",
+          objectName = "spark_catalog.default.v",
+          startIndex = 14,
+          stopIndex = 14,
+          fragment = "v"
+        )
       )
     }
   }
@@ -736,7 +742,8 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     Seq(true, false).foreach { serde =>
       withView(viewName) {
         createView(viewName, "SELECT 1 AS a")
-        val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( a) AS SELECT 1 AS a"
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( a) " +
+          "WITH SCHEMA COMPENSATION AS SELECT 1 AS a"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
       }
     }
@@ -748,7 +755,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       withView(viewName) {
         createView(viewName, "SELECT 1 AS a, 2 AS b", Seq("a", "b COMMENT 'b column'"))
         val expected = s"CREATE VIEW ${formattedViewName(viewName)}" +
-          s" ( a, b COMMENT 'b column') AS SELECT 1 AS a, 2 AS b"
+          s" ( a, b COMMENT 'b column') WITH SCHEMA COMPENSATION AS SELECT 1 AS a, 2 AS b"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
       }
     }
@@ -764,7 +771,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( c1 COMMENT 'bla', c2)" +
           " COMMENT 'table comment'" +
           " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
-          " AS SELECT 1 AS c1, '2' AS c2"
+          " WITH SCHEMA COMPENSATION AS SELECT 1 AS c1, '2' AS c2"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
       }
     }

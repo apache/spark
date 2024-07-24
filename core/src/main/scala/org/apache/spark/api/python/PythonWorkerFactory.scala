@@ -30,7 +30,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -107,7 +108,8 @@ private[spark] class PythonWorkerFactory(
               case c: CancelledKeyException => /* pass */
             }
           }
-          logWarning(s"Worker ${worker} process from idle queue is dead, discarding.")
+          logWarning(log"Worker ${MDC(WORKER, worker)} " +
+            log"process from idle queue is dead, discarding.")
           stopWorker(worker)
         }
       }

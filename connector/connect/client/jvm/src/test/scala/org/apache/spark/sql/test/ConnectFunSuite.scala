@@ -34,24 +34,11 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
-  protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "client",
-      "jvm",
-      "src",
-      "test",
-      "resources").toAbsolutePath
+  protected def baseResourcePath: Path = {
+    getWorkspaceFilePath("connect", "client", "jvm", "src", "test", "resources").toAbsolutePath
   }
 
-  protected val commonResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources").toAbsolutePath
+  protected def commonResourcePath: Path = {
+    getWorkspaceFilePath("connect", "common", "src", "test", "resources").toAbsolutePath
   }
 }

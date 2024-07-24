@@ -31,13 +31,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -84,6 +84,12 @@ class IncrementalExecution(
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
+
+  /**
+   * This value dictates which schema format version the state schema should be written in
+   * for all operators other than TransformWithState.
+   */
+  private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
 
   /**
    * See [SPARK-18339]
@@ -187,14 +193,32 @@ class IncrementalExecution(
     }
   }
 
-  object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
+  // Planning rule used to record the state schema for the first run and validate state schema
+  // changes across query runs.
+  object StateSchemaAndOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        val metadata = stateStoreWriter.operatorStateMetadata()
-        val metadataWriter = new OperatorStateMetadataWriter(new Path(
-          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
-        metadataWriter.write(metadata)
-        stateStoreWriter
+      // In the case of TransformWithStateExec, we want to collect this StateSchema
+      // filepath, and write this path out in the OperatorStateMetadata file
+      case statefulOp: StatefulOperator if isFirstBatch =>
+        val stateSchemaVersion = statefulOp match {
+          case _: TransformWithStateExec =>
+            sparkSession.sessionState.conf.
+              getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+          case _ => STATE_SCHEMA_DEFAULT_VERSION
+        }
+        val schemaValidationResult = statefulOp.
+          validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
+        // write out the state schema paths to the metadata file
+        statefulOp match {
+          case stateStoreWriter: StateStoreWriter =>
+            val metadata = stateStoreWriter.operatorStateMetadata()
+            // TODO: [SPARK-48849] Populate metadata with stateSchemaPaths if metadata version is v2
+            val metadataWriter = new OperatorStateMetadataWriter(new Path(
+              checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+            metadataWriter.write(metadata)
+          case _ =>
+        }
+        statefulOp
     }
   }
 
@@ -347,6 +371,28 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
         )
 
+      // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
+      // emitted rows adhere to watermark in the output of transformWithState.
+      // Hence, this node shares the same watermark value as TransformWithStateExec.
+      // However, given that UpdateEventTimeColumnExec does not store any state, it
+      // does not have any StateInfo. We simply use the StateInfo of transformWithStateExec
+      // to propagate watermark to both UpdateEventTimeColumnExec and transformWithStateExec.
+      case UpdateEventTimeColumnExec(eventTime, delay, None,
+        SerializeFromObjectExec(serializer,
+        t: TransformWithStateExec)) if t.stateInfo.isDefined =>
+
+        val stateInfo = t.stateInfo.get
+        val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
+        val iwEviction = inputWatermarkForEviction(stateInfo)
+
+        UpdateEventTimeColumnExec(eventTime, delay, iwLateEvents,
+          SerializeFromObjectExec(serializer,
+            t.copy(
+              eventTimeWatermarkForLateEvents = iwLateEvents,
+              eventTimeWatermarkForEviction = iwEviction)
+          ))
+
+
       case t: TransformWithStateExec if t.stateInfo.isDefined =>
         t.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
@@ -410,12 +456,8 @@ class IncrementalExecution(
             val reader = new StateMetadataPartitionReader(
               new Path(checkpointLocation).getParent.toString,
               new SerializableConfiguration(hadoopConf))
-            val opMetadataList = reader.allOperatorStateMetadata
-            ret = opMetadataList.map { operatorMetadata =>
-              val metadataInfoV1 = operatorMetadata
-                .asInstanceOf[OperatorStateMetadataV1]
-                .operatorInfo
-              metadataInfoV1.operatorId -> metadataInfoV1.operatorName
+            ret = reader.stateMetadata.map { metadataTableEntry =>
+              metadataTableEntry.operatorId -> metadataTableEntry.operatorName
             }.toMap
           } catch {
             case e: Exception =>
@@ -449,9 +491,11 @@ class IncrementalExecution(
       if (isFirstBatch && currentBatchId != 0) {
         checkOperatorValidWithMetadata(planWithStateOpId)
       }
-      // The rule doesn't change the plan but cause the side effect that metadata is written
-      // in the checkpoint directory of stateful operator.
-      planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
+
+      // The rule below doesn't change the plan but can cause the side effect that
+      // metadata/schema is written in the checkpoint directory of stateful operator.
+      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule
     }

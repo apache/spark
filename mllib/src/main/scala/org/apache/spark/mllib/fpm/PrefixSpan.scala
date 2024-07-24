@@ -34,7 +34,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{MIN_FREQUENT_PATTERN_COUNT, NUM_FREQUENT_ITEMS, NUM_LOCAL_FREQUENT_PATTERN, NUM_PREFIXES, NUM_SEQUENCES}
+import org.apache.spark.internal.LogKeys.{MIN_NUM_FREQUENT_PATTERN, NUM_FREQUENT_ITEMS, NUM_LOCAL_FREQUENT_PATTERN, NUM_PREFIXES, NUM_SEQUENCES}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -142,7 +142,7 @@ class PrefixSpan private (
     val totalCount = data.count()
     logInfo(log"number of sequences: ${MDC(NUM_SEQUENCES, totalCount)}")
     val minCount = math.ceil(minSupport * totalCount).toLong
-    logInfo(log"minimum count for a frequent pattern: ${MDC(MIN_FREQUENT_PATTERN_COUNT, minCount)}")
+    logInfo(log"minimum count for a frequent pattern: ${MDC(MIN_NUM_FREQUENT_PATTERN, minCount)}")
 
     // Find frequent items.
     val freqItems = findFrequentItems(data, minCount)
@@ -655,7 +655,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Get the type of item class
       val sample = model.freqSequences.first().sequence(0)(0)

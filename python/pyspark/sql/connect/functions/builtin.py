@@ -934,6 +934,13 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
 
+def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_mod", left, right)
+
+
+try_mod.__doc__ = pysparkfuncs.try_mod.__doc__
+
+
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_multiply", left, right)
 
@@ -1188,9 +1195,6 @@ def percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = list(percentage)
-
     if not isinstance(frequency, (int, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_INT",
@@ -1200,7 +1204,8 @@ def percentile(
             },
         )
 
-    return _invoke_function("percentile", _to_col(col), lit(percentage), lit(frequency))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile", col, percentage, lit(frequency))
 
 
 percentile.__doc__ = pysparkfuncs.percentile.__doc__
@@ -1211,10 +1216,8 @@ def percentile_approx(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = lit(list(percentage))
-
-    return _invoke_function("percentile_approx", _to_col(col), lit(percentage), lit(accuracy))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
 
 
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
@@ -1225,10 +1228,8 @@ def approx_percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = list(percentage)
-
-    return _invoke_function("approx_percentile", _to_col(col), lit(percentage), lit(accuracy))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
 
 
 approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
@@ -2123,54 +2124,48 @@ sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
 def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(csv, (str, Column)):
-        _csv = lit(csv)
-    else:
+    if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_csv", _csv)
+        return _invoke_function("schema_of_csv", lit(csv))
     else:
-        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
+        return _invoke_function("schema_of_csv", lit(csv), _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
 def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(json, (str, Column)):
-        _json = lit(json)
-    else:
+    if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_json", _json)
+        return _invoke_function("schema_of_json", lit(json))
     else:
-        return _invoke_function("schema_of_json", _json, _options_to_col(options))
+        return _invoke_function("schema_of_json", lit(json), _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
 def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(xml, (str, Column)):
-        _xml = lit(xml)
-    else:
+    if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_xml", _xml)
+        return _invoke_function("schema_of_xml", lit(xml))
     else:
-        return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
+        return _invoke_function("schema_of_xml", lit(xml), _options_to_col(options))
 
 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
@@ -2564,9 +2559,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
@@ -2575,13 +2568,7 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 def regexp_replace(
     string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    if isinstance(replacement, str):
-        replacement = lit(replacement)
-
-    return _invoke_function("regexp_replace", _to_col(string), pattern, replacement)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
@@ -2600,9 +2587,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
@@ -2736,6 +2721,13 @@ def url_decode(str: "ColumnOrName") -> Column:
 
 
 url_decode.__doc__ = pysparkfuncs.url_decode.__doc__
+
+
+def try_url_decode(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_url_decode", str)
+
+
+try_url_decode.__doc__ = pysparkfuncs.try_url_decode.__doc__
 
 
 def url_encode(str: "ColumnOrName") -> Column:
@@ -3351,19 +3343,15 @@ def unix_timestamp(
 unix_timestamp.__doc__ = pysparkfuncs.unix_timestamp.__doc__
 
 
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("from_utc_timestamp", timestamp, tz)
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 from_utc_timestamp.__doc__ = pysparkfuncs.from_utc_timestamp.__doc__
 
 
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("to_utc_timestamp", timestamp, tz)
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 to_utc_timestamp.__doc__ = pysparkfuncs.to_utc_timestamp.__doc__
@@ -3388,6 +3376,20 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
+
+
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampdiff", lit(unit), start, end)
+
+
+timestamp_diff.__doc__ = pysparkfuncs.timestamp_diff.__doc__
+
+
+def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampadd", lit(unit), quantity, ts)
+
+
+timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
 
 
 def window(
@@ -3734,8 +3736,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("assert_true", _to_col(col), _err_msg)
+    return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
 
 assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
@@ -3747,8 +3748,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("raise_error", _err_msg)
+    return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
 raise_error.__doc__ = pysparkfuncs.raise_error.__doc__

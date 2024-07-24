@@ -621,9 +621,9 @@ class BaseUDTFTestsMixin:
                 yield str(args),
 
         self.spark.udtf.register("test_udtf", TestUDTF)
-        self.assertEqual(
+        self.assertIn(
             self.spark.sql("select * from test_udtf(array(1, 2, 3))").collect(),
-            [Row(x="[1, 2, 3]")],
+            [[Row(x="[1, 2, 3]")], [Row(x="[np.int32(1), np.int32(2), np.int32(3)]")]],
         )
 
     def test_udtf_with_map_input_type(self):
@@ -935,10 +935,23 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_EVAL_TYPE",
+            error_class="CANNOT_REGISTER_UDTF",
             message_parameters={
                 "name": "test_udf",
-                "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
+            },
+        )
+
+        class TestUDTF:
+            ...
+
+        with self.assertRaises(PySparkTypeError) as e:
+            self.spark.udtf.register("test_udtf", TestUDTF)
+
+        self.check_error(
+            exception=e.exception,
+            error_class="CANNOT_REGISTER_UDTF",
+            message_parameters={
+                "name": "test_udtf",
             },
         )
 
@@ -1801,6 +1814,9 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_using_archive(self):
         from pyspark.core.files import SparkFiles
 
+        self.check_udtf_with_analyze_using_archive(SparkFiles.getRootDirectory())
+
+    def check_udtf_with_analyze_using_archive(self, exec_root_dir):
         with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_archive") as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
@@ -1815,9 +1831,7 @@ class BaseUDTFTestsMixin:
                 @staticmethod
                 def read_my_archive() -> str:
                     with open(
-                        os.path.join(
-                            SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
-                        ),
+                        os.path.join(exec_root_dir, "my_files", "my_archive", "my_file.txt"),
                         "r",
                     ) as my_file:
                         return my_file.read().strip()
@@ -1850,6 +1864,9 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_using_file(self):
         from pyspark.core.files import SparkFiles
 
+        self.check_udtf_with_analyze_using_file(SparkFiles.getRootDirectory())
+
+    def check_udtf_with_analyze_using_file(self, exec_root_dir):
         with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_file") as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
@@ -1860,9 +1877,7 @@ class BaseUDTFTestsMixin:
             class TestUDTF:
                 @staticmethod
                 def read_my_file() -> str:
-                    with open(
-                        os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
-                    ) as my_file:
+                    with open(os.path.join(exec_root_dir, "my_file.txt"), "r") as my_file:
                         return my_file.read().strip()
 
                 @staticmethod
@@ -2557,16 +2572,18 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield 1,
 
-        # We do not use `self.sql_conf` here to test the SQL SET command
-        # instead of using PySpark's `spark.conf.set`.
         old_value = self.spark.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
-        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=False")
-        self.assertEqual(udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF)
-        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=True")
-        self.assertEqual(
-            udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
-        )
-        self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
+        try:
+            self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", False)
+            self.assertEqual(
+                udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF
+            )
+            self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", True)
+            self.assertEqual(
+                udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
+            )
+        finally:
+            self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
 
     def test_udtf_eval_returning_non_tuple(self):
         @udtf(returnType="a: int")

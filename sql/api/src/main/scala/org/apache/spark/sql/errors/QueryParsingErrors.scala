@@ -289,7 +289,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def nestedTypeMissingElementTypeError(
       dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
-    dataType match {
+    dataType.toUpperCase(Locale.ROOT) match {
       case "ARRAY" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
@@ -546,6 +546,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
+  def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def parameterMarkerNotAllowed(statement: String, origin: Origin): Throwable = {
     new ParseException(
       command = origin.sqlText,
@@ -568,19 +574,19 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
+  def createFuncWithBothIfNotExistsAndReplaceError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       ctx)
   }
 
-  def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
+  def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS",
       ctx)
   }
 
-  def unsupportedFunctionNameError(funcName: Seq[String], ctx: CreateFunctionContext): Throwable = {
+  def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters = Map(
@@ -591,7 +597,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def specifyingDBInCreateTempFuncError(
       databaseName: String,
-      ctx: CreateFunctionContext): Throwable = {
+      ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
       messageParameters = Map("database" -> toSQLId(databaseName)),

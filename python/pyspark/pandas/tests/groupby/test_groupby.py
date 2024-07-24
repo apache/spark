@@ -451,6 +451,27 @@ class GroupByTestsMixin:
             pdf.groupby([("x", "a"), ("x", "b")]).diff().sort_index(),
         )
 
+    def test_aggregate_relabel_index_false(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [0, 0, 1, 1, 1],
+                "B": ["a", "a", "b", "a", "b"],
+                "C": [10, 15, 10, 20, 30],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            pdf.groupby(["B", "A"], as_index=False)
+            .agg(C_MAX=("C", "max"))
+            .sort_values(["B", "A"])
+            .reset_index(drop=True),
+            psdf.groupby(["B", "A"], as_index=False)
+            .agg(C_MAX=("C", "max"))
+            .sort_values(["B", "A"])
+            .reset_index(drop=True),
+        )
+
 
 class GroupByTests(
     GroupByTestsMixin,

@@ -134,12 +134,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 USE SCHEMA `not_exist`
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
   "errorClass" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
-    "schemaName" : "`not_exist`"
+    "schemaName" : "`spark_catalog`.`not_exist`"
   }
 }
 
@@ -276,7 +276,7 @@ Project [hello AS hello#x]
 -- !query
 CREATE TEMPORARY VIEW v(c1 COMMENT "hello") AS SELECT 1
 -- !query analysis
-CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView, true
+CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
@@ -304,7 +304,7 @@ Project [hello AS hello#x]
 -- !query
 CREATE TEMPORARY VIEW v(c1 COMMENT 'hello') AS SELECT 1
 -- !query analysis
-CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView, true
+CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- OneRowRelation
 

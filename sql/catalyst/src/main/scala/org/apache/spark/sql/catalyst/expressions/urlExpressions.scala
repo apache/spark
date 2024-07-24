@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -51,19 +52,19 @@ import org.apache.spark.unsafe.types.UTF8String
 case class UrlEncode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
-      StringType,
+      SQLConf.get.defaultStringType,
       "encode",
       Seq(child, Literal("UTF-8")),
-      Seq(StringType, StringType))
+      Seq(StringTypeAnyCollation, StringTypeAnyCollation))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def prettyName: String = "url_encode"
 }
@@ -88,21 +89,52 @@ case class UrlEncode(child: Expression)
 case class UrlDecode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
-      StringType,
+      SQLConf.get.defaultStringType,
       "decode",
       Seq(child, Literal("UTF-8")),
-      Seq(StringType, StringType))
+      Seq(StringTypeAnyCollation, StringTypeAnyCollation))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def prettyName: String = "url_decode"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - This is a special version of `url_decode` that performs the same operation, but returns a NULL value instead of raising an error if the decoding cannot be performed.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression to decode
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('https%3A%2F%2Fspark.apache.org');
+       https://spark.apache.org
+  """,
+  since = "4.0.0",
+  group = "url_funcs")
+// scalastyle:on line.size.limit
+case class TryUrlDecode(expr: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(expr: Expression) = this(expr, TryEval(UrlDecode(expr)))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(expr)
+
+  override def prettyName: String = "try_url_decode"
 }
 
 object UrlCodec {
@@ -115,7 +147,7 @@ object UrlCodec {
       UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
     } catch {
       case e: IllegalArgumentException =>
-        throw QueryExecutionErrors.illegalUrlError(src)
+        throw QueryExecutionErrors.illegalUrlError(src, e)
     }
   }
 }
@@ -154,8 +186,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
-  override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeAnyCollation)
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 
   // If the url is a constant, cache the URL object so that we don't need to convert url

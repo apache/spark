@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.errors import PythonException, PySparkNotImplementedError
+from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
@@ -60,7 +60,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
 
-        self.assertEqual(row[0], "[1, 2, 3]")
+        self.assertIn(row[0], ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"])
         self.assertEqual(row[1], "{'a': 'b'}")
         self.assertEqual(row[2], "Row(col1=1, col2=2)")
 
@@ -119,9 +119,10 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
 
         # To verify that Arrow optimization is on
-        self.assertEqual(
+        self.assertIn(
             df.selectExpr("str_repr(array) AS str_id").first()[0],
-            "[1, 2, 3]",  # The input is a NumPy array when the Arrow optimization is on
+            ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"],
+            # The input is a NumPy array when the Arrow optimization is on
         )
 
         # To verify that a UserDefinedFunction is returned
@@ -132,11 +133,14 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
 
     def test_nested_array_input(self):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
-        self.assertEqual(
+        self.assertIn(
             df.select(
                 udf(lambda x: str(x), returnType="string", useArrow=True)("nested_array")
             ).first()[0],
-            "[[1, 2], [3, 4]]",
+            [
+                "[[1, 2], [3, 4]]",
+                "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]",
+            ],
         )
 
     def test_type_coercion_string_to_numeric(self):
@@ -196,6 +200,28 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             "Arrow optimization for Python UDFs cannot be enabled for functions"
             " without arguments.",
         )
+
+    def test_named_arguments_negative(self):
+        @udf("int")
+        def test_udf(a, b):
+            return a + b
+
+        self.spark.udf.register("test_udf", test_udf)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+
+        with self.assertRaises(PythonException):
+            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+
+        with self.assertRaises(PythonException):
+            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):

@@ -61,7 +61,8 @@ class HiveResultSuite extends SharedSparkSession {
   test("toHiveString correctly handles UDTs") {
     val point = new ExamplePoint(50.0, 50.0)
     val tpe = new ExamplePointUDT()
-    assert(toHiveString((point, tpe), false, getTimeFormatters) === "(50.0, 50.0)")
+    assert(toHiveString((point, tpe), false, getTimeFormatters, getBinaryFormatter) ===
+      "(50.0, 50.0)")
   }
 
   test("decimal formatting in hive result") {

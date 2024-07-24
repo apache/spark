@@ -233,8 +233,12 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined data sources.
+   *
+   * @since 4.0.0
    */
-  private[sql] def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
+  @Experimental
+  @Unstable
+  def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
@@ -842,7 +846,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   object implicits extends SQLImplicits with Serializable {
-    protected override def _sqlContext: SQLContext = SparkSession.this.sqlContext
+    protected override def session: SparkSession = SparkSession.this
   }
   // scalastyle:on
 

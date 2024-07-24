@@ -734,9 +734,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // same way as how a permanent view is handled. This also avoids a potential issue where a
       // dependent view becomes invalid because of the above while its data is still cached.
       val viewText = viewDef.desc.viewText
-      val plan = sparkSession.sessionState.executePlan(viewDef)
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, plan.analyzed, cascade = viewText.isDefined)
+      val df = Dataset.ofRows(sparkSession, viewDef)
+      sparkSession.sharedState.cacheManager.uncacheQuery(df, cascade = viewText.isDefined)
     } catch {
       case NonFatal(_) => // ignore
     }

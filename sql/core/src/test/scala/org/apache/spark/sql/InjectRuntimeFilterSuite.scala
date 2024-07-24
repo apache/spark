@@ -356,8 +356,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1", 2)
       // left anti join unsupported.
       // bf2 as creation side and inject runtime filter for bf3(by passing key).
-      assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
-        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
+      assertDidNotRewriteWithBloomFilter("select * from (select * from bf1 left anti join bf2 " +
+        "on (bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
       // left anti join unsupported and hasn't selective filter.
       assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
         "(bf1.c1 = bf2.c2 and bf1.a1 = 5)) as a join bf3 on bf3.c3 = a.c1", 0)
@@ -487,7 +487,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32",
       SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000") {
       // Test that the max scan size rather than an individual scan size on the filter
-      // application side matters. `bf5filtered` has 14168 bytes and `bf2` has 3409 bytes.
+      // application side matters. `bf5filtered` has 15049 bytes and `bf2` has 3409 bytes.
       withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000") {
         assertRewroteWithBloomFilter("select * from " +
@@ -495,7 +495,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
           "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5", 2)
       }
       withSQLConf(
-        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "15000") {
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "16000") {
         assertDidNotRewriteWithBloomFilter("select * from " +
           "(select * from bf5filtered union all select * from bf2) t " +
           "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")

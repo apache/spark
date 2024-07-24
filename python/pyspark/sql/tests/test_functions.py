@@ -26,6 +26,7 @@ import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.sql import Row, Window, functions as F, types
+from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
@@ -1527,6 +1528,40 @@ class FunctionsTestsMixin:
             "At least one field must be specified",
             lambda: df.select(F.json_tuple(df.jstring)),
         )
+
+    def test_avro_type_check(self):
+        parameters = ["data", "jsonFormatSchema", "options"]
+        expected_type = ["pyspark.sql.Column or str", "str", "dict, optional"]
+        dummyDF = self.spark.createDataFrame([Row(a=i, b=i) for i in range(5)])
+
+        # test from_avro type checks for each parameter
+        wrong_type_value = 1
+        with self.assertRaises(PySparkTypeError) as pe1:
+            dummyDF.select(from_avro(wrong_type_value, "jsonSchema", None))
+        with self.assertRaises(PySparkTypeError) as pe2:
+            dummyDF.select(from_avro("value", wrong_type_value, None))
+        with self.assertRaises(PySparkTypeError) as pe3:
+            dummyDF.select(from_avro("value", "jsonSchema", wrong_type_value))
+        from_avro_pes = [pe1, pe2, pe3]
+        for i in range(3):
+            self.check_error(
+                exception=from_avro_pes[i].exception,
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+            )
+
+        # test to_avro type checks for each parameter
+        with self.assertRaises(PySparkTypeError) as pe4:
+            dummyDF.select(to_avro(wrong_type_value, "jsonSchema"))
+        with self.assertRaises(PySparkTypeError) as pe5:
+            dummyDF.select(to_avro("value", wrong_type_value))
+        to_avro_pes = [pe4, pe5]
+        for i in range(2):
+            self.check_error(
+                exception=to_avro_pes[i].exception,
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+            )
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

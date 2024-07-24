@@ -359,7 +359,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE TEMPORARY VIEW xmlTable(xmlField, a) AS SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a')
 -- !query analysis
-CreateViewCommand `xmlTable`, [(xmlField,None), (a,None)], SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a'), false, false, LocalTempView, true
+CreateViewCommand `xmlTable`, [(xmlField,None), (a,None)], SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 

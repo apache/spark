@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
@@ -507,11 +508,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
-        s"""
-          |spark.driver.libraryPath was detected (set to '$value').
+        log"""
+          |spark.driver.libraryPath was detected (set to '${MDC(LogKeys.CONFIG, value)}').
           |This is deprecated in Spark 1.2+.
           |
-          |Please instead use: ${DRIVER_LIBRARY_PATH.key}
+          |Please instead use: ${MDC(LogKeys.CONFIG2, DRIVER_LIBRARY_PATH.key)}
         """.stripMargin
       logWarning(warning)
     }
@@ -554,9 +555,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       val executorCores = get(EXECUTOR_CORES)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {
-        logWarning(s"Total executor cores: ${totalCores} is not " +
-          s"divisible by cores per executor: ${executorCores}, " +
-          s"the left cores: ${leftCores} will not be allocated")
+        logWarning(log"Total executor cores: " +
+          log"${MDC(LogKeys.NUM_EXECUTOR_CORES_TOTAL, totalCores)} " +
+          log"is not divisible by cores per executor: " +
+          log"${MDC(LogKeys.NUM_EXECUTOR_CORES, executorCores)}, " +
+          log"the left cores: " +
+          log"${MDC(LogKeys.NUM_EXECUTOR_CORES_REMAINING, leftCores)} " +
+          log"will not be allocated")
       }
     }
 
@@ -640,7 +645,11 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
+      DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2",
+        "Please open a JIRA ticket to report it if you need to use this configuration."),
+      DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
+        "Please use spark.shuffle.localDisk.file.output.buffer")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -772,15 +781,20 @@ private[spark] object SparkConf extends Logging {
   def logDeprecationWarning(key: String): Unit = {
     deprecatedConfigs.get(key).foreach { cfg =>
       logWarning(
-        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"may be removed in the future. ${cfg.deprecationMessage}")
+        log"The configuration key '${MDC(LogKeys.CONFIG, key)}' has been deprecated " +
+          log"as of Spark ${MDC(LogKeys.CONFIG_VERSION, cfg.version)} and " +
+          log"may be removed in the future. " +
+          log"${MDC(LogKeys.CONFIG_DEPRECATION_MESSAGE, cfg.deprecationMessage)}")
       return
     }
 
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
-        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"may be removed in the future. Please use the new key '$newKey' instead.")
+        log"The configuration key '${MDC(LogKeys.CONFIG, key)}' " +
+          log"has been deprecated as of " +
+          log"Spark ${MDC(LogKeys.CONFIG_VERSION, cfg.version)} and " +
+          log"may be removed in the future. Please use the new key " +
+          log"'${MDC(LogKeys.CONFIG_KEY_UPDATED, newKey)}' instead.")
       return
     }
   }

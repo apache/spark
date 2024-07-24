@@ -77,6 +77,20 @@ class XmlSuite
   override def excluded: Seq[String] = Seq(
     s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system")
 
+  private val baseOptions = Map("rowTag" -> "ROW")
+
+  private def readData(
+      xmlString: String,
+      schemaOpt: Option[StructType],
+      options: Map[String, String] = Map.empty): DataFrame = {
+    val ds = spark.createDataset(spark.sparkContext.parallelize(Seq(xmlString)))(Encoders.STRING)
+    if (schemaOpt.isDefined) {
+      spark.read.schema(schemaOpt.get).options(options).xml(ds)
+    } else {
+      spark.read.options(options).xml(ds)
+    }
+  }
+
   // Tests
 
   test("DSL test") {
@@ -252,10 +266,10 @@ class XmlSuite
         .xml(inputFile)
         .collect()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -284,10 +298,10 @@ class XmlSuite
         .xml(inputFile)
         .show()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -1281,26 +1295,6 @@ class XmlSuite
     assert(result.select("decoded._foo").head().getString(0) === "bar")
   }
 
-  /*
-  test("from_xml array basic test") {
-    val xmlData =
-      """<parent><pid>12345</pid><name>dave guy</name></parent>
-        |<parent><pid>67890</pid><name>other guy</name></parent>""".stripMargin
-    val df = Seq((8, xmlData)).toDF("number", "payload")
-    val xmlSchema = ArrayType(
-      StructType(
-        StructField("pid", IntegerType) ::
-          StructField("name", StringType) :: Nil))
-    val expectedSchema = df.schema.add("decoded", xmlSchema)
-    val result = df.withColumn("decoded",
-      from_xml(df.col("payload"), xmlSchema))
-    assert(expectedSchema === result.schema)
-    // TODO: ArrayType and MapType support in from_xml
-    // assert(result.selectExpr("decoded[0].pid").head().getInt(0) === 12345)
-    // assert(result.selectExpr("decoded[1].pid").head().getInt(1) === 67890)
-  }
-  */
-
   test("from_xml error test") {
     // XML contains error
     val xmlData =
@@ -1630,6 +1624,57 @@ class XmlSuite
     assert(df.schema === expectedSchema)
     assert(df.collect().head.get(1) === "2011-12-03T10:15:30Z")
     assert(df.collect().head.getAs[Timestamp](2).getTime === 1322936130000L)
+  }
+
+  test("Write timestamps correctly in ISO8601 format by default") {
+    val originalSchema =
+      buildSchema(
+        field("author"),
+        field("time", TimestampType),
+        field("time2", TimestampType),
+        field("time3", TimestampType),
+        field("time4", TimestampType),
+        field("time5", TimestampType)
+      )
+
+    val df = spark.read
+      .option("rowTag", "book")
+      .option("timestampFormat", "dd/MM/yyyy HH:mm[XXX]")
+      .schema(originalSchema)
+      .xml(getTestResourcePath(resDir + "timestamps.xml"))
+
+    withTempDir { dir =>
+      // use los angeles as old dates have wierd offsets
+      withSQLConf("spark.session.timeZone" -> "America/Los_Angeles") {
+        df
+          .write
+          .option("rowTag", "book")
+          .xml(dir.getCanonicalPath + "/xml")
+        val schema =
+          buildSchema(
+            field("author"),
+            field("time", StringType),
+            field("time2", StringType),
+            field("time3", StringType),
+            field("time4", StringType),
+            field("time5", StringType)
+          )
+        val df2 = spark.read
+          .option("rowTag", "book")
+          .schema(schema)
+          .xml(dir.getCanonicalPath + "/xml")
+
+        val expectedStringDatesWithoutFormat = Seq(
+          Row("John Smith",
+            "1800-01-01T10:07:02.000-07:52:58",
+            "1885-01-01T10:30:00.000-08:00",
+            "2014-10-27T18:30:00.000-07:00",
+            "2015-08-26T18:00:00.000-07:00",
+            "2016-01-28T20:00:00.000-08:00"))
+
+        checkAnswer(df2, expectedStringDatesWithoutFormat)
+      }
+    }
   }
 
   test("Test custom timestampFormat without timezone") {
@@ -2447,7 +2492,6 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
@@ -2455,7 +2499,7 @@ class XmlSuite
         checkErrorMatchPVals(
           exception = err,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2974,11 +3018,10 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
             checkErrorMatchPVals(
               exception = e,
               errorClass = "TASK_WRITE_FAILED",
-              parameters = Map("path" -> s"$actualPath.*"))
+              parameters = Map("path" -> s".*${dir.getName}.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }
@@ -3026,6 +3069,149 @@ class XmlSuite
         assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
       }
     }
+  }
+
+  /////////////////////////////////////
+  // Projection, sorting, filtering  //
+  /////////////////////////////////////
+  test("select with string xml object") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <name>John</name>
+         |    <metadata><id>3</id></metadata>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add("name", StringType)
+      .add("metadata", StringType)
+    val df = readData(xmlString, Some(schema), baseOptions)
+    checkAnswer(df.select("name"), Seq(Row("John")))
+  }
+
+  test("select with duplicate field name in string xml object") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <a><b>c</b></a>
+         |    <b>d</b>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add("a", StringType)
+      .add("b", StringType)
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("b"), Seq(Row("d")))
+    }
+  }
+
+  test("select nested struct objects") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct>
+         |        <innerStruct>
+         |            <field1>1</field1>
+         |            <field2>2</field2>
+         |        </innerStruct>
+         |    </struct>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add(
+        "struct",
+        new StructType()
+          .add("innerStruct", new StructType().add("field1", LongType).add("field2", LongType))
+      )
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("struct"), Seq(Row(Row(Row(1, 2)))))
+      checkAnswer(df.select("struct.innerStruct"), Seq(Row(Row(1, 2))))
+    }
+  }
+
+  test("select a struct of lists") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct>
+         |        <array><field>1</field></array>
+         |        <array><field>2</field></array>
+         |        <array><field>3</field></array>
+         |    </struct>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add(
+        "struct",
+        new StructType()
+          .add("array", ArrayType(StructType(StructField("field", LongType) :: Nil))))
+
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("struct"), Seq(Row(Row(Array(Row(1), Row(2), Row(3))))))
+      checkAnswer(df.select("struct.array"), Seq(Row(Array(Row(1), Row(2), Row(3)))))
+    }
+  }
+
+  test("select complex objects") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    1
+         |    <struct1>
+         |        value2
+         |        <struct2>
+         |            3
+         |            <array1>
+         |                value4
+         |                <struct3>
+         |                    5
+         |                    <array2>1<!--First comment--> <!--Second comment--></array2>
+         |                    value6
+         |                    <array2>2</array2>
+         |                    7
+         |                </struct3>
+         |                value8
+         |                <string>string</string>
+         |                9
+         |            </array1>
+         |            value10
+         |            <array1>
+         |                <struct3><!--First comment--> <!--Second comment-->
+         |                    <array2>3</array2>
+         |                    11
+         |                    <array2>4</array2><!--First comment--> <!--Second comment-->
+         |                </struct3>
+         |                <string>string</string>
+         |                value12
+         |            </array1>
+         |            13
+         |            <int>3</int>
+         |            value14
+         |        </struct2>
+         |        15
+         |    </struct1>
+         |     <!--First comment-->
+         |    value16
+         |     <!--Second comment-->
+         |</ROW>
+         |""".stripMargin
+    val df = readData(xmlString, None, baseOptions ++ Map("valueTag" -> "VALUE"))
+    checkAnswer(df.select("struct1.VALUE"), Seq(Row(Seq("value2", "15"))))
+    checkAnswer(df.select("struct1.struct2.array1"), Seq(Row(Seq(
+      Row(Seq("value4", "value8", "9"), "string", Row(Seq("5", "value6", "7"), Seq(1, 2))),
+      Row(Seq("value12"), "string", Row(Seq("11"), Seq(3, 4)))
+    ))))
+    checkAnswer(df.select("struct1.struct2.array1.struct3"), Seq(Row(Seq(
+      Row(Seq("5", "value6", "7"), Seq(1, 2)),
+      Row(Seq("11"), Seq(3, 4))
+    ))))
+    checkAnswer(df.select("struct1.struct2.array1.string"), Seq(Row(Seq("string", "string"))))
   }
 }
 

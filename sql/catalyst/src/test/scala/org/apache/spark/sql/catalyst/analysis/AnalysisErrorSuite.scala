@@ -90,6 +90,13 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
+case class SupportsNonDeterministicExpressionTestOperator(
+    actions: Seq[Expression],
+    allowNonDeterministicExpression: Boolean)
+  extends LeafNode with SupportsNonDeterministicExpression {
+  override def output: Seq[Attribute] = Seq()
+}
+
 class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   import TestRelations._
 
@@ -359,6 +366,40 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "inputSql" -> "\"true\"",
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
+
+  errorClassTest(
+    "the buckets of ntile window function is not foldable",
+    testRelation2.select(
+      WindowExpression(
+        NTile(Literal(99.9f)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(99.9)\"",
+      "paramIndex" -> "first",
+      "inputSql" -> "\"99.9\"",
+      "inputType" -> "\"FLOAT\"",
+      "requiredType" -> "\"INT\""))
+
+
+  errorClassTest(
+    "the buckets of ntile window function is not int literal",
+    testRelation2.select(
+      WindowExpression(
+        NTile(AttributeReference("b", IntegerType)()),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(b)\"",
+      "inputName" -> "`buckets`",
+      "inputExpr" -> "\"b\"",
+      "inputType" -> "\"INT\""))
 
   errorClassTest(
     "unresolved attributes",
@@ -1330,4 +1371,20 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     messageParameters = Map(
       "expr" -> "\"_w0\"",
       "exprType" -> "\"MAP<STRING, STRING>\""))
+
+  test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
+    val nonDeterministicExpressions = Seq(new Rand())
+    val tolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = true)
+    assertAnalysisSuccess(tolerantPlan)
+
+    val intolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = false)
+    assertAnalysisError(
+      intolerantPlan,
+      "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
+    )
+  }
 }

@@ -36,6 +36,7 @@ import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -70,7 +71,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connector/connect/server` module
+ * `connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -87,7 +88,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -699,7 +700,8 @@ class PlanGenerationTestSuite
   }
 
   test("select collated string") {
-    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    val schema =
+      StructType(StructField("s", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
@@ -1778,6 +1780,10 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
+  functionTest("substring using columns") {
+    fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
+  }
+
   functionTest("substring_index") {
     fn.substring_index(fn.col("g"), ";", 5)
   }
@@ -2305,6 +2311,14 @@ class PlanGenerationTestSuite
     fn.timestamp_micros(fn.col("x"))
   }
 
+  temporalFunctionTest("timestamp_diff") {
+    fn.timestamp_diff("year", fn.col("t"), fn.col("t"))
+  }
+
+  temporalFunctionTest("timestamp_add") {
+    fn.timestamp_add("week", fn.col("x"), fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long
@@ -2661,6 +2675,10 @@ class PlanGenerationTestSuite
 
   functionTest("url_decode") {
     fn.url_decode(fn.col("g"))
+  }
+
+  functionTest("try_url_decode") {
+    fn.try_url_decode(fn.col("g"))
   }
 
   functionTest("url_encode") {
@@ -3227,34 +3245,12 @@ class PlanGenerationTestSuite
   }
 
   /* Extensions */
-  test("relation extension deprecated") {
-    val input = proto.ExamplePluginRelation
-      .newBuilder()
-      .setInput(simple.plan.getRoot)
-      .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input))
-  }
-
-  test("expression extension deprecated") {
-    val extension = proto.ExamplePluginExpression
-      .newBuilder()
-      .setChild(
-        proto.Expression
-          .newBuilder()
-          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
-            .newBuilder()
-            .setUnparsedIdentifier("id")))
-      .setCustomField("abc")
-      .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
-  }
-
   test("relation extension") {
     val input = proto.ExamplePluginRelation
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input).toByteArray)
+    session.newDataFrame(_.setExtension(com.google.protobuf.Any.pack(input)))
   }
 
   test("expression extension") {
@@ -3268,7 +3264,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column.forExtension(com.google.protobuf.Any.pack(extension).toByteArray))
+    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
@@ -3329,11 +3325,11 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connector/connect/common/src/main/protobuf/spark/connect
+  //  1. cd connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
-    "connect/common/src/test/resources/protobuf-tests/common.desc"
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connect/" +
+    "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
   //  are no other negative impacts. For the problem description, please refer to SPARK-45029

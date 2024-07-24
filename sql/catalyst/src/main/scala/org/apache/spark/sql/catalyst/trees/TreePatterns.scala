@@ -96,7 +96,6 @@ object TreePattern extends Enumeration  {
   val VARIANT_GET: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val WINDOW_TIME: Value = Value
-  val UNARY_POSITIVE: Value = Value
   val UNPIVOT: Value = Value
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
@@ -133,6 +132,7 @@ object TreePattern extends Enumeration  {
   val UNION: Value = Value
   val UNRESOLVED_RELATION: Value = Value
   val UNRESOLVED_WITH: Value = Value
+  val UPDATE_EVENT_TIME_WATERMARK_COLUMN: Value = Value
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
@@ -151,6 +151,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
+  val UNRESOLVED_IDENTIFIER_WITH_CTE: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value
