@@ -61,8 +61,7 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
    useColumnFamilies: Boolean,
    storeConfs: StateStoreConf,
    hadoopConf: Configuration,
-   useMultipleValuesPerKey: Boolean = false
-  ): Unit = {
+   useMultipleValuesPerKey: Boolean = false): Unit = {
     id = stateStoreId
 
     super.init(
