@@ -23,16 +23,20 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, A
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPOSE
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 
 class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   private def leastCommonType(dataTypes: Seq[DataType]): DataType = {
-    dataTypes.reduce { (dt1, dt2) =>
-      TypeCoercion.findTightestCommonType(dt1, dt2).getOrElse {
-        throw new IllegalArgumentException(s"No common type found for $dt1 and $dt2")
+    if (dataTypes.isEmpty) {
+      StringType
+    } else {
+      dataTypes.reduce { (dt1, dt2) =>
+        TypeCoercion.findTightestCommonType(dt1, dt2).getOrElse {
+          throw new IllegalArgumentException(s"No common type found for $dt1 and $dt2")
+        }
       }
     }
   }
@@ -98,6 +102,11 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(TRANSPOSE)) {
     case t @ Transpose(indexColumn, child, _, _) if !t.resolved =>
+      if (!indexColumn.dataType.isInstanceOf[AtomicType]) {
+        throw new IllegalArgumentException(
+          s"Index column must be of atomic type, but found: ${indexColumn.dataType}")
+      }
+
       // Cast the index column to StringType
       val indexColumnAsString = Alias(
         Cast(indexColumn, StringType),
