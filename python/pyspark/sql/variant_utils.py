@@ -431,6 +431,10 @@ class VariantUtils:
 
     @classmethod
     def _to_year_month_interval_ansi_string(cls, months: int, start_field: int, end_field: int):
+        """
+        Used to convert months representing a year-month interval with given start and end
+        fields to its ANSI SQL string representation.
+        """
         YEAR = 0
         MONTH = 1
         MONTHS_PER_YEAR = 12
@@ -454,6 +458,10 @@ class VariantUtils:
     @classmethod
     def _to_day_time_interval_ansi_string(cls,
                                           micros: int, start_field: int, end_field: int) -> str:
+        """
+        Used to convert microseconds representing a day-tine interval with given start and end
+        fields to its ANSI SQL string representation.
+        """
         DAY = 0
         HOUR = 1
         MINUTE = 2

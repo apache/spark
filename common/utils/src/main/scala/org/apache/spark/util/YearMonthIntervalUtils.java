@@ -24,6 +24,8 @@ public class YearMonthIntervalUtils {
   private static byte MONTH = 1;
   private static int MONTHS_PER_YEAR = 12;
 
+  // Used to convert months representing a year-month interval with given start and end fields
+  // to its ANSI SQL string representation.
   public static String toYearMonthIntervalANSIString(int months, byte startField, byte endField) {
     String sign = "";
     long absMonths = months;

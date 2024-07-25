@@ -58,7 +58,7 @@ public class DayTimeIntervalUtils {
     }
   }
 
-  // Used to convert microseconds representing a day-time interval with a given start and end field
+  // Used to convert microseconds representing a day-time interval with given start and end fields
   // to its ANSI SQL string representation. Throws a SparkException if startField or endField are
   // out of bounds.
   public static String toDayTimeIntervalANSIString(long micros, byte startField, byte endField)
