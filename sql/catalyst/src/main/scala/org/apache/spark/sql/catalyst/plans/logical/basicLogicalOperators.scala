@@ -1481,7 +1481,6 @@ case class Transpose(
     output: Seq[Attribute] = Seq.empty
 ) extends UnaryNode {
 
-  // indexColumn, child, originalColNames
   override lazy val resolved: Boolean = {
     indexColumn.resolved && child.resolved && originalColNames != null && output.nonEmpty
   }
