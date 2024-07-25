@@ -2340,6 +2340,39 @@ class DataFrameAggregateSuite extends QueryTest
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
 
+  test("aggregating single distinct column with empty and non-empty table") {
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName(col int) using parquet")
+
+      checkAnswer(sql(s"select count(1) from $tableName"), Row(0))
+      checkAnswer(sql(s"select count(col) from $tableName"), Row(0))
+      checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(0))
+      checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(0))
+
+      sql(s"insert into $tableName(col) values(1)")
+
+      checkAnswer(sql(s"select count(1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select count(col) from $tableName"), Row(1))
+      checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(1))
+
+      sql(s"insert into $tableName(col) values(2)")
+
+      checkAnswer(sql(s"select count(1) from $tableName"), Row(2))
+      checkAnswer(sql(s"select count(col) from $tableName"), Row(2))
+      checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(2))
+
+      sql(s"insert into $tableName(col) values(3)")
+
+      checkAnswer(sql(s"select count(1) from $tableName"), Row(3))
+      checkAnswer(sql(s"select count(col) from $tableName"), Row(3))
+      checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(3))
+    }
+  }
+
   test("aggregating single distinct column with table") {
     val tableName = "t"
     withTable(tableName) {
