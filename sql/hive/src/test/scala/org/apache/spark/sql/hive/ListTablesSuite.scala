@@ -30,7 +30,7 @@ class ListTablesSuite extends QueryTest
   with TestHiveSingleton
   with BeforeAndAfterAll {
   import hiveContext._
-  import hiveContext.implicits._
+  import hiveContext.sparkSession.implicits._
 
   val df = sparkContext.parallelize((1 to 10).map(i => (i, s"str$i"))).toDF("key", "value")
 

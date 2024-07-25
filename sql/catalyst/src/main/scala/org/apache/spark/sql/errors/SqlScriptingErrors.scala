@@ -47,4 +47,18 @@ private[sql] object SqlScriptingErrors extends QueryErrorsBase {
       messageParameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
   }
 
+  def variableDeclarationNotAllowedInScope(varName: String, lineNumber: String): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
+      cause = null,
+      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+  }
+
+  def variableDeclarationOnlyAtBeginning(varName: String, lineNumber: String): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+      cause = null,
+      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+  }
+
 }

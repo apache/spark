@@ -128,8 +128,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
-            message_parameters={"arg_name": "f", "return_type": "StringType()"},
+            errorClass="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+            messageParameters={"arg_name": "f", "return_type": "StringType()"},
         )
 
     def test_nondeterministic_udf(self):
@@ -341,8 +341,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=ae.exception,
-            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-            message_parameters={"sqlExpr": '"<lambda>(v)"', "dataType": "VARIANT"},
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>(v)"', "dataType": "VARIANT"},
         )
 
     def test_udf_with_complex_variant_input(self):
@@ -357,8 +357,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=ae.exception,
-            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-            message_parameters={
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            messageParameters={
                 "sqlExpr": '"<lambda>(struct_of_v)"',
                 "dataType": "STRUCT<v: VARIANT NOT NULL>",
             },
@@ -376,8 +376,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=ae.exception,
-            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-            message_parameters={"sqlExpr": '"<lambda>()"', "dataType": "VARIANT"},
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "VARIANT"},
         )
 
     def test_udf_with_complex_variant_output(self):
@@ -392,8 +392,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=ae.exception,
-            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-            message_parameters={"sqlExpr": '"<lambda>()"', "dataType": "MAP<STRING, VARIANT>"},
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "MAP<STRING, VARIANT>"},
         )
 
     def test_udf_with_aggregate_function(self):
@@ -516,8 +516,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_CALLABLE",
+            messageParameters={"arg_name": "func", "arg_type": "str"},
         )
 
     def test_non_existed_udf(self):
@@ -1141,8 +1141,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_CALLABLE",
+            messageParameters={"arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1150,8 +1150,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "returnType", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1159,8 +1159,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_INT",
-            message_parameters={"arg_name": "evalType", "arg_type": "str"},
+            errorClass="NOT_INT",
+            messageParameters={"arg_name": "evalType", "arg_type": "str"},
         )
 
 

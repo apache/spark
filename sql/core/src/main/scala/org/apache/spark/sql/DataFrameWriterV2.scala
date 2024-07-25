@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.IntegerType
@@ -53,6 +53,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val properties = new mutable.HashMap[String, String]()
 
   private var partitioning: Option[Seq[Transform]] = None
+
+  private var clustering: Option[ClusterByTransform] = None
 
   override def using(provider: String): CreateTableWriter[T] = {
     this.provider = Some(provider)
@@ -104,7 +106,25 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     }
 
     this.partitioning = Some(asTransforms)
+    validatePartitioning()
     this
+  }
+
+  @scala.annotation.varargs
+  override def clusterBy(colName: String, colNames: String*): CreateTableWriter[T] = {
+    this.clustering =
+      Some(ClusterByTransform((colName +: colNames).map(col => FieldReference(col))))
+    validatePartitioning()
+    this
+  }
+
+  /**
+   * Validate that clusterBy is not used with partitionBy.
+   */
+  private def validatePartitioning(): Unit = {
+    if (partitioning.nonEmpty && clustering.nonEmpty) {
+      throw QueryCompilationErrors.clusterByWithPartitionedBy()
+    }
   }
 
   override def create(): Unit = {
@@ -119,7 +139,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     runCommand(
       CreateTableAsSelect(
         UnresolvedIdentifier(tableName),
-        partitioning.getOrElse(Seq.empty),
+        partitioning.getOrElse(Seq.empty) ++ clustering,
         logicalPlan,
         tableSpec,
         options.toMap,
@@ -207,7 +227,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       external = false)
     runCommand(ReplaceTableAsSelect(
       UnresolvedIdentifier(tableName),
-      partitioning.getOrElse(Seq.empty),
+      partitioning.getOrElse(Seq.empty) ++ clustering,
       logicalPlan,
       tableSpec,
       writeOptions = options.toMap,
@@ -328,7 +348,21 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
+
+  /**
+   * Clusters the output by the given columns on the storage. The rows with matching values in
+   * the specified clustering columns will be consolidated within the same group.
+   *
+   * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
+   * together in a file. This arrangement improves query efficiency when you apply selective
+   * filters to these clustering columns, thanks to data skipping.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colName: String, colNames: String*): CreateTableWriter[T]
 
   /**
    * Specifies a provider for the underlying output data source. Spark's default catalog supports

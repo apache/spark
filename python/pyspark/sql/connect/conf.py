@@ -100,8 +100,8 @@ class RuntimeConf:
             return False
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
             )
 
     isModifiable.__doc__ = PySparkRuntimeConfig.isModifiable.__doc__
@@ -110,8 +110,8 @@ class RuntimeConf:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={
+                errorClass="NOT_STR",
+                messageParameters={
                     "arg_name": identifier,
                     "arg_type": type(obj).__name__,
                 },

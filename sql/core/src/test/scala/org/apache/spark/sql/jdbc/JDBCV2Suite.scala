@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, acos, asin, avg, ceil, coalesce, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sqrt, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -228,6 +228,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
+
+      conn.prepareStatement("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('amy', 10000, 1000, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('alex', 12000, 1200, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('cathy', 8000, 1200, 0.15)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -1258,29 +1271,25 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    val df16 = sql(
-      """
-        |SELECT * FROM h2.test.employee
-        |WHERE sin(bonus) < -0.08
-        |AND sinh(bonus) > 200
-        |AND cos(bonus) > 0.9
-        |AND cosh(bonus) > 200
-        |AND tan(bonus) < -0.08
-        |AND tanh(bonus) = 1
-        |AND cot(bonus) < -11
-        |AND asin(bonus / salary) > 0.13
-        |AND acos(bonus / salary) < 1.47
-        |AND atan(bonus) > 1.4
-        |AND atan2(bonus, bonus) > 0.7
-        |""".stripMargin)
+    val df16 = spark.table("h2.test.employee_bonus")
+      .filter(sin($"bonus") < -0.08)
+      .filter(sinh($"bonus") > 200)
+      .filter(cos($"bonus") > 0.9)
+      .filter(cosh($"bonus") > 200)
+      .filter(tan($"bonus") < -0.08)
+      .filter(tanh($"bonus") === 1)
+      .filter(cot($"bonus") < -11)
+      .filter(asin($"factor") > 0.13)
+      .filter(acos($"factor") < 1.47)
+      .filter(atan($"bonus") > 1.4)
+      .filter(atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
-      "BONUS IS NOT NULL, SALARY IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
+      "BONUS IS NOT NULL, FACTOR IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
       "COS(BONUS) > 0.9, COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
-      "COT(BONUS) < -11.0, ASIN(BONUS / CAST(SALARY AS double)) > 0.13, " +
-      "ACOS(BONUS / CAST(SALARY AS double)) < 1.47, " +
-      "ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false)))
+      "COT(BONUS) < -11.0, ASIN(FACTOR) > 0.13, ACOS(FACTOR) < 1.47, ATAN(BONUS) > 1.4, " +
+      "(ATAN2(BONUS, BONUS)) > 0.7],")
+    checkAnswer(df16, Seq(Row("cathy", 8000, 1200, 0.15)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
     val df17 = sql(
@@ -1759,7 +1768,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false), Row("test", "binary1", false)))
+        Row("test", "datetime", false), Row("test", "binary1", false),
+        Row("test", "employee_bonus", false)))
   }
 
   test("SQL API: create table as select") {
