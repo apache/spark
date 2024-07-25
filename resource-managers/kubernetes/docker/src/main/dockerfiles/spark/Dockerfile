@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=17
+ARG java_image_tag=17-jammy
 
 FROM eclipse-temurin:${java_image_tag}
 
