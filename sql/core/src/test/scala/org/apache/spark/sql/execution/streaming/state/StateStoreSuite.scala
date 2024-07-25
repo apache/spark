@@ -1599,7 +1599,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
     )
-    //  Make maintenance interval small so that maintenance task is called right after scheduling.
+    // Make maintenance interval small so that maintenance task is called right after scheduling.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
     // Use the `MaintenanceErrorOnCertainPartitionsProvider` to run the test
     sqlConf.setConf(
@@ -1619,14 +1619,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         val provider2Id =
           StateStoreProviderId(StateStoreId("spark-48997", 0, 2), UUID.randomUUID)
 
-        // Create provider 2 first to start maintenance for it
+        // Create provider 2 first to start the maintenance task + pool
         StateStore.get(
           provider2Id,
           keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
         )
 
-        // The following 2 calls go `get` will cause the associated maintenance to fail
+        // The following 2 calls to `get` will cause the associated maintenance to fail
         StateStore.get(
           provider0Id,
           keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
@@ -1639,6 +1639,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
         )
 
+        // Wait for the maintenance task for all the providers to run: it should happen relatively
+        // quickly since the maintenance interval is small.
         eventually(timeout(5.seconds)) {
           assert(!StateStore.isLoaded(provider0Id))
           assert(!StateStore.isLoaded(provider1Id))
