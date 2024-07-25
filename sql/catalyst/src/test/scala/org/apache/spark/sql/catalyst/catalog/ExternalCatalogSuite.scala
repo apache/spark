@@ -1112,7 +1112,8 @@ abstract class CatalogTestUtils {
       provider = Some(defaultProvider),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)),
-      properties = ClusterBySpec.toProperties(ClusterBySpec.fromColumnNames(Seq("c1", "c2"))))
+      properties = Map(
+        ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2")))))
   }
 
   def newView(
