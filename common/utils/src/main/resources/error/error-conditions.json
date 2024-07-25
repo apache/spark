@@ -1059,6 +1059,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE" : {
+    "message" : [
+      "Data source <className> does not support streaming output mode <outputMode>."
+    ],
+    "sqlState" : "42KDE"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2942,20 +2948,8 @@
   },
   "INVALID_STREAMING_OUTPUT_MODE" : {
     "message" : [
-      "Invalid output mode: <outputMode>."
+      "Invalid streaming output mode: <outputMode>. Accepted output modes are 'Append', 'Complete', 'Update'."
     ],
-    "subClass" : {
-      "NOT_SUPPORTED_IN_FILE_SINK" : {
-        "message" : [
-          "Only 'append' output mode is supported in File Sink."
-        ]
-      },
-      "UNKNOWN" : {
-        "message" : [
-          "Accepted output modes are 'append', 'complete', 'update'."
-        ]
-      }
-    },
     "sqlState" : "42KDE"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
@@ -4991,6 +4985,12 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION" : {
+    "message" : [
+      "The output mode <outputMode> is not supported for <operation> on streaming DataFrames/DataSets."
+    ],
+    "sqlState" : "42KDE"
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [

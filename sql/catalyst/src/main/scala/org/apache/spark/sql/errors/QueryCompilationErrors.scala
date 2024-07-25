@@ -1637,11 +1637,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("path" -> path))
   }
 
-  def fileSinkOutputModeUnsupportedError(
+  def dataSourceOutputModeUnsupportedError(
       className: String, outputMode: OutputMode): AnalysisException = {
     new AnalysisException(
-      errorClass = "INVALID_STREAMING_OUTPUT_MODE.NOT_SUPPORTED_IN_FILE_SINK",
-      messageParameters = Map("outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT)))
+      errorClass = "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE",
+      messageParameters = Map(
+        "className" -> className,
+        "outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT)))
+  }
+
+  def unsupportedOutputModeForStreamingOperationError(
+      outputMode: OutputMode, operation: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      messageParameters = Map(
+        "outputMode" -> outputMode.toString().toLowerCase(Locale.ROOT),
+        "operation" -> operation))
   }
 
   def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {
