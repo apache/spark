@@ -1946,65 +1946,32 @@ class SparkConnectPlanner(
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        var schema: DataType = null
-        children(1) match {
-          case Literal(s, StringType) if s != null =>
-            try {
-              schema = DataType.fromJson(s.toString)
-            } catch {
-              case _: Exception =>
-            }
-          case _ =>
-        }
-
-        if (schema != null) {
+        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
+          val children = fun.getArgumentsList.asScala.map(transformExpression)
+          val schema = CharVarcharUtils.failIfHasCharVarchar(dataType)
           var options = Map.empty[String, String]
           if (children.length == 3) {
             options = extractMapData(children(2), "Options")
           }
-          Some(
-            JsonToStructs(
-              schema = CharVarcharUtils.failIfHasCharVarchar(schema),
-              options = options,
-              child = children.head))
-        } else {
-          None
+          JsonToStructs(schema = schema, options = options, child = children.head)
         }
 
       case "from_xml" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // XmlToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        var schema: DataType = null
-        children(1) match {
-          case Literal(s, StringType) if s != null =>
-            try {
-              schema = DataType.fromJson(s.toString)
-            } catch {
-              case _: Exception =>
-            }
-          case _ =>
-        }
-
-        if (schema != null) {
-          schema match {
-            case t: StructType => t
-            case _ => throw DataTypeErrors.failedParsingStructTypeError(schema.sql)
+        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
+          val children = fun.getArgumentsList.asScala.map(transformExpression)
+          val schema = dataType match {
+            case t: StructType =>
+              CharVarcharUtils
+                .failIfHasCharVarchar(t)
+                .asInstanceOf[StructType]
+            case _ => throw DataTypeErrors.failedParsingStructTypeError(dataType.sql)
           }
-
           var options = Map.empty[String, String]
           if (children.length == 3) {
             options = extractMapData(children(2), "Options")
           }
-          Some(
-            XmlToStructs(
-              schema = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType],
-              options = options,
-              child = children.head))
-        } else {
-          None
+          XmlToStructs(schema = schema, options = options, child = children.head)
         }
 
       // Avro-specific functions
@@ -2187,6 +2154,23 @@ class SparkConnectPlanner(
     case UnresolvedFunction(Seq("map"), args, _, _, _, _) =>
       extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
+  }
+
+  // Extract the schema from a literal string representing a JSON-formatted schema
+  private def extractDataTypeFromJSON(exp: proto.Expression): Option[DataType] = {
+    exp.getExprTypeCase match {
+      case proto.Expression.ExprTypeCase.LITERAL =>
+        exp.getLiteral.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
+            try {
+              Some(DataType.fromJson(exp.getLiteral.getString))
+            } catch {
+              case _: Exception => None
+            }
+          case _ => None
+        }
+      case _ => None
+    }
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -3106,6 +3090,11 @@ class SparkConnectPlanner(
       w.partitionBy(names.toSeq: _*)
     }
 
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
     if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
@@ -3167,6 +3156,11 @@ class SparkConnectPlanner(
         .map(Column(_))
         .toSeq
       w.partitionedBy(names.head, names.tail: _*)
+    }
+
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
     }
 
     writeOperation.getMode match {

@@ -471,7 +471,7 @@ private[ml] object EnsembleModelReadWrite {
       path: String,
       sparkSession: SparkSession,
       extraMetadata: JObject): Unit = {
-    DefaultParamsWriter.saveMetadata(instance, path, sparkSession.sparkContext, Some(extraMetadata))
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
     val treesMetadataWeights = instance.trees.zipWithIndex.map { case (tree, treeID) =>
       (treeID,
         DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sparkSession.sparkContext),
@@ -510,7 +510,7 @@ private[ml] object EnsembleModelReadWrite {
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sparkSession.implicits._
     implicit val format = DefaultFormats
-    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession.sparkContext, className)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {

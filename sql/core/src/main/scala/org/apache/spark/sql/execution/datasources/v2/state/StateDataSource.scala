@@ -91,7 +91,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
             partitionId, sourceOptions.storeName)
           val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
           val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-          manager.readSchemaFile()
+          val stateSchema = manager.readSchemaFile().head
+          (stateSchema.keySchema, stateSchema.valueSchema)
       }
 
       if (sourceOptions.readChangeFeed) {
