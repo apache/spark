@@ -197,10 +197,22 @@ object ClusterBySpec {
     ret
   }
 
+  /**
+   * Converts the clustering column property to a ClusterBySpec.
+   */
   def fromProperty(columns: String): ClusterBySpec = {
     ClusterBySpec(mapper.readValue[Seq[Seq[String]]](columns).map(FieldReference(_)))
   }
 
+  /**
+   * Converts a ClusterBySpec to a clustering column property map entry, with validation
+   * of the column names against the schema.
+   *
+   * @param schema the schema of the table.
+   * @param clusterBySpec the ClusterBySpec to be converted to a property.
+   * @param resolver the resolver used to match the column names.
+   * @return a map entry for the clustering column property.
+   */
   def toProperty(
       schema: StructType,
       clusterBySpec: ClusterBySpec,
@@ -210,14 +222,14 @@ object ClusterBySpec {
   }
 
   /**
-   * Converts a ClusterBySpec to a map of table properties used to store the clustering
-   * information in the table catalog.
+   * Converts a ClusterBySpec to a clustering column property map entry, without validating
+   * the column names against the schema.
    *
-   * @param clusterBySpec : existing ClusterBySpec to be converted to properties.
+   * @param clusterBySpec existing ClusterBySpec to be converted to properties.
+   * @return a map entry for the clustering column property.
    */
-  def toProperties(clusterBySpec: ClusterBySpec): Map[String, String] = {
-    val columnValue = mapper.writeValueAsString(clusterBySpec.columnNames.map(_.fieldNames))
-    Map(CatalogTable.PROP_CLUSTERING_COLUMNS -> columnValue)
+  def toPropertyWithoutValidation(clusterBySpec: ClusterBySpec): (String, String) = {
+    (CatalogTable.PROP_CLUSTERING_COLUMNS -> clusterBySpec.toJson)
   }
 
   private def normalizeClusterBySpec(
@@ -253,6 +265,10 @@ object ClusterBySpec {
       resolver: Resolver): ClusterByTransform = {
     val normalizedClusterBySpec = normalizeClusterBySpec(schema, clusterBySpec, resolver)
     ClusterByTransform(normalizedClusterBySpec.columnNames)
+  }
+
+  def fromColumnNames(names: Seq[String]): ClusterBySpec = {
+    ClusterBySpec(names.map(FieldReference(_)))
   }
 }
 

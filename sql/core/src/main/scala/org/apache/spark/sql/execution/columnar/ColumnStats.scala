@@ -297,6 +297,21 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
     Array[Any](null, null, nullCount, count, sizeInBytes)
 }
 
+private[columnar] final class VariantColumnStats extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    if (!row.isNullAt(ordinal)) {
+      val size = VARIANT.actualSize(row, ordinal)
+      sizeInBytes += size
+      count += 1
+    } else {
+      gatherNullStats()
+    }
+  }
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](null, null, nullCount, count, sizeInBytes)
+}
+
 private[columnar] final class IntervalColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {

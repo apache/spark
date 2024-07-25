@@ -218,7 +218,7 @@ def lit(col: Any) -> Column:
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
             raise PySparkValueError(
-                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+                errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
     else:
@@ -658,7 +658,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns the remainder after `dividend`/`divisor`.  Its result is
     always null if `divisor` is 0.
@@ -679,14 +679,14 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
-    ... ).select(sf.try_remainder("a", "b")).show()
-    +-------------------+
-    |try_remainder(a, b)|
-    +-------------------+
-    |                  0|
-    |                  1|
-    |               NULL|
-    +-------------------+
+    ... ).select(sf.try_mod("a", "b")).show()
+    +-------------+
+    |try_mod(a, b)|
+    +-------------+
+    |            0|
+    |            1|
+    |         NULL|
+    +-------------+
 
     Example 2: Exception during division, resulting in NULL when ANSI mode is on
 
@@ -695,16 +695,16 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
     ...     df = spark.range(1)
-    ...     df.select(sf.try_remainder(df.id, sf.lit(0))).show()
+    ...     df.select(sf.try_mod(df.id, sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
-    +--------------------+
-    |try_remainder(id, 0)|
-    +--------------------+
-    |                NULL|
-    +--------------------+
+    +--------------+
+    |try_mod(id, 0)|
+    +--------------+
+    |          NULL|
+    +--------------+
     """
-    return _invoke_function_over_columns("try_remainder", left, right)
+    return _invoke_function_over_columns("try_mod", left, right)
 
 
 @_try_remote_functions
@@ -3671,16 +3671,59 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_avgx("y", "x"), sf.avg("x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
     +---------------+------+
     |regr_avgx(y, x)|avg(x)|
     +---------------+------+
-    |          0.999| 0.999|
+    |           2.75|  2.75|
+    +---------------+------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |           NULL|  NULL|
+    +---------------+------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |           NULL|   1.0|
+    +---------------+------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |            3.0|   3.0|
+    +---------------+------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgx("y", "x"), sf.avg("x")).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |            3.0|   3.0|
     +---------------+------+
     """
     return _invoke_function_over_columns("regr_avgx", y, x)
@@ -3708,17 +3751,60 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_avgy("y", "x"), sf.avg("y")
-    ... ).show()
-    +-----------------+-----------------+
-    |  regr_avgy(y, x)|           avg(y)|
-    +-----------------+-----------------+
-    |9.980732994136...|9.980732994136...|
-    +-----------------+-----------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------+
+    |regr_avgy(y, x)|avg(y)|
+    +---------------+------+
+    |           1.75|  1.75|
+    +---------------+------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------+
+    |regr_avgy(y, x)|avg(y)|
+    +---------------+------+
+    |           NULL|   1.0|
+    +---------------+------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------+
+    |regr_avgy(y, x)|avg(y)|
+    +---------------+------+
+    |           NULL|  NULL|
+    +---------------+------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +------------------+------+
+    |   regr_avgy(y, x)|avg(y)|
+    +------------------+------+
+    |1.6666666666666...|  1.75|
+    +------------------+------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_avgy("y", "x"), sf.avg("y")).show()
+    +---------------+------------------+
+    |regr_avgy(y, x)|            avg(y)|
+    +---------------+------------------+
+    |            1.5|1.6666666666666...|
+    +---------------+------------------+
     """
     return _invoke_function_over_columns("regr_avgy", y, x)
 
@@ -3745,16 +3831,59 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_count("y", "x"), sf.count(sf.lit(0))
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
     +----------------+--------+
     |regr_count(y, x)|count(0)|
     +----------------+--------+
-    |            1000|    1000|
+    |               4|       4|
+    +----------------+--------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               0|       1|
+    +----------------+--------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               0|       1|
+    +----------------+--------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               3|       4|
+    +----------------+--------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_count("y", "x"), sf.count(sf.lit(0))).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |               2|       4|
     +----------------+--------+
     """
     return _invoke_function_over_columns("regr_count", y, x)
@@ -3783,16 +3912,59 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_intercept("y", "x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
     +--------------------+
     |regr_intercept(y, x)|
     +--------------------+
-    |-0.04961745990969568|
+    |                 0.0|
+    +--------------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                 0.0|
+    +--------------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_intercept("y", "x")).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |                 0.0|
     +--------------------+
     """
     return _invoke_function_over_columns("regr_intercept", y, x)
@@ -3820,17 +3992,60 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_r2("y", "x")
-    ... ).show()
-    +------------------+
-    |     regr_r2(y, x)|
-    +------------------+
-    |0.9851908293645...|
-    +------------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |         NULL|
+    +-------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |         NULL|
+    +-------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_r2("y", "x")).show()
+    +-------------+
+    |regr_r2(y, x)|
+    +-------------+
+    |          1.0|
+    +-------------+
     """
     return _invoke_function_over_columns("regr_r2", y, x)
 
@@ -3857,17 +4072,60 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_slope("y", "x")
-    ... ).show()
-    +------------------+
-    |  regr_slope(y, x)|
-    +------------------+
-    |10.040390844891...|
-    +------------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |             1.0|
+    +----------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |            NULL|
+    +----------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |            NULL|
+    +----------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |             1.0|
+    +----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_slope("y", "x")).show()
+    +----------------+
+    |regr_slope(y, x)|
+    +----------------+
+    |             1.0|
+    +----------------+
     """
     return _invoke_function_over_columns("regr_slope", y, x)
 
@@ -3894,17 +4152,60 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_sxx("y", "x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
     +-----------------+
     |   regr_sxx(y, x)|
     +-----------------+
-    |666.9989999999...|
+    |4.666666666666...|
     +-----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxx("y", "x")).show()
+    +--------------+
+    |regr_sxx(y, x)|
+    +--------------+
+    |           4.5|
+    +--------------+
     """
     return _invoke_function_over_columns("regr_sxx", y, x)
 
@@ -3931,17 +4232,60 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_sxy("y", "x")
-    ... ).show()
-    +----------------+
-    |  regr_sxy(y, x)|
-    +----------------+
-    |6696.93065315...|
-    +----------------+
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +-----------------+
+    |   regr_sxy(y, x)|
+    +-----------------+
+    |4.666666666666...|
+    +-----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_sxy("y", "x")).show()
+    +--------------+
+    |regr_sxy(y, x)|
+    +--------------+
+    |           4.5|
+    +--------------+
     """
     return _invoke_function_over_columns("regr_sxy", y, x)
 
@@ -3968,17 +4312,60 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> x = (sf.col("id") % 3).alias("x")
-    >>> y = (sf.randn(42) + x * 10).alias("y")
-    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
-    ...     sf.regr_syy("y", "x")
-    ... ).show()
+    Example 1: All paris are non-null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |           5.0|
+    +--------------+
+
+    Example 2: All paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 3: All paris's y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |          NULL|
+    +--------------+
+
+    Example 4: Some paris's x values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
     +-----------------+
     |   regr_syy(y, x)|
     +-----------------+
-    |68250.53503811...|
+    |4.666666666666...|
     +-----------------+
+
+    Example 5: Some paris's x or y values are null
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
+    >>> df.select(sf.regr_syy("y", "x")).show()
+    +--------------+
+    |regr_syy(y, x)|
+    +--------------+
+    |           4.5|
+    +--------------+
     """
     return _invoke_function_over_columns("regr_syy", y, x)
 
@@ -6573,8 +6960,8 @@ def greatest(*cols: "ColumnOrName") -> Column:
     """
     if len(cols) < 2:
         raise PySparkValueError(
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "greatest", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "greatest", "num_cols": "2"},
         )
     return _invoke_function_over_seq_of_columns("greatest", cols)
 
@@ -6608,8 +6995,8 @@ def least(*cols: "ColumnOrName") -> Column:
     """
     if len(cols) < 2:
         raise PySparkValueError(
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "least", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "least", "num_cols": "2"},
         )
     return _invoke_function_over_seq_of_columns("least", cols)
 
@@ -6661,8 +7048,8 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
     v = value._jc if isinstance(value, Column) else value
 
@@ -9144,7 +9531,7 @@ def unix_timestamp(
 
 
 @_try_remote_functions
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
@@ -9192,11 +9579,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    if isinstance(tz, Column):
-        tz = _to_java_column(tz)
-    return _invoke_function("from_utc_timestamp", _to_java_column(timestamp), tz)
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 @_try_remote_functions
@@ -9248,11 +9631,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    if isinstance(tz, Column):
-        tz = _to_java_column(tz)
-    return _invoke_function("to_utc_timestamp", _to_java_column(timestamp), tz)
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 @_try_remote_functions
@@ -9571,8 +9950,8 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
     time_col = _to_java_column(timeColumn)
@@ -9700,8 +10079,8 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_STR",
-                message_parameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_COLUMN_OR_STR",
+                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
 
     time_col = _to_java_column(timeColumn)
@@ -10070,8 +10449,8 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
     if numBits not in [0, 224, 256, 384, 512]:
         raise PySparkValueError(
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "numBits",
                 "allowed_values": "[0, 224, 256, 384, 512]",
             },
@@ -10205,20 +10584,14 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     java.lang.RuntimeException: My error msg
     ...
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-
-    errMsg = (
-        _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
-    )
-    return _invoke_function("assert_true", _to_java_column(col), errMsg)
+    return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
 
 @_try_remote_functions
@@ -10249,18 +10622,12 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     java.lang.RuntimeException: My error message
     ...
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-
-    errMsg = (
-        _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
-    )
-    return _invoke_function("raise_error", errMsg)
+    return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
 # ---------------------- String/Binary functions ------------------------------
@@ -10808,23 +11175,23 @@ def overlay(
     >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
     [Row(overlayed='SPARK_COREL')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
-    pos = _create_column_from_literal(pos) if isinstance(pos, int) else _to_java_column(pos)
-    len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
+    if isinstance(pos, int):
+        pos = lit(pos)
+    if isinstance(len, int):
+        len = lit(len)
 
-    return _invoke_function("overlay", _to_java_column(src), _to_java_column(replace), pos, len)
+    return _invoke_function_over_columns("overlay", src, replace, pos, len)
 
 
 @_try_remote_functions
@@ -11538,8 +11905,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        idx = lit(idx) if isinstance(idx, int) else idx
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 @_try_remote_functions
@@ -11575,17 +11941,7 @@ def regexp_replace(
     >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
     [Row(d='-----')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
-
-    if isinstance(pattern, str):
-        pattern_col = _create_column_from_literal(pattern)
-    else:
-        pattern_col = _to_java_column(pattern)
-    if isinstance(replacement, str):
-        replacement_col = _create_column_from_literal(replacement)
-    else:
-        replacement_col = _to_java_column(replacement)
-    return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 @_try_remote_functions
@@ -11658,8 +12014,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        idx = lit(idx) if isinstance(idx, int) else idx
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 @_try_remote_functions
@@ -12423,6 +12778,51 @@ def url_decode(str: "ColumnOrName") -> Column:
     +---------------+
     """
     return _invoke_function_over_columns("url_decode", str)
+
+
+@_try_remote_functions
+def try_url_decode(str: "ColumnOrName") -> Column:
+    """
+    This is a special version of `url_decode` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a URL-encoded string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the decoded string.
+
+    Examples
+    --------
+    Example 1: Decoding a URL-encoded string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["url"])
+    >>> df.select(sf.try_url_decode(df.url)).show(truncate=False)
+    +------------------------+
+    |try_url_decode(url)     |
+    +------------------------+
+    |https://spark.apache.org|
+    +------------------------+
+
+    Example 2: Return NULL if the decoding cannot be performed.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2spark.apache.org",)], ["url"])
+    >>> df.select(sf.try_url_decode(df.url)).show()
+    +-------------------+
+    |try_url_decode(url)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
+    """
+    return _invoke_function_over_columns("try_url_decode", str)
 
 
 @_try_remote_functions
@@ -15689,8 +16089,8 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
 
     if len(fields) == 0:
         raise PySparkValueError(
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "field"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "field"},
         )
     sc = _get_active_spark_context()
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
@@ -16187,19 +16587,15 @@ def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] =
     |       STRUCT<a: BIGINT>|     STRUCT<a: BIGINT>|
     +------------------------+----------------------+
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(json, str):
-        col = _create_column_from_literal(json)
-    elif isinstance(json, Column):
-        col = _to_java_column(json)
-    else:
+    if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
-    return _invoke_function("schema_of_json", col, _options_to_str(options))
+    return _invoke_function("schema_of_json", _to_java_column(lit(json)), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -16348,8 +16744,8 @@ def from_xml(
         schema = _to_java_column(schema)
     elif not isinstance(schema, str):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
     return _invoke_function("from_xml", _to_java_column(col), schema, _options_to_str(options))
 
@@ -16419,19 +16815,15 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = N
     ... ).collect()
     [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(xml, str):
-        col = _create_column_from_literal(xml)
-    elif isinstance(xml, Column):
-        col = _to_java_column(xml)
-    else:
+    if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
-    return _invoke_function("schema_of_xml", col, _options_to_str(options))
+    return _invoke_function("schema_of_xml", _to_java_column(lit(xml)), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -16543,19 +16935,15 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     |STRUCT<_c0: INT, _c1: STRING, _c2: BOOLEAN>|
     +-------------------------------------------+
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(csv, str):
-        col = _create_column_from_literal(csv)
-    elif isinstance(csv, Column):
-        col = _to_java_column(csv)
-    else:
+    if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
-    return _invoke_function("schema_of_csv", col, _options_to_str(options))
+    return _invoke_function("schema_of_csv", _to_java_column(lit(csv)), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -18090,20 +18478,17 @@ def from_csv(
     |      {1, 2, 3}|
     +---------------+
     """
-    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column
 
-    _get_active_spark_context()
-    if isinstance(schema, str):
-        schema = _create_column_from_literal(schema)
-    elif isinstance(schema, Column):
-        schema = _to_java_column(schema)
-    else:
+    if not isinstance(schema, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
-    return _invoke_function("from_csv", _to_java_column(col), schema, _options_to_str(options))
+    return _invoke_function(
+        "from_csv", _to_java_column(col), _to_java_column(lit(schema)), _options_to_str(options)
+    )
 
 
 def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
@@ -18145,15 +18530,15 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
     # function arity is between 1 and 3
     if not (1 <= len(parameters) <= 3):
         raise PySparkValueError(
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": f.__name__, "num_args": str(len(parameters))},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": f.__name__, "num_args": str(len(parameters))},
         )
 
     # and all arguments can be used as positional
     if not all(p.kind in supported_parameter_types for p in parameters):
         raise PySparkValueError(
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": f.__name__},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": f.__name__},
         )
 
     return parameters
@@ -18189,8 +18574,8 @@ def _create_lambda(f: Callable) -> Callable:
 
     if not isinstance(result, Column):
         raise PySparkValueError(
-            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"func_name": f.__name__, "return_type": type(result).__name__},
+            errorClass="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            messageParameters={"func_name": f.__name__, "return_type": type(result).__name__},
         )
 
     jexpr = result._jc.expr()

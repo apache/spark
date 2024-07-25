@@ -254,8 +254,8 @@ class ChannelBuilder:
                 uuid.UUID(session_id, version=4)
             except ValueError as ve:
                 raise PySparkValueError(
-                    error_class="INVALID_SESSION_UUID_ID",
-                    message_parameters={"arg_name": "session_id", "origin": str(ve)},
+                    errorClass="INVALID_SESSION_UUID_ID",
+                    messageParameters={"arg_name": "session_id", "origin": str(ve)},
                 )
         return session_id
 
@@ -352,8 +352,8 @@ class DefaultChannelBuilder(ChannelBuilder):
         # Explicitly check the scheme of the URL.
         if url[:5] != "sc://":
             raise PySparkValueError(
-                error_class="INVALID_CONNECT_URL",
-                message_parameters={
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
                     "detail": "The URL must start with 'sc://'. Please update the URL to "
                     "follow the correct format, e.g., 'sc://hostname:port'.",
                 },
@@ -364,8 +364,8 @@ class DefaultChannelBuilder(ChannelBuilder):
         self.url = urllib.parse.urlparse(tmp_url)
         if len(self.url.path) > 0 and self.url.path != "/":
             raise PySparkValueError(
-                error_class="INVALID_CONNECT_URL",
-                message_parameters={
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
                     "detail": f"The path component '{self.url.path}' must be empty. Please update "
                     f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
                 },
@@ -379,8 +379,8 @@ class DefaultChannelBuilder(ChannelBuilder):
                 kv = p.split("=")
                 if len(kv) != 2:
                     raise PySparkValueError(
-                        error_class="INVALID_CONNECT_URL",
-                        message_parameters={
+                        errorClass="INVALID_CONNECT_URL",
+                        messageParameters={
                             "detail": f"Parameter '{p}' should be provided as a "
                             f"key-value pair separated by an equal sign (=). Please update "
                             f"the parameter to follow the correct format, e.g., 'key=value'.",
@@ -397,8 +397,8 @@ class DefaultChannelBuilder(ChannelBuilder):
             self._port = int(netloc[1])
         else:
             raise PySparkValueError(
-                error_class="INVALID_CONNECT_URL",
-                message_parameters={
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
                     "detail": f"Target destination '{self.url.netloc}' should match the "
                     f"'<host>:<port>' pattern. Please update the destination to follow "
                     f"the correct format, e.g., 'hostname:port'.",
@@ -1059,8 +1059,8 @@ class SparkConnectClient(object):
                 yield response
             else:
                 raise PySparkValueError(
-                    error_class="UNKNOWN_RESPONSE",
-                    message_parameters={
+                    errorClass="UNKNOWN_RESPONSE",
+                    messageParameters={
                         "response": str(response),
                     },
                 )
@@ -1149,8 +1149,8 @@ class SparkConnectClient(object):
             explain_mode = kwargs.get("explain_mode")
             if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
                 raise PySparkValueError(
-                    error_class="UNKNOWN_EXPLAIN_MODE",
-                    message_parameters={
+                    errorClass="UNKNOWN_EXPLAIN_MODE",
+                    messageParameters={
                         "explain_mode": str(explain_mode),
                     },
                 )
@@ -1207,8 +1207,8 @@ class SparkConnectClient(object):
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         else:
             raise PySparkValueError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={
                     "operation": method,
                 },
             )
@@ -1441,8 +1441,8 @@ class SparkConnectClient(object):
                     properties.update(**response)
                 else:
                     raise PySparkValueError(
-                        error_class="UNKNOWN_RESPONSE",
-                        message_parameters={
+                        errorClass="UNKNOWN_RESPONSE",
+                        messageParameters={
                             "response": response,
                         },
                     )
@@ -1546,8 +1546,8 @@ class SparkConnectClient(object):
             req.operation_id = id_or_tag
         else:
             raise PySparkValueError(
-                error_class="UNKNOWN_INTERRUPT_TYPE",
-                message_parameters={
+                errorClass="UNKNOWN_INTERRUPT_TYPE",
+                messageParameters={
                     "interrupt_type": str(interrupt_type),
                 },
             )
@@ -1635,20 +1635,20 @@ class SparkConnectClient(object):
         spark_job_tags_sep = ","
         if tag is None:
             raise PySparkValueError(
-                error_class="CANNOT_BE_NONE", message_paramters={"arg_name": "Spark Connect tag"}
+                errorClass="CANNOT_BE_NONE", message_paramters={"arg_name": "Spark Connect tag"}
             )
         if spark_job_tags_sep in tag:
             raise PySparkValueError(
-                error_class="VALUE_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_ALLOWED",
+                messageParameters={
                     "arg_name": "Spark Connect tag",
                     "disallowed_value": spark_job_tags_sep,
                 },
             )
         if len(tag) == 0:
             raise PySparkValueError(
-                error_class="VALUE_NOT_NON_EMPTY_STR",
-                message_parameters={"arg_name": "Spark Connect tag", "arg_value": tag},
+                errorClass="VALUE_NOT_NON_EMPTY_STR",
+                messageParameters={"arg_name": "Spark Connect tag", "arg_value": tag},
             )
 
     def _handle_error(self, error: Exception) -> NoReturn:
@@ -1677,7 +1677,7 @@ class SparkConnectClient(object):
             elif isinstance(error, ValueError):
                 if "Cannot invoke RPC" in str(error) and "closed" in str(error):
                     raise SparkConnectException(
-                        error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                        errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
                     ) from None
             raise error
         finally:

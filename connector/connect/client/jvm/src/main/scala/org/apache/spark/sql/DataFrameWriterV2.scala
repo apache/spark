@@ -41,6 +41,8 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
 
   private var partitioning: Option[Seq[proto.Expression]] = None
 
+  private var clustering: Option[Seq[String]] = None
+
   private var overwriteCondition: Option[proto.Expression] = None
 
   override def using(provider: String): CreateTableWriter[T] = {
@@ -74,6 +76,12 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
   override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
     val asTransforms = (column +: columns).map(_.expr)
     this.partitioning = Some(asTransforms)
+    this
+  }
+
+  @scala.annotation.varargs
+  override def clusterBy(colName: String, colNames: String*): CreateTableWriter[T] = {
+    this.clustering = Some(colName +: colNames)
     this
   }
 
@@ -133,6 +141,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     provider.foreach(builder.setProvider)
 
     partitioning.foreach(columns => builder.addAllPartitioningColumns(columns.asJava))
+    clustering.foreach(columns => builder.addAllClusteringColumns(columns.asJava))
 
     options.foreach { case (k, v) =>
       builder.putOptions(k, v)
@@ -252,7 +261,21 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 3.4.0
    */
+  @scala.annotation.varargs
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
+
+  /**
+   * Clusters the output by the given columns on the storage. The rows with matching values in the
+   * specified clustering columns will be consolidated within the same group.
+   *
+   * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
+   * together in a file. This arrangement improves query efficiency when you apply selective
+   * filters to these clustering columns, thanks to data skipping.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colName: String, colNames: String*): CreateTableWriter[T]
 
   /**
    * Specifies a provider for the underlying output data source. Spark's default catalog supports

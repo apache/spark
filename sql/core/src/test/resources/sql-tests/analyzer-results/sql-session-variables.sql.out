@@ -150,7 +150,7 @@ SetVariable [variablereference(system.session.title='Create Variable - Failure C
 
 
 -- !query
-DECLARE VARIABLE var1 INT
+DECLARE VAR var1 INT
 -- !query analysis
 CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
@@ -164,7 +164,7 @@ Project [variablereference(system.session.var1=CAST(NULL AS INT)) AS var1#x]
 
 
 -- !query
-DROP TEMPORARY VARIABLE var1
+DROP TEMPORARY VAR var1
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1

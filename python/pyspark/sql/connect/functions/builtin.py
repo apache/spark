@@ -158,15 +158,15 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
     # Validate that the function arity is between 1 and 3.
     if not (1 <= len(parameters) <= 3):
         raise PySparkValueError(
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": f.__name__, "num_args": str(len(parameters))},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": f.__name__, "num_args": str(len(parameters))},
         )
 
     # Verify that all arguments can be used as positional arguments.
     if not all(p.kind in supported_parameter_types for p in parameters):
         raise PySparkValueError(
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": f.__name__},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": f.__name__},
         )
 
     return parameters
@@ -197,8 +197,8 @@ def _create_lambda(f: Callable) -> LambdaFunction:
 
     if not isinstance(result, Column):
         raise PySparkValueError(
-            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"func_name": f.__name__, "return_type": type(result).__name__},
+            errorClass="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            messageParameters={"func_name": f.__name__, "return_type": type(result).__name__},
         )
 
     return LambdaFunction(result._expr, arg_exprs)  # type: ignore[arg-type]
@@ -262,14 +262,14 @@ def lit(col: Any) -> Column:
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
             raise PySparkValueError(
-                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+                errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-                message_parameters={"dtype": col.dtype.name},
+                errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                messageParameters={"dtype": col.dtype.name},
             )
 
         # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
@@ -327,8 +327,8 @@ def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
 
     if not isinstance(df, DataFrame):
         raise PySparkTypeError(
-            error_class="NOT_DATAFRAME",
-            message_parameters={"arg_name": "df", "arg_type": type(df).__name__},
+            errorClass="NOT_DATAFRAME",
+            messageParameters={"arg_name": "df", "arg_type": type(df).__name__},
         )
     return df.hint("broadcast")
 
@@ -355,8 +355,8 @@ expr.__doc__ = pysparkfuncs.expr.__doc__
 def greatest(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
         raise PySparkValueError(
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "greatest", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "greatest", "num_cols": "2"},
         )
     return _invoke_function_over_columns("greatest", *cols)
 
@@ -374,8 +374,8 @@ input_file_name.__doc__ = pysparkfuncs.input_file_name.__doc__
 def least(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
         raise PySparkValueError(
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "least", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "least", "num_cols": "2"},
         )
     return _invoke_function_over_columns("least", *cols)
 
@@ -444,8 +444,8 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
 
     value_col = value if isinstance(value, Column) else lit(value)
@@ -934,11 +934,11 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
 
-def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("try_remainder", left, right)
+def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_mod", left, right)
 
 
-try_remainder.__doc__ = pysparkfuncs.try_remainder.__doc__
+try_mod.__doc__ = pysparkfuncs.try_mod.__doc__
 
 
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
@@ -1197,8 +1197,8 @@ def percentile(
 ) -> Column:
     if not isinstance(frequency, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "frequency",
                 "arg_type": type(frequency).__name__,
             },
@@ -1839,8 +1839,8 @@ def from_csv(
         _schema = lit(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1863,8 +1863,8 @@ def from_json(
         _schema = lit(schema.json())
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1887,8 +1887,8 @@ def from_xml(
         _schema = lit(schema.json())
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1947,8 +1947,8 @@ inline_outer.__doc__ = pysparkfuncs.inline_outer.__doc__
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     if len(fields) == 0:
         raise PySparkValueError(
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "field"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "field"},
         )
     return _invoke_function("json_tuple", _to_col(col), *[lit(field) for field in fields])
 
@@ -2124,54 +2124,48 @@ sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
 def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(csv, (str, Column)):
-        _csv = lit(csv)
-    else:
+    if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_csv", _csv)
+        return _invoke_function("schema_of_csv", lit(csv))
     else:
-        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
+        return _invoke_function("schema_of_csv", lit(csv), _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
 def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(json, (str, Column)):
-        _json = lit(json)
-    else:
+    if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_json", _json)
+        return _invoke_function("schema_of_json", lit(json))
     else:
-        return _invoke_function("schema_of_json", _json, _options_to_col(options))
+        return _invoke_function("schema_of_json", lit(json), _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
 def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(xml, (str, Column)):
-        _xml = lit(xml)
-    else:
+    if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_xml", _xml)
+        return _invoke_function("schema_of_xml", lit(xml))
     else:
-        return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
+        return _invoke_function("schema_of_xml", lit(xml), _options_to_col(options))
 
 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
@@ -2204,8 +2198,8 @@ def slice(
         _start = lit(start)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "start", "arg_type": type(start).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "start", "arg_type": type(start).__name__},
         )
 
     if isinstance(length, (Column, str)):
@@ -2214,8 +2208,8 @@ def slice(
         _length = lit(length)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "length", "arg_type": type(length).__name__},
         )
 
     return _invoke_function_over_columns("slice", col, _start, _length)
@@ -2423,13 +2417,13 @@ def overlay(
 ) -> Column:
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
     if isinstance(pos, int):
@@ -2565,9 +2559,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
@@ -2576,13 +2568,7 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 def regexp_replace(
     string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    if isinstance(replacement, str):
-        replacement = lit(replacement)
-
-    return _invoke_function("regexp_replace", _to_col(string), pattern, replacement)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
@@ -2601,9 +2587,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
@@ -2737,6 +2721,13 @@ def url_decode(str: "ColumnOrName") -> Column:
 
 
 url_decode.__doc__ = pysparkfuncs.url_decode.__doc__
+
+
+def try_url_decode(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_url_decode", str)
+
+
+try_url_decode.__doc__ = pysparkfuncs.try_url_decode.__doc__
 
 
 def url_encode(str: "ColumnOrName") -> Column:
@@ -3352,19 +3343,15 @@ def unix_timestamp(
 unix_timestamp.__doc__ = pysparkfuncs.unix_timestamp.__doc__
 
 
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("from_utc_timestamp", timestamp, tz)
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 from_utc_timestamp.__doc__ = pysparkfuncs.from_utc_timestamp.__doc__
 
 
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("to_utc_timestamp", timestamp, tz)
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 to_utc_timestamp.__doc__ = pysparkfuncs.to_utc_timestamp.__doc__
@@ -3413,24 +3400,24 @@ def window(
 ) -> Column:
     if windowDuration is None or not isinstance(windowDuration, str):
         raise PySparkTypeError(
-            error_class="NOT_STR",
-            message_parameters={
+            errorClass="NOT_STR",
+            messageParameters={
                 "arg_name": "windowDuration",
                 "arg_type": type(windowDuration).__name__,
             },
         )
     if slideDuration is not None and not isinstance(slideDuration, str):
         raise PySparkTypeError(
-            error_class="NOT_STR",
-            message_parameters={
+            errorClass="NOT_STR",
+            messageParameters={
                 "arg_name": "slideDuration",
                 "arg_type": type(slideDuration).__name__,
             },
         )
     if startTime is not None and not isinstance(startTime, str):
         raise PySparkTypeError(
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -3464,8 +3451,8 @@ window_time.__doc__ = pysparkfuncs.window_time.__doc__
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     if gapDuration is None or not isinstance(gapDuration, (Column, str)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "gapDuration", "arg_type": type(gapDuration).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "gapDuration", "arg_type": type(gapDuration).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -3746,11 +3733,10 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("assert_true", _to_col(col), _err_msg)
+    return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
 
 assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
@@ -3759,11 +3745,10 @@ assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
 def raise_error(errMsg: Union[Column, str]) -> Column:
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("raise_error", _err_msg)
+    return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
 raise_error.__doc__ = pysparkfuncs.raise_error.__doc__
@@ -3807,8 +3792,8 @@ sha1.__doc__ = pysparkfuncs.sha1.__doc__
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
     if numBits not in [0, 224, 256, 384, 512]:
         raise PySparkValueError(
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "numBits",
                 "allowed_values": "[0, 224, 256, 384, 512]",
             },
