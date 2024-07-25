@@ -23,8 +23,6 @@ import org.apache.spark.sql.types._
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  // scalastyle:off println
-
   //
   // Test cases: input parameter
   //

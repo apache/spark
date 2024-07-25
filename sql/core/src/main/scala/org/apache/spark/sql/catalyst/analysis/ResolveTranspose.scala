@@ -45,13 +45,9 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     fullCollectedRows: Array[InternalRow],
     nonIndexColumnNames: Seq[String],
     nonIndexColumnDataTypes: Seq[DataType]): Array[Array[Any]] = {
-    // scalastyle:off println
-
     // Construct the original matrix
     val originalMatrixNumCols = fullCollectedRows.head.numFields - 1
     val originalMatrixNumRows = fullCollectedRows.length
-//    println(s"originalMatrixNumCols ${originalMatrixNumCols}")
-//    println(s"originalMatrixNumRows ${originalMatrixNumRows}")
 
     val originalMatrix = Array.ofDim[Any](originalMatrixNumRows, originalMatrixNumCols)
     for (i <- 0 until originalMatrixNumRows) {
@@ -60,21 +56,14 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         originalMatrix(i)(j) = row.get(j + 1, nonIndexColumnDataTypes(j))
       }
     }
-//    println(s"originalMatrix:")
-//    printMatrix(originalMatrix)
 
     // Transpose the original matrix
     val transposedMatrix = Array.ofDim[Any](originalMatrixNumCols, originalMatrixNumRows)
     for (i <- 0 until originalMatrixNumRows) {
       for (j <- 0 until originalMatrixNumCols) {
-//        println(s"Transposing element at row $i, col $j: ${originalMatrix(i)(j)}")
         transposedMatrix(j)(i) = originalMatrix(i)(j)
-//        println(s"transposedMatrix row $j, col $i: ${transposedMatrix(j)(i)}")
       }
     }
-
-//    println(s"transposedMatrix:")
-//    printMatrix(transposedMatrix)
 
     // Insert nonIndexColumnNames as first "column"
     val finalMatrix = Array.ofDim[Any](originalMatrixNumCols, originalMatrixNumRows + 1)
@@ -87,16 +76,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       }
     }
 
-//    println(s"finalMatrix:")
-//    printMatrix(finalMatrix)
-
     finalMatrix
-  }
-
-  private def printMatrix(matrix: Array[Array[Any]]): Unit = {
-    matrix.foreach { row =>
-      println(row.mkString("[", ", ", "]"))
-    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
@@ -153,7 +133,6 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
         // Construct output attributes
         val keyAttr = AttributeReference("key", StringType, nullable = false)()
-//        println(s"keyAttr: ${keyAttr}")
         val transposedColumnNames = fullCollectedRows.map { row => row.getString(0) }
         val valueAttrs = transposedColumnNames.map { value =>
           AttributeReference(
@@ -161,7 +140,6 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
             commonType
           )()
         }
-//        println(s"valueAttrs: ${valueAttrs}")
 
         LocalRelation(
           (keyAttr +: valueAttrs).toIndexedSeq, transposedInternalRows.toIndexedSeq)
