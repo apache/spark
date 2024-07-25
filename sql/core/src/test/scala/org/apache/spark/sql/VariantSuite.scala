@@ -639,6 +639,78 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     }
   }
 
+  test("variant in a cached row-based df") {
+    val query = """select
+      parse_json(format_string('{\"a\": %s}', id)) v,
+      cast(null as variant) as null_v,
+      case when id % 2 = 0 then parse_json(cast(id as string)) else null end as some_null
+    from range(0, 10)"""
+    val df = spark.sql(query)
+    df.cache()
+
+    val expected = spark.sql(query)
+    checkAnswer(df, expected.collect())
+  }
+
+  test("struct of variant in a cached row-based df") {
+    val query = """select named_struct(
+      'v', parse_json(format_string('{\"a\": %s}', id)),
+      'null_v', cast(null as variant),
+      'some_null', case when id % 2 = 0 then parse_json(cast(id as string)) else null end
+    ) v
+    from range(0, 10)"""
+    val df = spark.sql(query)
+    df.cache()
+
+    val expected = spark.sql(query)
+    checkAnswer(df, expected.collect())
+  }
+
+  test("array of variant in a cached row-based df") {
+    val query = """select array(
+      parse_json(cast(id as string)),
+      parse_json(format_string('{\"a\": %s}', id)),
+      null,
+      case when id % 2 = 0 then parse_json(cast(id as string)) else null end) v
+    from range(0, 10)"""
+    val df = spark.sql(query)
+    df.cache()
+
+    val expected = spark.sql(query)
+    checkAnswer(df, expected.collect())
+  }
+
+  test("map of variant in a cached row-based df") {
+    val query = """select map(
+      'v', parse_json(format_string('{\"a\": %s}', id)),
+      'null_v', cast(null as variant),
+      'some_null', case when id % 2 = 0 then parse_json(cast(id as string)) else null end
+    ) v
+    from range(0, 10)"""
+    val df = spark.sql(query)
+    df.cache()
+
+    val expected = spark.sql(query)
+    checkAnswer(df, expected.collect())
+  }
+
+  test("variant in a cached column-based df") {
+    withTable("t") {
+      val query = """select named_struct(
+        'v', parse_json(format_string('{\"a\": %s}', id)),
+        'null_v', cast(null as variant),
+        'some_null', case when id % 2 = 0 then parse_json(cast(id as string)) else null end
+      ) v
+      from range(0, 10)"""
+      spark.sql(query).write.format("parquet").mode("overwrite").saveAsTable("t")
+      val df = spark.sql("select * from t")
+      df.cache()
+
+      val expected = spark.sql(query)
+      checkAnswer(df, expected.collect())
+    }
+  }
+
   test("variant_get size") {
     val largeKey = "x" * 1000
     val df = Seq(s"""{ "$largeKey": {"a" : 1 },

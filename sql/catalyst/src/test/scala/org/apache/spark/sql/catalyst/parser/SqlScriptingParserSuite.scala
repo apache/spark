@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -262,6 +263,37 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.nonEmpty)
   }
+
+  test("declare at the beginning") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE testVariable1 VARCHAR(50);
+        |  DECLARE testVariable2 INTEGER;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.collection.forall(
+      _.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable]))
+  }
+
+  test("declare after beginning") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  DECLARE testVariable INTEGER;
+        |END""".stripMargin
+    checkError(
+        exception = intercept[SparkException] {
+          parseScript(sqlScriptText)
+        },
+        errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+        parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
+  }
+
+  // TODO Add test for INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE exception
 
   test("SET VAR statement test") {
     val sqlScriptText =

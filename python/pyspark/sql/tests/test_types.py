@@ -134,8 +134,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
         df = self.spark.createDataFrame(rdd)
@@ -613,6 +613,12 @@ class TypesTestsMixin:
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
+    def test_string_type_simple_string(self):
+        self.assertEqual(StringType().simpleString(), "string")
+        self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
+        self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
+        self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
@@ -817,6 +823,38 @@ class TypesTestsMixin:
         self.assertRaises(
             PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
         )
+
+    def test_array_type_from_json(self):
+        arrayWithoutCollations = ArrayType(StringType(), True)
+        arrayWithCollations = ArrayType(StringType("UNICODE"), True)
+        array_json = {"type": "array", "elementType": "string", "containsNull": True}
+        collationsMap = {"element": "UNICODE"}
+
+        self.assertEqual(arrayWithoutCollations, ArrayType.fromJson(array_json))
+        self.assertEqual(
+            arrayWithCollations,
+            ArrayType.fromJson(array_json, fieldPath="", collationsMap=collationsMap),
+        )
+        self.assertEqual(
+            arrayWithCollations, ArrayType.fromJson(array_json, collationsMap=collationsMap)
+        )
+
+    def test_map_type_from_json(self):
+        mapWithoutCollations = MapType(StringType(), StringType(), True)
+        mapWithCollations = MapType(StringType("UNICODE"), StringType("UNICODE"), True)
+        map_json = {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "string",
+            "valueContainsNull": True,
+        }
+        collationsMap = {"key": "UNICODE", "value": "UNICODE"}
+
+        self.assertEqual(mapWithoutCollations, MapType.fromJson(map_json))
+        self.assertEqual(
+            mapWithCollations, MapType.fromJson(map_json, fieldPath="", collationsMap=collationsMap)
+        )
+        self.assertEqual(mapWithCollations, MapType.fromJson(map_json, collationsMap=collationsMap))
 
     def test_schema_with_bad_collations_provider(self):
         from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
@@ -1602,8 +1640,8 @@ class TypesTestsMixin:
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1620,8 +1658,8 @@ class TypesTestsMixin:
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1638,8 +1676,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1679,8 +1717,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1722,8 +1760,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1833,8 +1871,8 @@ class TypesTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
-                message_parameters={"field_name": "myarray"},
+                errorClass="CANNOT_INFER_TYPE_FOR_FIELD",
+                messageParameters={"field_name": "myarray"},
             )
 
     def test_repr(self):
@@ -1886,8 +1924,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "None", "end_field": "3"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "None", "end_field": "3"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1895,8 +1933,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "123", "end_field": "123"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "123", "end_field": "123"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1904,8 +1942,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "0", "end_field": "321"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "0", "end_field": "321"},
         )
 
     def test_daytime_interval_type(self):
@@ -1973,8 +2011,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "None", "end_field": "3"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "None", "end_field": "3"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1982,8 +2020,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "123", "end_field": "123"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "123", "end_field": "123"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1991,8 +2029,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "0", "end_field": "321"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "0", "end_field": "321"},
         )
 
     def test_yearmonth_interval_type(self):
@@ -2377,8 +2415,8 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
-            message_parameters={
+            errorClass="FIELD_NOT_NULLABLE_WITH_NAME",
+            messageParameters={
                 "field_name": "test_name",
             },
         )
@@ -2389,8 +2427,8 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
-            message_parameters={
+            errorClass="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+            messageParameters={
                 "data_type": "IntegerType()",
                 "field_name": "field b in field a",
                 "obj": "'data'",
