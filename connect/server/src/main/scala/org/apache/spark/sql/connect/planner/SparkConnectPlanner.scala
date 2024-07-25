@@ -3090,6 +3090,11 @@ class SparkConnectPlanner(
       w.partitionBy(names.toSeq: _*)
     }
 
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
     if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
@@ -3151,6 +3156,11 @@ class SparkConnectPlanner(
         .map(Column(_))
         .toSeq
       w.partitionedBy(names.head, names.tail: _*)
+    }
+
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
     }
 
     writeOperation.getMode match {

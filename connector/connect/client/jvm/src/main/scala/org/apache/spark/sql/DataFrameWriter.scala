@@ -202,6 +202,22 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
   }
 
   /**
+   * Clusters the output by the given columns on the storage. The rows with matching values in the
+   * specified clustering columns will be consolidated within the same group.
+   *
+   * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
+   * together in a file. This arrangement improves query efficiency when you apply selective
+   * filters to these clustering columns, thanks to data skipping.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colName: String, colNames: String*): DataFrameWriter[T] = {
+    this.clusteringColumns = Option(colName +: colNames)
+    this
+  }
+
+  /**
    * Saves the content of the `DataFrame` at the specified path.
    *
    * @since 3.4.0
@@ -242,6 +258,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
     source.foreach(builder.setSource)
     sortColumnNames.foreach(names => builder.addAllSortColumnNames(names.asJava))
     partitioningColumns.foreach(cols => builder.addAllPartitioningColumns(cols.asJava))
+    clusteringColumns.foreach(cols => builder.addAllClusteringColumns(cols.asJava))
 
     numBuckets.foreach(n => {
       val bucketBuilder = proto.WriteOperation.BucketBy.newBuilder()
@@ -509,4 +526,6 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
   private var numBuckets: Option[Int] = None
 
   private var sortColumnNames: Option[Seq[String]] = None
+
+  private var clusteringColumns: Option[Seq[String]] = None
 }

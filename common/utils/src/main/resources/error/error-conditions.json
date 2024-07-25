@@ -471,6 +471,20 @@
     ],
     "sqlState" : "0A000"
   },
+  "CLUSTERING_COLUMNS_MISMATCH" : {
+    "message" : [
+      "Specified clustering does not match that of the existing table <tableName>.",
+      "Specified clustering columns: [<specifiedClusteringString>].",
+      "Existing clustering columns: [<existingClusteringString>]."
+    ],
+    "sqlState" : "42P10"
+  },
+  "CLUSTERING_NOT_SUPPORTED" : {
+    "message" : [
+      "'<operation>' does not support clustering."
+    ],
+    "sqlState" : "42000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
