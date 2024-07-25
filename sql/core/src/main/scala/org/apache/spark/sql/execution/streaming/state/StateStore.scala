@@ -618,7 +618,11 @@ object StateStore extends Logging {
   private val maintenancePartitions = new mutable.HashSet[StateStoreProviderId]
 
   /**
-   * Runs the `task` periodically and automatically cancels it if there is an exception.
+   * Runs the `task` periodically and bubbles any exceptions that it encounters.
+   *
+   * Note: exceptions in the maintenance thread pool are caught and logged; the associated
+   * StateStoreProvider is also unloaded. Any exception that happens in the MaintenanceTask
+   * is indeed exceptional and thus we let it propagate.
    */
   class MaintenanceTask(periodMs: Long, task: => Unit) {
     private val executor =
@@ -858,6 +862,7 @@ object StateStore extends Logging {
             case NonFatal(e) =>
               logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
                 log"stopping management thread", e)
+              // If this provider is needed again, it will be reloaded.
               unload(id)
           } finally {
             val duration = System.currentTimeMillis() - startTime
