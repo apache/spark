@@ -24,37 +24,29 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   // scalastyle:off println
-//  test("transpose") {
-//    checkAnswer(
-//      salary.transpose(),
-//      Row("salary", 2000.0, 1000.0) :: Nil
-//    )
-//  }
+  test("transpose") {
+    checkAnswer(
+      salary.transpose(),
+      Row("salary", 2000.0, 1000.0) :: Nil
+    )
+  }
 
-//  test("transpose empty frame") {
-//    checkAnswer(
-//      emptyTestData.transpose(),
-//      emptyTestData
-//    )
-//  }
-
-  test("transpose with correct column ordering") {
-    val df = Seq(("test2", "1"), ("test1", "2")).toDF("s", "id")
-    print(df.transpose().show())
-//    checkAnswer(
-//      df.transpose(),
-//      Row("id", 2, 1) :: Nil
-//    )
+  test("transpose with index column specified") {
+    checkAnswer(
+      salary.transpose(Some($"salary")),
+      Row("personId", 1, 0) :: Nil
+    )
   }
 
   test("transpose frame with repeated first column values") {
     val df = Seq(("test1", "1"), ("test1", "2")).toDF("s", "id")
     print(df.transpose().show())
-//    checkAnswer(
-//      df.transpose(),
-//      Row("id", 1, 2) :: Nil
-//    )
+    //    checkAnswer(
+    //      df.transpose(),
+    //      Row("id", 1, 2) :: Nil
+    //    )
   }
+
 
   test("transpose empty frame that has column names") {
     val schema = StructType(Seq(
@@ -78,23 +70,19 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     //    )
   }
 
-//  test("transpose frame with columns of mismatch types") {
-//    // TODO: designated error class for Transpose
-//    checkError(
-//      exception = intercept[AnalysisException] {
-//        person.transpose()
-//      },
-//      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-//      parameters = Map(
-//        "types" -> """"INT" (`age`), "STRING" (`name`)"""
-//      )
-//    )
-//  }
+  test("transpose frame with columns of mismatch types") {
+    val exception = intercept[IllegalArgumentException] {
+      person.transpose()
+    }
+    assert(exception.getMessage.contains("No common type found"))
+  }
 
-//  test("transpose frame with index column specified") {
-//    checkAnswer(
-//      salary.transpose(Some($"salary")),
-//      Row("personId", 1, 0) :: Nil
-//    )
-//  }
+  test("transpose - correct column ordering") {
+    val df = Seq(("test2", "1"), ("test1", "2")).toDF("s", "id")
+    print(df.transpose().show())
+    //    checkAnswer(
+    //      df.transpose(),
+    //      Row("id", 2, 1) :: Nil
+    //    )
+  }
 }
