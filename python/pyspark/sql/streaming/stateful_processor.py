@@ -28,6 +28,8 @@ from pyspark.sql.types import (
     DateType, TimestampType
 )
 
+__all__ = ["StatefulProcessor", "StatefulProcessorHandle"]
+
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 

@@ -27,6 +27,8 @@ from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 
+__all__ = ["StatefulProcessorHandleState", "StatefulProcessorApiClient"]
+
 
 class StatefulProcessorHandleState(Enum):
     CREATED = 1

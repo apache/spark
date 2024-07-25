@@ -22,10 +22,8 @@ from pyspark.errors import PySparkTypeError
 from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions.builtin import udf
 from pyspark.sql.streaming.state import GroupStateTimeout
-from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient, \
-    StatefulProcessorHandleState
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient, StatefulProcessorHandleState
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
 

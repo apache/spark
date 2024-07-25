@@ -22,6 +22,8 @@ import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 from pyspark.sql.types import Row, StructType, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
 
+__all__ = ["ValueStateClient"]
+
 
 class ValueStateClient:
     def __init__(
