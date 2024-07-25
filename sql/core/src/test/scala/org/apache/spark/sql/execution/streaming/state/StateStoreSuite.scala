@@ -1591,14 +1591,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  test("SPARK-48997: maintenance task does not unload every provider after single failure") {
+  test("SPARK-48997: maintenance threads with exceptions unload only themselves") {
     val sqlConf = getDefaultSQLConf(
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
     )
     //  Make maintenance interval small so that maintenance task is called right after scheduling.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
-    // Use the `SingleMaintenanceErrorFakeStateStoreProvider` to run the test
+    // Use the `MaintenanceErrorOnCertainPartitionsProvider` to run the test
     sqlConf.setConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS,
       classOf[MaintenanceErrorOnCertainPartitionsProvider].getName
@@ -1608,55 +1608,38 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     withSpark(new SparkContext(conf)) { sc =>
       withCoordinatorRef(sc) { _ =>
-        withTempDir { f =>
-          // 0 and 1's maintenance will fail
-          val provider0Id =
-            StateStoreProviderId(StateStoreId(f.getCanonicalPath, 0, 0), UUID.randomUUID)
-          val provider1Id =
-            StateStoreProviderId(StateStoreId(f.getCanonicalPath, 0, 1), UUID.randomUUID)
-          val provider2Id =
-            StateStoreProviderId(StateStoreId(f.getCanonicalPath, 0, 2), UUID.randomUUID)
+        // 0 and 1's maintenance will fail
+        val provider0Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 0), UUID.randomUUID)
+        val provider1Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 1), UUID.randomUUID)
+        val provider2Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 2), UUID.randomUUID)
 
-          // Create provider 2 first to start maintenance for it
-          StateStore.get(
-            provider2Id,
-            keySchema,
-            valueSchema,
-            NoPrefixKeyStateEncoderSpec(keySchema),
-            0,
-            useColumnFamilies = false,
-            new StateStoreConf(sqlConf),
-            new Configuration()
-          )
+        // Create provider 2 first to start maintenance for it
+        StateStore.get(
+          provider2Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          // The following 2 calls go `get` will cause the associated maintenance to fail
-          StateStore.get(
-            provider0Id,
-            keySchema,
-            valueSchema,
-            NoPrefixKeyStateEncoderSpec(keySchema),
-            0,
-            useColumnFamilies = false,
-            new StateStoreConf(sqlConf),
-            new Configuration()
-          )
+        // The following 2 calls go `get` will cause the associated maintenance to fail
+        StateStore.get(
+          provider0Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          StateStore.get(
-            provider1Id,
-            keySchema,
-            valueSchema,
-            NoPrefixKeyStateEncoderSpec(keySchema),
-            0,
-            useColumnFamilies = false,
-            new StateStoreConf(sqlConf),
-            new Configuration()
-          )
+        StateStore.get(
+          provider1Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          eventually(timeout(5.seconds)) {
-            assert(!StateStore.isLoaded(provider0Id))
-            assert(!StateStore.isLoaded(provider1Id))
-            assert(StateStore.isLoaded(provider2Id))
-          }
+        eventually(timeout(5.seconds)) {
+          assert(!StateStore.isLoaded(provider0Id))
+          assert(!StateStore.isLoaded(provider1Id))
+          assert(StateStore.isLoaded(provider2Id))
         }
       }
     }
