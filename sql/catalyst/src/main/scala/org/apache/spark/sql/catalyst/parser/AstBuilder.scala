@@ -56,6 +56,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
+// import org.apache.spark.util.HeapUtils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -395,6 +396,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
             byName)
           val optimizeInsertIntoValues = conf.getConf(
             SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER)
+          // println("GOT HERE")
           if (optimizeInsertIntoValues) {
             EvaluateUnresolvedInlineTable.evaluate(insertIntoStatement)
           } else {

@@ -39,7 +39,7 @@ class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
   /**
    * Create a table with the given data and format. Return the randomly generated table name.
    */
-  private def createTable(format: String = "delta"): String = {
+  private def createTable: String = {
     val tableName = getRandomTableName()
     spark.sql(s"""
       CREATE TABLE $tableName (
@@ -55,8 +55,7 @@ class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
         state VARCHAR(50),
         zip_code VARCHAR(10),
         country VARCHAR(50),
-        registration_date String
-      ) using $format;
+        registration_date String)
     """)
     tableName
   }
@@ -129,7 +128,7 @@ class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
     Seq(true, false).foreach { insertIntoValueImprovementEnabled =>
 
       // Create a table with a randomly generated name.
-      val tableName = createTable()
+      val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
       withSQLConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
@@ -160,7 +159,7 @@ class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
     var firstTableName: Option[String] = None
     Seq(true, false).foreach { insertIntoValueImprovementEnabled =>
       // Create a table with a randomly generated name.
-      val tableName = createTable()
+      val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
       withSQLConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->

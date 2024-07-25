@@ -55,6 +55,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
+// import org.apache.spark.util.{CallSite, HeapUtils, Utils}
 import org.apache.spark.util.{CallSite, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -657,6 +658,7 @@ class SparkSession private(
           parsedPlan
         }
       }
+      // HeapUtils.createSparkSubmitHeapDump("/tmp")
       Dataset.ofRows(self, plan, tracker)
     }
 
@@ -710,6 +712,7 @@ class SparkSession private(
           parsedPlan
         }
       }
+      // HeapUtils.createSparkSubmitHeapDump("/tmp")
       Dataset.ofRows(self, plan, tracker)
     }
 
