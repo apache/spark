@@ -65,7 +65,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     assert(exception.getMessage.contains("No common type found"))
   }
 
-  test("transposed columns in ascending order based on index column values") {
+  test("enforce ascending order based on index column values for transposed columns") {
     val transposedDf = person.transpose(Some($"name"))
     checkAnswer(
       transposedDf,
@@ -73,6 +73,14 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     )
     // mike, jim -> jim, mike
     assertResult(Array("key", "jim", "mike"))(transposedDf.columns)
+  }
+
+  test("enforce AtomicType for index column values") {
+    val df = complexData.select($"m")  // (m,MapType(StringType,IntegerType,false))
+    val exception = intercept[IllegalArgumentException] {
+      df.transpose()
+    }
+    assert(exception.getMessage.contains("Index column must be of atomic type, but found"))
   }
 
   //
@@ -100,10 +108,11 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   }
 
   test("transpose frame with only index column") {
-
-  }
-
-  test("transpose frame with only one row") {
-
+    val transposedDf = tableName.transpose()
+    checkAnswer(
+      transposedDf,
+      Nil
+    )
+    assertResult(Array("key", "test"))(transposedDf.columns)
   }
 }
