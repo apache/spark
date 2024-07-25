@@ -273,7 +273,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       }
       checkError(e,
         errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schemaName" -> "`d:b`"))
+        parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
     }
 
     {
@@ -282,7 +282,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       }
       checkError(e,
         errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schemaName" -> "`d:b`"))
+        parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
     }
 
     withTempDir { dir =>
@@ -314,7 +314,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         }
         checkError(e,
           errorClass = "SCHEMA_NOT_FOUND",
-          parameters = Map("schemaName" -> "`d:b`"))
+          parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
       }
     }
   }

@@ -86,17 +86,18 @@ class StateScan(
       assert((tail - head + 1) == partitionNums.length,
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
-      sourceOptions.snapshotPartitionId match {
+      sourceOptions.fromSnapshotOptions match {
         case None => partitionNums.map { pn =>
           new StateStoreInputPartition(pn, queryId, sourceOptions)
         }.toArray
 
-        case Some(snapshotPartitionId) =>
-          if (partitionNums.contains(snapshotPartitionId)) {
-            Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
+        case Some(fromSnapshotOptions) =>
+          if (partitionNums.contains(fromSnapshotOptions.snapshotPartitionId)) {
+            Array(new StateStoreInputPartition(
+                fromSnapshotOptions.snapshotPartitionId, queryId, sourceOptions))
           } else {
             throw StateStoreErrors.stateStoreSnapshotPartitionNotFound(
-              snapshotPartitionId, sourceOptions.operatorId,
+              fromSnapshotOptions.snapshotPartitionId, sourceOptions.operatorId,
               sourceOptions.stateCheckpointLocation.toString)
           }
       }
@@ -128,16 +129,27 @@ class StateScan(
   override def toBatch: Batch = this
 
   override def description(): String = {
-    val desc = s"StateScan " +
+    var desc = s"StateScan " +
       s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
       s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
       s"[storeName=${sourceOptions.storeName}]"
 
     if (sourceOptions.joinSide != JoinSideValues.none) {
-      desc + s"[joinSide=${sourceOptions.joinSide}]"
-    } else {
-      desc
+      desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
+    sourceOptions.fromSnapshotOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[snapshotStartBatchId=${fromSnapshotOptions.snapshotStartBatchId}]"
+        desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
+      case _ =>
+    }
+    sourceOptions.readChangeFeedOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
+        desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
+      case _ =>
+    }
+    desc
   }
 
   private def stateCheckpointPartitionsLocation: Path = {

@@ -141,6 +141,22 @@ drop view v1;
 drop table t1;
 drop table t2;
 
+-- SPARK-46625: CTE reference with identifier clause and session variables
+DECLARE agg = 'max';
+DECLARE col = 'c1';
+DECLARE tab = 'T';
+
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER(agg)(IDENTIFIER(col)) FROM IDENTIFIER(tab);
+
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('T');
+
+WITH ABC(c1, c2) AS (VALUES(1, 2), (2, 3))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('A' || 'BC');
+
 -- Not supported
 SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1);
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'));

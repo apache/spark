@@ -235,7 +235,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: weights and gaussians
       val weights = instance.weights
       val gaussians = instance.gaussians
@@ -243,7 +243,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -253,7 +253,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
     private val className = classOf[GaussianMixtureModel].getName
 
     override def load(path: String): GaussianMixtureModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()

@@ -24,6 +24,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import logging
 import threading
 import os
 import platform
@@ -253,8 +254,8 @@ class ChannelBuilder:
                 uuid.UUID(session_id, version=4)
             except ValueError as ve:
                 raise PySparkValueError(
-                    error_class="INVALID_SESSION_UUID_ID",
-                    message_parameters={"arg_name": "session_id", "origin": str(ve)},
+                    errorClass="INVALID_SESSION_UUID_ID",
+                    messageParameters={"arg_name": "session_id", "origin": str(ve)},
                 )
         return session_id
 
@@ -351,8 +352,8 @@ class DefaultChannelBuilder(ChannelBuilder):
         # Explicitly check the scheme of the URL.
         if url[:5] != "sc://":
             raise PySparkValueError(
-                error_class="INVALID_CONNECT_URL",
-                message_parameters={
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
                     "detail": "The URL must start with 'sc://'. Please update the URL to "
                     "follow the correct format, e.g., 'sc://hostname:port'.",
                 },
@@ -363,8 +364,8 @@ class DefaultChannelBuilder(ChannelBuilder):
         self.url = urllib.parse.urlparse(tmp_url)
         if len(self.url.path) > 0 and self.url.path != "/":
             raise PySparkValueError(
-                error_class="INVALID_CONNECT_URL",
-                message_parameters={
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
                     "detail": f"The path component '{self.url.path}' must be empty. Please update "
                     f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
                 },
@@ -378,8 +379,8 @@ class DefaultChannelBuilder(ChannelBuilder):
                 kv = p.split("=")
                 if len(kv) != 2:
                     raise PySparkValueError(
-                        error_class="INVALID_CONNECT_URL",
-                        message_parameters={
+                        errorClass="INVALID_CONNECT_URL",
+                        messageParameters={
                             "detail": f"Parameter '{p}' should be provided as a "
                             f"key-value pair separated by an equal sign (=). Please update "
                             f"the parameter to follow the correct format, e.g., 'key=value'.",
@@ -396,8 +397,8 @@ class DefaultChannelBuilder(ChannelBuilder):
             self._port = int(netloc[1])
         else:
             raise PySparkValueError(
-                error_class="INVALID_CONNECT_URL",
-                message_parameters={
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
                     "detail": f"Target destination '{self.url.netloc}' should match the "
                     f"'<host>:<port>' pattern. Please update the destination to follow "
                     f"the correct format, e.g., 'hostname:port'.",
@@ -862,7 +863,8 @@ class SparkConnectClient(object):
         """
         Return given plan as a PyArrow Table iterator.
         """
-        logger.info(f"Executing plan {self._proto_to_string(plan)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
@@ -878,7 +880,8 @@ class SparkConnectClient(object):
         """
         Return given plan as a PyArrow Table.
         """
-        logger.info(f"Executing plan {self._proto_to_string(plan)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req, observations)
@@ -894,7 +897,8 @@ class SparkConnectClient(object):
         """
         Return given plan as a pandas DataFrame.
         """
-        logger.info(f"Executing plan {self._proto_to_string(plan)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         (self_destruct_conf,) = self.get_config_with_defaults(
@@ -996,7 +1000,8 @@ class SparkConnectClient(object):
         """
         Return schema for given plan.
         """
-        logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         schema = self._analyze(method="schema", plan=plan).schema
         assert schema is not None
         # Server side should populate the struct field which is the schema.
@@ -1007,7 +1012,8 @@ class SparkConnectClient(object):
         """
         Return explain string for given plan.
         """
-        logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(
             method="explain", plan=plan, explain_mode=explain_mode
         ).explain_string
@@ -1020,7 +1026,8 @@ class SparkConnectClient(object):
         """
         Execute given command.
         """
-        logger.info(f"Execute command for command {self._proto_to_string(command)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1041,7 +1048,8 @@ class SparkConnectClient(object):
         """
         Execute given command. Similar to execute_command, but the value is returned using yield.
         """
-        logger.info(f"Execute command as iterator for command {self._proto_to_string(command)}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Execute command as iterator for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1051,8 +1059,8 @@ class SparkConnectClient(object):
                 yield response
             else:
                 raise PySparkValueError(
-                    error_class="UNKNOWN_RESPONSE",
-                    message_parameters={
+                    errorClass="UNKNOWN_RESPONSE",
+                    messageParameters={
                         "response": str(response),
                     },
                 )
@@ -1141,8 +1149,8 @@ class SparkConnectClient(object):
             explain_mode = kwargs.get("explain_mode")
             if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
                 raise PySparkValueError(
-                    error_class="UNKNOWN_EXPLAIN_MODE",
-                    message_parameters={
+                    errorClass="UNKNOWN_EXPLAIN_MODE",
+                    messageParameters={
                         "explain_mode": str(explain_mode),
                     },
                 )
@@ -1199,8 +1207,8 @@ class SparkConnectClient(object):
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         else:
             raise PySparkValueError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={
                     "operation": method,
                 },
             )
@@ -1433,8 +1441,8 @@ class SparkConnectClient(object):
                     properties.update(**response)
                 else:
                     raise PySparkValueError(
-                        error_class="UNKNOWN_RESPONSE",
-                        message_parameters={
+                        errorClass="UNKNOWN_RESPONSE",
+                        messageParameters={
                             "response": response,
                         },
                     )
@@ -1538,8 +1546,8 @@ class SparkConnectClient(object):
             req.operation_id = id_or_tag
         else:
             raise PySparkValueError(
-                error_class="UNKNOWN_INTERRUPT_TYPE",
-                message_parameters={
+                errorClass="UNKNOWN_INTERRUPT_TYPE",
+                messageParameters={
                     "interrupt_type": str(interrupt_type),
                 },
             )
@@ -1627,20 +1635,20 @@ class SparkConnectClient(object):
         spark_job_tags_sep = ","
         if tag is None:
             raise PySparkValueError(
-                error_class="CANNOT_BE_NONE", message_paramters={"arg_name": "Spark Connect tag"}
+                errorClass="CANNOT_BE_NONE", message_paramters={"arg_name": "Spark Connect tag"}
             )
         if spark_job_tags_sep in tag:
             raise PySparkValueError(
-                error_class="VALUE_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_ALLOWED",
+                messageParameters={
                     "arg_name": "Spark Connect tag",
                     "disallowed_value": spark_job_tags_sep,
                 },
             )
         if len(tag) == 0:
             raise PySparkValueError(
-                error_class="VALUE_NOT_NON_EMPTY_STR",
-                message_parameters={"arg_name": "Spark Connect tag", "arg_value": tag},
+                errorClass="VALUE_NOT_NON_EMPTY_STR",
+                messageParameters={"arg_name": "Spark Connect tag", "arg_value": tag},
             )
 
     def _handle_error(self, error: Exception) -> NoReturn:
@@ -1669,7 +1677,7 @@ class SparkConnectClient(object):
             elif isinstance(error, ValueError):
                 if "Cannot invoke RPC" in str(error) and "closed" in str(error):
                     raise SparkConnectException(
-                        error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                        errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
                     ) from None
             raise error
         finally:

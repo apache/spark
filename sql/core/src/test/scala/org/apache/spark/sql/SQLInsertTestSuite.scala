@@ -21,6 +21,9 @@ import org.apache.spark.{SparkConf, SparkNumberFormatException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.execution.CommandResultExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.unsafe.types.UTF8String
@@ -28,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * The base trait for SQL INSERT.
  */
-trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
+trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -517,6 +520,34 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           matchPVals = true
         )
       }
+    }
+  }
+
+  test("SPARK-48817: test multi inserts") {
+    withTable("t1", "t2", "t3") {
+      createTable("t1", Seq("i"), Seq("int"))
+      createTable("t2", Seq("i"), Seq("int"))
+      createTable("t3", Seq("i"), Seq("int"))
+      sql(s"INSERT INTO t1 VALUES (1), (2), (3)")
+      val df = sql(
+        """
+          |FROM (select /*+ REPARTITION(3) */ i from t1)
+          |INSERT INTO t2 SELECT i
+          |INSERT INTO t3 SELECT i
+          |""".stripMargin
+      )
+      checkAnswer(spark.table("t2"), Seq(Row(1), Row(2), Row(3)))
+      checkAnswer(spark.table("t3"), Seq(Row(1), Row(2), Row(3)))
+
+      val commandResults = df.queryExecution.executedPlan.collect {
+        case c: CommandResultExec => c
+      }
+      assert(commandResults.size == 1)
+
+      val reusedExchanges = collect(commandResults.head.commandPhysicalPlan) {
+        case r: ReusedExchangeExec => r
+      }
+      assert(reusedExchanges.size == 1)
     }
   }
 }

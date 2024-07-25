@@ -30,10 +30,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
-    @unittest.skip("Spark Connect does not support mergeInto at the moment.")
-    def test_df_merge_into(self):
-        super().test_df_merge_into()
-
 
 if __name__ == "__main__":
     import unittest
