@@ -908,9 +908,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       // Collect the inner query expressions that are guaranteed to have a single value for each
       // outer row. See comment on getCorrelatedEquivalentInnerExpressions.
       val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
-      // Grouping expressions, except outer refs - grouping by an outer ref is always ok
+      // Grouping expressions, except outer refs and constant expressions - grouping by an
+      // outer ref or a constant is always ok
       val groupByExprs =
-        ExpressionSet(agg.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference]))
+        ExpressionSet(agg.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
+          x.references.nonEmpty))
       val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
 
       val invalidCols = if (!SQLConf.get.getConf(
