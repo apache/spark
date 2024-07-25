@@ -147,8 +147,7 @@ test_that("Unsupported operation", {
   # memory sink without aggregation
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
   expect_error(write.stream(df, "memory", queryName = "people", outputMode = "complete"),
-               paste0(".*(start : analysis error - Complete output mode not supported when there ",
-                      "are no streaming aggregations on streaming DataFrames/Datasets).*"))
+               ".*analysis error.*complete.*not supported.*no streaming aggregations*")
 })
 
 test_that("Terminated by error", {

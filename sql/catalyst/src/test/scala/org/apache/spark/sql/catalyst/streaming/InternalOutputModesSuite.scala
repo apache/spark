@@ -41,7 +41,7 @@ class InternalOutputModesSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         InternalOutputModes(outputMode)
       },
-      errorClass = "INVALID_STREAMING_OUTPUT_MODE.UNKNOWN",
+      errorClass = "INVALID_STREAMING_OUTPUT_MODE",
       parameters = Map("outputMode" -> outputMode))
   }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
@@ -212,9 +212,8 @@ object UnsupportedOperationChecker extends Logging {
         // We can append rows to the sink once the group is under the watermark. Without this
         // watermark a group is never "finished" so we would never output anything.
         if (watermarkAttributes.isEmpty) {
-          throwError(
-            s"$outputMode output mode not supported when there are streaming aggregations on " +
-                s"streaming DataFrames/DataSets without watermark")(plan)
+          throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
+            outputMode, "streaming aggregations without watermark")
         }
 
       case InternalOutputModes.Update if aggregates.nonEmpty =>
@@ -228,14 +227,13 @@ object UnsupportedOperationChecker extends Logging {
         }
 
         if (existingSessionWindow) {
-          throwError(s"$outputMode output mode not supported for session window on " +
-            "streaming DataFrames/DataSets")(plan)
+          throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
+            outputMode, "session window streaming aggregations")
         }
 
       case InternalOutputModes.Complete if aggregates.isEmpty =>
-        throwError(
-          s"$outputMode output mode not supported when there are no streaming aggregations on " +
-            s"streaming DataFrames/Datasets")(plan)
+        throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
+          outputMode, "no streaming aggregations")
 
       case _ =>
     }

@@ -274,14 +274,15 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
 
     withTempDir { dir =>
+
       def testOutputMode(mode: String): Unit = {
         checkError(
           exception = intercept[AnalysisException] {
             df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_STREAMING_OUTPUT_MODE.NOT_SUPPORTED_IN_FILE_SINK",
+          errorClass = "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE",
           sqlState = "42KDE",
-          parameters = Map("outputMode" -> mode))
+          parameters = Map("className" -> "parquet", "outputMode" -> mode))
       }
       testOutputMode("update")
       testOutputMode("complete")

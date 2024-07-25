@@ -1749,11 +1749,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2210")
   }
 
-  def invalidStreamingOutputModeError(
-      outputMode: Option[OutputMode]): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_STREAMING_OUTPUT_MODE.UNKNOWN",
-      messageParameters = Map("outputMode" -> outputMode.get.toString()))
+  def unsupportedOutputModeForStreamingOperationError(
+      outputMode: OutputMode,
+      operation: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      messageParameters = Map(
+        "outputMode" -> outputMode.toString().toLowerCase(Locale.ROOT),
+        "operation" -> operation))
   }
 
   def pythonStreamingDataSourceRuntimeError(
