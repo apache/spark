@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Transpose}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPOSE
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -30,42 +30,39 @@ import org.apache.spark.unsafe.types.UTF8String
 class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   private def leastCommonType(dataTypes: Seq[DataType]): DataType = {
-    dataTypes.reduce(TypeCoercion.findTightestCommonType(_, _).getOrElse(StringType))
+    dataTypes.reduce { (dt1, dt2) =>
+      TypeCoercion.findTightestCommonType(dt1, dt2).getOrElse {
+        throw new IllegalArgumentException(s"No common type found for $dt1 and $dt2")
+      }
+    }
   }
 
-  private def collectAndTranspose(
-    child: LogicalPlan,
-    nonIndexColumnNames: Seq[String]): Array[Array[Any]] = {
+  private def transposeMatrix(
+    fullCollectedRows: Array[InternalRow],
+    nonIndexColumnNames: Seq[String],
+    nonIndexColumnDataTypes: Seq[DataType]): Array[Array[Any]] = {
     // scalastyle:off println
 
-    // Collect rows from the child plan
-    val queryExecution = sparkSession.sessionState.executePlan(child)
-    val collectedRows = queryExecution.executedPlan.executeCollect()
+    // Construct the original matrix
+    val originalMatrixNumCols = fullCollectedRows.head.numFields - 1
+    val originalMatrixNumRows = fullCollectedRows.length
+    println(s"originalMatrixNumCols ${originalMatrixNumCols}")
+    println(s"originalMatrixNumRows ${originalMatrixNumRows}")
 
-    println(s"collectedRows ${collectedRows.mkString("Array(", ", ", ")")}")
-
-    // Determine the number of columns and rows in the original matrix
-    val matrixNumCols = if (collectedRows.nonEmpty) collectedRows.head.numFields else 0
-    val matrixNumRows = collectedRows.length
-
-    println(s"matrixNumCols ${matrixNumCols}")
-    println(s"matrixNumRows ${matrixNumRows}")
-
-    // Initialize the original matrix
-    val originalMatrix = Array.ofDim[Any](matrixNumRows, matrixNumCols)
-    for (i <- 0 until matrixNumRows) {
-      val row = collectedRows(i)
-      for (j <- 0 until matrixNumCols) {
-        originalMatrix(i)(j) = row.get(j, child.output(j).dataType)
+    val originalMatrix = Array.ofDim[Any](originalMatrixNumRows, originalMatrixNumCols)
+    for (i <- 0 until originalMatrixNumRows) {
+      val row = fullCollectedRows(i)
+      for (j <- 0 until originalMatrixNumCols) {
+        originalMatrix(i)(j) = row.get(j + 1, nonIndexColumnDataTypes(j))
       }
     }
     println(s"originalMatrix:")
     printMatrix(originalMatrix)
 
-    // Initialize the transposed matrix
-    val transposedMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows)
-    for (i <- 0 until matrixNumRows) {
-      for (j <- 0 until matrixNumCols) {
+    // Transpose the original matrix
+    val transposedMatrix = Array.ofDim[Any](originalMatrixNumCols, originalMatrixNumRows)
+    for (i <- 0 until originalMatrixNumRows) {
+      for (j <- 0 until originalMatrixNumCols) {
         println(s"Transposing element at row $i, col $j: ${originalMatrix(i)(j)}")
         transposedMatrix(j)(i) = originalMatrix(i)(j)
         println(s"transposedMatrix row $j, col $i: ${transposedMatrix(j)(i)}")
@@ -75,13 +72,13 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     println(s"transposedMatrix:")
     printMatrix(transposedMatrix)
 
-    // Insert the first column with originalColNames
-    val finalMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows + 1)
-    for (i <- 0 until matrixNumCols) {
+    // Insert nonIndexColumnNames as first "column"
+    val finalMatrix = Array.ofDim[Any](originalMatrixNumCols, originalMatrixNumRows + 1)
+    for (i <- 0 until originalMatrixNumCols) {
       finalMatrix(i)(0) = UTF8String.fromString(nonIndexColumnNames(i))
     }
-    for (i <- 0 until matrixNumCols) {
-      for (j <- 1 until matrixNumRows + 1) {
+    for (i <- 0 until originalMatrixNumCols) {
+      for (j <- 1 until originalMatrixNumRows + 1) {
         finalMatrix(i)(j) = transposedMatrix(i)(j - 1)
       }
     }
@@ -102,50 +99,63 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     _.containsPattern(TRANSPOSE)) {
     case t @ Transpose(indexColumn, child, _, _) if !t.resolved =>
       // Cast the index column to StringType
-      val indexColumnAsString = Cast(indexColumn, StringType)
+      val indexColumnAsString = Alias(
+        Cast(indexColumn, StringType),
+        indexColumn.asInstanceOf[Attribute].name)().asInstanceOf[NamedExpression]
 
-      // Collect index column values (as new column names in transposed frame)
-      val namedIndexColumnAsString = Alias(indexColumnAsString, "__indexColumnAsString")()
-      val projectPlan = Project(
-        Seq(namedIndexColumnAsString.asInstanceOf[NamedExpression]), child)
-      val queryExecution = sparkSession.sessionState.executePlan(projectPlan)
-      val collectedValues = queryExecution.executedPlan
-        .executeCollect().map(row => row.getString(0)).toSeq
-
-      // Determine the least common type of the non-index columns
+      // Cast non-index columns to the least common type
       val nonIndexColumnsAttr = child.output.filterNot(
         _.exprId == indexColumn.asInstanceOf[Attribute].exprId)
       val nonIndexTypes = nonIndexColumnsAttr.map(_.dataType)
       val commonType = leastCommonType(nonIndexTypes)
-
-      println(s"commonType: ${commonType}")
-
-      // Cast non-index columns to the least common type
-      val castedNonIndexColumns = nonIndexColumnsAttr.map { attr =>
+      val nonIndexColumnsAsLCT = nonIndexColumnsAttr.map { attr =>
         Alias(Cast(attr, commonType), attr.name)()
       }
-      val castedChild = Project(castedNonIndexColumns, child)
 
-      // Collect as matrix and flip
-      val nonIndexColumnNames = nonIndexColumnsAttr.map(_.name)
-      val transposedData = collectAndTranspose(castedChild, nonIndexColumnNames)
+      // Sort by index column values, and collect the casted frame
+      val allCastCols = indexColumnAsString +: nonIndexColumnsAsLCT
+      val sortedChild = Sort(
+        Seq(SortOrder(indexColumn.asInstanceOf[Attribute], Ascending)),
+        global = true,
+        child
+      )
+      val projectAllCastCols = Project(allCastCols, sortedChild)
+      val queryExecution = sparkSession.sessionState.executePlan(projectAllCastCols)
+      val fullCollectedRows = queryExecution.executedPlan.executeCollect()
 
-      val transposedInternalRows = transposedData.map { row =>
-        InternalRow.fromSeq(row.toIndexedSeq)
+      if (fullCollectedRows.isEmpty) {
+        // Return a DataFrame with a single column "key" containing non-index column names
+        val keyAttr = AttributeReference("key", StringType, nullable = false)()
+        val keyValues = nonIndexColumnsAttr.map(
+          _.name).map(name => UTF8String.fromString(name))
+        val keyRows = keyValues.map(value => InternalRow(value))
+
+        LocalRelation(Seq(keyAttr), keyRows)
+      } else {
+
+        // Transpose the matrix
+        val nonIndexColumnNames = nonIndexColumnsAttr.map(_.name)
+        val nonIndexColumnDataTypes = projectAllCastCols.output.tail.map(attr => attr.dataType)
+        val transposedMatrix = transposeMatrix(
+          fullCollectedRows, nonIndexColumnNames, nonIndexColumnDataTypes)
+        val transposedInternalRows = transposedMatrix.map { row =>
+          InternalRow.fromSeq(row.toIndexedSeq)
+        }
+
+        // Construct output attributes
+        val keyAttr = AttributeReference("key", StringType, nullable = false)()
+        println(s"keyAttr: ${keyAttr}")
+        val transposedColumnNames = fullCollectedRows.map { row => row.getString(0) }
+        val valueAttrs = transposedColumnNames.map { value =>
+          AttributeReference(
+            value,
+            commonType
+          )()
+        }
+        println(s"valueAttrs: ${valueAttrs}")
+
+        LocalRelation(
+          (keyAttr +: valueAttrs).toIndexedSeq, transposedInternalRows.toIndexedSeq)
       }
-
-      // Construct output attributes
-      val keyAttr = AttributeReference("key", StringType, nullable = false)()
-      println(s"keyAttr: ${keyAttr}")
-      val valueAttrs = collectedValues.map { value =>
-        AttributeReference(
-          value,
-          commonType // Use the common type determined earlier
-        )()
-      }
-      println(s"valueAttrs: ${valueAttrs}")
-
-      LocalRelation(
-        keyAttr +: valueAttrs, transposedInternalRows.toIndexedSeq)
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -37,13 +38,44 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
 //    )
 //  }
 
-  test("transpose frame with repeated first column values") {
-    val repeatedDf = Seq(("test1", "1"), ("test2", "2")).toDF("s", "id")
-    println(repeatedDf.transpose().show())
+  test("transpose with correct column ordering") {
+    val df = Seq(("test2", "1"), ("test1", "2")).toDF("s", "id")
+    print(df.transpose().show())
 //    checkAnswer(
-//      repeatedDf.transpose(),
-//      Row("id", 1) :: Nil
+//      df.transpose(),
+//      Row("id", 2, 1) :: Nil
 //    )
+  }
+
+  test("transpose frame with repeated first column values") {
+    val df = Seq(("test1", "1"), ("test1", "2")).toDF("s", "id")
+    print(df.transpose().show())
+//    checkAnswer(
+//      df.transpose(),
+//      Row("id", 1, 2) :: Nil
+//    )
+  }
+
+  test("transpose empty frame that has column names") {
+    val schema = StructType(Seq(
+         StructField("id", IntegerType, nullable = true),
+         StructField("name", StringType, nullable = true)
+    ))
+    val emptyDF = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+    println(emptyDF.transpose().show())
+    //    checkAnswer(
+    //      repeatedDf.transpose(),
+    //      Row("id", 1) :: Nil
+    //    )
+  }
+
+  test("transpose empty frame that has no column names") {
+    val emptyDF = spark.emptyDataFrame
+    println(emptyDF.transpose().show())
+    //    checkAnswer(
+    //      repeatedDf.transpose(),
+    //      Row("id", 1) :: Nil
+    //    )
   }
 
 //  test("transpose frame with columns of mismatch types") {
