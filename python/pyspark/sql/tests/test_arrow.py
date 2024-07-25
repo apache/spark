@@ -701,8 +701,8 @@ class ArrowTestsMixin:
 
                 self.check_error(
                     exception=pe.exception,
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                    message_parameters={"data_type": "IntegerType()"},
+                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    messageParameters={"data_type": "IntegerType()"},
                 )
 
     def test_createDataFrame_does_not_modify_input(self):

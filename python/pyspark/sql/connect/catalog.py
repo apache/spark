@@ -253,8 +253,8 @@ class Catalog:
     ) -> DataFrame:
         if schema is not None and not isinstance(schema, StructType):
             raise PySparkTypeError(
-                error_class="NOT_STRUCT",
-                message_parameters={
+                errorClass="NOT_STRUCT",
+                messageParameters={
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },

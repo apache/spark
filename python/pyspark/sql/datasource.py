@@ -115,8 +115,8 @@ class DataSource(ABC):
         ...   return StructType().add("a", "int").add("b", "string")
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "schema"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "schema"},
         )
 
     def reader(self, schema: StructType) -> "DataSourceReader":
@@ -136,8 +136,8 @@ class DataSource(ABC):
             A reader instance for this data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "reader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "reader"},
         )
 
     def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
@@ -159,8 +159,8 @@ class DataSource(ABC):
             A writer instance for this data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "writer"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "writer"},
         )
 
     def streamWriter(self, schema: StructType, overwrite: bool) -> "DataSourceStreamWriter":
@@ -182,8 +182,8 @@ class DataSource(ABC):
             A writer instance for writing data into a streaming sink.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "streamWriter"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "streamWriter"},
         )
 
     def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
@@ -206,8 +206,8 @@ class DataSource(ABC):
             A reader instance for this data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "simpleStreamReader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "simpleStreamReader"},
         )
 
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
@@ -228,8 +228,8 @@ class DataSource(ABC):
             A reader instance for this streaming data source.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "streamReader"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "streamReader"},
         )
 
 
@@ -328,8 +328,8 @@ class DataSourceReader(ABC):
         ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "partitions"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "partitions"},
         )
 
     @abstractmethod
@@ -398,8 +398,8 @@ class DataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "initialOffset"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "initialOffset"},
         )
 
     def latestOffset(self) -> dict:
@@ -418,8 +418,8 @@ class DataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "latestOffset"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "latestOffset"},
         )
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
@@ -443,8 +443,8 @@ class DataSourceStreamReader(ABC):
             must be an instance of `InputPartition` or a subclass of it.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "partitions"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "partitions"},
         )
 
     @abstractmethod
@@ -475,8 +475,8 @@ class DataSourceStreamReader(ABC):
             in the final DataFrame.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "read"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "read"},
         )
 
     def commit(self, end: dict) -> None:
@@ -534,8 +534,8 @@ class SimpleDataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "initialOffset"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "initialOffset"},
         )
 
     def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
@@ -555,8 +555,8 @@ class SimpleDataSourceStreamReader(ABC):
             The dict is the end offset of this read attempt and the start of next read attempt.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "read"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "read"},
         )
 
     def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
@@ -578,8 +578,8 @@ class SimpleDataSourceStreamReader(ABC):
             All the records between start offset and end offset.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "readBetweenOffsets"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "readBetweenOffsets"},
         )
 
     def commit(self, end: dict) -> None:

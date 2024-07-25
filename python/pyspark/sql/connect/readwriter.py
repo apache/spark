@@ -83,8 +83,8 @@ class DataFrameReader(OptionUtils):
             self._schema = schema
         else:
             raise PySparkTypeError(
-                error_class="NOT_STR_OR_STRUCT",
-                message_parameters={
+                errorClass="NOT_STR_OR_STRUCT",
+                messageParameters={
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },
@@ -479,7 +479,7 @@ class DataFrameReader(OptionUtils):
     @property
     def _jreader(self) -> None:
         raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jreader"}
+            errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": "_jreader"}
         )
 
 
@@ -557,8 +557,8 @@ class DataFrameWriter(OptionUtils):
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
             raise PySparkValueError(
-                error_class="CANNOT_SET_TOGETHER",
-                message_parameters={
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={
                     "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                 },
             )
@@ -566,8 +566,8 @@ class DataFrameWriter(OptionUtils):
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    error_class="NOT_INT",
-                    message_parameters={
+                    errorClass="NOT_INT",
+                    messageParameters={
                         "arg_list": "numBuckets",
                     },
                 )
@@ -577,16 +577,16 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    error_class="NOT_LIST_OF_STR",
-                    message_parameters={
+                    errorClass="NOT_LIST_OF_STR",
+                    messageParameters={
                         "arg_name": "cols",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OF_STR",
-                message_parameters={
+                errorClass="NOT_LIST_OF_STR",
+                messageParameters={
                     "arg_name": "col",
                     "arg_type": type(col).__name__,
                 },
@@ -612,8 +612,8 @@ class DataFrameWriter(OptionUtils):
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    error_class="CANNOT_SET_TOGETHER",
-                    message_parameters={
+                    errorClass="CANNOT_SET_TOGETHER",
+                    messageParameters={
                         "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                     },
                 )
@@ -623,16 +623,16 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    error_class="NOT_LIST_OF_STR",
-                    message_parameters={
+                    errorClass="NOT_LIST_OF_STR",
+                    messageParameters={
                         "arg_name": "cols",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OF_STR",
-                message_parameters={
+                errorClass="NOT_LIST_OF_STR",
+                messageParameters={
                     "arg_name": "col",
                     "arg_type": type(col).__name__,
                 },

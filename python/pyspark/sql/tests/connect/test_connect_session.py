@@ -82,7 +82,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertGreaterEqual(len(handler_called), 0)
 
     def _check_no_active_session_error(self, e: PySparkException):
-        self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
+        self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
     def test_stop_session(self):
         df = self.spark.sql("select 1 as a, 2 as b")
