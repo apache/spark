@@ -293,7 +293,7 @@ class VariantUtils:
         raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
 
     @classmethod
-    def _get_timedelta(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
+    def _get_dtinterval_info(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
         """
         Returns the (micros, start_field, end_field) tuple from a day-time interval value at a given
         position in a variant.
@@ -588,7 +588,7 @@ class VariantUtils:
 
             return cls._handle_array(value, pos, handle_array)
         elif variant_type == datetime.timedelta:
-            micros, start_field, end_field = cls._get_timedelta(value, pos)
+            micros, start_field, end_field = cls._get_dtinterval_info(value, pos)
             return '"' + cls._to_day_time_interval_ansi_string(micros, start_field, end_field) + '"'
         elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
             months, start_field, end_field = cls._get_yminterval_info(value, pos)
@@ -634,7 +634,7 @@ class VariantUtils:
         elif variant_type == datetime.timedelta:
             # day-time intervals are represented using timedelta in a trivial manner
             return datetime.timedelta(
-                microseconds=cls._get_timedelta(value, pos)[0]
+                microseconds=cls._get_dtinterval_info(value, pos)[0]
             )
         elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
             raise PySparkNotImplementedError(
