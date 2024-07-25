@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
@@ -248,10 +249,15 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
 
         val output = analyzedQuery.output
-        val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
-          output.find(_.name == partCol).get
-        }
-        val newOutput = output.filterNot(partitionAttrs.contains) ++ partitionAttrs
+
+        val partitionColumnNames = HashSet(normalizedTable.partitionColumnNames: _*)
+        val (partitionAttrs, notPartitionAttrs) =
+          output.partition(o => partitionColumnNames.contains(o.name))
+
+        val partitionAttrsByName = HashMap(partitionAttrs.map(o => o.name -> o): _*)
+        val newOutput = notPartitionAttrs ++
+          normalizedTable.partitionColumnNames.map(partitionAttrsByName(_))
+
         val reorderedQuery = if (newOutput == output) {
           analyzedQuery
         } else {
@@ -263,12 +269,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
-        val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
-          normalizedTable.schema.find(_.name == partCol).get
-        }
+        val partitionColumnNames = HashSet(normalizedTable.partitionColumnNames: _*)
+        val (partitionSchema, notPartitionSchema) =
+          normalizedTable.schema.partition(s => partitionColumnNames.contains(s.name))
 
-        val reorderedSchema =
-          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+        val partitionSchemaByName = HashMap(partitionSchema.map(s => s.name -> s): _*)
+        val reorderedSchema = StructType(
+          notPartitionSchema ++ normalizedTable.partitionColumnNames.map(partitionSchemaByName(_))
+        )
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
@@ -360,8 +368,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         messageParameters = Map.empty)
     }
 
+    val normalizedPartitionColsSet = HashSet(normalizedPartitionCols: _*)
     schema
-      .filter(f => normalizedPartitionCols.contains(f.name))
+      .filter(f => normalizedPartitionColsSet.contains(f.name))
       .foreach { field =>
         if (!PartitioningUtils.canPartitionOn(field.dataType)) {
           throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
