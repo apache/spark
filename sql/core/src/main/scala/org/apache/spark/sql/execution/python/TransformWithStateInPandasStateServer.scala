@@ -34,8 +34,11 @@ import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.types.StructType
 
 /**
- * This class is used to handle the state requests from the Python side. It processes following
- * state requests and return responses to the Python side:
+ * This class is used to handle the state requests from the Python side. It runs on a separate
+ * thread spawned by TransformWithStateInPandasStateRunner per task. It opens a dedicated socket
+ * to process/transfer state related info which is shut down when task finishes or there's an error
+ * on opening the socket. It run It processes following state requests and return responses to the
+ * Python side:
  * - Requests for managing explicit grouping key.
  * - Stateful processor requests.
  * - Requests for managing state variables (e.g. valueState).
