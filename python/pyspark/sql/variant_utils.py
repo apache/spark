@@ -453,11 +453,12 @@ class VariantUtils:
                 format_builder.append(str(months) + "' MONTH")
         else:
             format_builder.append(year_and_month + "' YEAR TO MONTH")
-        return ''.join(format_builder)
+        return "".join(format_builder)
 
     @classmethod
-    def _to_day_time_interval_ansi_string(cls,
-                                          micros: int, start_field: int, end_field: int) -> str:
+    def _to_day_time_interval_ansi_string(
+        cls, micros: int, start_field: int, end_field: int
+    ) -> str:
         """
         Used to convert microseconds representing a day-tine interval with given start and end
         fields to its ANSI SQL string representation.
@@ -558,9 +559,7 @@ class VariantUtils:
         if start_field < SECOND and SECOND <= end_field:
             lead_zero = "0" if (rest < 10 * MICROS_PER_SECOND) else ""
             format_builder.append(
-                ":"
-                + lead_zero
-                + (Decimal(rest) / Decimal(1000000)).normalize().to_eng_string()
+                ":" + lead_zero + (Decimal(rest) / Decimal(1000000)).normalize().to_eng_string()
             )
         return prefix + ("".join(format_builder) % tuple(format_args)) + postfix
 
@@ -592,8 +591,9 @@ class VariantUtils:
             return '"' + cls._to_day_time_interval_ansi_string(micros, start_field, end_field) + '"'
         elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
             months, start_field, end_field = cls._get_yminterval_info(value, pos)
-            return '"' + cls._to_year_month_interval_ansi_string(months, start_field,
-                                                                 end_field) + '"'
+            return (
+                '"' + cls._to_year_month_interval_ansi_string(months, start_field, end_field) + '"'
+            )
         else:
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
@@ -633,9 +633,7 @@ class VariantUtils:
             return cls._handle_array(value, pos, handle_array)
         elif variant_type == datetime.timedelta:
             # day-time intervals are represented using timedelta in a trivial manner
-            return datetime.timedelta(
-                microseconds=cls._get_dtinterval_info(value, pos)[0]
-            )
+            return datetime.timedelta(microseconds=cls._get_dtinterval_info(value, pos)[0])
         elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
             raise PySparkNotImplementedError(
                 errorClass="NOT_IMPLEMENTED",
