@@ -618,14 +618,32 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               }
             }
 
-            AggUtils.planAggregateWithOneDistinct(
-              normalizedGroupingExpressions,
-              functionsWithDistinct,
-              functionsWithoutDistinct,
-              distinctExpressions,
-              normalizedNamedDistinctExpressions,
-              resultExpressions,
-              planLater(child))
+            if (distinctExpressions.isEmpty) {
+              // If there is no distinct column expression, we use `planAggregateWithoutDistinct`.
+              // Essentially, when dealing with literals instead of columns, we can ignore DISTINCT.
+              // For example, this rule is applied to the following query:
+              //   SELECT COUNT(DISTINCT 1) FROM t
+              // Where t is a table with any columns.
+              AggUtils.planAggregateWithoutDistinct(
+                normalizedGroupingExpressions,
+                aggExpressions,
+                resultExpressions,
+                planLater(child))
+            } else {
+              // If there is a distinct column expression, we use `planAggregateWithOneDistinct`.
+              // This is the regular case where we have a single DISTINCT expression in aggregate.
+              // For example, this rule is applied to the following query:
+              //   SELECT COUNT(DISTINCT c) FROM t
+              // Where t is a table with column c.
+              AggUtils.planAggregateWithOneDistinct(
+                normalizedGroupingExpressions,
+                functionsWithDistinct,
+                functionsWithoutDistinct,
+                distinctExpressions,
+                normalizedNamedDistinctExpressions,
+                resultExpressions,
+                planLater(child))
+            }
           }
 
         aggregateOperator

@@ -2339,6 +2339,75 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
+
+  test("aggregating single distinct column with table") {
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName(col int) using parquet")
+
+      // Column `col` does exist in the table.
+      checkAnswer(sql(s"select max(col) from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(col) from $tableName"), Row(0))
+      checkAnswer(sql(s"select max(distinct col) from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(0))
+      checkAnswer(sql(s"select max(`col`) from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(`col`) from $tableName"), Row(0))
+      checkAnswer(sql(s"select max(distinct `col`) from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(distinct `col`) from $tableName"), Row(0))
+      // But here 'col' is a string literal, not a column name.
+      checkAnswer(sql(s"select max('col') from $tableName"), Row(null))
+      checkAnswer(sql(s"select count('col') from $tableName"), Row(0))
+      checkAnswer(sql(s"select max(distinct 'col') from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(distinct 'col') from $tableName"), Row(0))
+      checkAnswer(sql(s"""select max("col") from $tableName"""), Row(null))
+      checkAnswer(sql(s"""select count("col") from $tableName"""), Row(0))
+      checkAnswer(sql(s"""select max(distinct "col") from $tableName"""), Row(null))
+      checkAnswer(sql(s"""select count(distinct "col") from $tableName"""), Row(0))
+      // Works the same for any string literal.
+      checkAnswer(sql(s"select max('hello') from $tableName"), Row(null))
+      checkAnswer(sql(s"select count('hello') from $tableName"), Row(0))
+      checkAnswer(sql(s"select max(distinct 'hello') from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(distinct 'hello') from $tableName"), Row(0))
+      checkAnswer(sql(s"""select max("hello") from $tableName"""), Row(null))
+      checkAnswer(sql(s"""select count("hello") from $tableName"""), Row(0))
+      checkAnswer(sql(s"""select max(distinct "hello") from $tableName"""), Row(null))
+      checkAnswer(sql(s"""select count(distinct "hello") from $tableName"""), Row(0))
+      // Or any other literal for that matter.
+      checkAnswer(sql(s"select max(1) from $tableName"), Row(null))
+      checkAnswer(sql(s"select count(1) from $tableName"), Row(0))
+      checkAnswer(sql(s"""select max(distinct 1) from $tableName"""), Row(null))
+      checkAnswer(sql(s"""select count(distinct 1) from $tableName"""), Row(0))
+    }
+  }
+
+  test("selecting single distinct column with table") {
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName(col int) using parquet")
+
+      // Column `col` does exist in the table.
+      checkAnswer(sql(s"select col from $tableName"), Seq())
+      checkAnswer(sql(s"select distinct col from $tableName"), Seq())
+      checkAnswer(sql(s"select `col` from $tableName"), Seq())
+      checkAnswer(sql(s"select distinct `col` from $tableName"), Seq())
+      // But here 'col' is a string literal, not a column name.
+      checkAnswer(sql(s"select 'col' from $tableName"), Seq())
+      checkAnswer(sql(s"select distinct 'col' from $tableName"), Seq())
+      checkAnswer(sql(s"""select "col" from $tableName"""), Seq())
+      checkAnswer(sql(s"""select distinct "col" from $tableName"""), Seq())
+      // Works the same for any string literal.
+      checkAnswer(sql(s"select 'hello' from $tableName"), Seq())
+      checkAnswer(sql(s"select distinct 'hello' from $tableName"), Seq())
+      checkAnswer(sql(s"""select "hello" from $tableName"""), Seq())
+      checkAnswer(sql(s"""select distinct "hello" from $tableName"""), Seq())
+      // Or any other literal for that matter.
+      checkAnswer(sql(s"select 1 from $tableName"), Seq())
+      checkAnswer(sql(s"select distinct 1 from $tableName"), Seq())
+      checkAnswer(sql(s"""select 1 from $tableName"""), Seq())
+      checkAnswer(sql(s"""select distinct 1 from $tableName"""), Seq())
+    }
+  }
+
 }
 
 case class B(c: Option[Double])
