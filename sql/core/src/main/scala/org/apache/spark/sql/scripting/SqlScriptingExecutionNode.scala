@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
@@ -69,6 +68,9 @@ trait LeafStatementExec extends CompoundStatementExec {
    */
   var error: Option[SparkThrowable] = None
 
+  /**
+   * Throwable to rethrow after the statement execution if the error is not handled.
+   */
   var rethrow: Option[Throwable] = None
 }
 
@@ -136,7 +138,6 @@ class SingleStatementExec(
       }
     } catch {
       case e: SparkThrowable =>
-        // TODO: check handlers for error conditions
         raisedError = true
         errorState = Some(e.getSqlState)
         error = Some(e)
@@ -145,10 +146,10 @@ class SingleStatementExec(
             rethrow = Some(throwable)
           case _ =>
         }
-      case thr: Throwable =>
+      case throwable: Throwable =>
         raisedError = true
         errorState = Some("UNKNOWN")
-        rethrow = Some(thr)
+        rethrow = Some(throwable)
     }
   }
 }
@@ -175,20 +176,48 @@ class CompoundBodyExec(
     ret
   }
 
+  /**
+   * Handle error raised during the execution of the statement.
+   * @param statement statement that possibly raised the error
+   * @return pass through the statement
+   */
   private def handleError(statement: LeafStatementExec): CompoundStatementExec = {
     if (statement.raisedError) {
       getHandler(statement.errorState.get).foreach { handler =>
         statement.reset() // Clear all flags and result
         handler.reset()
-        return handler.getTreeIterator.next()
+        curr = Some(handler.getHandlerBody)
+        return handler.getHandlerBody
       }
     }
     statement
   }
 
+  /**
+   * Check if the leave statement was used, if it is not used stop iterating surrounding
+   * [[CompoundBodyExec]] and move iterator forward. If the label of the block matches the label of
+   * the leave statement, mark the leave statement as used.
+   * @param leave leave  statement
+   * @return pass through the leave statement
+   */
+  private def handleLeave(leave: LeaveStatementExec): LeaveStatementExec = {
+    if (!leave.used) {
+      // Hard stop the iteration of the current begin/end block
+      stopIteration = true
+      // If label of the block matches the label of the leave statement,
+      // mark the leave statement as used
+      if (label.getOrElse("").equals(leave.getLabel)) {
+        leave.used = true
+      }
+    }
+    curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+    leave
+  }
+
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
   private var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var stopIteration: Boolean = false  // hard stop iteration flag
 
   def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
@@ -208,7 +237,7 @@ class CompoundBodyExec(
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        localIterator.hasNext || childHasNext
+        (localIterator.hasNext || childHasNext) && !stopIteration
       }
 
       @scala.annotation.tailrec
@@ -217,21 +246,25 @@ class CompoundBodyExec(
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
           case Some(leave: LeaveStatementExec) =>
-            if (leave.used) {
-              curr = None
-              if (label.getOrElse("").equals(leave.getLabel)) {
-                leave.execute(session)
-              }
-            }
-            leave
+            handleLeave(leave)
           case Some(statement: LeafStatementExec) =>
-            curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement.execute(session)  // Execute the leaf statement
-            handleError(statement)
+            if (!statement.raisedError) {
+              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+            }
+            handleError(statement)  // Handle error if raised
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
-              val statement = body.getTreeIterator.next()
-              handleError(statement.asInstanceOf[LeafStatementExec])
+              val statement = body.getTreeIterator.next() // Get next statement from the child node
+              statement match {
+                case leave: LeaveStatementExec =>
+                  handleLeave(leave)
+                case leafStatement: LeafStatementExec =>
+                  // This check is done to handler error in surrounding begin/end block
+                  // if it was not handled in the nested block
+                  handleError(leafStatement)  // Handle error if raised
+                case nonLeafStatement: NonLeafStatementExec => nonLeafStatement
+              }
             } else {
               curr = if (localIterator.hasNext) Some(localIterator.next()) else None
               next()
@@ -243,24 +276,27 @@ class CompoundBodyExec(
     }
 }
 
-class ErrorHandlerExec(
-      body: CompoundBodyExec,
-      handlerType: HandlerType) extends NonLeafStatementExec {
+class ErrorHandlerExec(body: CompoundBodyExec) extends NonLeafStatementExec {
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
 
-  def getHandlerType: HandlerType = handlerType
+  def getHandlerBody: CompoundBodyExec = body
 
   override def reset(): Unit = body.reset()
 }
 
+/**
+ * Executable node for Leave statement.
+ * @param label
+ *   Label of the [[CompoundBodyExec]] that should be exited.
+ */
 class LeaveStatementExec(val label: String) extends LeafStatementExec {
 
   var used: Boolean = false
 
   def getLabel: String = label
 
-  override def execute(session: SparkSession): Unit = used = true
+  override def execute(session: SparkSession): Unit = ()
 
   override def reset(): Unit = used = false
 }

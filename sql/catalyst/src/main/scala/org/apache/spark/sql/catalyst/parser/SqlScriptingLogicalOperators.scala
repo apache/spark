@@ -74,8 +74,8 @@ case class ErrorCondition(
     value: String) extends CompoundPlanStatement
 
 object HandlerType extends Enumeration {
-  type HandlerType = Value
-  val EXIT, CONTINUE = Value
+    type HandlerType = Value
+    val EXIT, CONTINUE = Value
 }
 
 /**

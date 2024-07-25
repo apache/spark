@@ -140,7 +140,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val buff = ListBuffer[CompoundPlanStatement]()
     val handlers = ListBuffer[ErrorHandler]()
     val conditions = mutable.HashMap[String, String]()
-    val sqlstates = mutable.Set[String]()
+    val sqlStates = mutable.Set[String]()
 
     ctx.compoundStatements.forEach(compoundStatement => {
       val stmt = visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
@@ -149,9 +149,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         case handler: ErrorHandler => handlers += handler
         case condition: ErrorCondition =>
           assert(!conditions.contains(condition.conditionName))   // Check for duplicate names.
-          assert(!sqlstates.contains(condition.value))            // Check for duplicate sqlstates.
+          assert(!sqlStates.contains(condition.value))            // Check for duplicate sqlStates.
           conditions += condition.conditionName -> condition.value
-          sqlstates += condition.value
+          sqlStates += condition.value
         case s => buff += s
       }
     })

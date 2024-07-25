@@ -228,7 +228,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("handler") {
+  test("handler - continue") {
     val sqlScript =
       """
         |BEGIN
@@ -236,12 +236,13 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |  DECLARE zero_division CONDITION FOR '22012';
         |  DECLARE CONTINUE HANDLER FOR zero_division
         |  BEGIN
+        |    SELECT flag;
         |    SET VAR flag = 1;
         |  END;
         |  BEGIN
-        |    SELECT 1;
+        |    SELECT 2;
         |    BEGIN
-        |      SELECT 2;
+        |      SELECT 3;
         |      SELECT 1/0;
         |    END;
         |  END;
@@ -250,10 +251,42 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |""".stripMargin
     val expected = Seq(
       Array.empty[Row], // declare var
-      Array(Row(1)), // select
-      Array(Row(2)), // select
-      Array.empty[Row], // select 1/0 (error)
-      Array(Row(1)), // select
+      Array(Row(2)),    // select
+      Array(Row(3)),    // select
+      Array(Row(-1)),   // select flag
+      Array.empty[Row], // set flag
+      Array(Row(1)),    // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - exit") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  BEGIN
+        |    DECLARE flag INT = -1;
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE EXIT HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    SELECT 1/0;
+        |    SELECT 4;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array.empty[Row], // declare var
+      Array(Row(2)),    // select
+      Array(Row(3)),    // select
+      Array(Row(-1)),   // select flag
+      Array.empty[Row], // set flag
+      Array(Row(1)),    // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected)
   }

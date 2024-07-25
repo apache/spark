@@ -19,9 +19,10 @@ package org.apache.spark.sql.scripting
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, ErrorHandler, HandlerType, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 
@@ -56,6 +57,55 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       case _ => None
     }
 
+  private def transformBodyIntoExec(
+      compoundBody: CompoundBody,
+      isExitHandler: Boolean = false,
+      label: String = ""): CompoundBodyExec = {
+    val variables = compoundBody.collection.flatMap {
+      case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
+      case _ => None
+    }
+    val dropVariables = variables
+      .map(varName => DropVariable(varName, ifExists = true))
+      .map(new SingleStatementExec(_, Origin(), isInternal = true))
+      .reverse
+
+    val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
+    val handlers = ListBuffer[ErrorHandlerExec]()
+    compoundBody.handlers.foreach(handler => {
+      val handlerBodyExec =
+        transformBodyIntoExec(handler.body,
+          handler.handlerType == HandlerType.EXIT,
+          compoundBody.label.get)
+      val handlerExec = new ErrorHandlerExec(handlerBodyExec)
+
+      handler.conditions.foreach(condition => {
+        val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
+        conditionHandlerMap.put(conditionValue, handlerExec)
+      })
+
+      handlers += handlerExec
+    })
+
+    if (isExitHandler) {
+      val leave = new LeaveStatementExec(label)
+      val stmts = compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++
+        dropVariables :+ leave
+
+      return new CompoundBodyExec(
+        compoundBody.label,
+        stmts,
+        conditionHandlerMap,
+        session)
+    }
+
+    new CompoundBodyExec(
+      compoundBody.label,
+      compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
+      conditionHandlerMap,
+      session)
+  }
+
   /**
    * Transform the parsed tree to the executable node.
    * @param node
@@ -67,36 +117,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
     node match {
       case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
-        val variables = body.collection.flatMap {
-          case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
-          case _ => None
-        }
-        val dropVariables = variables
-          .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true))
-          .reverse
-
-        val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
-        val handlers = ListBuffer[ErrorHandlerExec]()
-        body.handlers.foreach(handler => {
-          val handlerBodyExec = transformTreeIntoExecutable(handler.body).
-            asInstanceOf[CompoundBodyExec]
-          val handlerExec =
-            new ErrorHandlerExec(handlerBodyExec, handler.handlerType)
-
-          handler.conditions.foreach(condition => {
-            val conditionValue = body.conditions.getOrElse(condition, condition)
-            conditionHandlerMap.put(conditionValue, handlerExec)
-          })
-
-          handlers += handlerExec
-        })
-
-        new CompoundBodyExec(
-          body.label,
-          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
-          conditionHandlerMap,
-          session)
+        transformBodyIntoExec(body)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
