@@ -75,35 +75,34 @@ object StateMetadataTableEntry {
 }
 
 class StateMetadataSource extends TableProvider with DataSourceRegister {
-
   override def shortName(): String = "state-metadata"
 
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    new StateMetadataTable(schema)
+    new StateMetadataTable
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    if (!options.containsKey("path")) {
-      throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
-    }
-
     StateMetadataTableEntry.schema
   }
 }
 
 
-class StateMetadataTable(override val schema: StructType) extends Table
-  with SupportsRead with SupportsMetadataColumns {
+class StateMetadataTable extends Table with SupportsRead with SupportsMetadataColumns {
   override def name(): String = "state-metadata-table"
+
+  override def schema(): StructType = StateMetadataTableEntry.schema
 
   override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     () => {
-      new StateMetadataScan(options.get("path"), schema)
+      if (!options.containsKey("path")) {
+        throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
+      }
+      new StateMetadataScan(options.get("path"))
     }
   }
 
@@ -118,10 +117,8 @@ class StateMetadataTable(override val schema: StructType) extends Table
 
 case class StateMetadataInputPartition(checkpointLocation: String) extends InputPartition
 
-class StateMetadataScan(
-    checkpointLocation: String,
-    schema: StructType) extends Scan {
-  override def readSchema: StructType = schema
+class StateMetadataScan(checkpointLocation: String) extends Scan {
+  override def readSchema: StructType = StateMetadataTableEntry.schema
 
   override def toBatch: Batch = {
     new Batch {
@@ -245,7 +242,7 @@ class StateMetadataPartitionReader(
               -1 // numColsPrefixKey is not available in OperatorStateMetadataV2
             )
           }
+        }
       }
-    }
-  }.iterator
+    }.iterator
 }

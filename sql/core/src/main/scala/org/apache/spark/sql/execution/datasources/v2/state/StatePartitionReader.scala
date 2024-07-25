@@ -36,7 +36,8 @@ class StatePartitionReaderFactory(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry]) extends PartitionReaderFactory {
+    stateStoreMetadata: Array[StateMetadataTableEntry],
+    stateVarName: Option[String] = None) extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
@@ -45,7 +46,7 @@ class StatePartitionReaderFactory(
         stateStoreInputPartition, schema, stateStoreMetadata)
     } else {
       new StatePartitionReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, stateStoreMetadata)
+        stateStoreInputPartition, schema, stateStoreMetadata, stateVarName)
     }
   }
 }
@@ -59,10 +60,19 @@ abstract class StatePartitionReaderBase(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
+    stateStoreMetadata: Array[StateMetadataTableEntry],
+    stateVarName: Option[String] = None)
   extends PartitionReader[InternalRow] with Logging {
-  private val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
-  private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
+  protected val keySchema = SchemaUtil.getSchemaAsDataType(
+    schema, "key").asInstanceOf[StructType]
+  protected val valueSchema = SchemaUtil.getSchemaAsDataType(
+    schema, "value").asInstanceOf[StructType]
+
+  // TODO better way to avoid this?
+  protected val transformWithState: Boolean =
+    stateStoreMetadata.head.operatorName == "transformWithStateExec"
+
+  protected var keyStateEncoderType: KeyStateEncoderSpec = _
 
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
@@ -77,14 +87,13 @@ abstract class StatePartitionReaderBase(
       0
     } else {
       require(stateStoreMetadata.length == 1)
-      require(stateStoreMetadata.head.version == 1)
-      stateStoreMetadata.head.numColsPrefixKey.get
+      stateStoreMetadata.head.numColsPrefixKey
     }
 
     // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
     // added in the future along with state metadata changes.
     // Filed JIRA here: https://issues.apache.org/jira/browse/SPARK-47524
-    val keyStateEncoderType = if (numColsPrefixKey > 0) {
+    keyStateEncoderType = if (numColsPrefixKey > 0) {
       PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
     } else {
       NoPrefixKeyStateEncoderSpec(keySchema)
@@ -92,7 +101,7 @@ abstract class StatePartitionReaderBase(
 
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
-      useColumnFamilies = false, storeConf, hadoopConf.value,
+      useColumnFamilies = transformWithState, storeConf, hadoopConf.value,
       useMultipleValuesPerKey = false)
   }
 
@@ -127,8 +136,10 @@ class StatePartitionReader(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
-  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
+    stateStoreMetadata: Array[StateMetadataTableEntry],
+    stateVarName: Option[String] = None)
+  extends StatePartitionReaderBase(storeConf, hadoopConf,
+    partition, schema, stateStoreMetadata, stateVarName) {
 
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
@@ -146,11 +157,23 @@ class StatePartitionReader(
     }
   }
 
+  // TODO we can remove this create new col family after integration with VCF
+  private var stateStore: Option[StateStore] = None
   override lazy val iter: Iterator[InternalRow] = {
-    store.iterator().map(pair => unifyStateRowPair((pair.key, pair.value)))
+    if (transformWithState) {
+      stateStore = Option(provider.getStore(partition.sourceOptions.batchId + 1))
+      assert(stateVarName.isDefined, "state variable name has to be defined for TWS")
+      stateStore.get.createColFamilyIfAbsent(
+        stateVarName.get, keySchema, valueSchema, keyStateEncoderType)
+      stateStore.get.iterator(stateVarName.get)
+        .map(pair => unifyStateRowPair((pair.key, pair.value)))
+    } else {
+      store.iterator().map(pair => unifyStateRowPair((pair.key, pair.value)))
+    }
   }
 
   override def close(): Unit = {
+    if (stateStore.isDefined) stateStore.get.abort()
     store.abort()
     super.close()
   }
@@ -164,6 +187,7 @@ class StatePartitionReader(
   }
 }
 
+// TODO do we need to do integration with readChangeFeed?
 /**
  * An implementation of [[StatePartitionReaderBase]] for the readChangeFeed mode of State Data
  * Source. It reads the change of state over batches of a particular partition.

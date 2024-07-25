@@ -140,10 +140,6 @@ object OperatorStateMetadataUtils extends Logging {
         Serialization.read[OperatorStateMetadataV1](in)
       case 2 =>
         Serialization.read[OperatorStateMetadataV2](in)
-
-      case 2 =>
-        Serialization.read[OperatorStateMetadataV2](in)
-
       case _ =>
         throw new IllegalArgumentException(s"Failed to deserialize operator metadata with " +
           s"version=$version")

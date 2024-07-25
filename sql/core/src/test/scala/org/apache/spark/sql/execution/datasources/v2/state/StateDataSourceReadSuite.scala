@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, Offset
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessorWithMultipleValueVars, TimeMode, TransformWithStateSuiteUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
@@ -447,6 +447,40 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
       newStateStoreProvider().getClass.getName)
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "false")
+  }
+
+  test("ERROR: Do not provide state variable name with " +
+    "transformWithState operator") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithMultipleValueVars(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val e = intercept[StateDataSourceUnspecifiedRequiredOption] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .load()
+        }
+        checkError(e, "STDS_REQUIRED_OPTION_UNSPECIFIED", Some("42601"),
+          Map("optionName" -> "stateVarName"))
+      }
+    }
   }
 }
 

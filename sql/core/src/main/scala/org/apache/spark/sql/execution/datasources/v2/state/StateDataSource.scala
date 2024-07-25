@@ -57,24 +57,31 @@ class StateDataSource extends TableProvider with DataSourceRegister {
   private def runStateVarChecks(
       sourceOptions: StateSourceOptions,
       stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
-    // Perform checks for transformWithState operator in case state variable name is provided
-    require(stateStoreMetadata.size == 1)
-    val opMetadata = stateStoreMetadata.head
-    // if we are trying to query state source with state variable name, then the operator
-    // should be transformWithState
-    if (opMetadata.operatorName != TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
-      val errorMsg = "Providing state variable names is only supported with the " +
-        s"transformWithState operator. Found operator=${opMetadata.operatorName}. " +
-        s"Please remove this option and re-run the query."
-      throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME, errorMsg)
-    }
+    if (sourceOptions.stateVarName.isDefined) {
+      // Perform checks for transformWithState operator in case state variable name is provided
+      require(stateStoreMetadata.size == 1)
+      val opMetadata = stateStoreMetadata.head
+      if (opMetadata.operatorName != TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
+        // if we are trying to query state source with state variable name, then the operator
+        // should be transformWithState
+        val errorMsg = "Providing state variable names is only supported with the " +
+          s"transformWithState operator. Found operator=${opMetadata.operatorName}. " +
+          s"Please remove this option and re-run the query."
+        throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME, errorMsg)
+      }
 
-    // if the operator is transformWithState, but the operator properties are empty, then
-    // the user has not defined any state variables for the operator
-    val operatorProperties = opMetadata.operatorProperties
-    if (operatorProperties.isEmpty) {
-      throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
-        "No state variable names are defined for the transformWithState operator")
+      // if the operator is transformWithState, but the operator properties are empty, then
+      // the user has not defined any state variables for the operator
+      val operatorProperties = opMetadata.operatorPropertiesJson
+      if (operatorProperties.isEmpty) {
+        throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
+          "No state variable names are defined for the transformWithState operator")
+      }
+    } else {
+      if (stateStoreMetadata.size == 1 &&
+        stateStoreMetadata.head.operatorName == TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
+        throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
+      }
     }
   }
 
@@ -94,9 +101,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
         entry.stateStoreName == sourceOptions.storeName
     }
 
-    if (sourceOptions.stateVarName.isDefined) {
-      runStateVarChecks(sourceOptions, stateStoreMetadata)
-    }
+    runStateVarChecks(sourceOptions, stateStoreMetadata)
 
     new StateTable(session, schema, sourceOptions, stateConf, stateStoreMetadata)
   }
