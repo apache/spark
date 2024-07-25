@@ -862,7 +862,18 @@ object StateStore extends Logging {
             case NonFatal(e) =>
               logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
                 log"stopping management thread", e)
-              // If this provider is needed again, it will be reloaded.
+              // When we get a non-fatal exception, we just unload the provider.
+              //
+              // By not bubbling the exception to the maintenance task thread or the query execution
+              // thread, it's possible for a maintenance thread pool task to continue failing on
+              // the same partition. Additionally, if there is some global issue that will cause
+              // all maintenance thread pool tasks to fail, then bubbling the exception and
+              // stopping the pool is faster than waiting for all tasks to see the same exception.
+              //
+              // However, we assume that repeated failures on the same partition and global issues
+              // are rare. The benefit to unloading just the partition with an exception is that
+              // is that transient issues on a given provider do not affect any other providers;
+              // so, in most cases, this should be a more performant solution.
               unload(id)
           } finally {
             val duration = System.currentTimeMillis() - startTime
