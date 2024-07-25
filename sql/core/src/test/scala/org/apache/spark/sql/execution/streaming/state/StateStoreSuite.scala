@@ -50,6 +50,10 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+// MaintenanceErrorOnCertainPartitionsProvider is a test-only provider that throws an
+// exception during maintenance for partitions 0 and 1 (these are arbitrary choices). It is
+// used to test that an exception in a single provider's maintenance does not affect other
+// providers that do not experience exceptions.
 class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStoreProvider {
   private var id: StateStoreId = null
 
