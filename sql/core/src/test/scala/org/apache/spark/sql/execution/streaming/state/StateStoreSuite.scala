@@ -58,14 +58,14 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
   private var id: StateStoreId = null
 
   override def init(
-   stateStoreId: StateStoreId,
-   keySchema: StructType,
-   valueSchema: StructType,
-   keyStateEncoderSpec: KeyStateEncoderSpec,
-   useColumnFamilies: Boolean,
-   storeConfs: StateStoreConf,
-   hadoopConf: Configuration,
-   useMultipleValuesPerKey: Boolean = false): Unit = {
+    stateStoreId: StateStoreId,
+    keySchema: StructType,
+    valueSchema: StructType,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    useColumnFamilies: Boolean,
+    storeConfs: StateStoreConf,
+    hadoopConf: Configuration,
+    useMultipleValuesPerKey: Boolean = false): Unit = {
     id = stateStoreId
 
     super.init(
