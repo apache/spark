@@ -24,65 +24,86 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   // scalastyle:off println
-  test("transpose") {
+
+  //
+  // Test cases: input parameter
+  //
+
+  test("transpose with default index column") {
     checkAnswer(
       salary.transpose(),
       Row("salary", 2000.0, 1000.0) :: Nil
     )
   }
 
-  test("transpose with index column specified") {
+  test("transpose with specified index column") {
     checkAnswer(
       salary.transpose(Some($"salary")),
       Row("personId", 1, 0) :: Nil
     )
   }
 
-  test("transpose frame with repeated first column values") {
-    val df = Seq(("test1", "1"), ("test1", "2")).toDF("s", "id")
-    print(df.transpose().show())
-    //    checkAnswer(
-    //      df.transpose(),
-    //      Row("id", 1, 2) :: Nil
-    //    )
-  }
+  //
+  // Test cases: API behavior
+  //
 
+  test("enforce least common type for non-index columns") {
+    val df = Seq(("x", 1, 10.0), ("y", 2, 20.0)).toDF("name", "id", "value")
+    val transposedDf = df.transpose()
+    checkAnswer(
+      transposedDf,
+      Row("id", 1.0, 2.0) :: Row("value", 10.0, 20.0) :: Nil
+    )
+    // (id,IntegerType) -> (x,DoubleType)
+    // (value,DoubleType) -> (y,DoubleType)
+    assertResult(DoubleType)(transposedDf.schema("x").dataType)
+    assertResult(DoubleType)(transposedDf.schema("y").dataType)
 
-  test("transpose empty frame that has column names") {
-    val schema = StructType(Seq(
-         StructField("id", IntegerType, nullable = true),
-         StructField("name", StringType, nullable = true)
-    ))
-    val emptyDF = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
-    println(emptyDF.transpose().show())
-    //    checkAnswer(
-    //      repeatedDf.transpose(),
-    //      Row("id", 1) :: Nil
-    //    )
-  }
-
-  test("transpose empty frame that has no column names") {
-    val emptyDF = spark.emptyDataFrame
-    println(emptyDF.transpose().show())
-    //    checkAnswer(
-    //      repeatedDf.transpose(),
-    //      Row("id", 1) :: Nil
-    //    )
-  }
-
-  test("transpose frame with columns of mismatch types") {
     val exception = intercept[IllegalArgumentException] {
       person.transpose()
     }
     assert(exception.getMessage.contains("No common type found"))
   }
 
-  test("transpose - correct column ordering") {
-    val df = Seq(("test2", "1"), ("test1", "2")).toDF("s", "id")
-    print(df.transpose().show())
-    //    checkAnswer(
-    //      df.transpose(),
-    //      Row("id", 2, 1) :: Nil
-    //    )
+  test("transposed columns in ascending order based on index column values") {
+    val transposedDf = person.transpose(Some($"name"))
+    checkAnswer(
+      transposedDf,
+      Row("id", 1, 0) :: Row("age", 20, 30)  :: Nil
+    )
+    // mike, jim -> jim, mike
+    assertResult(Array("key", "jim", "mike"))(transposedDf.columns)
+  }
+
+  //
+  // Test cases: special frame
+  //
+
+  test("transpose empty frame w. column names") {
+    val schema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("name", StringType)
+    ))
+    val emptyDF = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+    checkAnswer(
+      emptyDF.transpose(),
+      Row("name") :: Nil
+    )
+  }
+
+  test("transpose empty frame w/o column names") {
+    val emptyDF = spark.emptyDataFrame
+    checkAnswer(
+      emptyDF.transpose(),
+      Nil
+    )
+  }
+
+  test("transpose frame with only index column") {
+
+  }
+
+  test("transpose frame with only one row") {
+
   }
 }
