@@ -210,9 +210,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val readDataColumns = dataColumns
+      val readDataColumns = dataColumnsWithoutPartitionCols
         .filter(requiredAttributes.contains)
-        .filterNot(partitionColumns.contains)
 
       // Metadata attributes are part of a column of type struct up to this point. Here we extract
       // this column from the schema and specify a matcher for that.
