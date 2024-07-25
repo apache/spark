@@ -872,8 +872,8 @@ object StateStore extends Logging {
               //
               // However, we assume that repeated failures on the same partition and global issues
               // are rare. The benefit to unloading just the partition with an exception is that
-              // is that transient issues on a given provider do not affect any other providers;
-              // so, in most cases, this should be a more performant solution.
+              // transient issues on a given provider do not affect any other providers; so, in
+              // most cases, this should be a more performant solution.
               unload(id)
           } finally {
             val duration = System.currentTimeMillis() - startTime
