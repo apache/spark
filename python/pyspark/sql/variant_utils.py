@@ -436,7 +436,6 @@ class VariantUtils:
         fields to its ANSI SQL string representation.
         """
         YEAR = 0
-        MONTH = 1
         MONTHS_PER_YEAR = 12
         sign = ""
         abs_months = months
