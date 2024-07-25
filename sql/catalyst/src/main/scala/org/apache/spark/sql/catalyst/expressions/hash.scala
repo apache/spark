@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -565,7 +565,15 @@ abstract class InterpretedHashFunction {
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
-        hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+        dataType match {
+          case st: StringType if st.supportsBinaryEquality =>
+            hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+          case _ =>
+            val stringHash = CollationFactory
+              .fetchCollation(dataType.asInstanceOf[StringType].collationId)
+              .hashFunction.applyAsLong(s)
+            hashLong(stringHash, seed)
+            }
 
       case array: ArrayData =>
         val elementType = dataType match {

@@ -620,6 +620,33 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 31, 1728235666)
   }
 
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI")) {
+    test(s"hash equality for collated $collation strings") {
+      val s1 = "aaa"
+      val s2 = "AAA"
+
+      // Interpreted hash value for s1
+      val hash = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42).eval()
+
+      // Check if interpreted hash value is same as codegen for s1
+      checkEvaluation(Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42), hash)
+      // Check if s2's interpreted and codegen hash values are same as s1's
+      checkEvaluation(Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42), hash)
+    }
+  }
+
+  for (collation <- Seq("UTF8_BINARY", "UNICODE")) {
+    test(s"hash inequality for collated $collation strings") {
+      val s1 = "aaa"
+      val s2 = "AAA"
+
+      val hash1 = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42).eval()
+      val hash2 = Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42).eval()
+
+      assert(hash1 != hash2)
+    }
+  }
+
   test("SPARK-18207: Compute hash for a lot of expressions") {
     def checkResult(schema: StructType, input: InternalRow): Unit = {
       val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
