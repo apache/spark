@@ -98,12 +98,12 @@ class PandasGroupedOpsMixin:
         """
         # Columns are special because hasattr always return True
         if (
-                isinstance(udf, Column)
-                or not hasattr(udf, "func")
-                or (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
                 udf.evalType  # type: ignore[attr-defined]
                 != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-        )
+            )
         ):
             raise PySparkTypeError(
                 errorClass="INVALID_UDF_EVAL_TYPE",
@@ -120,7 +120,7 @@ class PandasGroupedOpsMixin:
         return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
 
     def applyInPandas(
-            self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
+        self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
@@ -241,12 +241,12 @@ class PandasGroupedOpsMixin:
         return DataFrame(jdf, self.session)
 
     def applyInPandasWithState(
-            self,
-            func: "PandasGroupedMapFunctionWithState",
-            outputStructType: Union[StructType, str],
-            stateStructType: Union[StructType, str],
-            outputMode: str,
-            timeoutConf: str,
+        self,
+        func: "PandasGroupedMapFunctionWithState",
+        outputStructType: Union[StructType, str],
+        stateStructType: Union[StructType, str],
+        outputMode: str,
+        timeoutConf: str,
     ) -> DataFrame:
         """
         Applies the given function to each group of data, while maintaining a user-defined
@@ -364,11 +364,13 @@ class PandasGroupedOpsMixin:
         return DataFrame(jdf, self.session)
 
 
-    def transformWithStateInPandas(self,
-                                   statefulProcessor: StatefulProcessor,
-                                   outputStructType: Union[StructType, str],
-                                   outputMode: str,
-                                   timeMode: str) -> DataFrame:
+    def transformWithStateInPandas(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str
+    ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2.
         We allow the user to act on per-group set of input rows along with keyed state and the
@@ -657,7 +659,7 @@ class PandasCogroupedOps:
         self._gd2 = gd2
 
     def applyInPandas(
-            self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
+        self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
         Applies a function to each cogroup using pandas and returns the result
@@ -760,7 +762,7 @@ class PandasCogroupedOps:
         return DataFrame(jdf, self._gd1.session)
 
     def applyInArrow(
-            self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
+        self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
         """
         Applies a function to each cogroup using Arrow and returns the result
