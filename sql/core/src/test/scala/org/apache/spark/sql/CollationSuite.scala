@@ -989,6 +989,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("Group by on collated string") {
+    val table = "t"
+
+    withTable(table) {
+      sql(s"create table $table (s string collate utf8_lcase)")
+      sql(s"insert into $table values ('aaa')")
+      sql(s"insert into $table values ('AAA')")
+
+      checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
+    }
+  }
+
   test("Support operations on complex types containing collated strings") {
     checkAnswer(sql("select reverse('abc' collate utf8_lcase)"), Seq(Row("cba")))
     checkAnswer(sql(
