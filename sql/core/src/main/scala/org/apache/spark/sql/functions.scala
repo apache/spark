@@ -399,7 +399,7 @@ object functions {
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.fn("collect_top_k", lit(num), lit(reverse))
+    Column.fn("collect_top_k", e, lit(num), lit(reverse))
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.

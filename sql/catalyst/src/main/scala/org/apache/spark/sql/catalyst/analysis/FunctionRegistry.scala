@@ -682,8 +682,10 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
-    expression[TimestampAdd]("timestamp_add"),
-    expression[TimestampDiff]("timestamp_diff"),
+    // expression[TimestampAdd]("timestamp_add"),
+    expression[TimestampAdd]("timestampadd"),
+    // expression[TimestampDiff]("timestamp_diff"),
+    expression[TimestampDiff]("timestampdiff"),
 
     // collection functions
     expression[CreateArray]("array"),
