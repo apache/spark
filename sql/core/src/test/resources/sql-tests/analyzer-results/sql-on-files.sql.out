@@ -7,9 +7,9 @@ CreateNamespace true
 
 
 -- !query
-CREATE TABLE sql_on_files.TEST_PARQUET USING PARQUET AS SELECT 1
+CREATE TABLE sql_on_files.test_parquet USING PARQUET AS SELECT 1
 -- !query analysis
-CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`TEST_PARQUET`, ErrorIfExists, [1]
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`test_parquet`, ErrorIfExists, [1]
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
@@ -55,16 +55,16 @@ Project [1#x]
 
 
 -- !query
-DROP TABLE sql_on_files.TEST_PARQUET
+DROP TABLE sql_on_files.test_parquet
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.TEST_PARQUET
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.test_parquet
 
 
 -- !query
-CREATE TABLE sql_on_files.TEST_ORC USING ORC AS SELECT 1
+CREATE TABLE sql_on_files.test_orc USING ORC AS SELECT 1
 -- !query analysis
-CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`TEST_ORC`, ErrorIfExists, [1]
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`test_orc`, ErrorIfExists, [1]
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
@@ -110,16 +110,16 @@ Project [1#x]
 
 
 -- !query
-DROP TABLE sql_on_files.TEST_ORC
+DROP TABLE sql_on_files.test_orc
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.TEST_ORC
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.test_orc
 
 
 -- !query
-CREATE TABLE sql_on_files.TEST_CSV USING CSV AS SELECT 1
+CREATE TABLE sql_on_files.test_csv USING CSV AS SELECT 1
 -- !query analysis
-CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`TEST_CSV`, ErrorIfExists, [1]
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`test_csv`, ErrorIfExists, [1]
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
@@ -165,16 +165,16 @@ Project [_c0#x]
 
 
 -- !query
-DROP TABLE sql_on_files.TEST_CSV
+DROP TABLE sql_on_files.test_csv
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.TEST_CSV
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.test_csv
 
 
 -- !query
-CREATE TABLE sql_on_files.TEST_JSON USING JSON AS SELECT 1
+CREATE TABLE sql_on_files.test_json USING JSON AS SELECT 1
 -- !query analysis
-CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`TEST_JSON`, ErrorIfExists, [1]
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_on_files`.`test_json`, ErrorIfExists, [1]
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
@@ -220,10 +220,10 @@ Project [1#xL]
 
 
 -- !query
-DROP TABLE sql_on_files.TEST_JSON
+DROP TABLE sql_on_files.test_json
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.TEST_JSON
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_on_files.test_json
 
 
 -- !query
