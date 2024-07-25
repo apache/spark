@@ -26,7 +26,14 @@ import socket
 from typing import Any
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
-from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer, write_with_length
+from pyspark.serializers import (
+    Serializer,
+    read_int,
+    write_int,
+    UTF8Deserializer,
+    CPickleSerializer,
+    write_with_length,
+)
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     to_arrow_type,
@@ -1139,16 +1146,10 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
-    def __init__(
-            self,
-            timezone,
-            safecheck,
-            assign_cols_by_name,
-            arrow_max_records_per_batch):
-        super(
-            TransformWithStateInPandasSerializer,
-            self
-        ).__init__(timezone, safecheck, assign_cols_by_name)
+    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch):
+        super(TransformWithStateInPandasSerializer, self).__init__(
+            timezone, safecheck, assign_cols_by_name
+        )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
 
@@ -1170,7 +1171,9 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
         def generate_data_batches(batches):
             for batch in batches:
-                data_pandas = [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+                data_pandas = [
+                    self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()
+                ]
                 key_series = [data_pandas[o] for o in self.key_offsets]
                 batch_key = tuple(s[0] for s in key_series)
                 yield (batch_key, data_pandas)
@@ -1181,11 +1184,10 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         for k, g in groupby(data_batches, key=lambda x: x[0]):
             yield (k, g)
 
-
     def dump_stream(self, iterator, stream):
         """
         Read through an iterator of (iterator of pandas DataFrame, state), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
-        result = [(b, t) for x in iterator for y, t in x for b in y]    
+        result = [(b, t) for x in iterator for y, t in x for b in y]
         super().dump_stream(result, stream)

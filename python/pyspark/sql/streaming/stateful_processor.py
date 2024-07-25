@@ -23,9 +23,18 @@ from pyspark.sql.streaming.value_state_client import ValueStateClient
 
 import pandas as pd
 from pyspark.sql.types import (
-    StructType, StructField, IntegerType, LongType, ShortType,
-    FloatType, DoubleType, DecimalType, StringType, BooleanType,
-    DateType, TimestampType
+    StructType,
+    StructField,
+    IntegerType,
+    LongType,
+    ShortType,
+    FloatType,
+    DoubleType,
+    DecimalType,
+    StringType,
+    BooleanType,
+    DateType,
+    TimestampType,
 )
 
 __all__ = ["StatefulProcessor", "StatefulProcessorHandle"]
@@ -39,10 +48,9 @@ class ValueState:
     Class used for arbitrary stateful operations with the v2 API to capture single value state.
     """
 
-    def __init__(self,
-            value_state_client: ValueStateClient,
-            state_name: str,
-            schema: Union[StructType, str]) -> None:
+    def __init__(
+        self, value_state_client: ValueStateClient, state_name: str, schema: Union[StructType, str]
+    ) -> None:
         self._value_state_client = value_state_client
         self._state_name = state_name
         self.schema = schema
@@ -90,9 +98,7 @@ class StatefulProcessorHandle:
     API v2.
     """
 
-    def __init__(
-            self,
-            stateful_processor_api_client: StatefulProcessorApiClient) -> None:
+    def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient) -> None:
         self.stateful_processor_api_client = stateful_processor_api_client
 
     def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
@@ -139,9 +145,8 @@ class StatefulProcessor(ABC):
 
     @abstractmethod
     def handleInputRows(
-            self,
-            key: Any,
-            rows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
+        self, key: Any, rows: Iterator["PandasDataFrameLike"]
+    ) -> Iterator["PandasDataFrameLike"]:
         """
         Function that will allow users to interact with input data rows along with the grouping key.
         It should take parameters (key, Iterator[`pandas.DataFrame`]) and return another

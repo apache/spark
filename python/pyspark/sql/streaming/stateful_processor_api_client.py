@@ -38,15 +38,13 @@ class StatefulProcessorHandleState(Enum):
 
 
 class StatefulProcessorApiClient:
-    def __init__(
-            self,
-            state_server_port: int,
-            key_schema: StructType) -> None:
+    def __init__(self, state_server_port: int, key_schema: StructType) -> None:
         self.key_schema = key_schema
         self._client_socket = socket.socket()
         self._client_socket.connect(("localhost", state_server_port))
-        self.sockfile = self._client_socket.makefile("rwb",
-                                                     int(os.environ.get("SPARK_BUFFER_SIZE",65536)))
+        self.sockfile = self._client_socket.makefile(
+            "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
+        )
         self.handle_state = StatefulProcessorHandleState.CREATED
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
@@ -61,11 +59,12 @@ class StatefulProcessorApiClient:
 
         response_message = self._receive_proto_message()
         status = response_message.statusCode
-        if (status == 0):
+        if status == 0:
             self.handle_state = state
         else:
-            raise PySparkRuntimeError(f"Error setting handle state: "
-                                      f"{response_message.errorMessage}")
+            raise PySparkRuntimeError(
+                f"Error setting handle state: " f"{response_message.errorMessage}"
+            )
 
     def set_implicit_key(self, key: Tuple) -> None:
         key_bytes = self._serialize_to_bytes(self.key_schema, key)
@@ -76,9 +75,10 @@ class StatefulProcessorApiClient:
         self._send_proto_message(message)
         response_message = self._receive_proto_message()
         status = response_message.statusCode
-        if (status != 0):
-            raise PySparkRuntimeError(f"Error setting implicit key: "
-                                      f"{response_message.errorMessage}")
+        if status != 0:
+            raise PySparkRuntimeError(
+                f"Error setting implicit key: " f"{response_message.errorMessage}"
+            )
 
     def remove_implicit_key(self) -> None:
         print("calling remove_implicit_key on python side")
@@ -89,9 +89,10 @@ class StatefulProcessorApiClient:
         self._send_proto_message(message)
         response_message = self._receive_proto_message()
         status = response_message.statusCode
-        if (status != 0):
-            raise PySparkRuntimeError(f"Error removing implicit key: "
-                                      f"{response_message.errorMessage}")
+        if status != 0:
+            raise PySparkRuntimeError(
+                f"Error removing implicit key: " f"{response_message.errorMessage}"
+            )
 
     def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
         if isinstance(schema, str):
@@ -106,17 +107,19 @@ class StatefulProcessorApiClient:
         self._send_proto_message(message)
         response_message = self._receive_proto_message()
         status = response_message.statusCode
-        if (status != 0):
-            raise PySparkRuntimeError(f"Error initializing value state: "
-                                      f"{response_message.errorMessage}")
+        if status != 0:
+            raise PySparkRuntimeError(
+                f"Error initializing value state: " f"{response_message.errorMessage}"
+            )
 
-    def _get_proto_state(self,
-                         state: StatefulProcessorHandleState) -> stateMessage.HandleState.ValueType:
-        if (state == StatefulProcessorHandleState.CREATED):
+    def _get_proto_state(
+        self, state: StatefulProcessorHandleState
+    ) -> stateMessage.HandleState.ValueType:
+        if state == StatefulProcessorHandleState.CREATED:
             return stateMessage.CREATED
-        elif (state == StatefulProcessorHandleState.INITIALIZED):
+        elif state == StatefulProcessorHandleState.INITIALIZED:
             return stateMessage.INITIALIZED
-        elif (state == StatefulProcessorHandleState.DATA_PROCESSED):
+        elif state == StatefulProcessorHandleState.DATA_PROCESSED:
             return stateMessage.DATA_PROCESSED
         else:
             return stateMessage.CLOSED
@@ -133,10 +136,10 @@ class StatefulProcessorApiClient:
     def _receive_proto_message(self) -> stateMessage.StateResponse:
         serialized_msg = self._receive_str()
         # proto3 will not serialize the message if the value is default, in this case 0
-        if (len(serialized_msg) == 0):
+        if len(serialized_msg) == 0:
             return stateMessage.StateResponse(statusCode=0)
         message = stateMessage.StateResponse()
-        message.ParseFromString(serialized_msg.encode('utf-8'))
+        message.ParseFromString(serialized_msg.encode("utf-8"))
         return message
 
     def _receive_str(self) -> str:

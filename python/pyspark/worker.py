@@ -489,11 +489,13 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
     return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
 
+
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
     def wrapped(stateful_processor_api_client, key, value_series_gen):
         import pandas as pd
+
         values = (pd.concat(x, axis=1) for x in value_series_gen)
         result_iter = f(stateful_processor_api_client, key, values)
 
@@ -503,6 +505,7 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
         return result_iter
 
     return lambda p, k, v: [(wrapped(p, k, v), to_arrow_type(return_type))]
+
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type):
     """
@@ -850,7 +853,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return args_offsets, wrap_grouped_transform_with_state_pandas_udf(func, return_type, runner_conf)
+        return args_offsets, wrap_grouped_transform_with_state_pandas_udf(
+            func, return_type, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
@@ -1486,12 +1491,9 @@ def read_udfs(pickleSer, infile, eval_type):
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = TransformWithStateInPandasSerializer(
-                timezone,
-                safecheck,
-                _assign_cols_by_name,
-                arrow_max_records_per_batch
+                timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
             )
-            
+
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
@@ -1675,7 +1677,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
             # This must be generator comprehension - do not materialize.
             return f(stateful_processor_api_client, key, values_gen())
-    
+
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
 

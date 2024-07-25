@@ -23,7 +23,10 @@ from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
-from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient, StatefulProcessorHandleState
+from pyspark.sql.streaming.stateful_processor_api_client import (
+    StatefulProcessorApiClient,
+    StatefulProcessorHandleState,
+)
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
 
@@ -35,7 +38,7 @@ if TYPE_CHECKING:
         PandasCogroupedMapFunction,
         ArrowGroupedMapFunction,
         ArrowCogroupedMapFunction,
-        DataFrameLike as PandasDataFrameLike
+        DataFrameLike as PandasDataFrameLike,
     )
     from pyspark.sql.group import GroupedData
 
@@ -361,13 +364,12 @@ class PandasGroupedOpsMixin:
         )
         return DataFrame(jdf, self.session)
 
-
     def transformWithStateInPandas(
         self,
         statefulProcessor: StatefulProcessor,
         outputStructType: Union[StructType, str],
         outputMode: str,
-        timeMode: str
+        timeMode: str,
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2.
@@ -453,26 +455,30 @@ class PandasGroupedOpsMixin:
 
         This API is experimental.
         """
-        
+
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf
+
         assert isinstance(self, GroupedData)
 
-        def transformWithStateUDF(statefulProcessorApiClient: StatefulProcessorApiClient, key: Any,
-                                  inputRows: Iterator["PandasDataFrameLike"]
-                                  ) -> Iterator["PandasDataFrameLike"]:
+        def transformWithStateUDF(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+            key: Any,
+            inputRows: Iterator["PandasDataFrameLike"],
+        ) -> Iterator["PandasDataFrameLike"]:
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
                 statefulProcessorApiClient.set_handle_state(
-                    StatefulProcessorHandleState.INITIALIZED)
+                    StatefulProcessorHandleState.INITIALIZED
+                )
 
             statefulProcessorApiClient.set_implicit_key(key)
             result = statefulProcessor.handleInputRows(key, inputRows)
 
             return result
-        
+
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
@@ -483,7 +489,7 @@ class PandasGroupedOpsMixin:
         )
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        
+
         jdf = self._jgd.transformWithStateInPandas(
             udf_column._jc.expr(),
             self.session._jsparkSession.parseDataType(outputStructType.json()),
@@ -491,7 +497,6 @@ class PandasGroupedOpsMixin:
             timeMode,
         )
         return DataFrame(jdf, self.session)
-
 
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
