@@ -993,11 +993,31 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val table = "t"
 
     withTable(table) {
-      sql(s"create table $table (s string collate utf8_lcase)")
-      sql(s"insert into $table values ('aaa')")
-      sql(s"insert into $table values ('AAA')")
+      withSQLConf(
+        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+        sql(s"create table $table (s string collate utf8_lcase)")
+        sql(s"insert into $table values ('aaa')")
+        sql(s"insert into $table values ('AAA')")
 
-      checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
+        checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
+      }
+    }
+  }
+
+  test("Group by on collated string a") {
+    val table = "t"
+
+    withTable(table) {
+      withSQLConf(
+        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+        sql(s"create table $table (s array<collate utf8_lcase>)")
+        sql(s"insert into $table values (array('aaa'))")
+        sql(s"insert into $table values (array('AAA'))")
+
+        checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
+      }
     }
   }
 
