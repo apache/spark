@@ -154,7 +154,7 @@ abstract class QueryStageExec extends LeafExecNode {
 abstract class ExchangeQueryStageExec extends QueryStageExec {
 
   /**
-   * Cancel the stage materialization if in progress with an optional reason; otherwise do nothing.
+   * Cancel the stage materialization if in progress with a reason; otherwise do nothing.
    */
   final def cancel(reason: String): Unit = {
     logDebug(s"Cancel query stage: $name")
