@@ -181,13 +181,13 @@ class CompoundBodyExec(
    * @param statement statement that possibly raised the error
    * @return pass through the statement
    */
-  private def handleError(statement: LeafStatementExec): CompoundStatementExec = {
+  private def handleError(statement: LeafStatementExec): LeafStatementExec = {
     if (statement.raisedError) {
       getHandler(statement.errorState.get).foreach { handler =>
         statement.reset() // Clear all flags and result
         handler.reset()
         curr = Some(handler.getHandlerBody)
-        return handler.getHandlerBody
+//        return handler.getHandlerBody
       }
     }
     statement
@@ -217,6 +217,7 @@ class CompoundBodyExec(
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
   private var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var prev: Option[CompoundStatementExec] = None
   private var stopIteration: Boolean = false  // hard stop iteration flag
 
   def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
@@ -260,9 +261,9 @@ class CompoundBodyExec(
                 case leave: LeaveStatementExec =>
                   handleLeave(leave)
                 case leafStatement: LeafStatementExec =>
-                  // This check is done to handler error in surrounding begin/end block
+                  // This check is done to handle error in surrounding begin/end block
                   // if it was not handled in the nested block
-                  handleError(leafStatement)  // Handle error if raised
+                  handleError(leafStatement)
                 case nonLeafStatement: NonLeafStatementExec => nonLeafStatement
               }
             } else {

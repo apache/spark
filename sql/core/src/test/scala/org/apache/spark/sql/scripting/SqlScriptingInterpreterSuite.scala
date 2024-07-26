@@ -228,7 +228,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("handler - continue") {
+  test("handler - continue resolve in the same block") {
     val sqlScript =
       """
         |BEGIN
@@ -239,13 +239,10 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |    SELECT flag;
         |    SET VAR flag = 1;
         |  END;
-        |  BEGIN
-        |    SELECT 2;
-        |    BEGIN
-        |      SELECT 3;
-        |      SELECT 1/0;
-        |    END;
-        |  END;
+        |  SELECT 2;
+        |  SELECT 3;
+        |  SELECT 1/0;
+        |  SELECT 4;
         |  SELECT flag;
         |END
         |""".stripMargin
@@ -255,17 +252,98 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(3)),    // select
       Array(Row(-1)),   // select flag
       Array.empty[Row], // set flag
+      Array(Row(4)),    // select
       Array(Row(1)),    // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("handler - exit") {
+  test("handler - continue resolve in outer block") {
     val sqlScript =
       """
         |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
         |  BEGIN
-        |    DECLARE flag INT = -1;
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  BEGIN
+        |    SELECT 3;
+        |    BEGIN
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array.empty[Row], // declare var
+      Array(Row(2)),    // select
+      Array(Row(3)),    // select
+      Array(Row(4)),    // select
+      Array(Row(-1)),   // select flag
+      Array.empty[Row], // set flag
+      Array(Row(5)),    // select
+      Array(Row(6)),    // select
+      Array(Row(7)),    // select
+      Array(Row(1)),    // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - continue resolve in the same block nested") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  SELECT 2;
+        |  BEGIN
+        |    SELECT 3;
+        |    BEGIN
+        |      DECLARE zero_division CONDITION FOR '22012';
+        |      DECLARE CONTINUE HANDLER FOR zero_division
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 1;
+        |      END;
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array.empty[Row], // declare var
+      Array(Row(2)),    // select
+      Array(Row(3)),    // select
+      Array(Row(4)),    // select
+      Array(Row(-1)),   // select flag
+      Array.empty[Row], // set flag
+      Array(Row(5)),    // select
+      Array(Row(6)),    // select
+      Array(Row(7)),    // select
+      Array(Row(1)),    // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - exit resolve in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  BEGIN
         |    DECLARE zero_division CONDITION FOR '22012';
         |    DECLARE EXIT HANDLER FOR zero_division
         |    BEGIN
@@ -286,6 +364,44 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(3)),    // select
       Array(Row(-1)),   // select flag
       Array.empty[Row], // set flag
+      Array(Row(1)),    // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - exit resolve in outer block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  BEGIN
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE EXIT HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    BEGIN
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array.empty[Row], // declare var
+      Array(Row(2)),    // select
+      Array(Row(3)),    // select
+      Array(Row(4)),    // select
+      Array(Row(-1)),   // select flag
+      Array.empty[Row], // set flag
+                        // skip select 5
+                        // skip select 6
       Array(Row(1)),    // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected)
