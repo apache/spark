@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -213,6 +213,14 @@ class IncrementalExecution(
         statefulOp match {
           case ssw: StateStoreWriter =>
             val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
+            // validate metadata
+            val oldMetadata = OperatorStateMetadataReader.createReader(
+              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+              hadoopConf, ssw.operatorStateMetadataVersion).read()
+            oldMetadata match {
+              case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+              case None =>
+            }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
                 new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
                 hadoopConf,

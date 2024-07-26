@@ -21,9 +21,10 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
-import org.json4s.JString
+import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.broadcast.Broadcast
@@ -123,6 +124,12 @@ case class TransformWithStateExec(
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
+  }
+
+  private def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
+    closeProcessorHandle()
+    stateVariableInfos
   }
 
   /**
@@ -425,7 +432,10 @@ case class TransformWithStateExec(
 
     val operatorPropertiesJson: JValue =
       ("timeMode" -> JString(timeMode.toString)) ~
-        ("outputMode" -> JString(outputMode.toString))
+        ("outputMode" -> JString(outputMode.toString)) ~
+        ("stateVariables" -> getStateVariableInfos().map { case (_, stateInfo) =>
+          stateInfo.jsonValue
+        }.arr)
 
     val json = compact(render(operatorPropertiesJson))
     OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
@@ -439,6 +449,66 @@ case class TransformWithStateExec(
 
     val storeNamePath = new Path(stateCheckpointPath, storeName)
     new Path(new Path(storeNamePath, "_metadata"), "schema")
+  }
+
+  private def checkOperatorPropEquality[T](
+      fieldName: String,
+      oldMetadataV2: OperatorStateMetadataV2,
+      newMetadataV2: OperatorStateMetadataV2): Unit = {
+    val oldJsonString = oldMetadataV2.operatorPropertiesJson
+    val newJsonString = newMetadataV2.operatorPropertiesJson
+    // verify that timeMode, outputMode are the same
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val oldJsonProps = JsonMethods.parse(oldJsonString).extract[Map[String, Any]]
+    val newJsonProps = JsonMethods.parse(newJsonString).extract[Map[String, Any]]
+    val oldProp = oldJsonProps(fieldName).asInstanceOf[T]
+    val newProp = newJsonProps(fieldName).asInstanceOf[T]
+    if (oldProp != newProp) {
+      throw StateStoreErrors.invalidConfigChangedAfterRestart(
+        fieldName,
+        oldProp.toString,
+        newProp.toString
+      )
+    }
+  }
+
+  private def checkStateVariableEquality(oldMetadataV2: OperatorStateMetadataV2): Unit = {
+    val oldJsonString = oldMetadataV2.operatorPropertiesJson
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val oldJsonProps = JsonMethods.parse(oldJsonString).extract[Map[String, Any]]
+    // compare state variable infos
+    val oldStateVariableInfos = oldJsonProps("stateVariables").
+      asInstanceOf[List[Map[String, Any]]]
+      .map(TransformWithStateVariableInfo.fromMap)
+    val newStateVariableInfos = getStateVariableInfos()
+    oldStateVariableInfos.foreach { oldInfo =>
+      val newInfo = newStateVariableInfos.get(oldInfo.stateName)
+      newInfo match {
+        case Some(stateVarInfo) =>
+          if (oldInfo.stateVariableType != stateVarInfo.stateVariableType) {
+            throw StateStoreErrors.invalidVariableTypeChange(
+              stateVarInfo.stateName,
+              oldInfo.stateVariableType.toString,
+              stateVarInfo.stateVariableType.toString
+            )
+          }
+        case None =>
+      }
+    }
+  }
+
+  override def validateNewMetadata(
+      oldMetadata: OperatorStateMetadata,
+      newMetadata: OperatorStateMetadata): Unit = {
+    (oldMetadata, newMetadata) match {
+      case (
+        oldMetadataV2: OperatorStateMetadataV2,
+        newMetadataV2: OperatorStateMetadataV2) =>
+        checkOperatorPropEquality[String]("timeMode", oldMetadataV2, newMetadataV2)
+        checkOperatorPropEquality[String]("outputMode", oldMetadataV2, newMetadataV2)
+        checkStateVariableEquality(oldMetadataV2)
+      case (_, _) =>
+    }
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

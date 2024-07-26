@@ -63,6 +63,29 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   }
 }
 
+// Class to test that changing between Value and List State fails
+// between query runs
+class RunningCountListStatefulProcessor
+  extends StatefulProcessor[String, String, (String, String)]
+    with Logging {
+  @transient protected var _countState: ListState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getListState[Long](
+      "countState", Encoders.scalaLong)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    Iterator.empty
+  }
+}
+
 class RunningCountStatefulProcessorInt
   extends StatefulProcessor[String, String, (String, String)] {
   @transient protected var _countState: ValueState[Int] = _
@@ -978,6 +1001,77 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             (t: Throwable) => {
               assert(t.getMessage.contains("Please check number and type of fields."))
             }
+          }
+        )
+      }
+    }
+  }
+
+  test("test that different outputMode after query restart fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreInvalidConfigAfterRestart] { t =>
+            assert(t.getMessage.contains("outputMode"))
+            assert(t.getMessage.contains("is not equal"))
+          }
+        )
+      }
+    }
+  }
+
+  test("test that changing between different state variable types fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountListStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
+            assert(t.getMessage.contains("Cannot change countState"))
           }
         )
       }
