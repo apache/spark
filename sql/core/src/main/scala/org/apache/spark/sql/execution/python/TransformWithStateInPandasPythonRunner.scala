@@ -93,7 +93,6 @@ class TransformWithStateInPandasPythonRunner(
       stateServerSocket = new ServerSocket( /* port = */0,
         /* backlog = */1)
       stateSocketSocketPort = stateServerSocket.getLocalPort
-      logWarning(s"opened socket on $stateSocketSocketPort")
     } catch {
       case e: Exception =>
         failed = true

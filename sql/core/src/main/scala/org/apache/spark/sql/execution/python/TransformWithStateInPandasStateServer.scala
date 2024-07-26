@@ -24,7 +24,7 @@ import scala.collection.mutable
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -76,7 +76,7 @@ class TransformWithStateInPandasStateServer(
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>
-          logError(s"Error reading message: ${e.getMessage}", e)
+          logError(log"Error reading message: ${MDC(LogKeys.ERROR, e.getMessage)}", e)
           sendResponse(1, e.getMessage)
           outputStream.flush()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
@@ -143,7 +143,6 @@ class TransformWithStateInPandasStateServer(
       case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
         val stateName = message.getGetValueState.getStateName
         val schema = message.getGetValueState.getSchema
-        logInfo(s"initializing value state $stateName")
         initializeValueState(stateName, schema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -178,11 +177,11 @@ class TransformWithStateInPandasStateServer(
             outputStream.writeInt(valueBytes.length)
             outputStream.write(valueBytes)
           } else {
-            logWarning(s"state $stateName doesn't exist")
+            logWarning(log"state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't exist")
             sendResponse(1, s"state $stateName doesn't exist")
           }
         } else {
-          logWarning(s"state $stateName doesn't exist")
+          logWarning(log"state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't exist")
           sendResponse(1, s"state $stateName doesn't exist")
         }
       case ValueStateCall.MethodCase.VALUESTATEUPDATE =>
@@ -195,7 +194,7 @@ class TransformWithStateInPandasStateServer(
           valueStates(stateName).update(valueRow)
           sendResponse(0)
         } else {
-          logWarning(s"state $stateName doesn't exist")
+          logWarning(log"state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't exist")
           sendResponse(1, s"state $stateName doesn't exist")
         }
       case ValueStateCall.MethodCase.CLEAR =>
@@ -203,7 +202,7 @@ class TransformWithStateInPandasStateServer(
           valueStates(stateName).clear()
           sendResponse(0)
         } else {
-          logWarning(s"state $stateName doesn't exist")
+          logWarning(log"state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't exist")
           sendResponse(1, s"state $stateName doesn't exist")
         }
       case _ =>
