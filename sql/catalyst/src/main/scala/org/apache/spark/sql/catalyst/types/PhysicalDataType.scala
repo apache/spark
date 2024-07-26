@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
@@ -238,6 +238,26 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalMapType")
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
+
+  @transient
+  private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
+    private[this] val keyOrdering =
+      PhysicalDataType(keyType).ordering.asInstanceOf[Ordering[Any]]
+    private[this] val valuesOrdering =
+      PhysicalDataType(valueType).ordering.asInstanceOf[Ordering[Any]]
+
+    override def compare(x: MapData, y: MapData): Int = {
+      val lengthX = x.numElements()
+      val lengthY = y.numElements()
+      val keyArrayX = x.keyArray()
+      val valueArrayX = x.valueArray()
+      val keyArrayY = y.keyArray()
+      val valueArrayY = y.valueArray()
+      val minLength = math.min(lengthX, lengthY)
+      var i = 0
+      while (i < )
+    }
+  }
 }
 
 class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
