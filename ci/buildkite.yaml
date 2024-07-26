@@ -1,0 +1,79 @@
+steps:
+  - label: run tests spark/core
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt core/test
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: run tests spark/streaming
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt streaming/test
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: run tests spark/kubernetes
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt -Pkubernetes kubernetes/test
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: run tests spark/catalyst
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt catalyst/test
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: run tests spark/sql-core-1
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt "sql/testOnly * -- -l org.apache.spark.tags.ExtendedSQLTest -l org.apache.spark.tags.SlowSQLTest"
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: run tests spark/sql-core-2
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt "sql/testOnly * -- -n org.apache.spark.tags.ExtendedSQLTest"
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: run tests spark/sql-core-3
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - build/sbt "sql/testOnly * -- -n org.apache.spark.tags.SlowSQLTest"
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: branch-3.5-openai
+
+  - label: build and publish docker image
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - SPARK_HOME=$(pwd) ci/build_and_publish_image.sh
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: release-3.5-openai
