@@ -156,9 +156,9 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
   /**
    * Cancel the stage materialization if in progress with an optional reason; otherwise do nothing.
    */
-  final def cancel(reason: Option[String]): Unit = {
+  final def cancel(reason: String): Unit = {
     logDebug(s"Cancel query stage: $name")
-    doCancel(reason)
+    doCancel(Option(reason))
   }
 
   protected def doCancel(reason: Option[String]): Unit
