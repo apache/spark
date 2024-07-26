@@ -94,30 +94,25 @@ case class ObjectHashAggregateExec(
         // This is a grouped aggregate and the input kvIterator is empty,
         // so return an empty kvIterator.
         Iterator.empty
+        // numOutputRows += 1
+        // Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
       } else {
-        val aggregationIterator =
-          new ObjectAggregationIterator(
-            partIndex,
-            child.output,
-            groupingExpressions,
-            aggregateExpressions,
-            aggregateAttributes,
-            initialInputBufferOffset,
-            resultExpressions,
-            (expressions, inputSchema) =>
-              MutableProjection.create(expressions, inputSchema),
-            inputAttributes,
-            iter,
-            fallbackCountThreshold,
-            numOutputRows,
-            spillSize,
-            numTasksFallBacked)
-        if (!hasInput && groupingExpressions.isEmpty) {
-          numOutputRows += 1
-          Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
-        } else {
-          aggregationIterator
-        }
+        new ObjectAggregationIterator(
+          partIndex,
+          child.output,
+          groupingExpressions,
+          aggregateExpressions,
+          aggregateAttributes,
+          initialInputBufferOffset,
+          resultExpressions,
+          (expressions, inputSchema) =>
+            MutableProjection.create(expressions, inputSchema),
+          inputAttributes,
+          iter,
+          fallbackCountThreshold,
+          numOutputRows,
+          spillSize,
+          numTasksFallBacked)
       }
       aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
       res

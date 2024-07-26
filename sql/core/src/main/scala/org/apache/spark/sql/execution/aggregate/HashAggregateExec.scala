@@ -101,35 +101,30 @@ case class HashAggregateExec(
 
       val beforeAgg = System.nanoTime()
       val hasInput = iter.hasNext
-      val res = if (!hasInput && groupingExpressions.nonEmpty) {
+      val res = if (!hasInput) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator.empty
+        // numOutputRows += 1
+        // Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
       } else {
-        val aggregationIterator =
-          new TungstenAggregationIterator(
-            partIndex,
-            groupingExpressions,
-            aggregateExpressions,
-            aggregateAttributes,
-            initialInputBufferOffset,
-            resultExpressions,
-            (expressions, inputSchema) =>
-              MutableProjection.create(expressions, inputSchema),
-            inputAttributes,
-            iter,
-            testFallbackStartsAt,
-            numOutputRows,
-            peakMemory,
-            spillSize,
-            avgHashProbe,
-            numTasksFallBacked)
-        if (!hasInput && groupingExpressions.isEmpty) {
-          numOutputRows += 1
-          Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
-        } else {
-          aggregationIterator
-        }
+        new TungstenAggregationIterator(
+          partIndex,
+          groupingExpressions,
+          aggregateExpressions,
+          aggregateAttributes,
+          initialInputBufferOffset,
+          resultExpressions,
+          (expressions, inputSchema) =>
+            MutableProjection.create(expressions, inputSchema),
+          inputAttributes,
+          iter,
+          testFallbackStartsAt,
+          numOutputRows,
+          peakMemory,
+          spillSize,
+          avgHashProbe,
+          numTasksFallBacked)
       }
       aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
       res
