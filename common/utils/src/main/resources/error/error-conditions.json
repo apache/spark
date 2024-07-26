@@ -2666,11 +2666,6 @@
         "message" : [
           "expects a long literal, but got <invalidValue>."
         ]
-      },
-      "IN_LIST" : {
-        "message" : [
-          "expects an array of literals, but got <invalidValue>."
-        ]
       }
     },
     "sqlState" : "22023"

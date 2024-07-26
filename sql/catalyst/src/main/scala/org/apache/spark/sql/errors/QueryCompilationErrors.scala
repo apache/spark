@@ -187,10 +187,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     invalidParameter("INTEGER", "collect_top_k", "num", invalidValue)
   }
 
-  def invalidInListParameter(invalidValue: Expression): Throwable = {
-    invalidParameter("IN_LIST", "in", "list", invalidValue)
-  }
-
   def invalidIgnoreNullsParameter(functionName: String, invalidValue: Expression): Throwable = {
     invalidParameter("Boolean", functionName, "ignoreNulls", invalidValue)
   }
