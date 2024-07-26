@@ -71,6 +71,9 @@ case class PlanWithUnresolvedIdentifier(
   def updateOtherPlans(plans: Seq[LogicalPlan]): PlanWithUnresolvedIdentifier = {
     PlanWithUnresolvedIdentifier(identifierExpr, plans, planBuilder)
   }
+
+  override def innerChildren: Seq[LogicalPlan] = otherPlans
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
 }
 
