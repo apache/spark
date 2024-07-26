@@ -319,6 +319,7 @@ class ReadwriterV2TestsMixin:
             self.assertEqual(get_cluster_by_cols(), ["x", "y"])
             self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
 
+
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
     pass
 
