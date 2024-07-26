@@ -29,7 +29,6 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = {
-    // Disable async kv store write in the UI, to make tests more stable here.
     super.sparkConf.set("spark.hadoop.hadoop.security.key.provider.path", "test:///")
   }
 
