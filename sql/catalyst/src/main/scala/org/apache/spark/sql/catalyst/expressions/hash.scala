@@ -573,7 +573,7 @@ abstract class InterpretedHashFunction {
               .fetchCollation(dataType.asInstanceOf[StringType].collationId)
               .hashFunction.applyAsLong(s)
             hashLong(stringHash, seed)
-            }
+        }
 
       case array: ArrayData =>
         val elementType = dataType match {
