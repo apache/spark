@@ -185,7 +185,7 @@ class VariantUtils:
         start_field = value[pos] & 0x3
         end_field = (value[pos] >> 2) & 0x3
         if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         return (start_field, end_field)
 
     @classmethod
@@ -198,7 +198,7 @@ class VariantUtils:
         start_field = value[pos] & 0x1
         end_field = (value[pos] >> 1) & 0x1
         if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         return (start_field, end_field)
 
     @classmethod
@@ -285,12 +285,12 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         if type_info == VariantUtils.YEAR_MONTH_INTERVAL:
             months = cls._read_long(value, pos + 2, 4, signed=True)
             start_field, end_field = cls._get_year_month_interval_fields(value, pos + 1)
             return (months, start_field, end_field)
-        raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_dtinterval_info(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
@@ -301,12 +301,12 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         if type_info == VariantUtils.DAY_TIME_INTERVAL:
             micros = cls._read_long(value, pos + 2, 8, signed=True)
             start_field, end_field = cls._get_day_time_interval_fields(value, pos + 1)
             return (micros, start_field, end_field)
-        raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_string(cls, value: bytes, pos: int) -> str:
@@ -486,10 +486,10 @@ class VariantUtils:
                 return "MINUTE"
             elif field == SECOND:
                 return "SECOND"
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
         if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         sign = ""
         rest = micros
         from_str = field_to_string(start_field).upper()
