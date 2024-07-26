@@ -935,6 +935,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
               .xml(dir.getCanonicalPath)
             assert(xml.schema == testcase.expectedCaseSensitiveSchema)
             checkAnswer(xml, testcase.expectedCaseSensitiveAns)
+          }
         }
       }
     }
