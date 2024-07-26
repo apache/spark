@@ -2178,8 +2178,7 @@ class Dataset[T] private[sql](
   /**
    * Transpose a DataFrame, switching rows to columns.
    * This function transforms the DataFrame such that the values in the specified index
-   * column become the new columns of the DataFrame. If no index column is provided, the first
-   * column is used as the default.
+   * column become the new columns of the DataFrame.
    *
    * Please note:
    * - The values transposed must share the least common type.
@@ -2188,19 +2187,45 @@ class Dataset[T] private[sql](
    *
    * @param indexColumn The single column that will be treated as the index for the transpose
    * operation.This column will be used to pivot the data, transforming the DataFrame such that
-   * the values of the indexColumn become the new columns in the transposed DataFrame. If not
-   * provided, the first column is used.
-   * 
+   * the values of the indexColumn become the new columns in the transposed DataFrame.
+   *
    * @group untypedrel
    * @since 4.0.0
    */
-  def transpose(indexColumn: Option[Column] = None): DataFrame = withPlan {
+  def transpose(indexColumn: Column): DataFrame = withPlan {
     if (this.isEmpty && this.columns.isEmpty) {
       this.logicalPlan
     } else {
-      val actualIndexColumn = indexColumn.getOrElse(col(this.columns.head))
       Transpose(
-        actualIndexColumn.named,
+        indexColumn.named,
+        logicalPlan
+      )
+    }
+  }
+
+  /**
+   * Transpose a DataFrame, switching rows to columns.
+   * This function transforms the DataFrame such that the values in the first
+   * column become the new columns of the DataFrame.
+   *
+   * This is equivalent to calling `Dataset#transpose(Column)`
+   * where `indexColumn` is set to the first column.
+   *
+   * Please note:
+   * - The values transposed must share the least common type.
+   * - The name of the column into which the original column names are transposed defaults to "key".
+   * - Non-"key" column names for the transposed table are ordered in ascending order.
+   *
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def transpose(): DataFrame = withPlan {
+    if (this.isEmpty && this.columns.isEmpty) {
+      this.logicalPlan
+    } else {
+      Transpose(
+        this.columns.head.named,
         logicalPlan
       )
     }

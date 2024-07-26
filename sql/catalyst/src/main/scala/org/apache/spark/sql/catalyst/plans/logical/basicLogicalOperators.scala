@@ -1482,7 +1482,7 @@ case class Transpose(
 ) extends UnaryNode {
 
   override lazy val resolved: Boolean = {
-    indexColumn.resolved && child.resolved && originalColNames != null && output.nonEmpty
+    indexColumn.resolved && child.resolved && originalColNames.isDefined && output.nonEmpty
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)

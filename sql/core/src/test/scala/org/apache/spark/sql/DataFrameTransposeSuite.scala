@@ -36,7 +36,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
 
   test("transpose with specified index column") {
     checkAnswer(
-      salary.transpose(Some($"salary")),
+      salary.transpose($"salary"),
       Row("personId", 1, 0) :: Nil
     )
   }
@@ -64,7 +64,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   }
 
   test("enforce ascending order based on index column values for transposed columns") {
-    val transposedDf = person.transpose(Some($"name"))
+    val transposedDf = person.transpose($"name")
     checkAnswer(
       transposedDf,
       Row("id", 1, 0) :: Row("age", 20, 30)  :: Nil
