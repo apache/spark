@@ -234,9 +234,8 @@ case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalMapType")
-  override private[sql] type InternalType = Any
+  override private[sql] def ordering = interpretedOrdering
+  override private[sql] type InternalType = MapData
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
   @transient
@@ -255,7 +254,47 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
       val valueArrayY = y.valueArray()
       val minLength = math.min(lengthX, lengthY)
       var i = 0
-      i
+      while (i < minLength) {
+        var comp = compare(keyArrayX, keyArrayY, keyType, i, keyOrdering)
+        if (comp != 0) {
+          return comp
+        }
+        comp = compare(valueArrayX, valueArrayY, valueType, i, valuesOrdering)
+        if (comp != 0) {
+          return comp
+        }
+
+        i += 1
+      }
+
+      if (lengthX < lengthY) {
+        -1
+      }
+      else if (lengthX > lengthY) {
+        1
+      }
+      else {
+        0
+      }
+    }
+
+    private def compare(arrayX: ArrayData, arrayY: ArrayData, dataType: DataType,
+                        position: Int, ordering: Ordering[Any]): Int = {
+      val isNullX = arrayX.isNullAt(position)
+      val isNullY = arrayY.isNullAt(position)
+
+      if (isNullX && isNullY) {
+        0
+      } else if (isNullX) {
+        -1
+      } else if (isNullY) {
+        1
+      } else {
+        ordering.compare(
+          arrayX.get(position, dataType),
+          arrayY.get(position, dataType)
+        )
+      }
     }
   }
 }
