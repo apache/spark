@@ -62,7 +62,7 @@ case class StateMetadataTableEntry(
 }
 
 object StateMetadataTableEntry {
-  private[sql] val schema = {
+  private[sql] val schema: StructType = {
     new StructType()
       .add("operatorId", LongType)
       .add("operatorName", StringType)
@@ -86,7 +86,7 @@ class StateMetadataSource extends TableProvider with DataSourceRegister {
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     // The schema of state metadata table is static.
-   StateMetadataTableEntry.schema
+    StateMetadataTableEntry.schema
   }
 }
 

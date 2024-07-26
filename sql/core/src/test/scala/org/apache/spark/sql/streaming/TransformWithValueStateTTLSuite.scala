@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
@@ -358,6 +359,45 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           },
           StopStream
         )
+      }
+    }
+  }
+
+  test("state data source integration - value TTL state with single variable") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val ttlKey = "k1"
+        val noTtlKey = "k2"
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val inputStream = MemoryStream[InputEvent]
+        val result = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            new MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputStream, InputEvent(ttlKey, "put", 1)),
+          AddData(inputStream, InputEvent(noTtlKey, "put", 2)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer())
+
+        // TODO this will fail, because VCF cannot load the same VCF id
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
+          .load()
+
+        // stateReaderDf.show(false)
       }
     }
   }
