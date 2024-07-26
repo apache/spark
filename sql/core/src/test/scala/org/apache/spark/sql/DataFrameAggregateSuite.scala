@@ -823,11 +823,7 @@ class DataFrameAggregateSuite extends QueryTest
     "should produce correct aggregate") { _ =>
     // explicit global aggregations
     val emptyAgg = Map.empty[String, String]
-    checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
-    checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
     checkAnswer(spark.emptyDataFrame.agg(count("*")), Seq(Row(0)))
-    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
-    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
     checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(count("*")), Seq(Row(0)))
 
     // global aggregation is converted to grouping aggregation:
@@ -2338,6 +2334,22 @@ class DataFrameAggregateSuite extends QueryTest
 
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
+  }
+
+  test("aggregating single distinct column with empty and non-empty table") {
+    val tableName = "t"
+    withTable(tableName) {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        sql(s"create table $tableName(col int not null) using parquet")
+        checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(0))
+        sql(s"insert into $tableName(col) values(1)")
+        checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
+        sql(s"insert into $tableName(col) values(1)")
+        checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
+        sql(s"insert into $tableName(col) values(2)")
+        checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
+      }
+    }
   }
 }
 

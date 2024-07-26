@@ -184,8 +184,15 @@ class TungstenAggregationIterator(
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
       // Note that it would be better to eliminate the hash map entirely in the future.
       val groupingKey = groupingProjection.apply(null)
-      val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+      var buffer: UnsafeRow = if (aggregateExpressions.isEmpty) {
+        null
+      } else {
+        hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+      }
       while (inputIter.hasNext) {
+        if (buffer == null) {
+          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+        }
         val newInput = inputIter.next()
         processRow(buffer, newInput)
       }
