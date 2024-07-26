@@ -406,4 +406,33 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
     )
     verifySqlScriptResult(sqlScript, expected)
   }
+
+  test("chained begin end blocks") {
+    val sqlScript =
+      """
+        |BEGIN
+        | BEGIN
+        |   SELECT 1;
+        |   SELECT 2;
+        | END;
+        | BEGIN
+        |   SELECT 3;
+        |   SELECT 4;
+        | END;
+        | BEGIN
+        |   SELECT 5;
+        |   SELECT 6;
+        | END;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array(Row(1)), // select
+      Array(Row(2)), // select
+      Array(Row(3)), // select
+      Array(Row(4)), // select
+      Array(Row(5)), // select
+      Array(Row(6))  // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
 }

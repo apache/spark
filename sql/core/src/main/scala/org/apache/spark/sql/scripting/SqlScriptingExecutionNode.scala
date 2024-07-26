@@ -187,7 +187,6 @@ class CompoundBodyExec(
         statement.reset() // Clear all flags and result
         handler.reset()
         curr = Some(handler.getHandlerBody)
-//        return handler.getHandlerBody
       }
     }
     statement
@@ -217,7 +216,6 @@ class CompoundBodyExec(
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
   private var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
-  private var prev: Option[CompoundStatementExec] = None
   private var stopIteration: Boolean = false  // hard stop iteration flag
 
   def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
