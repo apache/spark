@@ -1832,7 +1832,7 @@ class SparkConnectPlanner(
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
     fun.getFunctionName match {
-      case "product" =>
+      case "product" if fun.getArgumentsCount == 1 =>
         Some(
           aggregate
             .Product(transformExpression(fun.getArgumentsList.asScala.head))

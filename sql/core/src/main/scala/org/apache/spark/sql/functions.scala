@@ -8515,7 +8515,7 @@ object functions {
      */
     def bucket(numBuckets: Column, e: Column): Column = withExpr {
       numBuckets.expr match {
-        case lit@Literal(_, IntegerType) =>
+        case lit @ Literal(_, IntegerType) =>
           Bucket(lit, e.expr)
         case _ =>
           throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
