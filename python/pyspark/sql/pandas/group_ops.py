@@ -408,12 +408,12 @@ class PandasGroupedOpsMixin:
 
         Examples
         --------
-        >>> import pandas as pd
-        >>> from pyspark.sql import Row
-        >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
-        >>> from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
+        >>> import pandas as pd # doctest: +SKIP
         >>> from typing import Iterator
-        >>> from pyspark.sql.functions import split, col
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col, split
+        >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
+        >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
         >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass","org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         >>> output_schema = StructType([
         ...     StructField("id", StringType(), True),
@@ -423,31 +423,31 @@ class PandasGroupedOpsMixin:
         ...     StructField("value", IntegerType(), True)
         ... ])
         >>> class SimpleStatefulProcessor(StatefulProcessor):
-        ...   def init(self, handle: StatefulProcessorHandle):
-        ...       self.num_violations_state = handle.getValueState("numViolations", state_schema)
-        ...   def handleInputRows(self, key, rows):
-        ...     new_violations = 0
-        ...     count = 0
-        ...     exists = self.num_violations_state.exists()
-        ...     if exists:
-        ...       existing_violations_pdf = self.num_violations_state.get()
-        ...       existing_violations = existing_violations_pdf.get("value")[0]
-        ...     else:
-        ...       existing_violations = 0
-        ...     for pdf in rows:
-        ...       pdf_count = pdf.count()
-        ...       count += pdf_count.get('temperature')
-        ...       violations_pdf = pdf.loc[pdf['temperature'] > 100]
-        ...       new_violations += violations_pdf.count().get('temperature')
-        ...     updated_violations = new_violations + existing_violations
-        ...     self.num_violations_state.update((updated_violations,))
-        ...     yield pd.DataFrame({'id': key, 'count': count})
-        ...   def close(self) -> None:
-        ...     pass
+        ...     def init(self, handle: StatefulProcessorHandle):
+        ...         self.num_violations_state = handle.getValueState("numViolations", state_schema)
+        ...     def handleInputRows(self, key, rows):
+        ...         new_violations = 0
+        ...         count = 0
+        ...         exists = self.num_violations_state.exists()
+        ...         if exists:
+        ...             existing_violations_pdf = self.num_violations_state.get()
+        ...             existing_violations = existing_violations_pdf.get("value")[0]
+        ...         else:
+        ...             existing_violations = 0
+        ...         for pdf in rows:
+        ...             pdf_count = pdf.count()
+        ...             count += pdf_count.get('temperature')
+        ...             violations_pdf = pdf.loc[pdf['temperature'] > 100]
+        ...             new_violations += violations_pdf.count().get('temperature')
+        ...         updated_violations = new_violations + existing_violations
+        ...         self.num_violations_state.update((updated_violations,))
+        ...         yield pd.DataFrame({'id': key, 'count': count})
+        ...     def close(self) -> None:
+        ...         pass
         ...
         >>> df.groupBy("value").transformWithStateInPandas(statefulProcessor =
-        ...         SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
-        ...         timeMode="None") # doctest: +SKIP
+        ...     SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
+        ...     timeMode="None") # doctest: +SKIP
 
         Notes
         -----

@@ -1153,23 +1153,26 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
 
-    # Nothing special here, we need to create the handle and read
-    # data in groups.
     def load_stream(self, stream):
         """
-        Read ArrowRecordBatches from stream, deserialize them to populate a list of pair
-        (data chunk, state), and convert the data into a list of pandas.Series.
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunk, and
+        convert the data into a list of pandas.Series.
 
-        Please refer the doc of inner function `gen_data_and_state` for more details how
+        Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
-
-        In addition, this function further groups the return of `gen_data_and_state` by the state
-        instance (same semantic as grouping by grouping key) and produces an iterator of data
-        chunks for each group, so that the caller can lazily materialize the data chunk.
         """
         import pyarrow as pa
 
         def generate_data_batches(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+
+            The deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+
+            This function must avoid materializing multiple Arrow RecordBatches into memory at the
+            same time. And data chunks from the same grouping key should appear sequentially.
+            """
             for batch in batches:
                 data_pandas = [
                     self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()
@@ -1186,7 +1189,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Read through an iterator of (iterator of pandas DataFrame, state), serialize them to Arrow
+        Read through an iterator of (iterator of pandas DataFram), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
         result = [(b, t) for x in iterator for y, t in x for b in y]

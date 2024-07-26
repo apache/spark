@@ -46,6 +46,8 @@ if TYPE_CHECKING:
 class ValueState:
     """
     Class used for arbitrary stateful operations with the v2 API to capture single value state.
+
+    .. versionadded:: 4.0.0
     """
 
     def __init__(
@@ -58,16 +60,12 @@ class ValueState:
     def exists(self) -> bool:
         """
         Whether state exists or not.
-
-        .. versionadded:: 4.0.0
         """
         return self._value_state_client.exists(self._state_name)
 
     def get(self) -> Any:
         """
         Get the state value if it exists.
-
-        .. versionadded:: 4.0.0
         """
         value = self._value_state_client.get(self._state_name)
         columns = [field.name for field in self.schema.fields]
@@ -78,16 +76,12 @@ class ValueState:
     def update(self, new_value: Any) -> None:
         """
         Update the value of the state.
-
-        .. versionadded:: 4.0.0
         """
         self._value_state_client.update(self._state_name, self.schema, new_value)
 
     def clear(self) -> None:
         """
         Remove this state.
-
-        .. versionadded:: 4.0.0
         """
         self._value_state_client.clear(self._state_name)
 
@@ -96,6 +90,8 @@ class StatefulProcessorHandle:
     """
     Represents the operation handle provided to the stateful processor used in the arbitrary state
     API v2.
+
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient) -> None:
@@ -106,8 +102,6 @@ class StatefulProcessorHandle:
         Function to create new or return existing single value state variable of given type.
         The user must ensure to call this function only within the `init()` method of the
         StatefulProcessor.
-
-        .. versionadded:: 4.0.0
 
         Parameters
         ----------
@@ -125,6 +119,8 @@ class StatefulProcessor(ABC):
     """
     Class that represents the arbitrary stateful logic that needs to be provided by the user to
     perform stateful manipulations on keyed streams.
+
+    .. versionadded:: 4.0.0
     """
 
     @abstractmethod
@@ -132,8 +128,6 @@ class StatefulProcessor(ABC):
         """
         Function that will be invoked as the first method that allows for users to initialize all
         their state variables and perform other init actions before handling data.
-
-        .. versionadded:: 4.0.0
 
         Parameters
         ----------
@@ -158,8 +152,6 @@ class StatefulProcessor(ABC):
         `handleInputRows` function is not strictly required to iterate through all elements in the
         iterator if it intends to read a part of data.
 
-        .. versionadded:: 4.0.0
-
         Parameters
         ----------
         key : Any
@@ -174,7 +166,5 @@ class StatefulProcessor(ABC):
         """
         Function called as the last method that allows for users to perform any cleanup or teardown
         operations.
-
-        .. versionadded:: 4.0.0
         """
         pass
