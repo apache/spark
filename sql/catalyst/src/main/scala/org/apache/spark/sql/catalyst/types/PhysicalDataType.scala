@@ -255,7 +255,7 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
       val valueArrayY = y.valueArray()
       val minLength = math.min(lengthX, lengthY)
       var i = 0
-      while (i < )
+      i
     }
   }
 }
