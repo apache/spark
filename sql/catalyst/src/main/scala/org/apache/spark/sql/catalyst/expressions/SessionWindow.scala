@@ -105,12 +105,4 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
 
 object SessionWindow {
   val marker = "spark.sessionWindow"
-
-  def apply(
-      timeColumn: Expression,
-      gapDuration: String): SessionWindow = {
-    SessionWindow(timeColumn,
-      Literal(IntervalUtils.safeStringToInterval(UTF8String.fromString(gapDuration)),
-        CalendarIntervalType))
-  }
 }
