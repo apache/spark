@@ -596,6 +596,48 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("Write with clustering") {
+    // Cluster by existing column.
+    withTable("testtable") {
+      transform(
+        localRelation.write(
+          tableName = Some("testtable"),
+          tableSaveMethod = Some("save_as_table"),
+          format = Some("parquet"),
+          clusterByCols = Seq("id")))
+    }
+
+    // Cluster by non-existing column.
+    assertThrows[AnalysisException](
+      transform(
+        localRelation
+          .write(
+            tableName = Some("testtable"),
+            tableSaveMethod = Some("save_as_table"),
+            format = Some("parquet"),
+            clusterByCols = Seq("noid"))))
+  }
+
+  test("Write V2 with clustering") {
+    // Cluster by existing column.
+    withTable("testtable") {
+      transform(
+        localRelation.writeV2(
+          tableName = Some("testtable"),
+          mode = Some("MODE_CREATE"),
+          clusterByCols = Seq("id")))
+    }
+
+    // Cluster by non-existing column.
+    assertThrows[AnalysisException](
+      transform(
+        localRelation
+          .writeV2(
+            tableName = Some("testtable"),
+            mode = Some("MODE_CREATE"),
+            clusterByCols = Seq("noid"))))
+  }
+
   test("Write with invalid bucketBy configuration") {
     val cmd = localRelation.write(bucketByCols = Seq("id"), numBuckets = Some(0))
     assertThrows[InvalidCommandInput] {

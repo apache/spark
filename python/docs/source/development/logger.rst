@@ -52,7 +52,7 @@ Example log entry:
         "file": "/path/to/file.py",
         "line": "17",
         "fragment": "divide"
-        "error_class": "DIVIDE_BY_ZERO"
+        "errorClass": "DIVIDE_BY_ZERO"
       },
       "exception": {
         "class": "Py4JJavaError",

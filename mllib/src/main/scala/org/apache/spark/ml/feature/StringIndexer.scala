@@ -509,7 +509,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
     private case class Data(labelsArray: Array[Array[String]])
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.labelsArray)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
@@ -521,7 +521,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
     private val className = classOf[StringIndexerModel].getName
 
     override def load(path: String): StringIndexerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       // We support loading old `StringIndexerModel` saved by previous Spark versions.

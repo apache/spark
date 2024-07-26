@@ -668,8 +668,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_POSITIVE",
-            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
 
         with self.assertRaises(PySparkValueError) as pe:
@@ -677,8 +677,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_POSITIVE",
-            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
 
     def test_repartition_by_expression(self):

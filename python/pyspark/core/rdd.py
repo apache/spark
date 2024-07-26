@@ -137,8 +137,8 @@ def portable_hash(x: Hashable) -> int:
 
     if "PYTHONHASHSEED" not in os.environ:
         raise PySparkRuntimeError(
-            error_class="PYTHON_HASH_SEED_NOT_SET",
-            message_parameters={},
+            errorClass="PYTHON_HASH_SEED_NOT_SET",
+            messageParameters={},
         )
 
     if x is None:
@@ -246,8 +246,8 @@ class RDD(Generic[T_co]):
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle an RDD, which is always an error:
         raise PySparkRuntimeError(
-            error_class="RDD_TRANSFORM_ONLY_VALID_ON_DRIVER",
-            message_parameters={},
+            errorClass="RDD_TRANSFORM_ONLY_VALID_ON_DRIVER",
+            messageParameters={},
         )
 
     @property
@@ -1581,8 +1581,8 @@ class RDD(Generic[T_co]):
                 pipe.wait()
                 if checkCode and pipe.returncode:
                     raise PySparkRuntimeError(
-                        error_class="PIPE_FUNCTION_EXITED",
-                        message_parameters={
+                        errorClass="PIPE_FUNCTION_EXITED",
+                        messageParameters={
                             "func_name": command,
                             "error_code": str(pipe.returncode),
                         },
@@ -5105,8 +5105,8 @@ class RDD(Generic[T_co]):
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
     ) -> "DataFrame":
         raise PySparkRuntimeError(
-            error_class="CALL_BEFORE_INITIALIZE",
-            message_parameters={
+            errorClass="CALL_BEFORE_INITIALIZE",
+            messageParameters={
                 "func_name": "RDD.toDF",
                 "object": "SparkSession",
             },

@@ -48,8 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
@@ -62,7 +61,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
+class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
+                  with Logging with DataTypeErrorsBase {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -133,11 +133,41 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
-      label: Option[String]): CompoundBody = {
+      label: Option[String],
+      allowVarDeclare: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
     })
+
+    val compoundStatements = buff.toList
+
+    val candidates = if (allowVarDeclare) {
+      compoundStatements.dropWhile {
+        case SingleStatement(_: CreateVariable) => true
+        case _ => false
+      }
+    } else {
+      compoundStatements
+    }
+
+    val declareVarStatement = candidates.collectFirst {
+      case SingleStatement(c: CreateVariable) => c
+    }
+
+    declareVarStatement match {
+      case Some(c: CreateVariable) =>
+        if (allowVarDeclare) {
+          throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
+            c.origin.line.get.toString)
+        } else {
+          throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
+            c.origin.line.get.toString)
+        }
+      case _ =>
+    }
 
     CompoundBody(buff.toSeq, label)
   }
@@ -161,11 +191,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val labelText = beginLabelCtx.
       map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
       toLowerCase(Locale.ROOT)
-    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText))
+    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx, None)
+    visitCompoundBodyImpl(ctx, None, allowVarDeclare = false)
   }
 
   override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
