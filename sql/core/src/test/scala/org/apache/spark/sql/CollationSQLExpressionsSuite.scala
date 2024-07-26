@@ -2319,6 +2319,30 @@ class CollationSQLExpressionsSuite
     )
   }
 
+  // scalastyle:off nonascii
+  test("approx_count_distinct returns correct with collation") {
+    Seq(
+      ("utf8_lcase", Seq("a", "a", "A"), Seq(Row(1))),
+      ("utf8_lcase", Seq("aCfew", "acFEw", "ACFEW"), Seq(Row(1))),
+      ("UNICODE_CI_AI", Seq("č", "c", "Ć", "C", "Z", "Ž"), Seq(Row(2))),
+      ("UNICODE_CI_AI", Seq("fAFfewfćČĆfečwćCsŠ", "fAffEWfćČCfeCwcćss"), Seq(Row(1))),
+      ("UNICODE_CI_AI", Seq("fAcfewfćČĆfečwćCsŠ", "fAffEWfćČCfeCwcćss"), Seq(Row(2)))
+    ).foreach{
+      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+        checkAnswer(sql(
+          s"""
+             with t as (
+             select collate(col1, '$collationName') as c
+             from
+             values ${input.map(s => s"('$s')").mkString(", ")}
+          )
+          SELECT approx_count_distinct(c) FROM t
+             """), expected)
+    }
+
+  }
+  // scalastyle:on nonascii
+
   // TODO: Add more tests for other SQL expressions
 
 }
