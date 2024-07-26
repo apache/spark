@@ -185,7 +185,7 @@ object SchemaConverters extends Logging {
         // will vary based on the value of "recursive.fields.max.depth".
         // 1: struct<name: string>
         // 2: struct<name: string, bff: struct<name: string>>
-        // 3: struct<name: string, bff: struct<name string, bff: struct<name: string>>>
+        // 3: struct<name: string, bff: struct<name: string, bff: struct<name: string>>>
         // and so on.
         // TODO(rangadi): A better way to terminate would be replace the remaining recursive struct
         //      with the byte array of corresponding protobuf. This way no information is lost.

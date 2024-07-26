@@ -425,9 +425,10 @@ message Person {
 // The protobuf schema defined above, would be converted into a Spark SQL columns with the following
 // structure based on `recursive.fields.max.depth` value.
 
-1: struct<name: string, bff: null>
-2: struct<name: string, bff: <name: string, bff: null>>
-3: struct<name: string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
+1: struct<name: string>
+2: struct<name: string, bff: struct<name: string>>
+3: struct<name: string, bff: struct<name: string, bff: struct<name: string>>>
+...
 
 {% endhighlight %}
 <div class="d-none">
