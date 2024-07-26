@@ -68,23 +68,25 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
 
   protected def withIdentClause(
       ctx: IdentifierReferenceContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
+      otherPlans: Seq[LogicalPlan],
+      builder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan): LogicalPlan = {
     val exprCtx = ctx.expression
     if (exprCtx != null) {
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, otherPlans, builder)
     } else {
-      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
+      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier), otherPlans)
     }
   }
 
   protected def withFuncIdentClause(
       ctx: FunctionNameContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
+      otherPlans: Seq[LogicalPlan],
+      builder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan): LogicalPlan = {
     val exprCtx = ctx.expression
     if (exprCtx != null) {
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, otherPlans, builder)
     } else {
-      builder.apply(getFunctionMultiparts(ctx))
+      builder.apply(getFunctionMultiparts(ctx), otherPlans)
     }
   }
 
@@ -414,12 +416,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       case table: InsertIntoTableContext =>
         val (relationCtx, cols, partition, ifPartitionNotExists, byName)
         = visitInsertIntoTable(table)
-        withIdentClause(relationCtx, ident => {
+        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
             createUnresolvedRelation(relationCtx, ident),
             partition,
             cols,
-            query,
+            otherPlans.head,
             overwrite = false,
             ifPartitionNotExists,
             byName)
@@ -427,21 +429,21 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       case table: InsertOverwriteTableContext =>
         val (relationCtx, cols, partition, ifPartitionNotExists, byName)
         = visitInsertOverwriteTable(table)
-        withIdentClause(relationCtx, ident => {
+        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
             createUnresolvedRelation(relationCtx, ident),
             partition,
             cols,
-            query,
+            otherPlans.head,
             overwrite = true,
             ifPartitionNotExists,
             byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
-        withIdentClause(ctx.identifierReference, ident => {
+        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
           OverwriteByExpression.byPosition(
             createUnresolvedRelation(ctx.identifierReference, ident),
-            query,
+            otherPlans.head,
             expression(ctx.whereClause().booleanExpression()))
         })
       case dir: InsertOverwriteDirContext =>
@@ -1795,7 +1797,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
 
     withFuncIdentClause(
       func.functionName,
-      ident => {
+      Nil,
+      (ident, _) => {
         if (ident.length > 1) {
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
         }
@@ -2536,7 +2539,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     } else {
       // It's a function call
       val funcCtx = ctx.functionName
-      val func = withFuncIdentClause(
+      val func: Expression = withFuncIdentClause(
         funcCtx,
         arguments ++ filter ++ order.toSeq,
         (ident, otherExprs) => {
@@ -3070,7 +3073,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     val options = optionsClause.map{ clause =>
       new CaseInsensitiveStringMap(visitPropertyKeyValues(clause.options).asJava)
     }.getOrElse(CaseInsensitiveStringMap.empty)
-    withIdentClause(ctx, parts =>
+    withIdentClause(ctx, Nil, (parts, _) =>
       new UnresolvedRelation(parts, options, isStreaming = false))
   }
 
@@ -3089,7 +3092,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       ctx: IdentifierReferenceContext,
       commandName: String,
       suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTable(_, commandName, suggestAlternative))
+    withIdentClause(ctx, Nil, (ident, _) => UnresolvedTable(ident, commandName, suggestAlternative))
   }
 
   /**
@@ -3100,7 +3103,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       commandName: String,
       allowTemp: Boolean = true,
       suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, suggestAlternative))
+    withIdentClause(
+      ctx,
+      Nil,
+      (ident, _) => UnresolvedView(ident, commandName, allowTemp, suggestAlternative)
+    )
   }
 
   /**
@@ -3110,7 +3117,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       ctx: IdentifierReferenceContext,
       commandName: String,
       allowTempView: Boolean = true): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTableOrView(_, commandName, allowTempView))
+    withIdentClause(
+      ctx,
+      Nil,
+      (ident, _) => UnresolvedTableOrView(ident, commandName, allowTempView)
+    )
   }
 
   private def createUnresolvedTableOrView(
@@ -3794,7 +3805,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     blockBang(ctx.errorCapturingNot)
 
     CreateNamespace(
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident)),
       ctx.EXISTS != null,
       properties)
   }
@@ -3809,7 +3820,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
     DropNamespace(
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
       ctx.EXISTS != null,
       ctx.CASCADE != null)
   }
@@ -3827,7 +3838,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     withOrigin(ctx) {
       val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.propertyList), ctx)
       SetNamespaceProperties(
-        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
         properties)
     }
   }
@@ -3843,7 +3854,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
       SetNamespaceLocation(
-        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
         visitLocationSpec(ctx.locationSpec))
     }
   }
@@ -3869,7 +3880,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
     withOrigin(ctx) {
       DescribeNamespace(
-        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
         ctx.EXTENDED != null)
     }
 
@@ -4212,7 +4223,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
           ctx)
 
       case Some(query) =>
-        CreateTableAsSelect(withIdentClause(identifierContext, UnresolvedIdentifier(_)),
+        CreateTableAsSelect(
+          withIdentClause(identifierContext, Nil, (ident, _) => UnresolvedIdentifier(ident)),
           partitioning, query, tableSpec, Map.empty, ifNotExists)
 
       case _ =>
@@ -4220,7 +4232,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
         // with data type.
         val allColumns = columns ++ partCols
         CreateTable(
-          withIdentClause(identifierContext, UnresolvedIdentifier(_)),
+          withIdentClause(identifierContext, Nil, (ident, _) => UnresolvedIdentifier(ident)),
           allColumns, partitioning, tableSpec, ignoreIfExists = ifNotExists)
     }
   }
@@ -4286,7 +4298,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
 
       case Some(query) =>
         ReplaceTableAsSelect(
-          withIdentClause(ctx.replaceTableHeader.identifierReference(), UnresolvedIdentifier(_)),
+          withIdentClause(ctx.replaceTableHeader.identifierReference(), Nil,
+            (ident, _) => UnresolvedIdentifier(ident)),
           partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
@@ -4294,7 +4307,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
         // with data type.
         val allColumns = columns ++ partCols
         ReplaceTable(
-          withIdentClause(ctx.replaceTableHeader.identifierReference(), UnresolvedIdentifier(_)),
+          withIdentClause(ctx.replaceTableHeader.identifierReference(), Nil,
+            (ident, _) => UnresolvedIdentifier(ident)),
           allColumns, partitioning, tableSpec, orCreate = orCreate)
     }
   }
@@ -4305,7 +4319,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     // DROP TABLE works with either a table or a temporary view.
     DropTable(
-      withIdentClause(ctx.identifierReference, UnresolvedIdentifier(_, allowTemp = true)),
+      withIdentClause(ctx.identifierReference, Nil,
+        (ident, _) => UnresolvedIdentifier(ident, allowTemp = true)),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }
@@ -4315,7 +4330,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
     DropView(
-      withIdentClause(ctx.identifierReference, UnresolvedIdentifier(_, allowTemp = true)),
+      withIdentClause(ctx.identifierReference, Nil,
+        (ident, _) => UnresolvedIdentifier(ident, allowTemp = true)),
       ctx.EXISTS != null)
   }
 
@@ -4323,7 +4339,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    * Create a [[SetCatalogAndNamespace]] command.
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
-    SetCatalogAndNamespace(withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)))
+    SetCatalogAndNamespace(
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)))
   }
 
   /**
@@ -4331,7 +4348,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     val ns = if (ctx.identifierReference() != null) {
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident))
     } else {
       CurrentNamespace
     }
@@ -4346,7 +4363,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     Option(ctx.partitionSpec).map { spec =>
       val table = withOrigin(ctx.pattern) {
         if (ctx.identifierReference() != null) {
-          withIdentClause(ctx.identifierReference(), ns => {
+          withIdentClause(ctx.identifierReference(), Nil, (ns, _) => {
             val names = ns :+ string(visitStringLit(ctx.pattern))
             UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
           })
@@ -4358,7 +4375,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       ShowTablePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
     }.getOrElse {
       val ns = if (ctx.identifierReference() != null) {
-        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident))
       } else {
         CurrentNamespace
       }
@@ -4371,7 +4388,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
     val ns = if (ctx.identifierReference() != null) {
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident))
     } else {
       CurrentNamespace
     }
@@ -4861,7 +4878,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
     }
     val ns = if (ctx.identifierReference() != null) {
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident))
     } else {
       CurrentNamespace
     }
@@ -4937,7 +4954,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val query = Option(ctx.query).map(plan)
-    withIdentClause(ctx.identifierReference, ident => {
+    withIdentClause(ctx.identifierReference, Nil, (ident, _) => {
       if (query.isDefined && ident.length > 1) {
         val catalogAndNamespace = ident.init
         throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
@@ -5018,7 +5035,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    * }}}
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.table, ident => {
+    withIdentClause(ctx.table, Nil, (ident, _) => {
       val table = createUnresolvedTableOrView(
         ctx.table,
         ident,
@@ -5285,9 +5302,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       DescribeFunction(
         withIdentClause(
           describeFuncName.identifierReference(),
-          createUnresolvedFunctionName(
+          Nil,
+          (ident, _) => createUnresolvedFunctionName(
             describeFuncName.identifierReference,
-            _,
+            ident,
             "DESCRIBE FUNCTION",
             requirePersistent = false,
             funcTypeMismatchHint = None)),
@@ -5315,7 +5333,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
         throw QueryParsingErrors.showFunctionsInvalidPatternError(ctx.legacy.getText, ctx.legacy)
       }
       ShowFunctions(
-        withIdentClause(ctx.ns, UnresolvedNamespace(_)),
+        withIdentClause(ctx.ns, Nil, (ident, _) => UnresolvedIdentifier(ident)),
         userScope, systemScope, pattern)
     } else if (legacy.isDefined) {
       val ns = if (legacy.get.length > 1) {
@@ -5333,9 +5351,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     RefreshFunction(
       withIdentClause(
         ctx.identifierReference,
-        createUnresolvedFunctionName(
+        Nil,
+        (ident, _) => createUnresolvedFunctionName(
           ctx.identifierReference,
-          _,
+          ident,
           "REFRESH FUNCTION",
           requirePersistent = true,
           funcTypeMismatchHint = None)))
@@ -5343,7 +5362,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
     val comment = visitComment(ctx.comment)
-    CommentOnNamespace(withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)), comment)
+    CommentOnNamespace(
+      withIdentClause(
+        ctx.identifierReference,
+        Nil,
+        (ident, _) => UnresolvedNamespace(ident)),
+      comment)
   }
 
   override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
@@ -5475,7 +5499,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
     CreateVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      withIdentClause(ctx.identifierReference(), Nil, (ident, _) => UnresolvedIdentifier(ident)),
       defaultExpression,
       ctx.REPLACE() != null
     )
@@ -5491,7 +5515,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
     DropVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      withIdentClause(ctx.identifierReference(), Nil, (ident, _) => UnresolvedIdentifier(ident)),
       ctx.EXISTS() != null
     )
   }

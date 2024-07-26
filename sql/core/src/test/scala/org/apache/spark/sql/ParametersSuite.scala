@@ -624,6 +624,44 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     comparePlans(expected, parameterizedSql)
   }
 
+  test("SPARK-XXXXX: bind named parameters with IDENTIFIER clause") {
+    withTable("testtab") {
+      // Create table
+      spark.sql("create table testtab (id int, name string)").show()
+
+      // Insert into table using single param - WORKS
+      spark.sql("insert into identifier(:tab) values(1, 'test1')",
+        Map("tab" -> "testtab")).show()
+
+      // Select from table using param - WORKS
+      spark.sql("select * from identifier(:tab)",
+        Map("tab" -> "testtab")).show()
+
+      // Insert into table using multiple params - FAILS
+      spark.sql("insert into identifier(:tab) values(2, :name)",
+        Map("tab" -> "testtab", "name" -> "test2")).show()
+    }
+  }
+
+  test("SPARK-XXXXX: bind positional parameters with IDENTIFIER clause") {
+    withTable("testtab") {
+      // Create table
+      spark.sql("create table testtab (id int, name string)").show()
+
+      // Insert into table using single param - WORKS
+      spark.sql("insert into identifier(?) values(1, 'test1')",
+        Array("testtab")).show()
+
+      // Select from table using param - WORKS
+      spark.sql("select * from identifier(?)",
+        Array("testtab")).show()
+
+      // Insert into table using multiple params - FAILS
+      spark.sql("insert into identifier(?) values(2, ?)",
+        Array("testtab", "test2")).show()
+    }
+  }
+
   test("SPARK-46999: bind parameters for nested IDENTIFIER clause") {
     val query = sql(
       """
