@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{array, lit}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -824,7 +824,7 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def isin(list: Any*): Column = fn("in", array(list.map(lit): _*))
+  def isin(list: Any*): Column = Column.fn("in", this +: list.map(lit): _*)
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained

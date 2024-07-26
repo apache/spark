@@ -399,7 +399,7 @@ object functions {
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.fn("collect_top_k", e, lit(num), lit(reverse))
+    withAggregateFunction { CollectTopK(e.expr, num, reverse) }
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
@@ -1027,7 +1027,8 @@ object functions {
    * @group agg_funcs
    * @since 3.2.0
    */
-  def product(e: Column): Column = Column.fn("product", e)
+  def product(e: Column): Column =
+    withAggregateFunction { new Product(e.expr) }
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
@@ -5693,7 +5694,7 @@ object functions {
    * @since 3.2.0
    */
   def session_window(timeColumn: Column, gapDuration: String): Column =
-    Column.fn("session_window", timeColumn, lit(gapDuration)).as("session_window")
+    session_window(timeColumn, lit(gapDuration))
 
   /**
    * Generates session window given a timestamp specifying column.
@@ -5727,7 +5728,7 @@ object functions {
    * @since 3.2.0
    */
   def session_window(timeColumn: Column, gapDuration: Column): Column =
-    Column.fn("session_window", timeColumn, gapDuration).as("session_window")
+    Column.fn("session_window", timeColumn, gapDuration)
 
   /**
    * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
@@ -5760,8 +5761,9 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    */
-  def timestamp_diff(unit: String, start: Column, end: Column): Column =
-    Column.fn("timestamp_diff", lit(unit), start, end)
+  def timestamp_diff(unit: String, start: Column, end: Column): Column = withExpr {
+    TimestampDiff(unit, start.expr, end.expr)
+  }
 
   /**
    * Adds the specified number of units to the given timestamp.
@@ -5769,8 +5771,9 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    */
-  def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
-    Column.fn("timestamp_add", lit(unit), quantity, ts)
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column = withExpr {
+    TimestampAdd(unit, quantity.expr, ts.expr)
+  }
 
   /**
    * Parses the `timestamp` expression with the `format` expression
@@ -7058,7 +7061,7 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e)
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(Utils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -8462,7 +8465,9 @@ object functions {
    * @group udf_funcs
    * @since 3.4.0
    */
-  def unwrap_udt(column: Column): Column = Column.fn("unwrap_udt", column)
+  def unwrap_udt(column: Column): Column = withExpr {
+    UnwrapUDT(column.expr)
+  }
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those
@@ -8476,7 +8481,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def years(e: Column): Column = Column.fn("years", e)
+    def years(e: Column): Column = withExpr { Years(e.expr) }
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into months.
@@ -8484,7 +8489,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def months(e: Column): Column = Column.fn("months", e)
+    def months(e: Column): Column = withExpr { Months(e.expr) }
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into days.
@@ -8492,7 +8497,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def days(e: Column): Column = Column.fn("days", e)
+    def days(e: Column): Column = withExpr { Days(e.expr) }
 
     /**
      * (Scala-specific) A transform for timestamps to partition data into hours.
@@ -8500,7 +8505,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def hours(e: Column): Column = Column.fn("hours", e)
+    def hours(e: Column): Column = withExpr { Hours(e.expr) }
 
     /**
      * (Scala-specific) A transform for any type that partitions by a hash of the input column.
@@ -8508,10 +8513,10 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Column, e: Column): Column = {
+    def bucket(numBuckets: Column, e: Column): Column = withExpr {
       numBuckets.expr match {
-        case IntegerLiteral(_) =>
-          Column.fn("bucket", numBuckets, e)
+        case lit@Literal(_, IntegerType) =>
+          Bucket(lit, e.expr)
         case _ =>
           throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
       }
@@ -8523,6 +8528,8 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Int, e: Column): Column = bucket(lit(numBuckets), e)
+    def bucket(numBuckets: Int, e: Column): Column = withExpr {
+      Bucket(Literal(numBuckets), e.expr)
+    }
   }
 }

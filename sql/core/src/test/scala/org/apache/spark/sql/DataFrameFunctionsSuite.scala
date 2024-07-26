@@ -79,10 +79,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val excludedSqlFunctions = Set.empty[String]
 
     val expectedOnlyDataFrameFunctions = Set(
-      // "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
-      // "product", // Discussed in https://github.com/apache/spark/pull/30745
-      // "unwrap_udt",
-      // "collect_top_k",
+      "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
+      "product", // Discussed in https://github.com/apache/spark/pull/30745
+      "unwrap_udt",
+      "collect_top_k",
       "timestamp_add",
       "timestamp_diff"
     )

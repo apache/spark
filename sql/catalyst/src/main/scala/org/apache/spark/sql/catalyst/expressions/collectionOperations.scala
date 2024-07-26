@@ -1264,7 +1264,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
   def this(child: Expression) = this(child, None)
 
   def this(child: Expression, seed: Expression) =
-    this(child, ExpressionWithRandomSeed.expressionToSeed(seed, "SHUFFLE"))
+    this(child, ExpressionWithRandomSeed.expressionToSeed(seed, "shuffle"))
 
   override def stateful: Boolean = true
 

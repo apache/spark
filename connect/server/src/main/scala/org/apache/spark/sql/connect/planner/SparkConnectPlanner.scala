@@ -1832,6 +1832,11 @@ class SparkConnectPlanner(
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
     fun.getFunctionName match {
+      case "product" =>
+        Some(
+          aggregate
+            .Product(transformExpression(fun.getArgumentsList.asScala.head))
+            .toAggregateExpression())
 
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         // [col, expectedNumItems: Long, numBits: Long]
@@ -1839,6 +1844,40 @@ class SparkConnectPlanner(
         Some(
           new BloomFilterAggregate(children(0), children(1), children(2))
             .toAggregateExpression())
+
+      case "timestampdiff" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampDiff(unit, children(1), children(2)))
+
+      case "timestampadd" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampAdd(unit, children(1), children(2)))
+
+      case "bucket" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        (children.head, children.last) match {
+          case (numBuckets: Literal, child) if numBuckets.dataType == IntegerType =>
+            Some(Bucket(numBuckets, child))
+          case (other, _) =>
+            throw InvalidPlanInput(s"numBuckets should be a literal integer, but got $other")
+        }
+
+      case "years" if fun.getArgumentsCount == 1 =>
+        Some(Years(transformExpression(fun.getArguments(0))))
+
+      case "months" if fun.getArgumentsCount == 1 =>
+        Some(Months(transformExpression(fun.getArguments(0))))
+
+      case "days" if fun.getArgumentsCount == 1 =>
+        Some(Days(transformExpression(fun.getArguments(0))))
+
+      case "hours" if fun.getArgumentsCount == 1 =>
+        Some(Hours(transformExpression(fun.getArguments(0))))
+
+      case "unwrap_udt" if fun.getArgumentsCount == 1 =>
+        Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
