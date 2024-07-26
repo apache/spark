@@ -624,7 +624,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     comparePlans(expected, parameterizedSql)
   }
 
-  test("SPARK-XXXXX: bind named parameters with IDENTIFIER clause") {
+  test("SPARK-49017: bind named parameters with IDENTIFIER clause") {
     withTable("testtab") {
       // Create table
       spark.sql("create table testtab (id int, name string)").show()
@@ -643,7 +643,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     }
   }
 
-  test("SPARK-XXXXX: bind positional parameters with IDENTIFIER clause") {
+  test("SPARK-49017: bind positional parameters with IDENTIFIER clause") {
     withTable("testtab") {
       // Create table
       spark.sql("create table testtab (id int, name string)").show()
