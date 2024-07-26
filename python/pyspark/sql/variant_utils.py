@@ -430,7 +430,9 @@ class VariantUtils:
         raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
-    def _to_year_month_interval_ansi_string(cls, months: int, start_field: int, end_field: int):
+    def _to_year_month_interval_ansi_string(
+        cls, months: int, start_field: int, end_field: int
+    ) -> str:
         """
         Used to convert months representing a year-month interval with given start and end
         fields to its ANSI SQL string representation.
