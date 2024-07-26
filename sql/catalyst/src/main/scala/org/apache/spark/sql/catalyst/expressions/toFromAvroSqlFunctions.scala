@@ -93,7 +93,7 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
         TypeCheckResult.TypeCheckSuccess))
   }
 
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val schemaValue: String = jsonFormatSchema.eval() match {
       case s: UTF8String =>
         s.toString
@@ -165,7 +165,7 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
     }
   }
 
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val schemaValue: Option[String] = jsonFormatSchema.eval() match {
       case null =>
         None

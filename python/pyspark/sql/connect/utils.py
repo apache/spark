@@ -47,16 +47,16 @@ def require_minimum_grpc_version() -> None:
         import grpc
     except ImportError as error:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "grpcio",
                 "minimum_version": str(minimum_grpc_version),
             },
         ) from error
     if LooseVersion(grpc.__version__) < LooseVersion(minimum_grpc_version):
         raise PySparkImportError(
-            error_class="UNSUPPORTED_PACKAGE_VERSION",
-            message_parameters={
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
                 "package_name": "grpcio",
                 "minimum_version": str(minimum_grpc_version),
                 "current_version": str(grpc.__version__),
@@ -72,8 +72,8 @@ def require_minimum_grpcio_status_version() -> None:
         import grpc_status  # noqa
     except ImportError as error:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "grpcio-status",
                 "minimum_version": str(minimum_grpc_version),
             },
@@ -88,8 +88,8 @@ def require_minimum_googleapis_common_protos_version() -> None:
         import google.rpc  # noqa
     except ImportError as error:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "googleapis-common-protos",
                 "minimum_version": str(minimum_common_protos_version),
             },

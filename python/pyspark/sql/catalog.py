@@ -65,6 +65,7 @@ class Column(NamedTuple):
     nullable: bool
     isPartition: bool
     isBucket: bool
+    isCluster: bool
 
 
 class Function(NamedTuple):
@@ -663,6 +664,7 @@ class Catalog:
                     nullable=jcolumn.nullable(),
                     isPartition=jcolumn.isPartition(),
                     isBucket=jcolumn.isBucket(),
+                    isCluster=jcolumn.isCluster(),
                 )
             )
         return columns
@@ -853,8 +855,8 @@ class Catalog:
         else:
             if not isinstance(schema, StructType):
                 raise PySparkTypeError(
-                    error_class="NOT_STRUCT",
-                    message_parameters={
+                    errorClass="NOT_STRUCT",
+                    messageParameters={
                         "arg_name": "schema",
                         "arg_type": type(schema).__name__,
                     },

@@ -175,7 +175,16 @@ case class EnsureRequirements(
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
-            child
+            bestSpecOpt match {
+              // If keyGroupCompatible = false, we can still perform SPJ
+              // by shuffling the other side based on join keys (see the else case below).
+              // Hence we need to ensure that after this call, the outputPartitioning of the
+              // partitioned side's BatchScanExec is grouped by join keys to match,
+              // and we do that by pushing down the join keys
+              case Some(KeyGroupedShuffleSpec(_, _, Some(joinKeyPositions))) =>
+                populateJoinKeyPositions(child, Some(joinKeyPositions))
+              case _ => child
+            }
           } else {
             val newPartitioning = bestSpecOpt.map { bestSpec =>
               // Use the best spec to create a new partitioning to re-shuffle this child
@@ -576,6 +585,21 @@ case class EnsureRequirements(
     case node =>
       node.mapChildren(child => populateCommonPartitionInfo(
         child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
+  }
+
+
+  private def populateJoinKeyPositions(
+      plan: SparkPlan,
+      joinKeyPositions: Option[Seq[Int]]): SparkPlan = plan match {
+    case scan: BatchScanExec =>
+      scan.copy(
+        spjParams = scan.spjParams.copy(
+          joinKeyPositions = joinKeyPositions
+        )
+      )
+    case node =>
+      node.mapChildren(child => populateJoinKeyPositions(
+        child, joinKeyPositions))
   }
 
   private def reduceCommonPartValues(

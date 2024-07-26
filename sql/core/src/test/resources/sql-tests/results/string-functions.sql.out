@@ -778,6 +778,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -795,6 +796,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -812,6 +814,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -829,6 +832,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -897,6 +901,46 @@ org.apache.spark.SparkRuntimeException
     "function" : "`encode`"
   }
 }
+
+
+-- !query
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+白日依山尽，黄河入海流。欲穷千里目，更上一层楼。
+
+
+-- !query
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。
+
+
+-- !query
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark
+
+
+-- !query
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως
+
+
+-- !query
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。
 
 
 -- !query
@@ -1032,6 +1076,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1049,6 +1094,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1098,6 +1144,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1115,6 +1162,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "UTF-16LE, UTF-8, UTF-32, UTF-16BE, UTF-16, US-ASCII, ISO-8859-1",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }

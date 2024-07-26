@@ -82,7 +82,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertGreaterEqual(len(handler_called), 0)
 
     def _check_no_active_session_error(self, e: PySparkException):
-        self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
+        self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
     def test_stop_session(self):
         df = self.spark.sql("select 1 as a, 2 as b")
@@ -269,6 +269,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         # assert that getOrCreate() generates a new session
         session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
         session.range(3).collect()
+
+    def test_stop_invalid_session(self):  # SPARK-47986
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        # run a simple query so the session id is synchronized.
+        session.range(3).collect()
+
+        # change the server side session id to simulate that the server has terminated this session.
+        session._client._server_session_id = str(uuid.uuid4())
+
+        # Should not throw any error
+        session.stop()
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):

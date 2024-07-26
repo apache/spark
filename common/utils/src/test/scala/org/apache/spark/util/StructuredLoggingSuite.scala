@@ -25,7 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC, MessageWithContext}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -227,6 +227,37 @@ trait LoggingSuiteBase
           val logOutput = captureLogOutput(logFunc)
           verifyMsgWithConcat(level, logOutput)
       }
+  }
+
+  test("LogEntry should construct MessageWithContext only once") {
+    var constructionCount = 0
+
+    def constructMessageWithContext(): MessageWithContext = {
+      constructionCount += 1
+      log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
+    }
+    logInfo(constructMessageWithContext())
+    assert(constructionCount === 1)
+  }
+
+  test("LogEntry should construct MessageWithContext only once II") {
+    var constructionCount = 0
+    var constructionCount2 = 0
+
+    def executorId(): String = {
+      constructionCount += 1
+      "1"
+    }
+
+    def workerId(): String = {
+      constructionCount2 += 1
+      "2"
+    }
+
+    logInfo(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId())}." +
+      log"worker id ${MDC(LogKeys.WORKER_ID, workerId())}")
+    assert(constructionCount === 1)
+    assert(constructionCount2 === 1)
   }
 }
 

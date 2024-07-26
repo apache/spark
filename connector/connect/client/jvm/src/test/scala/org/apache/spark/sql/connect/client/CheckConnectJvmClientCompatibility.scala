@@ -143,6 +143,21 @@ object CheckConnectJvmClientCompatibility {
     checkMiMaCompatibility(clientJar, protobufJar, includedRules, excludeRules)
   }
 
+  private lazy val mergeIntoWriterExcludeRules: Seq[ProblemFilter] = {
+    // Exclude some auto-generated methods in [[MergeIntoWriter]] classes.
+    // The incompatible changes are due to the uses of [[proto.Expression]] instead
+    // of [[catalyst.Expression]] in the method signature.
+    val classNames = Seq("WhenMatched", "WhenNotMatched", "WhenNotMatchedBySource")
+    val methodNames = Seq("apply", "condition", "copy", "copy$*", "unapply")
+
+    classNames.flatMap { className =>
+      methodNames.map { methodName =>
+        ProblemFilters.exclude[IncompatibleSignatureProblem](
+          s"org.apache.spark.sql.$className.$methodName")
+      }
+    }
+  }
+
   private def checkMiMaCompatibilityWithSqlModule(
       clientJar: File,
       sqlJar: File): List[Problem] = {
@@ -164,6 +179,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.streaming.ui.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.test.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.util.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.scripting.*"),
 
       // Skip private[sql] constructors
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.*.this"),
@@ -237,6 +253,8 @@ object CheckConnectJvmClientCompatibility {
       // SparkSession#implicits
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#implicits._sqlContext"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#implicits.session"),
 
       // SparkSession#Builder
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -287,6 +305,7 @@ object CheckConnectJvmClientCompatibility {
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
 
       // Artifact Manager
       ProblemFilters.exclude[MissingClassProblem](
@@ -296,17 +315,9 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.util.ArtifactUtils"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.artifact.util.ArtifactUtils$"),
+        "org.apache.spark.sql.artifact.util.ArtifactUtils$")) ++
+      mergeIntoWriterExcludeRules
 
-      // MergeIntoWriter
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter$"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched$"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched$"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatchedBySource"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatchedBySource$"))
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
 
@@ -440,6 +451,9 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
+      // SQLImplicits
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
+
       // Steaming API
       ProblemFilters.exclude[MissingTypesProblem](
         "org.apache.spark.sql.streaming.DataStreamWriter" // Client version extends Logging
@@ -457,7 +471,8 @@ object CheckConnectJvmClientCompatibility {
 
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"))
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$")) ++
+      mergeIntoWriterExcludeRules
 
     checkMiMaCompatibility(sqlJar, clientJar, includedRules, excludeRules)
   }
