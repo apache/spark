@@ -204,6 +204,18 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           tableName, specifiedBucketString, existingBucketString)
       }
 
+      // Check if the specified clustering columns match the existing table.
+      val specifiedClusterBySpec = tableDesc.clusterBySpec
+      val existingClusterBySpec = existingTable.clusterBySpec
+      if (specifiedClusterBySpec != existingClusterBySpec) {
+        val specifiedClusteringString =
+          specifiedClusterBySpec.map(_.toString).getOrElse("")
+        val existingClusteringString =
+          existingClusterBySpec.map(_.toString).getOrElse("")
+        throw QueryCompilationErrors.mismatchedTableClusteringError(
+          tableName, specifiedClusteringString, existingClusteringString)
+      }
+
       val newQuery = if (adjustedColumns != query.output) {
         Project(adjustedColumns, query)
       } else {
@@ -325,7 +337,12 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
     }
 
-    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
+    val normalizedProperties = table.properties ++ table.clusterBySpec.map { spec =>
+      ClusterBySpec.toProperty(schema, spec, conf.resolver)
+    }
+
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec,
+      properties = normalizedProperties)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {

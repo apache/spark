@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -240,6 +241,56 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           Row("col2", "struct<x:int,y:int>", null),
           Row("# Clustering Information", "", ""),
           Row("# col_name", "data_type", "comment")))
+    }
+  }
+
+  test("describe a clustered table - dataframe writer v1") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      val df = spark.range(10).select(
+        col("id").cast("string").as("col1"),
+        struct(col("id").cast("int").as("x"), col("id").cast("int").as("y")).as("col2"))
+      df.write.mode("append").clusterBy("col1", "col2.x").saveAsTable(tbl)
+      val descriptionDf = sql(s"DESC $tbl")
+
+      descriptionDf.show(false)
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col1", "string", null),
+          Row("col2", "struct<x:int,y:int>", null),
+          Row("# Clustering Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("col2.x", "int", null),
+          Row("col1", "string", null)))
+    }
+  }
+
+  test("describe a clustered table - dataframe writer v2") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      val df = spark.range(10).select(
+        col("id").cast("string").as("col1"),
+        struct(col("id").cast("int").as("x"), col("id").cast("int").as("y")).as("col2"))
+      df.writeTo(tbl).clusterBy("col1", "col2.x").create()
+      val descriptionDf = sql(s"DESC $tbl")
+
+      descriptionDf.show(false)
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col1", "string", null),
+          Row("col2", "struct<x:int,y:int>", null),
+          Row("# Clustering Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("col2.x", "int", null),
+          Row("col1", "string", null)))
     }
   }
 }

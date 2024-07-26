@@ -247,7 +247,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     private case class Data(originalMin: Vector, originalMax: Vector)
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = new Data(instance.originalMin, instance.originalMax)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
@@ -259,7 +259,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     private val className = classOf[MinMaxScalerModel].getName
 
     override def load(path: String): MinMaxScalerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val Row(originalMin: Vector, originalMax: Vector) =

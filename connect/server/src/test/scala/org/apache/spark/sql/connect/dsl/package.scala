@@ -219,6 +219,7 @@ package object dsl {
           mode: Option[String] = None,
           sortByColumns: Seq[String] = Seq.empty,
           partitionByCols: Seq[String] = Seq.empty,
+          clusterByCols: Seq[String] = Seq.empty,
           bucketByCols: Seq[String] = Seq.empty,
           numBuckets: Option[Int] = None): Command = {
         val writeOp = WriteOperation.newBuilder()
@@ -242,6 +243,7 @@ package object dsl {
         }
         sortByColumns.foreach(writeOp.addSortColumnNames(_))
         partitionByCols.foreach(writeOp.addPartitioningColumns(_))
+        clusterByCols.foreach(writeOp.addClusteringColumns(_))
 
         if (numBuckets.nonEmpty && bucketByCols.nonEmpty) {
           val op = WriteOperation.BucketBy.newBuilder()
@@ -272,6 +274,7 @@ package object dsl {
           options: Map[String, String] = Map.empty,
           tableProperties: Map[String, String] = Map.empty,
           partitionByCols: Seq[Expression] = Seq.empty,
+          clusterByCols: Seq[String] = Seq.empty,
           mode: Option[String] = None,
           overwriteCondition: Option[Expression] = None): Command = {
         val writeOp = WriteOperationV2.newBuilder()
@@ -279,6 +282,7 @@ package object dsl {
         tableName.foreach(writeOp.setTableName)
         provider.foreach(writeOp.setProvider)
         partitionByCols.foreach(writeOp.addPartitioningColumns)
+        clusterByCols.foreach(writeOp.addClusteringColumns)
         options.foreach { case (k, v) =>
           writeOp.putOptions(k, v)
         }

@@ -888,8 +888,8 @@ class Join(LogicalPlan):
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
             raise AnalysisException(
-                error_class="UNSUPPORTED_JOIN_TYPE",
-                message_parameters={"join_type": how},
+                errorClass="UNSUPPORTED_JOIN_TYPE",
+                messageParameters={"join_type": how},
             )
         self.how = join_type
 
@@ -1056,8 +1056,8 @@ class SetOperation(LogicalPlan):
             plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
             raise PySparkValueError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"operation": self.set_op},
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": self.set_op},
             )
 
         plan.set_op.is_all = self.is_all
@@ -1693,8 +1693,8 @@ class WriteOperation(LogicalPlan):
                     )
                 else:
                     raise PySparkValueError(
-                        error_class="UNSUPPORTED_OPERATION",
-                        message_parameters={"operation": tsm},
+                        errorClass="UNSUPPORTED_OPERATION",
+                        messageParameters={"operation": tsm},
                     )
         elif self.path is not None:
             plan.write_operation.path = self.path
@@ -1711,8 +1711,8 @@ class WriteOperation(LogicalPlan):
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
             else:
                 raise PySparkValueError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": self.mode},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": self.mode},
                 )
         return plan
 
@@ -1804,8 +1804,8 @@ class WriteOperationV2(LogicalPlan):
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
                 raise PySparkValueError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": self.mode},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": self.mode},
                 )
         return plan
 
@@ -2352,8 +2352,8 @@ class PythonUDTF:
             udtf.command = CloudPickleSerializer().dumps(self._func)
         except pickle.PicklingError:
             raise PySparkPicklingError(
-                error_class="UDTF_SERIALIZATION_ERROR",
-                message_parameters={
+                errorClass="UDTF_SERIALIZATION_ERROR",
+                messageParameters={
                     "name": self._name,
                     "message": "Please check the stack trace and "
                     "make sure the function is serializable.",

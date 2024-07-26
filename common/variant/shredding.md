@@ -39,7 +39,7 @@ optional group variant_col {
 ```
 
 | Variant Value | Top-level untyped_value | b.untyped_value | Non-null in a | Non-null in b.c |
-|---------------|--------------------------|---------------|---------------|
+|---------------|--------------------------|---------------|---------------|------------------|
 | {a: 123, b: {c: “hello”}} | null | null | typed_value | typed_value |
 | {a: 1.23, b: {c: “123”}} | null | null | untyped_value | typed_value |
 | {a: [1,2,3], b: {c: null}} | null | null | untyped_value | untyped_value |

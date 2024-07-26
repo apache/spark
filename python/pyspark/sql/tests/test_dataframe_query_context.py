@@ -38,8 +38,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("div_zero", df.id / 0).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="DIVIDE_BY_ZERO",
-                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
                 fragment="__truediv__",
             )
@@ -49,8 +49,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("plus_invalid_type", df.id + "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -65,8 +65,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("minus_invalid_type", df.id - "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -81,8 +81,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("multiply_invalid_type", df.id * "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -97,8 +97,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("mod_invalid_type", df.id % "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -113,8 +113,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("equalTo_invalid_type", df.id == "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -129,8 +129,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("lt_invalid_type", df.id < "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -145,8 +145,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("leq_invalid_type", df.id <= "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -161,8 +161,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("geq_invalid_type", df.id >= "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -177,8 +177,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("gt_invalid_type", df.id > "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -193,8 +193,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("eqNullSafe_invalid_type", df.id.eqNullSafe("string")).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -209,8 +209,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("bitwiseOR_invalid_type", df.id.bitwiseOR("string")).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -225,8 +225,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("bitwiseAND_invalid_type", df.id.bitwiseAND("string")).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -241,8 +241,8 @@ class DataFrameQueryContextTestsMixin:
                 df.withColumn("bitwiseXOR_invalid_type", df.id.bitwiseXOR("string")).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -259,8 +259,8 @@ class DataFrameQueryContextTestsMixin:
                 ).withColumn("plus_ten", df.id + 10).withColumn("minus_ten", df.id - 10).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="DIVIDE_BY_ZERO",
-                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
                 fragment="__truediv__",
             )
@@ -274,8 +274,8 @@ class DataFrameQueryContextTestsMixin:
                 ).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -294,8 +294,8 @@ class DataFrameQueryContextTestsMixin:
                 ).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -312,8 +312,8 @@ class DataFrameQueryContextTestsMixin:
                 ).withColumn("plus_ten", df.id + 10).withColumn("minus_ten", df.id - 10).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -328,8 +328,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(df.id - 10, df.id + 4, df.id / 0, df.id * 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="DIVIDE_BY_ZERO",
-                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
                 fragment="__truediv__",
             )
@@ -339,8 +339,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(df.id - 10, df.id + "string", df.id / 10, df.id * 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -355,8 +355,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(df.id - "string", df.id + 4, df.id / 10, df.id * 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -371,8 +371,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(df.id - 10, df.id + 4, df.id / 10, df.id * "string").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -389,8 +389,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(a, df.id + 4, b, df.id * 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="DIVIDE_BY_ZERO",
-                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
                 fragment="__truediv__",
             )
@@ -402,8 +402,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(df.id / 10, a, b, df.id * 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -420,8 +420,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(a, df.id / 10, b, df.id * 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -438,8 +438,8 @@ class DataFrameQueryContextTestsMixin:
                 df.select(a, df.id / 10, b, df.id + 5).collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="CAST_INVALID_INPUT",
-                message_parameters={
+                errorClass="CAST_INVALID_INPUT",
+                messageParameters={
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -456,8 +456,8 @@ class DataFrameQueryContextTestsMixin:
                 self.spark.sql("select 10/0").collect()
             self.check_error(
                 exception=pe.exception,
-                error_class="DIVIDE_BY_ZERO",
-                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.SQL,
             )
 
@@ -466,8 +466,8 @@ class DataFrameQueryContextTestsMixin:
                 self.spark.sql("select * from non-existing-table")
             self.check_error(
                 exception=pe.exception,
-                error_class="INVALID_IDENTIFIER",
-                message_parameters={"ident": "non-existing-table"},
+                errorClass="INVALID_IDENTIFIER",
+                messageParameters={"ident": "non-existing-table"},
                 query_context_type=None,
             )
 
