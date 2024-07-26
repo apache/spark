@@ -94,6 +94,25 @@ struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
 
 
 -- !query
+select *, (select count(*) from y where x1 = y1 and cast(y2 as double) = x1 + 1
+           group by cast(y2 as double)) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
+select *, (select count(*) from y where y2 + 1 = x1 + x2 group by y2 + 1) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1, x2):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1
 -- !query schema
 struct<>
@@ -133,6 +152,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 11,
     "stopIndex" : 65,
     "fragment" : "(select count(*) from y where y1 + y2 = x1 group by y1)"
+  } ]
+}
+
+
+-- !query
+select *, (select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2) from x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "value" : "y2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 81,
+    "fragment" : "(select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2)"
   } ]
 }
 

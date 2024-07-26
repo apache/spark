@@ -140,4 +140,22 @@ class MasterWorkerUISuite extends MasterSuiteBase {
       System.getProperties().remove("spark.ui.proxyBase")
     }
   }
+
+  test("SPARK-49007: Support custom master web ui title") {
+    implicit val formats = org.json4s.DefaultFormats
+    val title = "Spark Custom Title"
+    val conf = new SparkConf().set(MASTER_UI_TITLE, title)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
+    try {
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include (title)
+      }
+    } finally {
+      localCluster.stop()
+    }
+  }
 }

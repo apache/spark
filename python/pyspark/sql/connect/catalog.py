@@ -208,6 +208,7 @@ class Catalog:
                 nullable=table[3][i].as_py(),
                 isPartition=table[4][i].as_py(),
                 isBucket=table[5][i].as_py(),
+                isCluster=table[6][i].as_py(),
             )
             for i in range(table.num_rows)
         ]
