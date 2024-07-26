@@ -334,8 +334,9 @@ trait Logging {
       // If Log4j 2 is used but is initialized by default configuration,
       // load a default properties file
       // scalastyle:off println
-      if (Logging.islog4j2DefaultConfigured()) {
-        Logging.defaultSparkLog4jConfig = true
+      if (Logging.shouldUseDefaultSparkLog4jConfig || Logging.islog4j2DefaultConfigured()) {
+        Logging.shouldUseDefaultSparkLog4jConfig = true
+        Logging.defaultSparkLog4jConfigApplied = true
         val defaultLogProps = if (Logging.isStructuredLoggingEnabled) {
           "org/apache/spark/log4j2-defaults.properties"
         } else {
@@ -397,7 +398,8 @@ trait Logging {
 private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
-  @volatile private var defaultSparkLog4jConfig = false
+  @volatile private var shouldUseDefaultSparkLog4jConfig = false
+  @volatile private var defaultSparkLog4jConfigApplied = false
   @volatile private var structuredLoggingEnabled = true
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
@@ -423,8 +425,8 @@ private[spark] object Logging {
    */
   def uninitialize(): Unit = initLock.synchronized {
     if (isLog4j2()) {
-      if (defaultSparkLog4jConfig) {
-        defaultSparkLog4jConfig = false
+      if (shouldUseDefaultSparkLog4jConfig) {
+        defaultSparkLog4jConfigApplied = false
         val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
         context.reconfigure()
       } else {
