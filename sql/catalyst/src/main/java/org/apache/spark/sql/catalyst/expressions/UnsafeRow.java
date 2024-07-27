@@ -17,11 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import javax.xml.crypto.Data;
 import java.io.*;
+import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+
+import scala.collection.mutable.Seq;
+import scala.util.hashing.MurmurHash3;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -32,6 +40,7 @@ import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
+import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -83,6 +92,28 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     } else {
       return pdt instanceof PhysicalPrimitiveType;
     }
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof UnsafeRow o)) {
+      return false;
+    } else if (attributesDataType == null) {
+      return this.sizeInBytes == o.sizeInBytes && ByteArrayMethods.arrayEquals(this.baseObject, this.baseOffset, o.baseObject, o.baseOffset, (long)this.sizeInBytes);
+    }
+
+    UnsafeRow other = (UnsafeRow) obj;
+    for (int idx = 0; idx < numFields; ++idx) {
+      if (attributesDataType[idx] instanceof StringType) {
+        StringType st = (StringType) attributesDataType[idx];
+        int equal = PhysicalArrayType.apply(st).ordering().compare(getUTF8String(idx), other.getUTF8String(idx));
+        if (equal != 0)
+          return false;
+      } else {
+        // TODO
+      }
+    }
+    return true;
   }
 
   /**
@@ -496,6 +527,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       sizeInBytes
     );
     rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    rowCopy.setAttributesDataType(attributesDataType);
     return rowCopy;
   }
 
@@ -554,17 +586,21 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    ArrayList exp = new ArrayList<Expression>(numFields);
+    for (int i = 0; i < numFields; ++i) {
+      if (attributesDataType[i] instanceof StringType) {
+        exp.add(new Literal(getUTF8String(i), attributesDataType[i]));
+      }
+    }
+
+    return (int) new Murmur3Hash(scala.collection.JavaConverters.asScala(exp).toSeq(), 42).eval(copy());
   }
 
-  @Override
-  public boolean equals(Object other) {
-    if (other instanceof UnsafeRow o) {
-      return (sizeInBytes == o.sizeInBytes) &&
-        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-          sizeInBytes);
-    }
-    return false;
+  private DataType[] attributesDataType;
+
+  public void setAttributesDataType(DataType[] _attributesDataType) {
+    assert (numFields == attributesDataType.length);
+    attributesDataType = _attributesDataType;
   }
 
   /**
