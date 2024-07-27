@@ -586,10 +586,16 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public int hashCode() {
+    if (attributesDataType == null) {
+      return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    }
+
     ArrayList exp = new ArrayList<Expression>(numFields);
     for (int i = 0; i < numFields; ++i) {
       if (attributesDataType[i] instanceof StringType) {
         exp.add(new Literal(getUTF8String(i), attributesDataType[i]));
+      } else {
+        // TODO
       }
     }
 
