@@ -21,8 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JString}
-import org.json4s.JsonAST.JValue
+import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
@@ -37,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.execution.streaming.state.OperatorPropertiesUtils.OperatorProperties
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, StructType}
@@ -430,15 +430,12 @@ case class TransformWithStateExec(
       Array(StateStoreMetadataV2(
         StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
 
-    val operatorPropertiesJson: JValue =
-      ("timeMode" -> JString(timeMode.toString)) ~
-        ("outputMode" -> JString(outputMode.toString)) ~
-        ("stateVariables" -> getStateVariableInfos().map { case (_, stateInfo) =>
-          stateInfo.jsonValue
-        }.arr)
-
-    val json = compact(render(operatorPropertiesJson))
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
+    val operatorProperties = TransformWithStateOperatorProperties(
+      timeMode.toString,
+      outputMode.toString,
+      getStateVariableInfos().values.toList
+    )
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
   }
 
   private def stateSchemaDirPath(): Path = {
@@ -451,35 +448,8 @@ case class TransformWithStateExec(
     new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
-  private def checkOperatorPropEquality[T](
-      fieldName: String,
-      oldMetadataV2: OperatorStateMetadataV2,
-      newMetadataV2: OperatorStateMetadataV2): Unit = {
-    val oldJsonString = oldMetadataV2.operatorPropertiesJson
-    val newJsonString = newMetadataV2.operatorPropertiesJson
-    // verify that timeMode, outputMode are the same
-    implicit val formats: DefaultFormats.type = DefaultFormats
-    val oldJsonProps = JsonMethods.parse(oldJsonString).extract[Map[String, Any]]
-    val newJsonProps = JsonMethods.parse(newJsonString).extract[Map[String, Any]]
-    val oldProp = oldJsonProps(fieldName).asInstanceOf[T]
-    val newProp = newJsonProps(fieldName).asInstanceOf[T]
-    if (oldProp != newProp) {
-      throw StateStoreErrors.invalidConfigChangedAfterRestart(
-        fieldName,
-        oldProp.toString,
-        newProp.toString
-      )
-    }
-  }
-
-  private def checkStateVariableEquality(oldMetadataV2: OperatorStateMetadataV2): Unit = {
-    val oldJsonString = oldMetadataV2.operatorPropertiesJson
-    implicit val formats: DefaultFormats.type = DefaultFormats
-    val oldJsonProps = JsonMethods.parse(oldJsonString).extract[Map[String, Any]]
-    // compare state variable infos
-    val oldStateVariableInfos = oldJsonProps("stateVariables").
-      asInstanceOf[List[Map[String, Any]]]
-      .map(TransformWithStateVariableInfo.fromMap)
+  private def checkStateVariableEquality(
+      oldStateVariableInfos: List[TransformWithStateVariableInfo]): Unit = {
     val newStateVariableInfos = getStateVariableInfos()
     oldStateVariableInfos.foreach { oldInfo =>
       val newInfo = newStateVariableInfos.get(oldInfo.stateName)
@@ -498,15 +468,19 @@ case class TransformWithStateExec(
   }
 
   override def validateNewMetadata(
-      oldMetadata: OperatorStateMetadata,
-      newMetadata: OperatorStateMetadata): Unit = {
-    (oldMetadata, newMetadata) match {
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    (oldOperatorMetadata, newOperatorMetadata) match {
       case (
         oldMetadataV2: OperatorStateMetadataV2,
         newMetadataV2: OperatorStateMetadataV2) =>
-        checkOperatorPropEquality[String]("timeMode", oldMetadataV2, newMetadataV2)
-        checkOperatorPropEquality[String]("outputMode", oldMetadataV2, newMetadataV2)
-        checkStateVariableEquality(oldMetadataV2)
+        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          oldMetadataV2.operatorPropertiesJson)
+        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          newMetadataV2.operatorPropertiesJson)
+        OperatorProperties.validateOperatorProperties(
+          oldOperatorProps, newOperatorProps)
+        checkStateVariableEquality(oldOperatorProps.stateVariables)
       case (_, _) =>
     }
   }
@@ -737,3 +711,32 @@ object TransformWithStateExec {
 }
 // scalastyle:on argcount
 
+case class TransformWithStateOperatorProperties(
+    override val timeMode: String,
+    override val outputMode: String,
+    val stateVariables: List[TransformWithStateVariableInfo])
+  extends OperatorProperties(timeMode, outputMode) {
+
+  override def json: String = {
+    val stateVariablesJson = stateVariables.map(_.jsonValue)
+    val json =
+      ("timeMode" -> timeMode) ~
+        ("outputMode" -> outputMode) ~
+        ("stateVariables" -> stateVariablesJson)
+    compact(render(json))
+  }
+}
+
+object TransformWithStateOperatorProperties {
+  def fromJson(json: String): TransformWithStateOperatorProperties = {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val jsonMap = JsonMethods.parse(json).extract[Map[String, Any]]
+    TransformWithStateOperatorProperties(
+      jsonMap("timeMode").asInstanceOf[String],
+      jsonMap("outputMode").asInstanceOf[String],
+      jsonMap("stateVariables").asInstanceOf[List[Map[String, Any]]].map { stateVarMap =>
+        TransformWithStateVariableInfo.fromMap(stateVarMap)
+      }
+    )
+  }
+}

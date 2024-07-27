@@ -24,7 +24,9 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path}
-import org.json4s.{Formats, NoTypeHints}
+import org.json4s.{Formats, JString, NoTypeHints}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
@@ -87,6 +89,40 @@ case class OperatorStateMetadataV2(
     stateStoreInfo: Array[StateStoreMetadataV2],
     operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
+}
+
+object OperatorPropertiesUtils {
+  class OperatorProperties(
+      val timeMode: String,
+      val outputMode: String) {
+    def json: String = {
+      compact(render(
+        ("timeMode" -> JString(timeMode)) ~
+          ("outputMode" -> JString(outputMode))
+      ))
+    }
+  }
+
+  object OperatorProperties {
+    def fromJson(json: String): OperatorProperties = {
+      implicit val formats: Formats = Serialization.formats(NoTypeHints)
+      Serialization.read[OperatorProperties](json)
+    }
+
+    def validateOperatorProperties(
+        oldOperatorProperties: OperatorProperties,
+        newOperatorProperties: OperatorProperties): Unit = {
+      if (oldOperatorProperties.timeMode != newOperatorProperties.timeMode) {
+        throw StateStoreErrors.invalidConfigChangedAfterRestart(
+          "timeMode", oldOperatorProperties.timeMode, newOperatorProperties.timeMode)
+      }
+
+      if (oldOperatorProperties.outputMode != newOperatorProperties.outputMode) {
+          throw StateStoreErrors.invalidConfigChangedAfterRestart(
+          "outputMode", oldOperatorProperties.outputMode, newOperatorProperties.outputMode)
+      }
+    }
+  }
 }
 
 object OperatorStateMetadataUtils extends Logging {

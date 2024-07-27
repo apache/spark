@@ -176,17 +176,17 @@ object StateStoreErrors {
 
 
   def invalidConfigChangedAfterRestart(configName: String, oldConfig: String, newConfig: String):
-  StateStoreInvalidConfigAfterRestart = {
+    StateStoreInvalidConfigAfterRestart = {
     new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
   }
 
   def duplicateStateVariableDefined(stateName: String):
-  StateStoreDuplicateStateVariableDefined = {
+    StateStoreDuplicateStateVariableDefined = {
     new StateStoreDuplicateStateVariableDefined(stateName)
   }
 
   def invalidVariableTypeChange(stateName: String, oldType: String, newType: String):
-  StateStoreInvalidVariableTypeChange = {
+    StateStoreInvalidVariableTypeChange = {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
   }
 }

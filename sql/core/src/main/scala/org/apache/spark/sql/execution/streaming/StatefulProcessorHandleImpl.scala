@@ -305,16 +305,16 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   private[sql] val columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema] =
     new mutable.HashMap[String, StateStoreColFamilySchema]()
 
-  private[sql] val stateVariableInfos: mutable.Map[String, TransformWithStateVariableInfo] =
+  private val stateVariableInfos: mutable.Map[String, TransformWithStateVariableInfo] =
     new mutable.HashMap[String, TransformWithStateVariableInfo]()
 
   def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = columnFamilySchemas.toMap
 
   def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] = stateVariableInfos.toMap
 
-  private def checkIfDuplicateVariableDefined(stateName: String): Unit = {
-    if (columnFamilySchemas.contains(stateName)) {
-      throw StateStoreErrors.duplicateStateVariableDefined(stateName)
+  private def checkIfDuplicateVariableDefined(stateVarName: String): Unit = {
+    if (columnFamilySchemas.contains(stateVarName)) {
+      throw StateStoreErrors.duplicateStateVariableDefined(stateVarName)
     }
   }
 
