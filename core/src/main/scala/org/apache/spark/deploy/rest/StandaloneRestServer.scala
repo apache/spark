@@ -201,6 +201,7 @@ private[rest] class StandaloneSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
+      .map(x => (x._1, replacePlaceHolder(x._2)))
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
     val driverDefaultJavaOptions = sparkProperties.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
