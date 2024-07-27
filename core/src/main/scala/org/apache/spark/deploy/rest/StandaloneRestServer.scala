@@ -174,8 +174,6 @@ private[rest] class StandaloneSubmitRequestServlet(
     conf: SparkConf)
   extends SubmitRequestServlet {
 
-  val envVariablePattern = "\\{\\{[A-Z_]+\\}\\}".r
-
   private def replacePlaceHolder(variable: String) = variable match {
     case s"{{$name}}" if System.getenv(name) != null => System.getenv(name)
     case _ => variable
