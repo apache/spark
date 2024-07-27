@@ -219,6 +219,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = request.appArgs
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
         .map(x => (x._1, replacePlaceHolder(x._2)))
