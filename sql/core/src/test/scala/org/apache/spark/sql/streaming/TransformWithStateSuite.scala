@@ -962,10 +962,20 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         )
 
         val df = spark.read.format("state-metadata").load(checkpointDir.toString)
-        checkAnswer(df, Seq(
-          Row(0, "transformWithStateExec", "default", 5, 0L, 1L,
-           """{"timeMode":"NoTime","outputMode":"Update"}""")
-        ))
+
+        // check first 6 columns of the row, and then read the last column of the row separately
+        checkAnswer(
+            df.select(
+              "operatorId", "operatorName", "stateStoreName", "numPartitions", "minBatchId",
+              "maxBatchId"),
+            Seq(Row(0, "transformWithStateExec", "default", 5, 0, 1))
+        )
+        val operatorPropsJson = df.select("operatorProperties").collect().head.getString(0)
+        val operatorProperties = TransformWithStateOperatorProperties.fromJson(operatorPropsJson)
+        assert(operatorProperties.timeMode == "NoTime")
+        assert(operatorProperties.outputMode == "Update")
+        assert(operatorProperties.stateVariables.length == 1)
+        assert(operatorProperties.stateVariables.head.stateName == "countState")
       }
     }
   }
