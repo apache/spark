@@ -104,12 +104,17 @@ object OperatorStateMetadataUtils extends Logging {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
-  def readMetadata(inputStream: FSDataInputStream): Option[OperatorStateMetadata] = {
+  def readMetadata(
+      inputStream: FSDataInputStream,
+      expectedVersion: Int): Option[OperatorStateMetadata] = {
     val inputReader =
       new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
     try {
       val versionStr = inputReader.readLine()
       val version = MetadataVersionUtil.validateVersion(versionStr, 2)
+      if (version != expectedVersion) {
+        throw new IllegalArgumentException(s"Expected version $expectedVersion, but found $version")
+      }
       Some(deserialize(version, inputReader))
     } finally {
       inputStream.close()
@@ -214,7 +219,7 @@ object OperatorStateMetadataV2 {
     .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
   def metadataDirPath(stateCheckpointPath: Path): Path =
-    new Path(new Path(new Path(stateCheckpointPath, "_metadata"), "metadata"), "v2")
+    new Path(new Path(stateCheckpointPath, "_metadata"), "v2")
 
   def metadataFilePath(stateCheckpointPath: Path, currentBatchId: Long): Path =
     new Path(metadataDirPath(stateCheckpointPath), currentBatchId.toString)
@@ -259,7 +264,7 @@ class OperatorStateMetadataV1Reader(
 
   def read(): Option[OperatorStateMetadata] = {
     val inputStream = fm.open(metadataFilePath)
-    OperatorStateMetadataUtils.readMetadata(inputStream)
+    OperatorStateMetadataUtils.readMetadata(inputStream, version)
   }
 }
 
@@ -310,6 +315,6 @@ class OperatorStateMetadataV2Reader(
     val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
       stateCheckpointPath, lastBatchId)
     val inputStream = fm.open(metadataFilePath)
-    OperatorStateMetadataUtils.readMetadata(inputStream)
+    OperatorStateMetadataUtils.readMetadata(inputStream, version)
   }
 }
