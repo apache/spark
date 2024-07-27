@@ -4200,6 +4200,12 @@
     ],
     "sqlState" : "42846"
   },
+  "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
+    "message" : [
+      "Unknown primitive type with id <id> was found in a variant value."
+    ],
+    "sqlState" : "22023"
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
