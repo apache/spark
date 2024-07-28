@@ -2612,6 +2612,11 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "BOOLEAN" : {
+        "message" : [
+          "expects a boolean literal, but got <invalidValue>."
+        ]
+      },
       "CHARSET" : {
         "message" : [
           "expects one of the <charsets>, but got <charset>."
@@ -2622,9 +2627,19 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "INTEGER" : {
+        "message" : [
+          "expects an integer literal, but got <invalidValue>."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Expects `length` greater than or equal to 0, but got <length>."
+        ]
+      },
+      "LONG" : {
+        "message" : [
+          "expects a long literal, but got <invalidValue>."
         ]
       },
       "NULL" : {
