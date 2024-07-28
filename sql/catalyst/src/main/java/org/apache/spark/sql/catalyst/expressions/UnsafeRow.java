@@ -104,7 +104,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
     UnsafeRow other = (UnsafeRow) obj;
     for (int idx = 0; idx < numFields; ++idx) {
-      int equal = PhysicalArrayType.apply(attributesDataType[idx]).ordering().compare(get(idx, attributesDataType[idx]), other.get(idx, attributesDataType[idx]));
+      int equal = PhysicalDataType.apply(attributesDataType[idx]).ordering().compare(get(idx, attributesDataType[idx]), other.get(idx, attributesDataType[idx]));
       if (equal != 0)
         return false;
     }
