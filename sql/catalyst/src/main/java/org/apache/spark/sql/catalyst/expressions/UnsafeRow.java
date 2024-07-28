@@ -106,7 +106,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     for (int idx = 0; idx < numFields; ++idx) {
       if (attributesDataType[idx] instanceof StringType) {
         StringType st = (StringType) attributesDataType[idx];
-        int equal = PhysicalArrayType.apply(st).ordering().compare(getUTF8String(idx), other.getUTF8String(idx));
+        int equal = PhysicalArrayType.apply(attributesDataType[idx]).ordering().compare(getUTF8String(idx), other.getUTF8String(idx));
         if (equal != 0)
           return false;
       } else {
@@ -592,11 +592,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
     ArrayList exp = new ArrayList<Expression>(numFields);
     for (int i = 0; i < numFields; ++i) {
-      if (attributesDataType[i] instanceof StringType) {
-        exp.add(new Literal(getUTF8String(i), attributesDataType[i]));
-      } else {
-        // TODO
-      }
+      exp.add(new Literal(get(i, attributesDataType[i]), attributesDataType[i]));
     }
 
     return (int) new Murmur3Hash(scala.collection.JavaConverters.asScala(exp).toSeq(), 42).eval(copy());
