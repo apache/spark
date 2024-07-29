@@ -610,7 +610,7 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
   <thead><tr><th>Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>create</code></td>
-    <td>Create a Spark driver via <code>cluster</code> mode. Spark master supports server-side
+    <td>Create a Spark driver via <code>cluster</code> mode. Since 4.0.0, Spark master supports server-side
       variable replacements for the values of Spark properties and environment variables.
     </td>
     <td>POST</td>
