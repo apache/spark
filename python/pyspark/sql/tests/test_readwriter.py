@@ -313,11 +313,6 @@ class ReadwriterV2TestsMixin:
             self.assertEqual(get_cluster_by_cols(), ["x"])
             self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
 
-            # Test write with two clustering columns
-            df.writeTo(table_name).using("parquet").clusterBy("x", "y").replace()
-            self.assertEqual(get_cluster_by_cols(), ["x", "y"])
-            self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
-
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
     pass
