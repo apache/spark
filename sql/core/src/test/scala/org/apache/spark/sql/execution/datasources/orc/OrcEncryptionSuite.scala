@@ -21,11 +21,16 @@ import java.util.Random
 
 import org.apache.orc.impl.HadoopShimsFactory
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 
 class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   import testImplicits._
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.hadoop.hadoop.security.key.provider.path", "test:///")
+  }
 
   val originalData = Seq(("123456789", "dongjoon@apache.org", "Dongjoon Hyun"))
   val rowDataWithoutKey =
