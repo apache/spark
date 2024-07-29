@@ -19,15 +19,12 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
-
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
@@ -47,8 +44,8 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, Inte
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform, Expression => V2Expression}
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
@@ -158,11 +155,13 @@ class AstBuilder extends DataTypeAstBuilder
     declareVarStatement match {
       case Some(c: CreateVariable) =>
         if (allowVarDeclare) {
-          throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          throw SqlScriptingException.variableDeclarationOnlyAtBeginning(
+            c.origin,
             toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
             c.origin.line.get.toString)
         } else {
-          throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+          throw SqlScriptingException.variableDeclarationNotAllowedInScope(
+            c.origin,
             toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
             c.origin.line.get.toString)
         }
@@ -181,10 +180,15 @@ class AstBuilder extends DataTypeAstBuilder
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
               el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        throw SqlScriptingErrors.labelsMismatch(
-          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        withOrigin(bl) {
+          throw SqlScriptingException.labelsMismatch(
+          CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        }
       case (None, Some(el: EndLabelContext)) =>
-        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
+        withOrigin(el) {
+          throw SqlScriptingException.endLabelWithoutBeginLabel(
+            CurrentOrigin.get, el.multipartIdentifier().getText)
+        }
       case _ =>
     }
 
