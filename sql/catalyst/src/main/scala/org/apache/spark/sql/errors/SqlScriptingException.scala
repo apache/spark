@@ -17,37 +17,65 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.sql.catalyst.trees.Origin
+
+class SqlScriptingException protected (
+    origin: Origin,
+    errorClass: String,
+    cause: Throwable,
+    messageParameters: Map[String, String] = Map.empty)
+  extends SparkException(
+    message = s"[LINE:${origin.line}] "
+      + SparkThrowableHelper.getMessage(errorClass, messageParameters),
+    errorClass = Option(errorClass),
+    cause = cause,
+    messageParameters = messageParameters
+  ) {
+
+}
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
  * of the SQL Scripting Language interpreter.
  */
-private[sql] object SqlScriptingErrors extends QueryErrorsBase {
+private[sql] object SqlScriptingException {
 
-  def labelsMismatch(beginLabel: String, endLabel: String): Throwable = {
-    new SparkException(
+  def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
       errorClass = "LABELS_MISMATCH",
       cause = null,
       messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
   }
 
-  def endLabelWithoutBeginLabel(endLabel: String): Throwable = {
-    new SparkException(
+  def endLabelWithoutBeginLabel(origin: Origin, endLabel: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
       messageParameters = Map("endLabel" -> endLabel))
   }
 
-  def variableDeclarationNotAllowedInScope(varName: String, lineNumber: String): Throwable = {
-    new SparkException(
+  def variableDeclarationNotAllowedInScope(
+    origin: Origin,
+    varName: String,
+    lineNumber: String
+  ): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
   }
 
-  def variableDeclarationOnlyAtBeginning(varName: String, lineNumber: String): Throwable = {
-    new SparkException(
+  def variableDeclarationOnlyAtBeginning(
+    origin: Origin,
+    varName: String,
+    lineNumber: String
+  ): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
