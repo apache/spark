@@ -1123,6 +1123,65 @@ class DataStreamWriter:
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
+    @overload
+    def clusterBy(self, *cols: str) -> "DataStreamWriter":
+        ...
+
+    @overload
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
+        ...
+
+    def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
+        """Clusters the output by the given columns.
+
+        If specified, the output is laid out such that records with similar values on the clustering
+        column(s) are grouped together in the same file.
+
+        Clustering improves query efficiency by allowing queries with predicates on the clustering
+        columns to skip unnecessary data. Unlike partitioning, clustering can be used on very high
+        cardinality columns.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        cols : str or list
+            name of columns
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> df = spark.readStream.format("rate").load()
+        >>> df.writeStream.clusterBy("value")
+        <...streaming.readwriter.DataStreamWriter object ...>
+
+        Cluster-by timestamp column from Rate source.
+
+        >>> import tempfile
+        >>> import time
+        >>> with tempfile.TemporaryDirectory(prefix="partitionBy1") as d:
+        ...     with tempfile.TemporaryDirectory(prefix="partitionBy2") as cp:
+        ...         df = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        ...         q = df.writeStream.clusterBy(
+        ...             "timestamp").format("parquet").option("checkpointLocation", cp).start(d)
+        ...         time.sleep(5)
+        ...         q.stop()
+        ...         spark.read.schema(df.schema).parquet(d).show()
+        +...---------+-----+
+        |...timestamp|value|
+        +...---------+-----+
+        ...
+        """
+        from pyspark.sql.classic.column import _to_seq
+
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]
+        self._jwrite = self._jwrite.clusterBy(_to_seq(self._spark._sc, cols))
+        return self
+
     def queryName(self, queryName: str) -> "DataStreamWriter":
         """Specifies the name of the :class:`StreamingQuery` that can be started with
         :func:`start`. This name must be unique among all the currently active queries
