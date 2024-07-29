@@ -44,7 +44,6 @@ private[spark] class JobWaiter[T](
 
   def completionFuture: Future[Unit] = jobPromise.future
 
-
   /**
    * Sends a signal to the DAGScheduler to cancel the job with an optional reason. The
    * cancellation itself is handled asynchronously. After the low level scheduler cancels
