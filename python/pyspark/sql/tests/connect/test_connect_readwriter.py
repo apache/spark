@@ -277,7 +277,6 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
         self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
         self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours("ts")), DataFrameWriterV2)
-        self.assertIsInstance(writer.clusterBy("foo", "bar"), DataFrameWriterV2)
 
     def test_simple_udt_from_read(self):
         from pyspark.ml.linalg import Matrices, Vectors

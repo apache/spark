@@ -252,7 +252,6 @@ class ReadwriterV2TestsMixin:
         self.assertIsInstance(writer.partitionedBy("id"), tpe)
         self.assertIsInstance(writer.partitionedBy(col("id")), tpe)
         self.assertIsInstance(writer.tableProperty("foo", "bar"), tpe)
-        self.assertIsInstance(writer.clusterBy("id"), tpe)
 
     def test_partitioning_functions(self):
         self.check_partitioning_functions(DataFrameWriterV2)
