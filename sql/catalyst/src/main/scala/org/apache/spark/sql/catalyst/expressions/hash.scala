@@ -565,14 +565,14 @@ abstract class InterpretedHashFunction {
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
-        dataType match {
-          case st: StringType if st.supportsBinaryEquality =>
-            hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
-          case _ =>
-            val stringHash = CollationFactory
-              .fetchCollation(dataType.asInstanceOf[StringType].collationId)
-              .hashFunction.applyAsLong(s)
-            hashLong(stringHash, seed)
+        val st = dataType.asInstanceOf[StringType]
+        if (st.supportsBinaryEquality) {
+          hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+        } else {
+          val stringHash = CollationFactory
+            .fetchCollation(dataType.asInstanceOf[StringType].collationId)
+            .hashFunction.applyAsLong(s)
+          hashLong(stringHash, seed)
         }
 
       case array: ArrayData =>
