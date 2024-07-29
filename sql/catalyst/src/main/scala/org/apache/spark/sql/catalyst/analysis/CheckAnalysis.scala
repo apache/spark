@@ -680,7 +680,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             checkForUnspecifiedWindow(projectList)
 
           case agg@Aggregate(_, aggregateExpressions, _) if
-            !PlanHelper.specialExpressionsInUnsupportedOperator(agg).nonEmpty =>
+            PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>
             checkForUnspecifiedWindow(aggregateExpressions)
 
           case j: Join if !j.duplicateResolved =>
