@@ -214,6 +214,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td><code>spark.master.ui.title</code></td>
   <td>(None)</td>
   <td>
+    Specifies the title of the Master UI page. If unset, <code>Spark Master at 'master url'</code>
     is used by default.
   </td>
   <td>4.0.0</td>
