@@ -510,27 +510,29 @@ object EliminateDistinct extends Rule[LogicalPlan] {
             _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) =>
           ae.copy(isDistinct = false)
 
-        case ae: AggregateExpression if isDistinctLiteral && ae.isDistinct &&
-          ae.aggregateFunction.children.forall(_.foldable) =>
+        case ae: AggregateExpression if isDistinctLiteral && ae.isDistinct =>
           replaceDistinctAggregate = true
           ae.copy(isDistinct = false)
       }
-      if (isDistinctLiteral && replaceDistinctAggregate) {
-        newAgg.withNewChildren(Seq(Limit(Literal(1), newAgg.child)))
+      if (replaceDistinctAggregate) {
+        newAgg.withNewChildren(Limit(Literal(1), newAgg.child) :: Nil)
       } else {
         newAgg
       }
   }
 
   private def isDistinctLiteralAggregate(agg: Aggregate): Boolean = {
-    var isDistinctLiteralAggregate = agg.groupingExpressions.isEmpty
-    agg.transformExpressions {
-      case ae: AggregateExpression if
-        ae.aggregateFunction.children.exists(!_.foldable) =>
-        isDistinctLiteralAggregate = false
-        ae
+    if (agg.groupingExpressions.isEmpty) {
+      var isDistinctLiteralAggregate = true
+      agg.transformExpressionsWithPruning(_.containsPattern(AGGREGATE_EXPRESSION)) {
+        case ae: AggregateExpression =>
+          isDistinctLiteralAggregate &= ae.aggregateFunction.children.forall(_.foldable)
+          ae
+      }
+      isDistinctLiteralAggregate
+    } else {
+      false
     }
-    isDistinctLiteralAggregate
   }
 
   def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
