@@ -989,49 +989,47 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("...") {
-    val table = "t"
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "")) {
+    for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      val collationSetup = if (collation.isEmpty) "" else "collate " + collation
 
-    withTable(table) {
-      withSQLConf("spark.sql.test.forceApplyObjectHashAggregate" -> "true",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
-        sql(s"create table $table (m map<string collate utf8_lcase, string collate utf8_lcase>)")
-        sql(s"insert into $table values (map('aaa', 'AAA'))")
-        sql(s"insert into $table values (map('AAA', 'aaa'))")
+      test(s"Group by on map containing $collationSetup strings ($codeGen)") {
+        val table = "t"
 
-        checkAnswer(sql(s"select count(*) from $table group by m"), Seq(Row(2)))
+        withTable(table) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+
+            sql(s"create table $table" +
+              s" (m map<string $collationSetup, string $collationSetup>)")
+            sql(s"insert into $table values (map('aaa', 'AAA'))")
+            sql(s"insert into $table values (map('AAA', 'aaa'))")
+            sql(s"insert into $table values (map('bbb', 'BBB'))")
+            sql(s"insert into $table values (map('aAA', 'AaA'))")
+            sql(s"insert into $table values (map('BBb', 'bBB'))")
+
+            val query = sql(s"select count(*) from $table group  by m")
+
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(query, Seq(Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(query, Seq(Row(3), Row(2)))
+            }
+          }
+        }
       }
-    }
-  }
 
-  test("Group by on collated string") {
-    val table = "t"
+      test(s"Group by on map containing structs with $collationSetup strings ($codeGen)") {
+        val table = "t"
 
-    withTable(table) {
-      withSQLConf(
-        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (s string collate utf8_lcase)")
-        sql(s"insert into $table values ('aaa')")
-        sql(s"insert into $table values ('AAA')")
-
-        checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
-      }
-    }
-  }
-
-  test("Group by on collated string a") {
-    val table = "t"
-
-    withTable(table) {
-      withSQLConf(
-        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (s array<collate utf8_lcase>)")
-        sql(s"insert into $table values (array('aaa'))")
-        sql(s"insert into $table values (array('AAA'))")
-
-        checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
+        withTable(table) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $table" +
+              s" (m map<struct<fld1: $collationSetup, fld2: $collationSetup>, " +
+              s"struct<fld1: $collationSetup, fld2: $collationSetup>>)")
+            sql(s"insert into $table values (map('")
+          }
+        }
       }
     }
   }

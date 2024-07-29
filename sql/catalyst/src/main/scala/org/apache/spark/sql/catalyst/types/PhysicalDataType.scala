@@ -255,11 +255,11 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
       val minLength = math.min(lengthX, lengthY)
       var i = 0
       while (i < minLength) {
-        var comp = compare(keyArrayX, keyArrayY, keyType, i, keyOrdering)
+        var comp = compareElements(keyArrayX, keyArrayY, keyType, i, keyOrdering)
         if (comp != 0) {
           return comp
         }
-        comp = compare(valueArrayX, valueArrayY, valueType, i, valuesOrdering)
+        comp = compareElements(valueArrayX, valueArrayY, valueType, i, valuesOrdering)
         if (comp != 0) {
           return comp
         }
@@ -278,7 +278,7 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
       }
     }
 
-    private def compare(arrayX: ArrayData, arrayY: ArrayData, dataType: DataType,
+    private def compareElements(arrayX: ArrayData, arrayY: ArrayData, dataType: DataType,
                         position: Int, ordering: Ordering[Any]): Int = {
       val isNullX = arrayX.isNullAt(position)
       val isNullY = arrayY.isNullAt(position)
