@@ -965,6 +965,27 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           },
           StopStream
         )
+
+        // test that columnFamilyIds are the same on restart
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "2"), ("b", "2")),
+          // assert that columnFamilySchemas don't change
+          Execute { q =>
+            val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+            val providerId = StateStoreProviderId(StateStoreId(
+              checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+            val checker = new StateSchemaCompatibilityChecker(providerId,
+              hadoopConf, Some(schemaFilePath))
+            val colFamilySeq = checker.readSchemaFile()
+            assert(colFamilySeq.length == 3)
+            assert(colFamilySeq.map(_.toString).toSet == Set(
+              schema0, schema1, schema2
+            ).map(_.toString))
+          },
+          StopStream
+        )
       }
     }
   }
