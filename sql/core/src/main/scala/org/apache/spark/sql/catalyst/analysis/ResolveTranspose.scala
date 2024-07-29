@@ -42,9 +42,9 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   }
 
   private def transposeMatrix(
-    fullCollectedRows: Array[InternalRow],
-    nonIndexColumnNames: Seq[String],
-    nonIndexColumnDataTypes: Seq[DataType]): Array[Array[Any]] = {
+      fullCollectedRows: Array[InternalRow],
+      nonIndexColumnNames: Seq[String],
+      nonIndexColumnDataTypes: Seq[DataType]): Array[Array[Any]] = {
     // Construct the original matrix
     val originalMatrixNumCols = fullCollectedRows.head.numFields - 1
     val originalMatrixNumRows = fullCollectedRows.length

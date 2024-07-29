@@ -2194,7 +2194,7 @@ class Dataset[T] private[sql](
    */
   def transpose(indexColumn: Column): DataFrame = withPlan {
     if (this.isEmpty && this.columns.isEmpty) {
-      this.logicalPlan
+      LocalRelation()
     } else {
       Transpose(
         indexColumn.named,
@@ -2222,10 +2222,10 @@ class Dataset[T] private[sql](
    */
   def transpose(): DataFrame = withPlan {
     if (this.isEmpty && this.columns.isEmpty) {
-      this.logicalPlan
+      LocalRelation()
     } else {
       Transpose(
-        this.columns.head.named,
+        this.col(this.columns.head).named,
         logicalPlan
       )
     }
