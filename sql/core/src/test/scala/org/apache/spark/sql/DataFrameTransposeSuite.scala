@@ -73,12 +73,17 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     assertResult(Array("key", "jim", "mike"))(transposedDf.columns)
   }
 
-  test("enforce AtomicType for index column values") {
-    val df = complexData.select($"m")  // (m,MapType(StringType,IntegerType,false))
-    val exception = intercept[IllegalArgumentException] {
-      df.transpose()
+  test("enforce AtomicType Attribute for index column values") {
+    val exceptionAtomic = intercept[IllegalArgumentException] {
+      complexData.transpose($"m")  // (m,MapType(StringType,IntegerType,false))
     }
-    assert(exception.getMessage.contains("Index column must be of atomic type, but found"))
+    assert(exceptionAtomic.getMessage.contains("Index column must be of atomic type, but found"))
+
+    val exceptionAttribute = intercept[IllegalArgumentException] {
+      // (s,StructType(StructField(key,IntegerType,false),StructField(value,StringType,true)))
+      complexData.transpose($"s.key")
+    }
+    assert(exceptionAttribute.getMessage.contains("Index column must be an atomic attribute"))
   }
 
   //

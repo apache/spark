@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPOSE
@@ -82,15 +82,18 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(TRANSPOSE)) {
     case t @ Transpose(indexColumn, child, _, _) if !t.resolved =>
-      if (!indexColumn.dataType.isInstanceOf[AtomicType]) {
-        throw new IllegalArgumentException(
-          s"Index column must be of atomic type, but found: ${indexColumn.dataType}")
-      }
 
       // Cast the index column to StringType
-      val indexColumnAsString = Alias(
-        Cast(indexColumn, StringType),
-        indexColumn.asInstanceOf[Attribute].name)().asInstanceOf[NamedExpression]
+      val indexColumnAsString = indexColumn match {
+        case attr: Attribute if attr.dataType.isInstanceOf[AtomicType] =>
+          Alias(Cast(attr, StringType), attr.name)()
+        case attr: Attribute =>
+          throw new IllegalArgumentException(
+            s"Index column must be of atomic type, but found: ${attr.dataType}")
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Index column must be an atomic attribute")
+      }
 
       // Cast non-index columns to the least common type
       val nonIndexColumnsAttr = child.output.filterNot(
