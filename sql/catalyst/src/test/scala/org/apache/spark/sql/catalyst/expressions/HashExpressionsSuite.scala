@@ -25,8 +25,8 @@ import scala.language.implicitConversions
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalatest.exceptions.TestFailedException
-import org.apache.spark.SparkFunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
