@@ -14,13 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 from enum import Enum
 import os
 import socket
 from typing import Union, cast, Tuple
 
-import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+import pyspark.sql.streaming.proto as stateMessage
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy

@@ -491,7 +491,6 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
-
     def wrapped(stateful_processor_api_client, key, value_series_gen):
         import pandas as pd
 
