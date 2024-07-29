@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.MapSort
+import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapSort, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
-import org.apache.spark.sql.types.MapType
+import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
  * Adds MapSort to group expressions containing map columns, as the key/value paris need to be
@@ -34,13 +35,46 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     _.containsPattern(AGGREGATE), ruleId) {
     case a @ Aggregate(groupingExpr, _, _) =>
       val newGrouping = groupingExpr.map { expr =>
-        if (!expr.isInstanceOf[MapSort]
+        if (!expr.exists(_.isInstanceOf[MapSort])
           && expr.dataType.existsRecursively(_.isInstanceOf[MapType])) {
-          MapSort(expr)
+          insertMapSortRecursively(expr)
         } else {
           expr
         }
       }
       a.copy(groupingExpressions = newGrouping)
   }
+
+  private def insertMapSortRecursively(e: Expression): Expression = {
+    e.dataType match {
+      case _: MapType if !e.isInstanceOf[MapSort] => MapSort(e)
+
+      case StructType(fields) =>
+        val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
+          Seq(Literal(f.name), insertMapSortRecursively(
+            GetStructField(e, i)))
+        }.toImmutableArraySeq)
+        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+          // No field needs char/varchar processing, just return the original expression.
+          e
+        } else if (e.nullable) {
+          If(IsNull(e), Literal(null, struct.dataType), struct)
+        } else {
+          struct
+        }
+
+      case ArrayType(et, containsNull) =>
+        val param = NamedLambdaVariable("x", et, containsNull)
+        val funcBody = insertMapSortRecursively(param)
+        if (funcBody.fastEquals(param)) {
+          // If array element does not need char/varchar processing, return the original expression.
+          e
+        } else {
+          ArrayTransform(e, LambdaFunction(funcBody, Seq(param)))
+        }
+
+      case _ => e
+    }
+  }
+
 }
