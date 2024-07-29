@@ -143,15 +143,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
+  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case p: SupportsNonDeterministicExpression =>
+        p.allowNonDeterministicExpression
+      case _ => false
+    }
+  }
+
   private def checkForUnspecifiedWindow(expressions: Seq[Expression]): Unit = {
-    print("test1")
     expressions.foreach(_.transformDownWithPruning(
       _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
       case UnresolvedWindowExpression(_, windowSpec) =>
         throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
       }
     )
-    print("test2")
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -671,7 +680,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             checkForUnspecifiedWindow(projectList)
 
           case agg@Aggregate(_, aggregateExpressions, _) if
-          !PlanHelper.specialExpressionsInUnsupportedOperator(agg).nonEmpty =>
+            !PlanHelper.specialExpressionsInUnsupportedOperator(agg).nonEmpty =>
             checkForUnspecifiedWindow(aggregateExpressions)
 
           case j: Join if !j.duplicateResolved =>
@@ -729,6 +738,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been
             // already validated inside checkMetric function
@@ -762,17 +772,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "expressionList" -> invalidExprSqls.mkString(", ")))
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
-            other match {
-              case agg@Aggregate(_, aggregateExpressions, _) =>
-                checkForUnspecifiedWindow(aggregateExpressions)
-                val invalidExprSqls =
-                  PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
-                other.failAnalysis(
-                  errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
-                  messageParameters = Map(
-                    "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
-            }
-
             val invalidExprSqls =
               PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
             other.failAnalysis(

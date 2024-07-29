@@ -101,6 +101,7 @@ private[spark] object LogKeys {
   case object BLOCK_TYPE extends LogKey
   case object BOOT extends LogKey
   case object BOOTSTRAP_TIME extends LogKey
+  case object BOOT_TIME extends LogKey
   case object BROADCAST extends LogKey
   case object BROADCAST_ID extends LogKey
   case object BROADCAST_OUTPUT_STATUS_SIZE extends LogKey
@@ -110,6 +111,7 @@ private[spark] object LogKeys {
   case object BYTE_SIZE extends LogKey
   case object CACHED_TABLE_PARTITION_METADATA_SIZE extends LogKey
   case object CACHE_AUTO_REMOVED_SIZE extends LogKey
+  case object CACHE_SIZE extends LogKey
   case object CACHE_UNTIL_HIGHEST_CONSUMED_SIZE extends LogKey
   case object CACHE_UNTIL_LAST_PRODUCED_SIZE extends LogKey
   case object CALL_SITE_LONG_FORM extends LogKey
@@ -282,6 +284,7 @@ private[spark] object LogKeys {
   case object FINAL_CONTEXT extends LogKey
   case object FINAL_OUTPUT_PATH extends LogKey
   case object FINAL_PATH extends LogKey
+  case object FINISH_TIME extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
@@ -320,10 +323,12 @@ private[spark] object LogKeys {
   case object INITIAL_CAPACITY extends LogKey
   case object INITIAL_HEARTBEAT_INTERVAL extends LogKey
   case object INIT_MODE extends LogKey
+  case object INIT_TIME extends LogKey
   case object INPUT extends LogKey
   case object INPUT_SPLIT extends LogKey
   case object INTEGRAL extends LogKey
   case object INTERVAL extends LogKey
+  case object INVALID_PARAMS extends LogKey
   case object ISOLATION_LEVEL extends LogKey
   case object ISSUE_DATE extends LogKey
   case object IS_NETWORK_REQUEST_DONE extends LogKey
@@ -369,6 +374,7 @@ private[spark] object LogKeys {
   case object LOG_LEVEL extends LogKey
   case object LOG_OFFSET extends LogKey
   case object LOG_TYPE extends LogKey
+  case object LOSSES extends LogKey
   case object LOWER_BOUND extends LogKey
   case object MALFORMATTED_STRING extends LogKey
   case object MAP_ID extends LogKey
@@ -566,6 +572,7 @@ private[spark] object LogKeys {
   case object OS_NAME extends LogKey
   case object OS_VERSION extends LogKey
   case object OUTPUT extends LogKey
+  case object OUTPUT_BUFFER extends LogKey
   case object OVERHEAD_MEMORY_SIZE extends LogKey
   case object PAGE_SIZE extends LogKey
   case object PARENT_STAGES extends LogKey
@@ -751,6 +758,7 @@ private[spark] object LogKeys {
   case object STORAGE_LEVEL_REPLICATION extends LogKey
   case object STORAGE_MEMORY_SIZE extends LogKey
   case object STORE_ID extends LogKey
+  case object STRATEGY extends LogKey
   case object STREAMING_CONTEXT extends LogKey
   case object STREAMING_DATA_SOURCE_DESCRIPTION extends LogKey
   case object STREAMING_DATA_SOURCE_NAME extends LogKey

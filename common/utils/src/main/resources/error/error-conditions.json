@@ -514,7 +514,7 @@
     "subClass" : {
       "EXPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
+          "Error occurred due to the mismatch between explicit collations: [<explicitTypes>]. Decide on a single explicit collation and remove others."
         ]
       },
       "IMPLICIT" : {
@@ -954,6 +954,16 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
+      "UNSUPPORTED_UDF_INPUT_TYPE" : {
+        "message" : [
+          "UDFs do not support '<dataType>' as an input data type."
+        ]
+      },
+      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
+        "message" : [
+          "UDFs do not support '<dataType>' as an output data type."
+        ]
+      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1117,6 +1127,12 @@
       "Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ],
     "sqlState" : "42704"
+  },
+  "END_LABEL_WITHOUT_BEGIN_LABEL" : {
+    "message" : [
+      "End label <endLabel> can not exist without begin label."
+    ],
+    "sqlState" : "42K0L"
   },
   "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
     "message" : [
@@ -2584,7 +2600,7 @@
       },
       "CHARSET" : {
         "message" : [
-          "expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got <charset>."
+          "expects one of the <charsets>, but got <charset>."
         ]
       },
       "DATETIME_UNIT" : {
@@ -3026,6 +3042,12 @@
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
     ],
     "sqlState" : "54006"
+  },
+  "LABELS_MISMATCH" : {
+    "message" : [
+      "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
@@ -3782,6 +3804,12 @@
   "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
       "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+    "message" : [
+      "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
     ],
     "sqlState" : "42802"
   },

@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -1050,15 +1050,35 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
 object StringTranslate {
 
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Int)
+  /**
+   * Build a translation dictionary from UTF8Strings. First, this method converts the input strings
+   * to valid Java Strings. However, we avoid any behavior changes for the UTF8_BINARY collation,
+   * but ensure that all other collations use `UTF8String.toValidString` to achieve this step.
+   */
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Integer)
     : JMap[String, String] = {
-    val matching = if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      matchingString.toString().toLowerCase()
+    val isCollationAware = collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
+    val matching: String = if (isCollationAware) {
+      matchingString.toString
     } else {
-      matchingString.toString()
+      matchingString.toValidString
     }
+    val replace: String = if (isCollationAware) {
+      replaceString.toString
+    } else {
+      replaceString.toValidString
+    }
+    buildDict(matching, replace)
+  }
 
-    val replace = replaceString.toString()
+  /**
+   * Build a translation dictionary from Strings. This method assumes that the input strings are
+   * already valid. The result dictionary maps each character in `matching` to the corresponding
+   * character in `replace`. If `replace` is shorter than `matching`, the extra characters in
+   * `matching` will be mapped to null terminator, which causes characters to get deleted during
+   * translation. If `replace` is longer than `matching`, the extra characters will be ignored.
+   */
+  private def buildDict(matching: String, replace: String): JMap[String, String] = {
     val dict = new HashMap[String, String]()
     var i = 0
     var j = 0
@@ -1212,7 +1232,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = srcStr.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeBinaryLcase)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeAnyCollation)
 
   final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
@@ -1240,11 +1260,11 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     if (evals.length == 1) {
       val stringTrimCode: String = this match {
         case _: StringTrim =>
-          CollationSupport.StringTrim.genCode(srcString.value, collationId)
+          CollationSupport.StringTrim.genCode(srcString.value)
         case _: StringTrimLeft =>
-          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
+          CollationSupport.StringTrimLeft.genCode(srcString.value)
         case _: StringTrimRight =>
-          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
+          CollationSupport.StringTrimRight.genCode(srcString.value)
       }
       ev.copy(code = code"""
          |${srcString.code}
@@ -1370,7 +1390,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override protected def direction: String = "BOTH"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrim.exec(srcString, collationId)
+    CollationSupport.StringTrim.exec(srcString)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
@@ -1477,7 +1497,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override protected def direction: String = "LEADING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimLeft.exec(srcString, collationId)
+    CollationSupport.StringTrimLeft.exec(srcString)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
@@ -1537,7 +1557,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override protected def direction: String = "TRAILING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimRight.exec(srcString, collationId)
+    CollationSupport.StringTrimRight.exec(srcString)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
@@ -2682,24 +2702,40 @@ case class Chr(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Base64(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class Base64(child: Expression, chunkBase64: Boolean)
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
+
+  override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  protected override def nullSafeEval(bytes: Any): Any = {
-    UTF8String.fromBytes(JBase64.getMimeEncoder.encode(bytes.asInstanceOf[Array[Byte]]))
-  }
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[Base64],
+    dataType,
+    "encode",
+    Seq(child, Literal(chunkBase64, BooleanType)),
+    Seq(BinaryType, BooleanType))
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      s"""${ev.value} = UTF8String.fromBytes(
-            ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
-       """})
-  }
+  override def toString: String = s"$prettyName($child)"
 
-  override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object Base64 {
+  def apply(expr: Expression): Base64 = new Base64(expr)
+
+  private lazy val nonChunkEncoder = JBase64.getMimeEncoder(-1, Array())
+
+  def encode(input: Array[Byte], chunkBase64: Boolean): UTF8String = {
+    val encoder = if (chunkBase64) {
+      JBase64.getMimeEncoder
+    } else {
+      nonChunkEncoder
+    }
+    UTF8String.fromBytes(encoder.encode(input))
+  }
 }
 
 /**
@@ -2896,12 +2932,12 @@ case class StringDecode(
   def this(bin: Expression, charset: Expression) =
     this(bin, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
   override def prettyName: String = "decode"
   override def toString: String = s"$prettyName($bin, $charset)"
 
-  override def replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[StringDecode],
     SQLConf.get.defaultStringType,
     "decode",
@@ -2965,7 +3001,7 @@ case class Encode(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[Encode],
     BinaryType,
     "encode",

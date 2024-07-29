@@ -93,10 +93,15 @@ abstract class StateStoreChangelogWriter(
     new DataOutputStream(compressed)
   }
 
+  protected def writeVersion(): Unit = {
+    compressedStream.writeUTF(s"v${version}")
+  }
+
   protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
-  var size = 0
+
+  def version: Short
 
   def put(key: Array[Byte], value: Array[Byte]): Unit
 
@@ -141,13 +146,15 @@ class StateStoreChangelogWriterV1(
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
+  // Note that v1 does not record this value in the changelog file
+  override def version: Short = 1
+
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(key.size)
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
     compressedStream.write(value)
-    size += 1
   }
 
   override def delete(key: Array[Byte]): Unit = {
@@ -156,7 +163,6 @@ class StateStoreChangelogWriterV1(
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
-    size += 1
   }
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -183,19 +189,24 @@ class StateStoreChangelogWriterV1(
 
 /**
  * Write changes to the key value state store instance to a changelog file.
- * There are 2 types of data records, put and delete.
- * A put record is written as: | record type | key length
- *    | key content | value length | value content | col family name length | col family name | -1 |
+ * There are 3 types of data records, put, merge and delete.
+ * A put record or merge record is written as: | record type | key length
+ *    | key content | value length | value content | -1 |
  * A delete record is written as: | record type | key length | key content | -1
- *    | col family name length | col family name | -1 |
  * Write an EOF_RECORD to signal the end of file.
- * The overall changelog format is: | put record | delete record | ... | put record | eof record |
+ * The overall changelog format is:  version | put record | delete record
+ *                                   | ... | put record | eof record |
  */
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+
+  override def version: Short = 2
+
+  // append the version field to the changelog file starting from version 2
+  writeVersion()
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
@@ -208,7 +219,6 @@ class StateStoreChangelogWriterV2(
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
-    size += 1
   }
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -225,7 +235,6 @@ class StateStoreChangelogWriterV2(
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
     compressedStream.write(value)
-    size += 1
   }
 
   def commit(): Unit = {
@@ -270,6 +279,8 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
+  def version: Short
+
   override protected def close(): Unit = { if (input != null) input.close() }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte])
@@ -287,6 +298,9 @@ class StateStoreChangelogReaderV1(
     fileToRead: Path,
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+
+  // Note that v1 does not record this value in the changelog file
+  override def version: Short = 1
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -319,7 +333,7 @@ class StateStoreChangelogReaderV1(
  * Read an iterator of change record from the changelog file.
  * A record is represented by tuple(recordType: RecordType.Value,
  * key: Array[Byte], value: Array[Byte])
- * A put record is returned as a tuple(recordType, key, value)
+ * A put or merge record is returned as a tuple(recordType, key, value)
  * A delete record is return as a tuple(recordType, key, null)
  */
 class StateStoreChangelogReaderV2(
@@ -334,6 +348,13 @@ class StateStoreChangelogReaderV2(
     ByteStreams.readFully(input, blockBuffer, 0, blockSize)
     blockBuffer
   }
+
+  override def version: Short = 2
+
+  // ensure that the version read is v2
+  val changelogVersionStr = input.readUTF()
+  assert(changelogVersionStr == "v2",
+    s"Changelog version mismatch: $changelogVersionStr != v2")
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())

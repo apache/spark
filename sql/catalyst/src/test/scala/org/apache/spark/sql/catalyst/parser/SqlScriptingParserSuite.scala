@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
@@ -159,6 +159,161 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       == "SELECT 2")
     assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText
       == "SELECT 3")
+  }
+
+  test("compound: beginLabel") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: beginLabel + endLabel") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: beginLabel + endLabel with different values") {
+    val sqlScriptText =
+      """
+        |lbl_begin: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl_end""".stripMargin
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "LABELS_MISMATCH",
+      parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
+  }
+
+  test("compound: endLabel") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
+      parameters = Map("endLabel" -> "lbl"))
+  }
+
+  test("compound: beginLabel + endLabel with different casing") {
+    val sqlScriptText =
+      """
+        |LBL: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: no labels provided") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.nonEmpty)
+  }
+
+  test("SET VAR statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET VARIABLE statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VARIABLE totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET statement test - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET totalInsCnt = (SELECT x FROMERROR y WHERE id = 1);
+        |END""".stripMargin
+    val e = intercept[ParseException] {
+      parseScript(sqlScriptText)
+    }
+    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
   }
 
   // Helper methods

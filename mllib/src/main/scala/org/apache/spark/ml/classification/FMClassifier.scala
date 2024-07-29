@@ -342,7 +342,7 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 

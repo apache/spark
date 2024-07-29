@@ -73,6 +73,7 @@ class CapturedException(PySparkException):
         if self._cause is None and origin is not None and origin.getCause() is not None:
             self._cause = convert_exception(origin.getCause())
         self._origin = origin
+        self._log_exception()
 
     def __str__(self) -> str:
         from pyspark import SparkContext
