@@ -105,6 +105,9 @@ object TransformWithStateOperatorProperties extends Logging {
     )
   }
 
+  // This function is to confirm that the operator properties and state variables have
+  // only changed in an acceptable way after query restart. If the properties have changed
+  // in an unacceptable way, this function will throw an exception.
   def validateOperatorProperties(
       oldOperatorProperties: TransformWithStateOperatorProperties,
       newOperatorProperties: TransformWithStateOperatorProperties): Unit = {
@@ -117,6 +120,7 @@ object TransformWithStateOperatorProperties extends Logging {
       throw StateStoreErrors.invalidConfigChangedAfterRestart(
         "outputMode", oldOperatorProperties.outputMode, newOperatorProperties.outputMode)
     }
+
     val oldStateVariableInfos = oldOperatorProperties.stateVariables
     val newStateVariableInfos = newOperatorProperties.stateVariables.map { stateVarInfo =>
       stateVarInfo.stateName -> stateVarInfo
