@@ -621,24 +621,25 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
-    test(s"hash equality for collated $collation strings") {
+    test(s"hash check for collated $collation strings") {
       val s1 = "aaa"
       val s2 = "AAA"
 
-      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
-        // Calculate interpreted hash values for s1 and s2
-        val interpretedHash1 = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42).eval()
-        val interpretedHash2 = Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42).eval()
+      val murmur3Hash1 = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42)
+      val murmur3Hash2 = Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42)
 
+      // Interpreted hash values for s1 and s2
+      val interpretedHash1 = murmur3Hash1.eval()
+      val interpretedHash2 = murmur3Hash2.eval()
+
+      // Check that interpreted and codegen hashes are equal
+      checkEvaluation(murmur3Hash1, interpretedHash1)
+      checkEvaluation(murmur3Hash2, interpretedHash2)
+
+      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
         assert(interpretedHash1 != interpretedHash2)
       } else {
-        // Interpreted hash value for s1
-        val interpretedHash = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42).eval()
-
-        // Check if interpreted hash value is same as codegen for s1
-        checkEvaluation(Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42), interpretedHash)
-        // Check if s2's interpreted and codegen hash values are same as s1's
-        checkEvaluation(Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42), interpretedHash)
+        assert(interpretedHash1 == interpretedHash2)
       }
     }
   }
