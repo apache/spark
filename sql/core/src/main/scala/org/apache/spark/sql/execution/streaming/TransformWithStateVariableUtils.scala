@@ -22,7 +22,9 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
+import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 
 // Enum of possible State Variable types
 object StateVariableType extends Enumeration {
@@ -71,6 +73,49 @@ object TransformWithStateVariableUtils {
   }
 
   def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-      TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
+    TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
+  }
+}
+
+case class TransformWithStateOperatorProperties(
+    val timeMode: String,
+    val outputMode: String,
+    val stateVariables: List[TransformWithStateVariableInfo]) {
+
+  def json: String = {
+    val stateVariablesJson = stateVariables.map(_.jsonValue)
+    val json =
+      ("timeMode" -> timeMode) ~
+        ("outputMode" -> outputMode) ~
+        ("stateVariables" -> stateVariablesJson)
+    compact(render(json))
+  }
+}
+
+object TransformWithStateOperatorProperties extends Logging {
+  def fromJson(json: String): TransformWithStateOperatorProperties = {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val jsonMap = JsonMethods.parse(json).extract[Map[String, Any]]
+    TransformWithStateOperatorProperties(
+      jsonMap("timeMode").asInstanceOf[String],
+      jsonMap("outputMode").asInstanceOf[String],
+      jsonMap("stateVariables").asInstanceOf[List[Map[String, Any]]].map { stateVarMap =>
+        TransformWithStateVariableInfo.fromMap(stateVarMap)
+      }
+    )
+  }
+
+  def validateOperatorProperties(
+      oldOperatorProperties: TransformWithStateOperatorProperties,
+      newOperatorProperties: TransformWithStateOperatorProperties): Unit = {
+    if (oldOperatorProperties.timeMode != newOperatorProperties.timeMode) {
+      throw StateStoreErrors.invalidConfigChangedAfterRestart(
+        "timeMode", oldOperatorProperties.timeMode, newOperatorProperties.timeMode)
+    }
+
+    if (oldOperatorProperties.outputMode != newOperatorProperties.outputMode) {
+      throw StateStoreErrors.invalidConfigChangedAfterRestart(
+        "outputMode", oldOperatorProperties.outputMode, newOperatorProperties.outputMode)
+    }
   }
 }

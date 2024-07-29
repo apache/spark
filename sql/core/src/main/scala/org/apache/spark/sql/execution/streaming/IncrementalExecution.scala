@@ -214,12 +214,14 @@ class IncrementalExecution(
           case ssw: StateStoreWriter =>
             val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
             // validate metadata
-            val oldMetadata = OperatorStateMetadataReader.createReader(
-              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-              hadoopConf, ssw.operatorStateMetadataVersion).read()
-            oldMetadata match {
-              case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
-              case None =>
+            if (isFirstBatch && currentBatchId != 0) {
+              val oldMetadata = OperatorStateMetadataReader.createReader(
+                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+                hadoopConf, ssw.operatorStateMetadataVersion).read()
+              oldMetadata match {
+                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+                case None =>
+              }
             }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
                 new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),

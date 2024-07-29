@@ -21,10 +21,6 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -36,7 +32,6 @@ import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.execution.streaming.state.OperatorPropertiesUtils.OperatorProperties
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, StructType}
@@ -478,7 +473,7 @@ case class TransformWithStateExec(
           oldMetadataV2.operatorPropertiesJson)
         val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
           newMetadataV2.operatorPropertiesJson)
-        OperatorProperties.validateOperatorProperties(
+        TransformWithStateOperatorProperties.validateOperatorProperties(
           oldOperatorProps, newOperatorProps)
         checkStateVariableEquality(oldOperatorProps.stateVariables)
       case (_, _) =>
@@ -710,33 +705,3 @@ object TransformWithStateExec {
   }
 }
 // scalastyle:on argcount
-
-case class TransformWithStateOperatorProperties(
-    override val timeMode: String,
-    override val outputMode: String,
-    val stateVariables: List[TransformWithStateVariableInfo])
-  extends OperatorProperties(timeMode, outputMode) {
-
-  override def json: String = {
-    val stateVariablesJson = stateVariables.map(_.jsonValue)
-    val json =
-      ("timeMode" -> timeMode) ~
-        ("outputMode" -> outputMode) ~
-        ("stateVariables" -> stateVariablesJson)
-    compact(render(json))
-  }
-}
-
-object TransformWithStateOperatorProperties {
-  def fromJson(json: String): TransformWithStateOperatorProperties = {
-    implicit val formats: DefaultFormats.type = DefaultFormats
-    val jsonMap = JsonMethods.parse(json).extract[Map[String, Any]]
-    TransformWithStateOperatorProperties(
-      jsonMap("timeMode").asInstanceOf[String],
-      jsonMap("outputMode").asInstanceOf[String],
-      jsonMap("stateVariables").asInstanceOf[List[Map[String, Any]]].map { stateVarMap =>
-        TransformWithStateVariableInfo.fromMap(stateVarMap)
-      }
-    )
-  }
-}

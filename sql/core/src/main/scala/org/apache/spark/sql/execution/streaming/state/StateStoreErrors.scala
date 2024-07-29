@@ -193,7 +193,7 @@ object StateStoreErrors {
 
 class StateStoreDuplicateStateVariableDefined(stateName: String)
   extends SparkRuntimeException(
-    errorClass = "STATE_STORE_DUPLICATE_STATE_VARIABLE_DEFINED",
+    errorClass = "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED",
     messageParameters = Map(
       "stateName" -> stateName
     )

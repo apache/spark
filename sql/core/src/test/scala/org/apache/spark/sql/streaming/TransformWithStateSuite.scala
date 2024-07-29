@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.time.Duration
 import java.util.UUID
 
 import org.apache.hadoop.fs.Path
@@ -45,6 +46,34 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorWithTTL
+  extends StatefulProcessor[String, String, (String, String)]
+  with Logging {
+  @transient protected var _countState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig(Duration.ofMillis(1000)))
   }
 
   override def handleInputRows(
@@ -1082,6 +1111,82 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a"),
           ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
             assert(t.getMessage.contains("Cannot change countState"))
+          }
+        )
+      }
+    }
+  }
+
+  test("test that different timeMode after query restart fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          ExpectFailure[StateStoreInvalidConfigAfterRestart] { t =>
+            assert(t.getMessage.contains("timeMode"))
+            assert(t.getMessage.contains("is not equal"))
+          }
+        )
+      }
+    }
+  }
+
+  test("test that introducing TTL after restart fails query") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
+            assert(t.getMessage.contains("is not supported"))
           }
         )
       }

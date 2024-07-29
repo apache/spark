@@ -3803,6 +3803,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
+    "message" : [
+      "State variable with name <stateName> has already been defined in the StatefulProcessor."
+    ],
+    "sqlState" : "42802"
+  },
   "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
     "message" : [
       "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
@@ -3830,12 +3836,6 @@
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATE_STORE_DUPLICATE_STATE_VARIABLE_DEFINED" : {
-    "message" : [
-      "State variable with name <stateName> has already been defined in the StatefulProcessor."
     ],
     "sqlState" : "42802"
   },
