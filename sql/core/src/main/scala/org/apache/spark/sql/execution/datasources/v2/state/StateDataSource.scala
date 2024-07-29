@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{JoinSideValues, STATE_VAR_NAME}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
-import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TransformWithStateOperatorProperties}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
@@ -77,6 +77,15 @@ class StateDataSource extends TableProvider with DataSourceRegister {
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           "No state variable names are defined for the transformWithState operator")
       }
+
+      val stateVarName = sourceOptions.stateVarName.get
+      val twsOperatorProperties = TransformWithStateOperatorProperties.fromJson(operatorProperties)
+      val stateVars = twsOperatorProperties.stateVariables
+      if (!stateVars.contains(stateVarName)) {
+        throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
+          s"State variable $stateVarName is not defined for the transformWithState operator.")
+      }
+
     } else {
       if (stateStoreMetadata.size == 1 &&
         stateStoreMetadata.head.operatorName == TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
