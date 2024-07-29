@@ -215,12 +215,22 @@ class IncrementalExecution(
             val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
             // validate metadata
             if (isFirstBatch && currentBatchId != 0) {
-              val oldMetadata = OperatorStateMetadataReader.createReader(
-                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                hadoopConf, ssw.operatorStateMetadataVersion).read()
-              oldMetadata match {
-                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
-                case None =>
+              // If we are restarting from a different checkpoint directory
+              // there may be a mismatch between the stateful operators in the
+              // physical plan and the metadata.
+              try {
+                val oldMetadata = OperatorStateMetadataReader.createReader(
+                  new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+                  hadoopConf, ssw.operatorStateMetadataVersion).read()
+                oldMetadata match {
+                  case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+                  case None =>
+                }
+              } catch {
+                case e: Exception =>
+                  logWarning(s"Error reading metadata path for stateful operator. This " +
+                    s"may due to no prior committed batch, or previously run on lower " +
+                    s"versions: ${e.getMessage}")
               }
             }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
