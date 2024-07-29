@@ -45,17 +45,21 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
       a.copy(groupingExpressions = newGrouping)
   }
 
+  /*
+  Inserts MapSort recursively taking into account when
+  it is nested inside a struct or array.
+   */
   private def insertMapSortRecursively(e: Expression): Expression = {
     e.dataType match {
-      case _: MapType if !e.isInstanceOf[MapSort] => MapSort(e)
+      case _: MapType => MapSort(e)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
           Seq(Literal(f.name), insertMapSortRecursively(
-            GetStructField(e, i)))
+            GetStructField(e, i, Some(f.name))))
         }.toImmutableArraySeq)
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
-          // No field needs char/varchar processing, just return the original expression.
+          // No field needs MapSort processing, just return the original expression.
           e
         } else if (e.nullable) {
           If(IsNull(e), Literal(null, struct.dataType), struct)
@@ -66,12 +70,8 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
       case ArrayType(et, containsNull) =>
         val param = NamedLambdaVariable("x", et, containsNull)
         val funcBody = insertMapSortRecursively(param)
-        if (funcBody.fastEquals(param)) {
-          // If array element does not need char/varchar processing, return the original expression.
-          e
-        } else {
-          ArrayTransform(e, LambdaFunction(funcBody, Seq(param)))
-        }
+
+        ArrayTransform(e, LambdaFunction(funcBody, Seq(param)))
 
       case _ => e
     }
