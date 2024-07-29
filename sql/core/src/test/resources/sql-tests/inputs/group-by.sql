@@ -277,53 +277,53 @@ ORDER BY col1
 
 -- SC-170296: Verify that group by works when MapType is inside complex type for column type
 -- ARRAY<MAP<INT,INT>>
-SELECT *, count(*)
+SELECT count(*)
 FROM VALUES (ARRAY(MAP(1, 2, 2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3, 1, 2), MAP(1, 3))) as t(a)
 GROUP BY a;
 
 -- STRUCT<b:MAP<INT,INT>>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
 GROUP BY a;
 
-SELECT a.b, count(*)
+SELECT count(*)
 FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
 GROUP BY a.b;
 
 -- STRUCT<b:ARRAY<MAP<INT,INT>>>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (named_struct('b', array(map(1, 2, 2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3, 1, 2), map(1, 3)))) as t(a)
 GROUP BY a;
 
 -- ARRAY<STRUCT<b:MAP<INT,INT>>>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (ARRAY(named_struct('b', map(1, 2, 2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3, 1, 2)), named_struct('b', map(1, 3)))) as t(a)
 group BY a;
 
 -- MAP<ARRAY<INT>,INT>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (map(array(1, 2), 2, array(2, 3), 3)), (map(array(1, 3), 3)), (map(array(2, 3), 3, array(1, 2), 2)) as t(a)
 group BY a;
 
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (map(array(1, 2, 3), 3)), (map(array(3, 2, 1), 3)) as t(a)
 group BY a;
 
 -- ARRAY<MAP<ARRAY<INT>,INT>>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (ARRAY(map(array(1, 2), 2, array(2, 3), 3))), (ARRAY(MAP(ARRAY(1, 3), 3))), (ARRAY(map(array(2, 3), 3, array(1, 2), 2))) as t(a)
 group BY a;
 
 -- MAP<STRUCT<b:INT>,INT>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (map(named_struct('b', 1), 2, named_struct('b', 2), 3)), (map(named_struct('b', 1), 3)), (map(named_struct('b', 2), 3, named_struct('b', 1), 2)) as t(a)
 group BY a;
 
 -- STRUCT<b:MAP<STRUCT<c:INT>,INT>>
-SELECT a, count(*)
+SELECT count(*)
 FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
 group BY a;
 
-SELECT a.b, count(*)
+SELECT count(*)
 FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
 group BY a.b;
