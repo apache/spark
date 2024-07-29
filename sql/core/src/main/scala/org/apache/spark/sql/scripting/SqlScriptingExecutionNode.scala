@@ -162,12 +162,16 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec])
  * Executable node for IfElseStatement.
  * @param conditions Collection of executable conditions. First condition corresponds to IF clause,
  *                   while others (if any) correspond to following ELSE IF clauses.
- * @param bodies  Collection of executable bodies.
+ * @param conditionalBodies  Collection of executable bodies that have a corresponding condition,
+*                 in IF or ELSE IF branches.
+ * @param unconditionalBody Body that is executed if none of the conditions are met,
+ *                          i.e. ELSE branch.
  * @param booleanEvaluator Evaluator for Boolean conditions.
  */
 class IfElseStatementExec(
     conditions: Seq[SingleStatementExec],
-    bodies: Seq[CompoundBodyExec],
+    conditionalBodies: Seq[CompoundBodyExec],
+    unconditionalBody: Option[CompoundBodyExec],
     booleanEvaluator: StatementBooleanEvaluator) extends NonLeafStatementExec {
   private object IfElseState extends Enumeration {
     val Condition, Body = Value
@@ -177,9 +181,8 @@ class IfElseStatementExec(
   private var curr: Option[CompoundStatementExec] = Some(conditions.head)
 
   private var clauseIdx: Int = 0
-  private val conditionsCount: Int = conditions.length
-  private val bodiesCount: Int = bodies.length
-  assert(conditionsCount == bodiesCount || conditionsCount + 1 == bodiesCount)
+  private val conditionsCount = conditions.length
+  assert(conditionsCount == conditionalBodies.length)
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
@@ -191,17 +194,17 @@ class IfElseStatementExec(
           val condition = curr.get.asInstanceOf[SingleStatementExec]
           if (booleanEvaluator.eval(condition)) {
             state = IfElseState.Body
-            curr = Some(bodies(clauseIdx))
+            curr = Some(conditionalBodies(clauseIdx))
           } else {
             clauseIdx += 1
             if (clauseIdx < conditionsCount) {
               // There are ELSE IF clauses remaining.
               state = IfElseState.Condition
               curr = Some(conditions(clauseIdx))
-            } else if (conditionsCount < bodiesCount) {
+            } else if (unconditionalBody.isDefined) {
               // ELSE clause exists.
               state = IfElseState.Body
-              curr = Some(bodies(clauseIdx))
+              curr = Some(unconditionalBody.get)
             } else {
               // No remaining clauses.
               curr = None
@@ -209,8 +212,10 @@ class IfElseStatementExec(
           }
           condition
         case IfElseState.Body =>
-          val retStmt = bodies(clauseIdx).getTreeIterator.next()
-          if (!bodies(clauseIdx).getTreeIterator.hasNext) {
+          assert(curr.get.isInstanceOf[CompoundBodyExec])
+          val currBody = curr.get.asInstanceOf[CompoundBodyExec]
+          val retStmt = currBody.getTreeIterator.next()
+          if (!currBody.getTreeIterator.hasNext) {
             curr = None
           }
           retStmt
@@ -224,7 +229,8 @@ class IfElseStatementExec(
     curr = Some(conditions.head)
     clauseIdx = 0
     conditions.foreach(c => c.reset())
-    bodies.foreach(b => b.reset())
+    conditionalBodies.foreach(b => b.reset())
+    unconditionalBody.foreach(b => b.reset())
   }
 }
 

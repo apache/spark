@@ -217,7 +217,8 @@ class AstBuilder extends DataTypeAstBuilder
             Seq(Alias(expression(boolExpr), "condition")()),
             OneRowRelation()))
       }),
-      bodies = ctx.compoundBody().asScala.toList.map(body => visitCompoundBody(body))
+      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      unconditionalBody = Option(ctx.unconditionalBody).map(body => visitCompoundBody(body))
     )
   }
 

@@ -46,9 +46,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
 
   case class TestIfElse(
       conditions: Seq[TestSingleStatement],
-      bodies: Seq[TestBody],
+      conditionalBodies: Seq[TestBody],
+      unconditionalBody: Option[TestBody],
       booleanEvaluator: StatementBooleanEvaluator)
-    extends IfElseStatementExec(conditions, bodies, booleanEvaluator)
+    extends IfElseStatementExec(
+      conditions, conditionalBodies, unconditionalBody, booleanEvaluator)
 
   // Repeat retValue reps times, then return !retValue once.
   case class RepEval(retValue: Boolean, reps: Int) extends StatementBooleanEvaluator {
@@ -101,10 +103,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         conditions = Seq(
           TestSingleStatement("con1")
         ),
-        bodies = Seq(
-          TestBody(Seq(TestLeafStatement("body1"))),
-          TestBody(Seq(TestLeafStatement("body2")))
+        conditionalBodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1")))
         ),
+        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
         booleanEvaluator = RepEval(retValue = false, reps = 0)
       )
     )).getTreeIterator
@@ -118,10 +120,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         conditions = Seq(
           TestSingleStatement("con1")
         ),
-        bodies = Seq(
-          TestBody(Seq(TestLeafStatement("body1"))),
-          TestBody(Seq(TestLeafStatement("body2")))
+        conditionalBodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1")))
         ),
+        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
         booleanEvaluator = RepEval(retValue = false, reps = 1)
       )
     )).getTreeIterator
@@ -136,11 +138,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestSingleStatement("con1"),
           TestSingleStatement("con2")
         ),
-        bodies = Seq(
+        conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
-          TestBody(Seq(TestLeafStatement("body2"))),
-          TestBody(Seq(TestLeafStatement("body3")))
+          TestBody(Seq(TestLeafStatement("body2")))
         ),
+        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
         booleanEvaluator = RepEval(retValue = false, reps = 0)
       )
     )).getTreeIterator
@@ -155,11 +157,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestSingleStatement("con1"),
           TestSingleStatement("con2")
         ),
-        bodies = Seq(
+        conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
-          TestBody(Seq(TestLeafStatement("body2"))),
-          TestBody(Seq(TestLeafStatement("body3")))
+          TestBody(Seq(TestLeafStatement("body2")))
         ),
+        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
         booleanEvaluator = RepEval(retValue = false, reps = 1)
       )
     )).getTreeIterator
@@ -175,12 +177,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestSingleStatement("con2"),
           TestSingleStatement("con3")
         ),
-        bodies = Seq(
+        conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2"))),
-          TestBody(Seq(TestLeafStatement("body3"))),
-          TestBody(Seq(TestLeafStatement("body4")))
+          TestBody(Seq(TestLeafStatement("body3")))
         ),
+        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body4")))),
         booleanEvaluator = RepEval(retValue = false, reps = 2)
       )
     )).getTreeIterator
@@ -195,15 +197,53 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestSingleStatement("con1"),
           TestSingleStatement("con2")
         ),
-        bodies = Seq(
+        conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
-          TestBody(Seq(TestLeafStatement("body2"))),
-          TestBody(Seq(TestLeafStatement("body3")))
+          TestBody(Seq(TestLeafStatement("body2")))
         ),
+        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
         booleanEvaluator = RepEval(retValue = false, reps = 2)
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body3"))
+  }
+
+  test("if else if - without else (successful check)") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1"),
+          TestSingleStatement("con2")
+        ),
+        conditionalBodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2")))
+        ),
+        unconditionalBody = None,
+        booleanEvaluator = RepEval(retValue = false, reps = 1)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body2"))
+  }
+
+  test("if else if - without else (unsuccessful checks)") {
+    val iter = TestNestedStatementIterator(Seq(
+      TestIfElse(
+        conditions = Seq(
+          TestSingleStatement("con1"),
+          TestSingleStatement("con2")
+        ),
+        conditionalBodies = Seq(
+          TestBody(Seq(TestLeafStatement("body1"))),
+          TestBody(Seq(TestLeafStatement("body2")))
+        ),
+        unconditionalBody = None,
+        booleanEvaluator = RepEval(retValue = false, reps = 2)
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2"))
   }
 }
