@@ -1027,7 +1027,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             sql(s"create table $table" +
               s" (m map<struct<fld1: $collationSetup, fld2: $collationSetup>, " +
               s"struct<fld1: $collationSetup, fld2: $collationSetup>>)")
-            sql(s"insert into $table values (map('")
+            sql(s"insert into $table values " +
+              s"(map(struct(fld1: 'aaa', fld2: 'bbb'), struct(fld1: 'ccc', fld2: 'ddd')))")
           }
         }
       }
