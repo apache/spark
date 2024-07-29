@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+from enum import Enum
 from itertools import chain
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
@@ -278,6 +279,70 @@ class ColumnTestsMixin:
         expression = sf.expr("foo")
         when_cond = sf.when(expression, sf.lit(None))
         self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
+
+    def test_enum_literals(self):
+        class IntEnum(Enum):
+            X = 1
+            Y = 2
+            Z = 3
+
+        class BoolEnum(Enum):
+            T = True
+
+        class StrEnum(Enum):
+            X = "x"
+
+        id = sf.col("id")
+        s = sf.col("s")
+        b = sf.col("b")
+
+        cols, expected = list(
+            zip(
+                (id + IntEnum.X, 2),
+                (id - IntEnum.X, 0),
+                (id * IntEnum.X, 1),
+                (id / IntEnum.X, 1.0),
+                (id % IntEnum.X, 0),
+                (IntEnum.X + id, 2),
+                (IntEnum.X - id, 0),
+                (IntEnum.X * id, 1),
+                (IntEnum.X / id, 1.0),
+                (IntEnum.X % id, 0),
+                (id**IntEnum.X, 1.0),
+                (IntEnum.X**id, 1, 0),
+                (id == IntEnum.X, True),
+                (IntEnum.X == id, True),
+                (id < IntEnum.X, False),
+                (id <= IntEnum.X, True),
+                (id >= IntEnum.X, True),
+                (id > IntEnum.X, False),
+                (id.eqNullSafe(IntEnum.X), True),
+                (b & BoolEnum.T, True),
+                (b | BoolEnum.T, True),
+                (BoolEnum.T & b, True),
+                (BoolEnum.T | b, True),
+                (id.bitwiseOR(IntEnum.X), 1),
+                (id.bitwiseAND(IntEnum.X), 1),
+                (id.bitwiseXOR(IntEnum.X), 0),
+                (id.contains(IntEnum.X), True),
+                (s.startswith(StrEnum.X), False),
+                (s.endswith(StrEnum.X), False),
+                (s.like(StrEnum.X), False),
+                (s.rlike(StrEnum.X), False),
+                (s.ilike(StrEnum.X), False),
+                (s.substr(IntEnum.X, IntEnum.Y), "1"),
+                (sf.when(b, IntEnum.X).when(~b, IntEnum.Y).otherwise(IntEnum.Z), 1),
+            )
+        )
+        result = (
+            self.spark.range(1, 2)
+            .select(id, id.astype("string").alias("s"), id.astype("boolean").alias("b"))
+            .select(*cols)
+            .first()
+        )
+
+        for r, c, e in zip(result, cols, expected):
+            self.assertEqual(r, e, str(c))
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
