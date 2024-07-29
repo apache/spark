@@ -26,6 +26,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 
+/**
+ * This file contains utility classes and functions for managing state variables in
+ * the operatorProperties field of the OperatorStateMetadata for TransformWithState.
+ * We use these utils to read and write state variable information for validation purposes
+ */
 // Enum of possible State Variable types
 object StateVariableType extends Enumeration {
   type StateVariableType = Value
