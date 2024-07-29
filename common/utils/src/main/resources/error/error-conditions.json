@@ -3860,7 +3860,7 @@
   },
   "STATE_STORE_INVALID_CONFIG_AFTER_RESTART" : {
     "message" : [
-      "<configName> <oldConfig> is not equal to <newConfig>. Please set <configName> to <oldConfig>, or restart with a new checkpoint directory."
+      "<configName>=<oldConfig> is not equal to <newConfig>. Please set <configName> to <oldConfig>, or restart with a new checkpoint directory."
     ],
     "sqlState" : "42K06"
   },
