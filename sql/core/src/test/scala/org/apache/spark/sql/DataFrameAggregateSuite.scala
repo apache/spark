@@ -2469,6 +2469,62 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
+//  test("selecting composite literal with table") {
+//    val tableName = "t"
+//    withTable(tableName) {
+//      sql(s"create table $tableName(col int) using parquet")
+//
+//      checkAnswer(sql(s"""select count(distinct 1, 2) from $tableName"""), Row(0))
+//      checkAnswer(sql(s"""select count(distinct 1 + 2) from $tableName"""), Row(0))
+//      checkAnswer(sql(s"""select count(distinct 1, 1 + 2) from $tableName"""), Row(0))
+//    }
+//  }
+
+  test("selecting multiple distinct column with table") {
+    val tableName = "t"
+    withTable(tableName) {
+      // Original table now has 0 rows.
+      sql(s"create table $tableName(col int) using parquet")
+
+      checkAnswer(sql(s"""select count(distinct 1), count(distinct 2) from $tableName"""),
+        Row(0, 0))
+      checkAnswer(sql(s"""select count(distinct 1), count(distinct col) from $tableName"""),
+        Row(0, 0))
+      checkAnswer(sql(s"""select count(distinct col), count(distinct col) from $tableName"""),
+        Row(0, 0))
+
+      // Original table now has 1 row.
+      sql(s"insert into $tableName(col) values(1)")
+
+      checkAnswer(sql(s"""select count(distinct 2), count(distinct 1) from $tableName"""),
+        Row(1, 1))
+      checkAnswer(sql(s"""select count(distinct col), count(distinct 1) from $tableName"""),
+        Row(1, 1))
+      checkAnswer(sql(s"""select count(distinct col), count(distinct col) from $tableName"""),
+        Row(1, 1))
+
+      // Original table now has 2 rows.
+      sql(s"insert into $tableName(col) values(2)")
+
+      checkAnswer(sql(s"""select count(distinct 1), count(distinct 2) from $tableName"""),
+        Row(1, 1))
+      checkAnswer(sql(s"""select count(distinct 1), count(distinct col) from $tableName"""),
+        Row(1, 2))
+      checkAnswer(sql(s"""select count(distinct col), count(distinct col) from $tableName"""),
+        Row(2, 2))
+
+      // Original table now has 3 rows.
+      sql(s"insert into $tableName(col) values(3)")
+
+      checkAnswer(sql(s"""select count(distinct 2), count(distinct 1) from $tableName"""),
+        Row(1, 1))
+      checkAnswer(sql(s"""select count(distinct col), count(distinct 1) from $tableName"""),
+        Row(3, 1))
+      checkAnswer(sql(s"""select count(distinct col), count(distinct col) from $tableName"""),
+        Row(3, 3))
+    }
+  }
+
 }
 
 case class B(c: Option[Double])
