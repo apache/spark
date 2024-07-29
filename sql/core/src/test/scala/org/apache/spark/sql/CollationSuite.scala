@@ -1007,13 +1007,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             sql(s"insert into $table values (map('aAA', 'AaA'))")
             sql(s"insert into $table values (map('BBb', 'bBB'))")
 
-            val query = sql(s"select count(*) from $table group  by m")
+            val df = sql(s"select count(*) from $table group by m")
 
             if (collation.isEmpty ||
               CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
-              checkAnswer(query, Seq(Row(1), Row(1), Row(1), Row(1), Row(1)))
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1), Row(1)))
             } else {
-              checkAnswer(query, Seq(Row(3), Row(2)))
+              checkAnswer(df, Seq(Row(3), Row(2)))
             }
           }
         }
@@ -1025,15 +1025,30 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         withTable(table) {
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
             sql(s"create table $table" +
-              s" (m map<struct<fld1: $collationSetup, fld2: $collationSetup>, " +
-              s"struct<fld1: $collationSetup, fld2: $collationSetup>>)")
+              s" (m map<struct<fld1: string $collationSetup, fld2: string $collationSetup>, " +
+              s"struct<fld1: string $collationSetup, fld2: string $collationSetup>>)")
             sql(s"insert into $table values " +
-              s"(map(struct(fld1: 'aaa', fld2: 'bbb'), struct(fld1: 'ccc', fld2: 'ddd')))")
+              s"(map(struct('aaa', 'bbb'), struct('ccc', 'ddd')))")
+            sql(s"insert into $table values " +
+              s"(map(struct('Aaa', 'BBB'), struct('cCC', 'dDd')))")
+            sql(s"insert into $table values " +
+              s"(map(struct('AAA', 'BBb'), struct('cCc', 'DDD')))")
+            sql(s"insert into $table values " +
+              s"(map(struct('aaa', 'bbB'), struct('CCC', 'DDD')))")
+
+            val df = sql(s"select count(*) from $table group by m")
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(4)))
+            } else {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1)))
+            }
           }
         }
       }
     }
   }
+
 
   test("Support operations on complex types containing collated strings") {
     checkAnswer(sql("select reverse('abc' collate utf8_lcase)"), Seq(Row("cba")))
