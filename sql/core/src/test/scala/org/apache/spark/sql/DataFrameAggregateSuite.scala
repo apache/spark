@@ -2469,16 +2469,101 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-//  test("selecting composite literal with table") {
-//    val tableName = "t"
-//    withTable(tableName) {
-//      sql(s"create table $tableName(col int) using parquet")
-//
-//      checkAnswer(sql(s"""select count(distinct 1, 2) from $tableName"""), Row(0))
-//      checkAnswer(sql(s"""select count(distinct 1 + 2) from $tableName"""), Row(0))
-//      checkAnswer(sql(s"""select count(distinct 1, 1 + 2) from $tableName"""), Row(0))
-//    }
-//  }
+  test("selecting single distinct column with subquery") {
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName(col int) using parquet")
+
+      val querySumDistinctCountDistinct =
+        s"SELECT SUM(DISTINCT 1) FROM (SELECT COUNT(DISTINCT 1) FROM $tableName)"
+      val querySumDistinctCount =
+        s"SELECT SUM(DISTINCT 1) FROM (SELECT COUNT(1) FROM $tableName)"
+      val querySumCountDistinct =
+        s"SELECT SUM(1) FROM (SELECT COUNT(DISTINCT 1) FROM $tableName)"
+      val querySumRefCountDistinct =
+        s"SELECT SUM(x) FROM (SELECT COUNT(DISTINCT 1) AS x FROM $tableName)"
+
+      checkAnswer(sql(querySumDistinctCountDistinct), Row(1))
+      checkAnswer(sql(querySumDistinctCount), Row(1))
+      checkAnswer(sql(querySumCountDistinct), Row(1))
+      checkAnswer(sql(querySumRefCountDistinct), Row(0))
+
+      sql(s"insert into $tableName(col) values(1)")
+
+      checkAnswer(sql(querySumDistinctCountDistinct), Row(1))
+      checkAnswer(sql(querySumDistinctCount), Row(1))
+      checkAnswer(sql(querySumCountDistinct), Row(1))
+      checkAnswer(sql(querySumRefCountDistinct), Row(1))
+
+      sql(s"insert into $tableName(col) values(2)")
+
+      checkAnswer(sql(querySumDistinctCountDistinct), Row(1))
+      checkAnswer(sql(querySumDistinctCount), Row(1))
+      checkAnswer(sql(querySumCountDistinct), Row(1))
+      checkAnswer(sql(querySumRefCountDistinct), Row(1))
+    }
+  }
+
+  test("selecting single distinct column with table and grouping expression") {
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName(col int) using parquet")
+      val query = s"SELECT COUNT(DISTINCT 1) FROM $tableName GROUP BY col"
+      checkAnswer(sql(query), Seq())
+      sql(s"insert into $tableName(col) values(1)")
+      checkAnswer(sql(query), Row(1))
+      sql(s"insert into $tableName(col) values(2)")
+      checkAnswer(sql(query), Seq(Row(1), Row(1)))
+    }
+  }
+
+  test("selecting complex literal with table") {
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName(col int) using parquet")
+
+      val columnValues = Seq(0, 1, 1, 2)
+      columnValues.foreach {
+        columnValue => {
+          if (columnValue != 0) sql(s"insert into $tableName(col) values($columnValue)")
+          val result = Row(if (columnValue == 0) 0 else 1)
+
+          // Integer literals.
+          checkAnswer(sql(s"""select count(distinct 1 + 2) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct 1, 2) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct 1, 1 + 2) from $tableName"""), result)
+
+          // String literals.
+          checkAnswer(sql(s"""select count(distinct "hello") from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct "col") from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct "") from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct collation("abc")) from $tableName"""), result)
+          checkAnswer(sql(s"""
+            |select count(distinct collation("abc" collate utf8_lcase)) from
+            |$tableName""".stripMargin), result)
+
+          // Other special cases.
+          checkAnswer(sql(s"""select count(distinct current_date()) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct 1, "x", current_date()) from $tableName"""),
+            result)
+
+          // Complex types.
+          checkAnswer(sql(s"""select count(distinct array(1, 2)) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct map(1, 2)) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct struct(1, 2)) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct named_struct("a", 1)) from $tableName"""),
+            result)
+
+          // Field extraction.
+          checkAnswer(sql(s"""select count(distinct array(1, 2)[1]) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct map(1, 2)[1]) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct struct(1, 2).col1) from $tableName"""), result)
+          checkAnswer(sql(s"""select count(distinct named_struct("a", 1).a) from $tableName"""),
+            result)
+        }
+      }
+    }
+  }
 
   test("selecting multiple distinct column with table") {
     val tableName = "t"

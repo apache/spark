@@ -511,23 +511,22 @@ object EliminateDistinct extends Rule[LogicalPlan] {
           ae.copy(isDistinct = false)
 
         case ae: AggregateExpression if isDistinctLiteral && ae.isDistinct &&
-          ae.aggregateFunction.children.forall(_.isInstanceOf[Literal]) =>
+          ae.aggregateFunction.children.forall(_.foldable) =>
           replaceDistinctAggregate = true
           ae.copy(isDistinct = false)
       }
       if (isDistinctLiteral && replaceDistinctAggregate) {
-        Aggregate(newAgg.groupingExpressions, newAgg.aggregateExpressions,
-          Limit(Literal(1), agg.child))
+        newAgg.withNewChildren(Seq(Limit(Literal(1), newAgg.child)))
       } else {
         newAgg
       }
   }
 
   private def isDistinctLiteralAggregate(agg: Aggregate): Boolean = {
-    var isDistinctLiteralAggregate = true
+    var isDistinctLiteralAggregate = agg.groupingExpressions.isEmpty
     agg.transformExpressions {
       case ae: AggregateExpression if
-        ae.aggregateFunction.children.exists(!_.isInstanceOf[Literal]) =>
+        ae.aggregateFunction.children.exists(!_.foldable) =>
         isDistinctLiteralAggregate = false
         ae
     }
