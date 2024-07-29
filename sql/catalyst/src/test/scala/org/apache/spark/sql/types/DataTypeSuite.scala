@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.core.JsonParseException
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
@@ -999,6 +1000,50 @@ class DataTypeSuite extends SparkFunSuite {
       errorClass = "COLLATION_INVALID_PROVIDER",
       parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
     )
+  }
+
+  test("parse array type with collation metadata") {
+    val unicodeCollationId = CollationFactory.collationNameToId("UNICODE")
+    val arrayJson =
+      s"""
+         |{
+         |  "type": "array",
+         |  "elementType": "string",
+         |  "containsNull": true
+         |}
+         |""".stripMargin
+
+    val collationsMap = Map("element" -> "UNICODE")
+
+    // Parse without collations map
+    assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
+
+    val parsedWithCollations = DataType.parseDataType(
+        JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+    assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
+  }
+
+  test("parse map type with collation metadata") {
+    val unicodeCollationId = CollationFactory.collationNameToId("UNICODE")
+    val mapJson =
+      s"""
+         |{
+         |  "type": "map",
+         |  "keyType": "string",
+         |  "valueType": "string",
+         |  "valueContainsNull": true
+         |}
+         |""".stripMargin
+
+    val collationsMap = Map("key" -> "UNICODE", "value" -> "UNICODE")
+
+    // Parse without collations map
+    assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
+
+    val parsedWithCollations = DataType.parseDataType(
+      JsonMethods.parse(mapJson), collationsMap = collationsMap)
+    assert(parsedWithCollations ===
+      MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
   }
 
   test("SPARK-48680: Add CharType and VarcharType to DataTypes JAVA API") {

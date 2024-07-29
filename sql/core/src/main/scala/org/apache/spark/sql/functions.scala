@@ -527,7 +527,7 @@ object functions {
    * @since 2.0.0
    */
   def first(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("first", false, ignoreNulls, e)
+    Column.fn("first", false, e, lit(ignoreNulls))
 
   /**
    * Aggregate function: returns the first value of a column in a group.
@@ -791,7 +791,7 @@ object functions {
    * @since 2.0.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("last", false, ignoreNulls, e)
+    Column.fn("last", false, e, lit(ignoreNulls))
 
   /**
    * Aggregate function: returns the last value of the column in a group.
@@ -1485,7 +1485,7 @@ object functions {
    * @since 3.2.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column =
-    Column.fn("lag", false, ignoreNulls, e, lit(offset), lit(defaultValue))
+    Column.fn("lag", false, e, lit(offset), lit(defaultValue), lit(ignoreNulls))
 
   /**
    * Window function: returns the value that is `offset` rows after the current row, and
@@ -1552,7 +1552,7 @@ object functions {
    * @since 3.2.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column =
-    Column.fn("lead", false, ignoreNulls, e, lit(offset), lit(defaultValue))
+    Column.fn("lead", false, e, lit(offset), lit(defaultValue), lit(ignoreNulls))
 
   /**
    * Window function: returns the value that is the `offset`th row of the window frame
@@ -1567,7 +1567,7 @@ object functions {
    * @since 3.1.0
    */
   def nth_value(e: Column, offset: Int, ignoreNulls: Boolean): Column =
-    Column.fn("nth_value", false, ignoreNulls, e, lit(offset))
+    Column.fn("nth_value", false, e, lit(offset), lit(ignoreNulls))
 
   /**
    * Window function: returns the value that is the `offset`th row of the window frame
@@ -1856,7 +1856,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def rand(seed: Long): Column = withExpr { Rand(seed) }
+  def rand(seed: Long): Column = Column.fn("rand", lit(seed))
 
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
@@ -1878,7 +1878,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def randn(seed: Long): Column = withExpr { Randn(seed) }
+  def randn(seed: Long): Column = Column.fn("randn", lit(seed))
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from
@@ -3373,7 +3373,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = withExpr { Uuid(Some(Utils.random.nextLong)) }
+  def uuid(): Column = Column.fn("uuid", lit(Utils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -4729,14 +4729,8 @@ object functions {
    * @group predicate_funcs
    * @since 3.5.0
    */
-  def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
-    escapeChar.expr match {
-      case StringLiteral(v) if v.length == 1 =>
-        Like(str.expr, pattern.expr, v.charAt(0))
-      case _ =>
-        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
-    }
-  }
+  def like(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("like", str, pattern, escapeChar)
 
   /**
    * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
@@ -4754,14 +4748,8 @@ object functions {
    * @group predicate_funcs
    * @since 3.5.0
    */
-  def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
-    escapeChar.expr match {
-      case StringLiteral(v) if v.length == 1 =>
-        ILike(str.expr, pattern.expr, v.charAt(0))
-      case _ =>
-        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
-    }
-  }
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("ilike", str, pattern, escapeChar)
 
   /**
    * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
@@ -5705,11 +5693,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.2.0
    */
-  def session_window(timeColumn: Column, gapDuration: String): Column = {
-    withExpr {
-      SessionWindow(timeColumn.expr, gapDuration)
-    }.as("session_window")
-  }
+  def session_window(timeColumn: Column, gapDuration: String): Column =
+    session_window(timeColumn, lit(gapDuration))
 
   /**
    * Generates session window given a timestamp specifying column.
@@ -5743,7 +5728,7 @@ object functions {
    * @since 3.2.0
    */
   def session_window(timeColumn: Column, gapDuration: Column): Column =
-    Column.fn("session_window", timeColumn, gapDuration).as("session_window")
+    Column.fn("session_window", timeColumn, gapDuration)
 
   /**
    * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
@@ -7076,7 +7061,7 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr, Some(Utils.random.nextLong)) }
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(Utils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -7415,7 +7400,7 @@ object functions {
    * @group xml_funcs
    * @since 4.0.0
    */
-  def schema_of_xml(xml: Column): Column = withExpr(new SchemaOfXml(xml.expr))
+  def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
 
   // scalastyle:off line.size.limit
 
@@ -7434,9 +7419,8 @@ object functions {
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
-  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
-    withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
-  }
+  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column =
+    fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
 
   // scalastyle:off line.size.limit
 
@@ -8434,8 +8418,7 @@ object functions {
    */
   @scala.annotation.varargs
   @deprecated("Use call_udf")
-  def callUDF(udfName: String, cols: Column*): Column =
-    call_function(Seq(udfName), cols: _*)
+  def callUDF(udfName: String, cols: Column*): Column = call_udf(udfName, cols: _*)
 
   /**
    * Call an user-defined function.
@@ -8453,8 +8436,7 @@ object functions {
    * @since 3.2.0
    */
   @scala.annotation.varargs
-  def call_udf(udfName: String, cols: Column*): Column =
-    call_function(Seq(udfName), cols: _*)
+  def call_udf(udfName: String, cols: Column*): Column = Column.fn(udfName, cols: _*)
 
   /**
    * Call a SQL function.
