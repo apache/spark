@@ -2343,33 +2343,61 @@ class DataFrameAggregateSuite extends QueryTest
   test("aggregating single distinct column with empty and non-empty table") {
     val tableName = "t"
     withTable(tableName) {
+      // Original table now has 0 rows.
       sql(s"create table $tableName(col int) using parquet")
 
+      // Count function.
       checkAnswer(sql(s"select count(1) from $tableName"), Row(0))
       checkAnswer(sql(s"select count(col) from $tableName"), Row(0))
       checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(0))
       checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(0))
+      // Sum function.
+      checkAnswer(sql(s"select sum(1) from $tableName"), Row(null))
+      checkAnswer(sql(s"select sum(col) from $tableName"), Row(null))
+      checkAnswer(sql(s"select sum(distinct 1) from $tableName"), Row(null))
+      checkAnswer(sql(s"select sum(distinct col) from $tableName"), Row(null))
 
+      // Original table now has 1 row.
       sql(s"insert into $tableName(col) values(1)")
 
+      // Count function.
       checkAnswer(sql(s"select count(1) from $tableName"), Row(1))
       checkAnswer(sql(s"select count(col) from $tableName"), Row(1))
       checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
       checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(1))
+      // Sum function.
+      checkAnswer(sql(s"select sum(1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select sum(col) from $tableName"), Row(1))
+      checkAnswer(sql(s"select sum(distinct 1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select sum(distinct col) from $tableName"), Row(1))
 
+      // Original table now has 2 rows.
       sql(s"insert into $tableName(col) values(2)")
 
+      // Count function.
       checkAnswer(sql(s"select count(1) from $tableName"), Row(2))
       checkAnswer(sql(s"select count(col) from $tableName"), Row(2))
       checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
       checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(2))
+      // Sum function.
+      checkAnswer(sql(s"select sum(1) from $tableName"), Row(2))
+      checkAnswer(sql(s"select sum(col) from $tableName"), Row(3))
+      checkAnswer(sql(s"select sum(distinct 1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select sum(distinct col) from $tableName"), Row(3))
 
+      // Original table now has 3 rows.
       sql(s"insert into $tableName(col) values(3)")
 
+      // Count function.
       checkAnswer(sql(s"select count(1) from $tableName"), Row(3))
       checkAnswer(sql(s"select count(col) from $tableName"), Row(3))
       checkAnswer(sql(s"select count(distinct 1) from $tableName"), Row(1))
       checkAnswer(sql(s"select count(distinct col) from $tableName"), Row(3))
+      // Sum function.
+      checkAnswer(sql(s"select sum(1) from $tableName"), Row(3))
+      checkAnswer(sql(s"select sum(col) from $tableName"), Row(6))
+      checkAnswer(sql(s"select sum(distinct 1) from $tableName"), Row(1))
+      checkAnswer(sql(s"select sum(distinct col) from $tableName"), Row(6))
     }
   }
 
@@ -2405,7 +2433,7 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(sql(s"""select count("hello") from $tableName"""), Row(0))
       checkAnswer(sql(s"""select max(distinct "hello") from $tableName"""), Row(null))
       checkAnswer(sql(s"""select count(distinct "hello") from $tableName"""), Row(0))
-      // Or any other literal for that matter.
+      // Or any other kind of literal for that matter.
       checkAnswer(sql(s"select max(1) from $tableName"), Row(null))
       checkAnswer(sql(s"select count(1) from $tableName"), Row(0))
       checkAnswer(sql(s"""select max(distinct 1) from $tableName"""), Row(null))

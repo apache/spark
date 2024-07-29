@@ -498,7 +498,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AGGREGATE)) {
     case agg: Aggregate =>
-      agg.transformExpressionsWithPruning(_.containsPattern(AGGREGATE_EXPRESSION)) {
+      var isDistinctLiteral = false
+      val newAgg = agg.transformExpressionsWithPruning(_.containsPattern(AGGREGATE_EXPRESSION)) {
         case ae: AggregateExpression if ae.isDistinct &&
           isDuplicateAgnostic(ae.aggregateFunction) =>
           ae.copy(isDistinct = false)
@@ -507,6 +508,17 @@ object EliminateDistinct extends Rule[LogicalPlan] {
           agg.child.distinctKeys.exists(
             _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) =>
           ae.copy(isDistinct = false)
+
+        case ae: AggregateExpression if ae.isDistinct &&
+          ae.aggregateFunction.children.forall(_.isInstanceOf[Literal]) =>
+          isDistinctLiteral = true
+          ae.copy(isDistinct = false)
+      }
+      if (isDistinctLiteral) {
+        Aggregate(newAgg.groupingExpressions, newAgg.aggregateExpressions,
+          Limit(Literal(1), agg.child))
+      } else {
+        newAgg
       }
   }
 
