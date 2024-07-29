@@ -2196,7 +2196,7 @@ class Dataset[T] private[sql](
     if (this.isEmpty && this.columns.isEmpty) {
       LocalRelation()
     } else {
-      Transpose(
+      UnresolvedTranspose(
         indexColumn.named,
         logicalPlan
       )
@@ -2224,7 +2224,7 @@ class Dataset[T] private[sql](
     if (this.isEmpty && this.columns.isEmpty) {
       LocalRelation()
     } else {
-      Transpose(
+      UnresolvedTranspose(
         this.col(this.columns.head).named,
         logicalPlan
       )

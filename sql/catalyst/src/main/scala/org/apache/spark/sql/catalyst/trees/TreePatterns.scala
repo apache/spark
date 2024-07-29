@@ -158,6 +158,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_FUNC: Value = Value
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
   val UNRESOLVED_TABLE_VALUED_FUNCTION: Value = Value
+  val UNRESOLVED_TRANSPOSE: Value = Value
   val UNRESOLVED_TVF_ALIASES: Value = Value
 
   // Execution expression patterns (alphabetically ordered)

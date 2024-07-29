@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort, Transpose}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPOSE
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -80,8 +80,8 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(TRANSPOSE)) {
-    case t @ Transpose(indexColumn, child, _, _) if !t.resolved =>
+    _.containsPattern(TreePattern.UNRESOLVED_TRANSPOSE)) {
+    case t @ UnresolvedTranspose(indexColumn, child, _, _) if !t.resolved =>
 
       // Cast the index column to StringType
       val indexColumnAsString = indexColumn match {
