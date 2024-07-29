@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.messages
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
@@ -33,7 +33,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
       .newBuilder()
       .setLiteral(proto.Expression.Literal.newBuilder().setInteger(32).build())
     // Pack the extension into Any.
-    val aval = com.google.protobuf.Any.pack(lit.build())
+    val aval = org.sparkproject.connect.protobuf.Any.pack(lit.build())
     // Add Any to the repeated field list.
     builder.addExtensions(aval)
     // Create serialized value.

@@ -22,8 +22,8 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ArtifactStatusesResponse

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.google.protobuf.Message
+import org.sparkproject.connect.protobuf.Message
 
 import org.apache.spark.connect.proto
 import org.apache.spark.scheduler.SparkListenerEvent

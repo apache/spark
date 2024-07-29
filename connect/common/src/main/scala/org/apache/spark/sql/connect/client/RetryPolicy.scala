@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.client
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.Random
 
-import io.grpc.{Status, StatusRuntimeException}
+import org.sparkproject.connect.grpc.{Status, StatusRuntimeException}
 
 /**
  * [[RetryPolicy]] configure the retry mechanism in [[GrpcRetryHandler]]

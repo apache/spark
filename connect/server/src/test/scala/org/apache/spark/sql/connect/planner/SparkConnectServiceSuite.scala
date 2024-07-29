@@ -22,10 +22,6 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf
-import com.google.protobuf.ByteString
-import io.grpc.StatusRuntimeException
-import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
@@ -34,6 +30,9 @@ import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar
+import org.sparkproject.connect.grpc.StatusRuntimeException
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.{Any, ByteString}
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
@@ -427,7 +426,7 @@ class SparkConnectServiceSuite
         proto.Command
           .newBuilder()
           .setExtension(
-            protobuf.Any.pack(
+            Any.pack(
               proto.ExamplePluginCommand
                 .newBuilder()
                 .setCustomField("SPARK-43923")

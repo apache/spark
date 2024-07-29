@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import scala.jdk.CollectionConverters._
 
-import io.grpc.ManagedChannel
+import org.sparkproject.connect.grpc.ManagedChannel
 
 import org.apache.spark.connect.proto._
 

@@ -18,9 +18,9 @@ package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.google.protobuf.GeneratedMessageV3
-import io.grpc.{Status, StatusRuntimeException}
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.{Status, StatusRuntimeException}
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.GeneratedMessageV3
 
 import org.apache.spark.internal.Logging
 

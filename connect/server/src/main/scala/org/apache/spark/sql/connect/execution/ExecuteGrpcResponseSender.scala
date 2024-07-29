@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.execution
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.Message
-import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
+import org.sparkproject.connect.grpc.stub.{ServerCallStreamObserver, StreamObserver}
+import org.sparkproject.connect.protobuf.Message
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto.ExecutePlanResponse

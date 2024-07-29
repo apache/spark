@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.common
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.{ByteString, Message}
-import com.google.protobuf.Descriptors.FieldDescriptor.JavaType
+import org.sparkproject.connect.protobuf.{ByteString, Message}
+import org.sparkproject.connect.protobuf.Descriptors.FieldDescriptor.JavaType
 
 private[connect] class Abbreviator(thresholds: Map[String, Int]) extends Serializable {
   private val format = java.text.NumberFormat.getInstance()

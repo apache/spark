@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.util.control.NonFatal
 
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand

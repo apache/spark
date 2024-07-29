@@ -21,9 +21,9 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import io.grpc.{ManagedChannel, StatusRuntimeException}
-import io.grpc.protobuf.StatusProto
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.{ManagedChannel, StatusRuntimeException}
+import org.sparkproject.connect.grpc.protobuf.StatusProto
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging

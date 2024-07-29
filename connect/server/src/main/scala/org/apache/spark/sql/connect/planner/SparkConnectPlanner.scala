@@ -24,12 +24,12 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import com.google.common.base.Throwables
-import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
-import io.grpc.{Context, Status, StatusRuntimeException}
-import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.sparkproject.connect.grpc.{Context, Status, StatusRuntimeException}
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.guava.base.Throwables
+import org.sparkproject.connect.guava.collect.{Lists, Maps}
+import org.sparkproject.connect.protobuf.{Any => ProtoAny, ByteString}
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}

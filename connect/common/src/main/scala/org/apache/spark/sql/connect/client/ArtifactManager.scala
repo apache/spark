@@ -30,11 +30,11 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import Artifact._
-import com.google.protobuf.ByteString
-import io.grpc.StatusRuntimeException
-import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.apache.commons.lang3.StringUtils
+import org.sparkproject.connect.grpc.StatusRuntimeException
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto

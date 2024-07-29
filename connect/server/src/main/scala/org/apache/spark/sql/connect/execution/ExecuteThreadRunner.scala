@@ -22,8 +22,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import com.google.protobuf.Message
 import org.apache.commons.lang3.StringUtils
+import org.sparkproject.connect.protobuf.Message
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto

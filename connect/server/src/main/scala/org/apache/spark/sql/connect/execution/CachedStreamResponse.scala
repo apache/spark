@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.execution
 
-import com.google.protobuf.MessageLite
+import org.sparkproject.connect.protobuf.MessageLite
 
 private[execution] case class CachedStreamResponse[T <: MessageLite](
     // the actual cached response

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.common
 
-import com.google.protobuf.{CodedInputStream, InvalidProtocolBufferException, Message, Parser}
+import org.sparkproject.connect.protobuf.{CodedInputStream, InvalidProtocolBufferException, Message, Parser}
 
 private[sql] object ProtoUtils {
   def abbreviate[T <: Message](message: T, maxStringSize: Int = 1024): T = {

@@ -28,7 +28,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.ScalaReflection

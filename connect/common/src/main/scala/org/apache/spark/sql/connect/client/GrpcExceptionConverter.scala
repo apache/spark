@@ -21,11 +21,11 @@ import java.time.DateTimeException
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import com.google.rpc.ErrorInfo
-import io.grpc.{ManagedChannel, StatusRuntimeException}
-import io.grpc.protobuf.StatusProto
 import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods
+import org.sparkproject.connect.google_protos.rpc.ErrorInfo
+import org.sparkproject.connect.grpc.{ManagedChannel, StatusRuntimeException}
+import org.sparkproject.connect.grpc.protobuf.StatusProto
 
 import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, SparkConnectServiceGrpc, UserContext}

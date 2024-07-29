@@ -19,14 +19,14 @@ package org.apache.spark.sql.connect.service
 
 import scala.util.Random
 
-import com.google.protobuf.Message
-import com.google.protobuf.util.JsonFormat
-import io.grpc.ForwardingServerCall.SimpleForwardingServerCall
-import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
-import io.grpc.Metadata
-import io.grpc.ServerCall
-import io.grpc.ServerCallHandler
-import io.grpc.ServerInterceptor
+import org.sparkproject.connect.grpc.ForwardingServerCall.SimpleForwardingServerCall
+import org.sparkproject.connect.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
+import org.sparkproject.connect.grpc.Metadata
+import org.sparkproject.connect.grpc.ServerCall
+import org.sparkproject.connect.grpc.ServerCallHandler
+import org.sparkproject.connect.grpc.ServerInterceptor
+import org.sparkproject.connect.protobuf.Message
+import org.sparkproject.connect.protobuf.util.JsonFormat
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DESCRIPTION, MESSAGE}

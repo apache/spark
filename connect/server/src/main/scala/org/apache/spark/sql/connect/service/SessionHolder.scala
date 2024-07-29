@@ -27,8 +27,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
-import com.google.common.base.Ticker
-import com.google.common.cache.{Cache, CacheBuilder}
+import org.sparkproject.connect.guava.base.Ticker
+import org.sparkproject.connect.guava.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator

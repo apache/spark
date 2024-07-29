@@ -25,9 +25,9 @@ import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
-import com.google.common.cache.{CacheBuilder, CacheLoader}
-import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
+import org.sparkproject.connect.grpc.ClientInterceptor
+import org.sparkproject.connect.guava.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.connect.proto

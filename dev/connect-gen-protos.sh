@@ -36,7 +36,7 @@ if [[ $# -eq 1 ]]; then
   OUTPUT_PATH=$1
 fi
 
-pushd connect/common/src/main
+pushd sql/connect-api/src/main
 
 LICENSE=$(cat <<'EOF'
 #

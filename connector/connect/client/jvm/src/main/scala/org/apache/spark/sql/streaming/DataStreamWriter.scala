@@ -22,7 +22,7 @@ import java.util.concurrent.TimeoutException
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
