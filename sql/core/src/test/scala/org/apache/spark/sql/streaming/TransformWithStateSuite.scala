@@ -1165,28 +1165,38 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
+        val clock = new StreamManualClock
         val result = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.None(),
+            TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            triggerClock = clock),
           AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "1")),
+          AdvanceManualClock(1 * 1000),
           StopStream
         )
         val result2 = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessorWithTTL(),
-            TimeMode.None(),
+            TimeMode.ProcessingTime(),
             OutputMode.Update())
         testStream(result2, OutputMode.Update())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            triggerClock = clock),
           AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
           ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
-            assert(t.getMessage.contains("is not supported"))
+              assert(t.getMessage.contains("StructField(ttlExpirationMs,LongType,true)"))
           }
         )
       }
