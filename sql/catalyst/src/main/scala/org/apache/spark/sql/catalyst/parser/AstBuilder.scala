@@ -3820,7 +3820,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
     DropNamespace(
-      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident)),
       ctx.EXISTS != null,
       ctx.CASCADE != null)
   }
@@ -3838,7 +3838,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     withOrigin(ctx) {
       val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.propertyList), ctx)
       SetNamespaceProperties(
-        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident)),
         properties)
     }
   }
@@ -3854,7 +3854,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
       SetNamespaceLocation(
-        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident)),
         visitLocationSpec(ctx.locationSpec))
     }
   }
@@ -3880,7 +3880,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
     withOrigin(ctx) {
       DescribeNamespace(
-        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)),
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident)),
         ctx.EXTENDED != null)
     }
 
@@ -4340,7 +4340,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     SetCatalogAndNamespace(
-      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident)))
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident)))
   }
 
   /**
@@ -4348,7 +4348,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     val ns = if (ctx.identifierReference() != null) {
-      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident))
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident))
     } else {
       CurrentNamespace
     }
@@ -4375,7 +4375,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
       ShowTablePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
     }.getOrElse {
       val ns = if (ctx.identifierReference() != null) {
-        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident))
+        withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident))
       } else {
         CurrentNamespace
       }
@@ -4388,7 +4388,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    */
   override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
     val ns = if (ctx.identifierReference() != null) {
-      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedIdentifier(ident))
+      withIdentClause(ctx.identifierReference, Nil, (ident, _) => UnresolvedNamespace(ident))
     } else {
       CurrentNamespace
     }
@@ -5333,7 +5333,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
         throw QueryParsingErrors.showFunctionsInvalidPatternError(ctx.legacy.getText, ctx.legacy)
       }
       ShowFunctions(
-        withIdentClause(ctx.ns, Nil, (ident, _) => UnresolvedIdentifier(ident)),
+        withIdentClause(ctx.ns, Nil, (ident, _) => UnresolvedNamespace(ident)),
         userScope, systemScope, pattern)
     } else if (legacy.isDefined) {
       val ns = if (legacy.get.length > 1) {
