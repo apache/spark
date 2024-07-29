@@ -429,6 +429,31 @@ class StreamingTestsMixin:
             result = self.spark.sql("SELECT value FROM output_table").collect()
             self.assertTrue(len(result) > 0)
 
+    def test_streaming_write_to_table_cluster_by(self):
+        with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
+            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+            q = df.writeStream.clusterBy("value").toTable(
+                "output_table", format="parquet", checkpointLocation=tmpdir
+            )
+            self.assertTrue(q.isActive)
+            time.sleep(10)
+            q.stop()
+            result = self.spark.sql("DESCRIBE output_table").collect()
+            self.assertEqual(
+                set(
+                    [
+                        Row(col_name="timestamp", data_type="timestamp", comment=None),
+                        Row(col_name="value", data_type="bigint", comment=None),
+                        Row(col_name="# Clustering Information", data_type="", comment=""),
+                        Row(col_name="# col_name", data_type="data_type", comment="comment"),
+                        Row(col_name="value", data_type="bigint", comment=None),
+                    ]
+                ),
+                set(result),
+            )
+            result = self.spark.sql("SELECT value FROM output_table").collect()
+            self.assertTrue(len(result) > 0)
+
     def test_streaming_with_temporary_view(self):
         """
         This verifies createOrReplaceTempView() works with a streaming dataframe. An SQL

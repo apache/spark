@@ -384,7 +384,7 @@ object FunctionRegistry {
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
-    expression[CaseWhen]("when"),
+    CaseWhen.registryEntry,
 
     // math functions
     expression[Acos]("acos"),

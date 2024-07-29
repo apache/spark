@@ -445,6 +445,25 @@ class DataStreamWriter:
 
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
 
+    @overload
+    def clusterBy(self, *cols: str) -> "DataStreamWriter":
+        ...
+
+    @overload
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
+        ...
+
+    def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]
+        # Clear any existing columns (if any).
+        while len(self._write_proto.clustering_column_names) > 0:
+            self._write_proto.clustering_column_names.pop()
+        self._write_proto.clustering_column_names.extend(cast(List[str], cols))
+        return self
+
+    clusterBy.__doc__ = PySparkDataStreamWriter.clusterBy.__doc__
+
     def queryName(self, queryName: str) -> "DataStreamWriter":
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
             raise PySparkValueError(

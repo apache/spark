@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
@@ -248,10 +249,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
 
         val output = analyzedQuery.output
+
+        val outputByName = HashMap(output.map(o => o.name -> o): _*)
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
-          output.find(_.name == partCol).get
+          outputByName(partCol)
         }
-        val newOutput = output.filterNot(partitionAttrs.contains) ++ partitionAttrs
+        val partitionAttrsSet = HashSet(partitionAttrs: _*)
+        val newOutput = output.filterNot(partitionAttrsSet.contains) ++ partitionAttrs
+
         val reorderedQuery = if (newOutput == output) {
           analyzedQuery
         } else {
@@ -263,12 +268,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
+        val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)
         val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
-          normalizedTable.schema.find(_.name == partCol).get
+          normalizedSchemaByName(partCol)
         }
-
-        val reorderedSchema =
-          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+        val partitionSchemaSet = HashSet(partitionSchema: _*)
+        val reorderedSchema = StructType(
+          normalizedTable.schema.filterNot(partitionSchemaSet.contains) ++ partitionSchema
+        )
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
@@ -360,8 +367,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         messageParameters = Map.empty)
     }
 
+    val normalizedPartitionColsSet = HashSet(normalizedPartitionCols: _*)
     schema
-      .filter(f => normalizedPartitionCols.contains(f.name))
+      .filter(f => normalizedPartitionColsSet.contains(f.name))
       .foreach { field =>
         if (!PartitioningUtils.canPartitionOn(field.dataType)) {
           throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
