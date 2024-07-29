@@ -1000,7 +1000,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"insert into $table values ('aaa', 'aaa')")
         sql(s"insert into $table values ('AAA', 'aaa')")
 
-        checkAnswer(sql(s"select count(*) from $table group by s, a"), Seq(Row(2)))
+        val df = sql(s"select count(*) from $table group by s")
+
+        checkAnswer(df, Seq(Row(2)))
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: ObjectHashAggregateExec => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortMergeJoinExec => ()
+          }.isEmpty
+        )
       }
     }
   }
@@ -1016,7 +1032,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"insert into $table values (map('aaa', 'aaa'))")
         sql(s"insert into $table values (map('AAA', 'aaa'))")
 
-        checkAnswer(sql(s"select count(*) from $table group by m"), Seq(Row(2)))
+        val df = sql(s"select count(*) from $table group by m")
+
+        checkAnswer(df, Seq(Row(2)))
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: ObjectHashAggregateExec => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortMergeJoinExec => ()
+          }.isEmpty
+        )
       }
     }
   }
