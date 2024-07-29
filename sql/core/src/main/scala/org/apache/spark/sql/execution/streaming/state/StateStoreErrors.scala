@@ -191,11 +191,11 @@ object StateStoreErrors {
   }
 }
 
-class StateStoreDuplicateStateVariableDefined(stateName: String)
+class StateStoreDuplicateStateVariableDefined(stateVarName: String)
   extends SparkRuntimeException(
     errorClass = "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED",
     messageParameters = Map(
-      "stateName" -> stateName
+      "stateVarName" -> stateVarName
     )
   )
 
@@ -209,15 +209,16 @@ class StateStoreInvalidConfigAfterRestart(configName: String, oldConfig: String,
     )
   )
 
-class StateStoreInvalidVariableTypeChange(stateName: String, oldType: String, newType: String)
+class StateStoreInvalidVariableTypeChange(stateVarName: String, oldType: String, newType: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
     messageParameters = Map(
-      "stateName" -> stateName,
+      "stateVarName" -> stateVarName,
       "oldType" -> oldType,
       "newType" -> newType
     )
   )
+
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",

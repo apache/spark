@@ -3805,7 +3805,7 @@
   },
   "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
     "message" : [
-      "State variable with name <stateName> has already been defined in the StatefulProcessor."
+      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
     ],
     "sqlState" : "42802"
   },
@@ -3872,7 +3872,7 @@
   },
   "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
     "message" : [
-      "Cannot change <stateName> to <newType> between query restarts. Please set <stateName> to <oldType>, or restart with a new checkpoint directory."
+      "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
     ],
     "sqlState" : "42K06"
   },

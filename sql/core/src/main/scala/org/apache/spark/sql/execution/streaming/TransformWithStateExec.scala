@@ -443,25 +443,6 @@ case class TransformWithStateExec(
     new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
-  private def checkStateVariableEquality(
-      oldStateVariableInfos: List[TransformWithStateVariableInfo]): Unit = {
-    val newStateVariableInfos = getStateVariableInfos()
-    oldStateVariableInfos.foreach { oldInfo =>
-      val newInfo = newStateVariableInfos.get(oldInfo.stateName)
-      newInfo match {
-        case Some(stateVarInfo) =>
-          if (oldInfo.stateVariableType != stateVarInfo.stateVariableType) {
-            throw StateStoreErrors.invalidVariableTypeChange(
-              stateVarInfo.stateName,
-              oldInfo.stateVariableType.toString,
-              stateVarInfo.stateVariableType.toString
-            )
-          }
-        case None =>
-      }
-    }
-  }
-
   override def validateNewMetadata(
       oldOperatorMetadata: OperatorStateMetadata,
       newOperatorMetadata: OperatorStateMetadata): Unit = {
@@ -475,7 +456,6 @@ case class TransformWithStateExec(
           newMetadataV2.operatorPropertiesJson)
         TransformWithStateOperatorProperties.validateOperatorProperties(
           oldOperatorProps, newOperatorProps)
-        checkStateVariableEquality(oldOperatorProps.stateVariables)
       case (_, _) =>
     }
   }

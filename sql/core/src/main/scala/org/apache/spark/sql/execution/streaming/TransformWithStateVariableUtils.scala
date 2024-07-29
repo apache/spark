@@ -117,5 +117,23 @@ object TransformWithStateOperatorProperties extends Logging {
       throw StateStoreErrors.invalidConfigChangedAfterRestart(
         "outputMode", oldOperatorProperties.outputMode, newOperatorProperties.outputMode)
     }
+    val oldStateVariableInfos = oldOperatorProperties.stateVariables
+    val newStateVariableInfos = newOperatorProperties.stateVariables.map { stateVarInfo =>
+      stateVarInfo.stateName -> stateVarInfo
+    }.toMap
+    oldStateVariableInfos.foreach { oldInfo =>
+      val newInfo = newStateVariableInfos.get(oldInfo.stateName)
+      newInfo match {
+        case Some(stateVarInfo) =>
+          if (oldInfo.stateVariableType != stateVarInfo.stateVariableType) {
+            throw StateStoreErrors.invalidVariableTypeChange(
+              stateVarInfo.stateName,
+              oldInfo.stateVariableType.toString,
+              stateVarInfo.stateVariableType.toString
+            )
+          }
+        case None =>
+      }
+    }
   }
 }
