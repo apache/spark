@@ -91,8 +91,8 @@ abstract class StatePartitionReaderBase(
 
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
-      useColumnFamilies = false, storeConf, hadoopConf.value,
-      useMultipleValuesPerKey = false)
+      useColumnFamilies = false, columnFamilyIds = Map.empty, storeConf,
+      hadoopConf.value, useMultipleValuesPerKey = false)
   }
 
   protected val iter: Iterator[InternalRow]

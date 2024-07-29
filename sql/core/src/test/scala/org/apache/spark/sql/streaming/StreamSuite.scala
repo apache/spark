@@ -1477,6 +1477,7 @@ class TestStateStoreProvider extends StateStoreProvider {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
+      columnFamilyIds: Map[String, Short],
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {

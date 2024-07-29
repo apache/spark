@@ -53,7 +53,8 @@ case class StatefulOperatorStateInfo(
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
-    numPartitions: Int) {
+    numPartitions: Int,
+    columnFamilyIds: Map[String, Short] = Map.empty) {
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
       s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"

@@ -242,7 +242,17 @@ class IncrementalExecution(
             metadataWriter.write(metadata)
           case _ =>
         }
-        statefulOp
+        statefulOp match {
+          case tws: TransformWithStateExec =>
+            // create map of columnFamilyName -> columnFamilyId
+            val columnFamilySchemas = schemaValidationResult.head.newSchemas
+            val columnFamilyIds = columnFamilySchemas.map { case schema =>
+              schema.colFamilyName -> schema.colFamilyId
+            }.toMap
+            val stateInfo = tws.getStateInfo
+            tws.copy(stateInfo = Some(stateInfo.copy(columnFamilyIds = columnFamilyIds)))
+          case _ => statefulOp
+        }
     }
   }
 

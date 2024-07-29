@@ -77,6 +77,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       valueSchema,
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = false,
+      columnFamilyIds = Map.empty,
       StateStoreConf(spark.sessionState.conf),
       new Configuration)
     provider

@@ -188,7 +188,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
     val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
       provider.init(
         storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-        useColumnFamilies = true, storeConf, new Configuration)
+        useColumnFamilies = true, columnFamilyIds = Map.empty,
+        storeConf, new Configuration)
     }
     checkError(
       ex,
@@ -459,7 +460,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
-      useColumnFamilies,
+      useColumnFamilies, columnFamilyIds = Map.empty,
       new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey)
     provider
   }

@@ -379,6 +379,7 @@ trait StateStoreProvider {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
+      columnFamilyIds: Map[String, Short],
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit
@@ -440,12 +441,13 @@ object StateStoreProvider {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
+      columnFamilyIds: Map[String, Short],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      useColumnFamilies, columnFamilyIds, storeConf, hadoopConf, useMultipleValuesPerKey)
     provider
   }
 
@@ -699,6 +701,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
+      columnFamilyIds: Map[String, Short],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): ReadStateStore = {
@@ -706,7 +709,8 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, columnFamilyIds, storeConf, hadoopConf,
+      useMultipleValuesPerKey)
     storeProvider.getReadStore(version)
   }
 
@@ -718,6 +722,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
+      columnFamilyIds: Map[String, Short],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): StateStore = {
@@ -725,7 +730,8 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, columnFamilyIds, storeConf, hadoopConf,
+      useMultipleValuesPerKey)
     storeProvider.getStore(version)
   }
 
@@ -735,6 +741,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
+      columnFamilyIds: Map[String, Short],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
@@ -748,7 +755,8 @@ object StateStore extends Logging {
           storeProviderId,
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+            useColumnFamilies, columnFamilyIds, storeConf, hadoopConf,
+            useMultipleValuesPerKey)
         )
       }
 
