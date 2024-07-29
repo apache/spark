@@ -35,7 +35,7 @@ from pyspark.sql.column import Column as ParentColumn
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import with_origin_to_class
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, enum_to_value
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -52,7 +52,7 @@ def _create_column_from_literal(
     from py4j.java_gateway import JVMView
 
     sc = get_active_spark_context()
-    return cast(JVMView, sc._jvm).functions.lit(literal)
+    return cast(JVMView, sc._jvm).functions.lit(enum_to_value(literal))
 
 
 def _create_column_from_name(name: str) -> "JavaObject":
@@ -163,7 +163,7 @@ def _bin_op(
     other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
 ) -> ParentColumn:
     """Create a method for given binary operator"""
-    jc = other._jc if isinstance(other, ParentColumn) else other
+    jc = other._jc if isinstance(other, ParentColumn) else enum_to_value(other)
     njc = getattr(self._jc, name)(jc)
     return Column(njc)
 
@@ -441,20 +441,23 @@ class Column(ParentColumn):
         return _bin_op("endsWith", self, other)
 
     def like(self: ParentColumn, other: str) -> ParentColumn:
-        njc = getattr(self._jc, "like")(other)
+        njc = getattr(self._jc, "like")(enum_to_value(other))
         return Column(njc)
 
     def rlike(self: ParentColumn, other: str) -> ParentColumn:
-        njc = getattr(self._jc, "rlike")(other)
+        njc = getattr(self._jc, "rlike")(enum_to_value(other))
         return Column(njc)
 
     def ilike(self: ParentColumn, other: str) -> ParentColumn:
-        njc = getattr(self._jc, "ilike")(other)
+        njc = getattr(self._jc, "ilike")(enum_to_value(other))
         return Column(njc)
 
     def substr(
         self, startPos: Union[int, ParentColumn], length: Union[int, ParentColumn]
     ) -> ParentColumn:
+        startPos = enum_to_value(startPos)
+        length = enum_to_value(length)
+
         if type(startPos) != type(length):
             raise PySparkTypeError(
                 errorClass="NOT_SAME_TYPE",
@@ -586,12 +589,12 @@ class Column(ParentColumn):
                 errorClass="NOT_COLUMN",
                 messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
             )
-        v = value._jc if isinstance(value, Column) else value
+        v = value._jc if isinstance(value, Column) else enum_to_value(value)
         jc = self._jc.when(condition._jc, v)
         return Column(jc)
 
     def otherwise(self, value: Any) -> ParentColumn:
-        v = value._jc if isinstance(value, Column) else value
+        v = value._jc if isinstance(value, Column) else enum_to_value(value)
         jc = self._jc.otherwise(v)
         return Column(jc)
 
