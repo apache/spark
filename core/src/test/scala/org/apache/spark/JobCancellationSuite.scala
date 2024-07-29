@@ -634,7 +634,6 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     val rdd = sc.parallelize(1 to 100, 2).map(_ * 2)
     val asyncAction = rdd.collectAsync()
-
     val reason = "custom cancel reason"
 
     Future {
