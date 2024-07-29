@@ -996,11 +996,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withSQLConf(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (s string collate utf8_lcase)")
-        sql(s"insert into $table values ('aaa')")
-        sql(s"insert into $table values ('AAA')")
+        sql(s"create table $table (s string collate utf8_lcase, a string)")
+        sql(s"insert into $table values ('aaa', 'aaa')")
+        sql(s"insert into $table values ('AAA', 'aaa')")
 
-        checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
+        checkAnswer(sql(s"select count(*) from $table group by s, a"), Seq(Row(2)))
       }
     }
   }
