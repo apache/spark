@@ -20,22 +20,9 @@ from typing import Any, TYPE_CHECKING, Iterator, Union
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.value_state_client import ValueStateClient
+from pyspark.sql.types import StructType
 
 import pandas as pd
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    IntegerType,
-    LongType,
-    ShortType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    StringType,
-    BooleanType,
-    DateType,
-    TimestampType,
-)
 
 __all__ = ["StatefulProcessor", "StatefulProcessorHandle"]
 

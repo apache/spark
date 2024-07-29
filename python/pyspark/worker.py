@@ -491,7 +491,6 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
-    _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
     def wrapped(stateful_processor_api_client, key, value_series_gen):
         import pandas as pd
@@ -1650,8 +1649,6 @@ def read_udfs(pickleSer, infile, eval_type):
             return f(keys, vals)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
-        from itertools import tee
-
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1

@@ -414,7 +414,8 @@ class PandasGroupedOpsMixin:
         >>> from pyspark.sql.functions import col, split
         >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
         >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
-        >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass","org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+        >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
+        ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         >>> output_schema = StructType([
         ...     StructField("id", StringType(), True),
         ...     StructField("count", IntegerType(), True)

@@ -19,11 +19,7 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from enum import Enum
 from itertools import groupby
-import os
-import socket
-from typing import Any
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
@@ -32,7 +28,6 @@ from pyspark.serializers import (
     write_int,
     UTF8Deserializer,
     CPickleSerializer,
-    write_with_length,
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,

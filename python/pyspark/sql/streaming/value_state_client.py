@@ -19,7 +19,7 @@ from typing import Any, Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-from pyspark.sql.types import Row, StructType, _parse_datatype_string
+from pyspark.sql.types import StructType, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
 
 __all__ = ["ValueStateClient"]

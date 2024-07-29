@@ -27,7 +27,6 @@ from typing import cast
 from pyspark import SparkConf
 from pyspark.sql.functions import split, col
 from pyspark.sql.types import (
-    LongType,
     StringType,
     StructType,
     StructField,

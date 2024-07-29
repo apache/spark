@@ -18,7 +18,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, Union, cast, Tuple
+from typing import Union, cast, Tuple
 
 import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
