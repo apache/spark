@@ -29,12 +29,13 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
-class SQLExecutionSuite extends SparkFunSuite {
+class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 
   test("concurrent query execution (SPARK-10548)") {
     val conf = new SparkConf()
@@ -194,9 +195,9 @@ class SQLExecutionSuite extends SparkFunSuite {
           start.physicalPlanDescription.toLowerCase(Locale.ROOT).contains("project")
       })
       spark.sql("SELECT 1").collect()
-      spark.sql("SET k2 = v2")
-      spark.sql("SET redaction.password = 123")
-      spark.sql("SELECT 1").collect()
+      withSQLConf("k2" -> "v2", "redaction.password" -> "123") {
+        spark.sql("SELECT 1").collect()
+      }
       spark.sparkContext.listenerBus.waitUntilEmpty()
       assert(index.get() == 2)
     } finally {
@@ -226,10 +227,43 @@ class SQLExecutionSuite extends SparkFunSuite {
 
       spark.range(1).collect()
 
+      spark.sparkContext.listenerBus.waitUntilEmpty()
       assert(jobTags.contains(jobTag))
       assert(sqlJobTags.contains(jobTag))
     } finally {
       spark.sparkContext.removeJobTag(jobTag)
+      spark.stop()
+    }
+  }
+
+  test("jobGroupId property") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    val JobGroupId = "test-JobGroupId"
+    try {
+      spark.sparkContext.setJobGroup(JobGroupId, "job Group id")
+
+      var jobGroupIdOpt: Option[String] = None
+      var sqlJobGroupIdOpt: Option[String] = None
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobGroupIdOpt = Some(jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+        }
+
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlJobGroupIdOpt = e.jobGroupId
+          }
+        }
+      })
+
+      spark.range(1).collect()
+
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobGroupIdOpt.contains(JobGroupId))
+      assert(sqlJobGroupIdOpt.contains(JobGroupId))
+    } finally {
+      spark.sparkContext.clearJobGroup()
       spark.stop()
     }
   }

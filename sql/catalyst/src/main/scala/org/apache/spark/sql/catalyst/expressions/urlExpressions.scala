@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -52,7 +52,7 @@ import org.apache.spark.unsafe.types.UTF8String
 case class UrlEncode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
@@ -86,16 +86,18 @@ case class UrlEncode(child: Expression)
   since = "3.4.0",
   group = "url_funcs")
 // scalastyle:on line.size.limit
-case class UrlDecode(child: Expression)
+case class UrlDecode(child: Expression, failOnError: Boolean = true)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  def this(child: Expression) = this(child, true)
+
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
       "decode",
-      Seq(child, Literal("UTF-8")),
-      Seq(StringTypeAnyCollation, StringTypeAnyCollation))
+      Seq(child, Literal("UTF-8"), Literal(failOnError)),
+      Seq(StringTypeAnyCollation, StringTypeAnyCollation, BooleanType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
@@ -106,17 +108,49 @@ case class UrlDecode(child: Expression)
   override def prettyName: String = "url_decode"
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - This is a special version of `url_decode` that performs the same operation, but returns a NULL value instead of raising an error if the decoding cannot be performed.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression to decode
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('https%3A%2F%2Fspark.apache.org');
+       https://spark.apache.org
+  """,
+  since = "4.0.0",
+  group = "url_funcs")
+// scalastyle:on line.size.limit
+case class TryUrlDecode(expr: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(expr: Expression) = this(expr, UrlDecode(expr, false))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(expr)
+
+  override def prettyName: String = "try_url_decode"
+}
+
 object UrlCodec {
   def encode(src: UTF8String, enc: UTF8String): UTF8String = {
     UTF8String.fromString(URLEncoder.encode(src.toString, enc.toString))
   }
 
-  def decode(src: UTF8String, enc: UTF8String): UTF8String = {
+  def decode(src: UTF8String, enc: UTF8String, failOnError: Boolean): UTF8String = {
     try {
       UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
     } catch {
-      case e: IllegalArgumentException =>
-        throw QueryExecutionErrors.illegalUrlError(src)
+      case e: IllegalArgumentException if failOnError =>
+        throw QueryExecutionErrors.illegalUrlError(src, e)
+      case _: IllegalArgumentException => null
     }
   }
 }

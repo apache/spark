@@ -644,7 +644,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("analyzes column statistics in cached global temporary view") {
     withGlobalTempView("gTempView") {
-      val globalTempDB = spark.sharedState.globalTempViewManager.database
+      val globalTempDB = spark.sharedState.globalTempDB
       val e1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }
@@ -850,7 +850,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`db_not_exists`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`db_not_exists`"))
   }
 
   test("SPARK-43383: Add rowCount statistics to LocalRelation") {

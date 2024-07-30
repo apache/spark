@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -85,7 +85,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, AbstractMapType(StringTypeAnyCollation, StringTypeAnyCollation))
+    Seq(StringTypeAnyCollation, MapType(StringType, StringType))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -243,6 +243,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
     with ExpressionWithRandomSeed {
 
   def this() = this(None)
+
+  def this(seed: Expression) = this(ExpressionWithRandomSeed.expressionToSeed(seed, "UUID"))
 
   override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 

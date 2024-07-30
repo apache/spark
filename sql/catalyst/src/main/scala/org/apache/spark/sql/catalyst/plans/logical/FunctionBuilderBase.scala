@@ -124,8 +124,7 @@ object NamedParametersSupport {
       functionName: String): Seq[Expression] = {
     val parameters: Seq[InputParameter] = functionSignature.parameters
     if (parameters.dropWhile(_.default.isEmpty).exists(_.default.isEmpty)) {
-      throw QueryCompilationErrors.unexpectedRequiredParameterInFunctionSignature(
-        functionName, functionSignature)
+      throw QueryCompilationErrors.unexpectedRequiredParameter(functionName, parameters)
     }
 
     val (positionalArgs, namedArgs) = splitAndCheckNamedArguments(args, functionName)

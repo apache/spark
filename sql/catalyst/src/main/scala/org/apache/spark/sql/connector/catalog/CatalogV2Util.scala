@@ -25,14 +25,15 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -132,6 +133,64 @@ private[sql] object CatalogV2Util {
     }
 
     Collections.unmodifiableMap(newProperties)
+  }
+
+  /**
+   * Apply ClusterBy changes to a map and return the result.
+   */
+  def applyClusterByChanges(
+      properties: Map[String, String],
+      schema: StructType,
+      changes: Seq[TableChange]): Map[String, String] = {
+    applyClusterByChanges(properties.asJava, schema, changes).asScala.toMap
+  }
+
+  /**
+   * Apply ClusterBy changes to a Java map and return the result.
+   */
+  def applyClusterByChanges(
+      properties: util.Map[String, String],
+      schema: StructType,
+      changes: Seq[TableChange]): util.Map[String, String] = {
+    val newProperties = new util.HashMap[String, String](properties)
+
+    changes.foreach {
+      case clusterBy: ClusterBy =>
+        val clusterByProp =
+          ClusterBySpec.toProperty(
+            schema,
+            ClusterBySpec(clusterBy.clusteringColumns.toIndexedSeq),
+            conf.resolver)
+        newProperties.put(clusterByProp._1, clusterByProp._2)
+
+      case _ =>
+      // ignore non-property changes
+    }
+
+    Collections.unmodifiableMap(newProperties)
+  }
+
+  /**
+   * Apply ClusterBy changes to the partitioning transforms and return the result.
+   */
+  def applyClusterByChanges(
+     partitioning: Array[Transform],
+     schema: StructType,
+     changes: Seq[TableChange]): Array[Transform] = {
+
+    var newPartitioning = partitioning
+    // If there is a clusterBy change (only the first one), we overwrite the existing
+    // clustering columns.
+    val clusterByOpt = changes.collectFirst { case c: ClusterBy => c }
+    clusterByOpt.foreach { clusterBy =>
+      newPartitioning = partitioning.map {
+        case _: ClusterByTransform => ClusterBySpec.extractClusterByTransform(
+          schema, ClusterBySpec(clusterBy.clusteringColumns.toIndexedSeq), conf.resolver)
+        case other => other
+      }
+    }
+
+    newPartitioning
   }
 
   /**
@@ -350,7 +409,6 @@ private[sql] object CatalogV2Util {
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
     }
 
   def getTable(
@@ -375,7 +433,6 @@ private[sql] object CatalogV2Util {
     } catch {
       case _: NoSuchFunctionException => None
       case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
     }
   }
 
@@ -525,10 +582,15 @@ private[sql] object CatalogV2Util {
     }
 
     if (isDefaultColumn) {
-      val e = analyze(f, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val e = analyze(
+        f,
+        statementType = "Column analysis",
+        metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+
       assert(e.resolved && e.foldable,
         "The existence default value must be a simple SQL string that is resolved and foldable, " +
           "but got: " + f.getExistenceDefaultValue().get)
+
       val defaultValue = new ColumnDefaultValue(
         f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
       val cleanedMetadata = metadataWithKeysRemoved(

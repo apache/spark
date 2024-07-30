@@ -165,8 +165,10 @@ trait CodegenSupport extends SparkPlan {
         }
       }
 
+    @scala.annotation.nowarn("cat=deprecation")
     val inputVars = inputVarsCandidate match {
-      case stream: LazyList[ExprCode] => stream.force
+      case stream: Stream[ExprCode] => stream.force
+      case lazyList: LazyList[ExprCode] => lazyList.force
       case other => other
     }
 
@@ -951,6 +953,10 @@ case class CollapseCodegenStages(
         plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
       case plan: LocalTableScanExec =>
         // Do not make LogicalTableScanExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
+      case plan: EmptyRelationExec =>
+        // Do not make EmptyRelationExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
         plan
       case plan: CommandResultExec =>

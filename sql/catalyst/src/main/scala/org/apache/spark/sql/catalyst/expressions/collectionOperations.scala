@@ -713,6 +713,7 @@ case class MapConcat(children: Seq[Expression])
     }
   }
 
+  override def stateful: Boolean = true
   override def nullable: Boolean = children.exists(_.nullable)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
@@ -827,6 +828,8 @@ case class MapFromEntries(child: Expression)
   @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._3
 
   override def nullable: Boolean = child.nullable || nullEntries
+
+  override def stateful: Boolean = true
 
   @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
@@ -1259,6 +1262,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
   with ExpectsInputTypes with Nondeterministic with ExpressionWithRandomSeed {
 
   def this(child: Expression) = this(child, None)
+
+  def this(child: Expression, seed: Expression) =
+    this(child, ExpressionWithRandomSeed.expressionToSeed(seed, "shuffle"))
 
   override def stateful: Boolean = true
 
@@ -5202,6 +5208,9 @@ case class ArrayCompact(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def prettyName: String = "array_compact"
+
+  override def dataType: ArrayType =
+    child.dataType.asInstanceOf[ArrayType].copy(containsNull = false)
 
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
     copy(child = newChild)

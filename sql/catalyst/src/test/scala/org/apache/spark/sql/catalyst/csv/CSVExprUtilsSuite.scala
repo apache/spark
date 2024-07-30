@@ -33,6 +33,15 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
+  test("Does not accept null delimiter") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toDelimiterStr(null)
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.NULL_VALUE",
+      parameters = Map.empty)
+  }
+
   test("Does not accept delimiter larger than one character") {
     checkError(
       exception = intercept[SparkIllegalArgumentException]{
@@ -84,8 +93,6 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // tab in the middle of some other letters
     ("""ba\tr""", Some("ba\tr"), None),
     // null character, expressed in Unicode literal syntax
-    ("\u0000", Some("\u0000"), None),
-    // and specified directly
     ("\u0000", Some("\u0000"), None)
   )
 

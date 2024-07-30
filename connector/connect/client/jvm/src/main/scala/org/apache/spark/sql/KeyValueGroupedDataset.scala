@@ -27,7 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
-import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
+import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
@@ -157,8 +157,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.5.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
@@ -186,8 +184,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.5.0
    */
   def flatMapSortedGroups[U](
@@ -429,8 +425,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.5.0
    */
   def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
@@ -450,8 +444,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.5.0
    */
   def cogroupSorted[U, R](
@@ -1031,7 +1023,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val inputEncoders = Seq(vEncoder, vEncoder)
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = f,
       inputEncoders = inputEncoders,
       outputEncoder = vEncoder)
@@ -1091,7 +1083,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
       inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
     val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = nf,
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
@@ -1110,7 +1102,7 @@ private object KeyValueGroupedDatasetImpl {
       ds: Dataset[V],
       kEncoder: AgnosticEncoder[K],
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, K, V] = {
-    val gf = ScalarUserDefinedFunction(
+    val gf = ScalaUserDefinedFunction(
       function = groupingFunc,
       inputEncoders = ds.agnosticEncoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
@@ -1132,7 +1124,7 @@ private object KeyValueGroupedDatasetImpl {
       vEncoder: AgnosticEncoder[V],
       groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     // Use a dummy udf to pass the K V encoders
-    val dummyGroupingFunc = ScalarUserDefinedFunction(
+    val dummyGroupingFunc = ScalaUserDefinedFunction(
       function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
       outputEncoder = kEncoder).apply(col("*"))

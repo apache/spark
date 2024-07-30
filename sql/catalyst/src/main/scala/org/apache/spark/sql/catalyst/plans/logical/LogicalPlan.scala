@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -25,10 +27,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 abstract class LogicalPlan
@@ -103,7 +106,20 @@ abstract class LogicalPlan
    */
   lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
-  override protected def statePrefix = if (!resolved) "'" else super.statePrefix
+  override protected def statePrefix = {
+    if (!resolved) {
+      "'"
+    } else {
+      val prefixFromSuper = super.statePrefix
+      // Ancestor class could mark something on the prefix, including 'invalid'. Add a marker for
+      // `streaming` only when there is no marker from ancestor class.
+      if (prefixFromSuper.isEmpty && isStreaming) {
+        "~"
+      } else {
+        prefixFromSuper
+      }
+    }
+  }
 
   /**
    * Returns true if all its children of this query plan have been resolved.
@@ -215,6 +231,33 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
 }
 
 /**
+ * A abstract class for LogicalQueryStage that is visible in logical rewrites.
+ */
+abstract class LogicalQueryStage extends LeafNode {
+  override protected val nodePatterns: Seq[TreePattern] = Seq(LOGICAL_QUERY_STAGE)
+
+  /**
+   * Returns the logical plan that is included in this query stage
+   */
+  def logicalPlan: LogicalPlan
+
+  /**
+   * Returns the physical plan.
+   */
+  def physicalPlan: QueryPlan[_]
+
+  /**
+   * Return true if the physical stage is materialized
+   */
+  def isMaterialized: Boolean
+
+  /**
+   * Return true if the physical plan corresponds directly to a stage
+   */
+  def isDirectStage: Boolean
+}
+
+/**
  * A logical plan node with single child.
  */
 trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
@@ -273,31 +316,35 @@ object LogicalPlanIntegrity {
    * in plan output. Returns the error message if the check does not pass.
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Option[String] = {
-    val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
-      // NOTE: we still need to filter resolved expressions here because the output of
-      // some resolved logical plans can have unresolved references,
-      // e.g., outer references in `ExistenceJoin`.
-      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType.asNullable) }
-    }.flatten
+    // SPARK-48771: rewritten using mutable collections to improve this function's performance and
+    // avoid unnecessary traversals of the query plan.
+    val exprIds = mutable.HashMap.empty[ExprId, mutable.HashSet[DataType]]
+    val ignoredExprIds = mutable.HashSet.empty[ExprId]
 
-    val ignoredExprIds = plan.collect {
+    plan.foreach {
       // NOTE: `Union` currently reuses input `ExprId`s for output references, but we cannot
       // simply modify the code for assigning new `ExprId`s in `Union#output` because
       // the modification will make breaking changes (See SPARK-32741(#29585)).
       // So, this check just ignores the `exprId`s of `Union` output.
-      case u: Union if u.resolved => u.output.map(_.exprId)
-    }.flatten.toSet
+      case u: Union if u.resolved =>
+        u.output.foreach(ignoredExprIds += _.exprId)
+      case p if canGetOutputAttrs(p) =>
+        p.output.foreach { a =>
+          // NOTE: we still need to filter resolved expressions here because the output of
+          // some resolved logical plans can have unresolved references,
+          // e.g., outer references in `ExistenceJoin`.
+          if (a.resolved) {
+            val prevTypes = exprIds.getOrElseUpdate(a.exprId, mutable.HashSet.empty[DataType])
+            prevTypes += a.dataType.asNullable
+          }
+        }
+      case _ =>
+    }
 
-    val groupedDataTypesByExprId = exprIds.filterNot { case (exprId, _) =>
-      ignoredExprIds.contains(exprId)
-    }.groupBy(_._1).values.map(_.distinct)
-
-    groupedDataTypesByExprId.collectFirst {
-      case group if group.length > 1 =>
-        val exprId = group.head._1
-        val types = group.map(_._2.sql)
+    exprIds.collectFirst {
+      case (exprId, types) if types.size > 1 && !ignoredExprIds.contains(exprId) =>
         s"Multiple attributes have the same expression ID ${exprId.id} but different data types: " +
-          types.mkString(", ") + ". The plan tree:\n" + plan.treeString
+          types.map(_.sql).mkString(", ") + ". The plan tree:\n" + plan.treeString
     }
   }
 

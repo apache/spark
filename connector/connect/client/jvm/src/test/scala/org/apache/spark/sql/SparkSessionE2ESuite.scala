@@ -108,6 +108,35 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
+  test("interrupt all - streaming queries") {
+    val q1 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    val q2 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    assert(q1.isActive)
+    assert(q2.isActive)
+
+    val interrupted = spark.interruptAll()
+
+    q1.awaitTermination(timeoutMs = 20 * 1000)
+    q2.awaitTermination(timeoutMs = 20 * 1000)
+    assert(!q1.isActive)
+    assert(!q2.isActive)
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+  }
+
   // TODO(SPARK-48139): Re-enable `SparkSessionE2ESuite.interrupt tag`
   ignore("interrupt tag") {
     val session = spark
@@ -230,6 +259,53 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
+  test("interrupt tag - streaming query") {
+    spark.addTag("foo")
+    val q1 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(spark.getTags() == Set("foo"))
+
+    spark.addTag("bar")
+    val q2 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(spark.getTags() == Set("foo", "bar"))
+
+    spark.clearTags()
+
+    spark.addTag("zoo")
+    val q3 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(spark.getTags() == Set("zoo"))
+
+    assert(q1.isActive)
+    assert(q2.isActive)
+    assert(q3.isActive)
+
+    val interrupted = spark.interruptTag("foo")
+
+    q1.awaitTermination(timeoutMs = 20 * 1000)
+    q2.awaitTermination(timeoutMs = 20 * 1000)
+    assert(!q1.isActive)
+    assert(!q2.isActive)
+    assert(q3.isActive)
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+  }
+
   test("progress is available for the spark result") {
     val result = spark
       .range(10000)
@@ -306,4 +382,62 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
         .create()
     }
   }
+
+  test("SPARK-47986: get or create after session changed") {
+    val remote = s"sc://localhost:$serverPort"
+
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
+
+    val session1 = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    assert(session1 eq SparkSession.getActiveSession.get)
+    assert(session1 eq SparkSession.getDefaultSession.get)
+    assert(session1.range(3).collect().length == 3)
+
+    session1.client.hijackServerSideSessionIdForTesting("-testing")
+
+    val e = intercept[SparkException] {
+      session1.range(3).analyze
+    }
+
+    assert(e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]"))
+    assert(!session1.client.isSessionValid)
+    assert(SparkSession.getActiveSession.isEmpty)
+    assert(SparkSession.getDefaultSession.isEmpty)
+
+    val session2 = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    assert(session1 ne session2)
+    assert(session2.client.isSessionValid)
+    assert(session2 eq SparkSession.getActiveSession.get)
+    assert(session2 eq SparkSession.getDefaultSession.get)
+    assert(session2.range(3).collect().length == 3)
+  }
+
+  test("SPARK-48810: session.stop should not throw when the session is invalid") {
+    val remote = s"sc://localhost:$serverPort"
+
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
+
+    val session = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    session.range(3).collect()
+
+    session.hijackServerSideSessionIdForTesting("-testing")
+
+    // no error is thrown here.
+    session.stop()
+  }
+
 }

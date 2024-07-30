@@ -22,7 +22,10 @@ from pyspark.errors import StreamingQueryException, PySparkValueError
 from pyspark.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
-from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.streaming.listener import (
+    StreamingQueryListener,
+    StreamingQueryProgress,
+)
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -114,7 +117,7 @@ class StreamingQuery:
     @property
     def name(self) -> str:
         """
-        Returns the user-specified name of the query, or null if not specified.
+        Returns the user-specified name of the query, or None if not specified.
         This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
         as `dataframe.writeStream.queryName("query").start()`.
         This name, if set, must be unique across all active queries.
@@ -127,14 +130,14 @@ class StreamingQuery:
         Returns
         -------
         str
-            The user-specified name of the query, or null if not specified.
+            The user-specified name of the query, or None if not specified.
 
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
-        Get the user-specified name of the query, or null if not specified.
+        Get the user-specified name of the query, or None if not specified.
 
         >>> sq.name
         'this_query'
@@ -214,8 +217,8 @@ class StreamingQuery:
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_POSITIVE",
+                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
@@ -251,7 +254,7 @@ class StreamingQuery:
         return json.loads(self._jsq.status().json())
 
     @property
-    def recentProgress(self) -> List[Dict[str, Any]]:
+    def recentProgress(self) -> List[StreamingQueryProgress]:
         """
         Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
         The number of progress updates retained for each stream is configured by Spark session
@@ -280,10 +283,10 @@ class StreamingQuery:
 
         >>> sq.stop()
         """
-        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
+        return [StreamingQueryProgress.fromJObject(p) for p in self._jsq.recentProgress()]
 
     @property
-    def lastProgress(self) -> Optional[Dict[str, Any]]:
+    def lastProgress(self) -> Optional[StreamingQueryProgress]:
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
@@ -311,7 +314,7 @@ class StreamingQuery:
         """
         lastProgress = self._jsq.lastProgress()
         if lastProgress:
-            return json.loads(lastProgress.json())
+            return StreamingQueryProgress.fromJObject(lastProgress)
         else:
             return None
 
@@ -589,8 +592,8 @@ class StreamingQueryManager:
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_POSITIVE",
+                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:

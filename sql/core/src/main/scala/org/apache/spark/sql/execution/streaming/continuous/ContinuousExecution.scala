@@ -334,7 +334,8 @@ class ContinuousExecution(
           epochUpdateThread.interrupt()
           epochUpdateThread.join()
           // The following line must be the last line because it may fail if SparkContext is stopped
-          sparkSession.sparkContext.cancelJobGroup(runId.toString)
+          sparkSession.sparkContext.cancelJobGroup(runId.toString,
+            s"Continuous execution finished for query $prettyIdString")
         }
       }
       Thread.interrupted()
@@ -445,7 +446,8 @@ class ContinuousExecution(
    */
   def stopInNewThread(error: Throwable): Unit = {
     if (failure.compareAndSet(null, error)) {
-      logError(s"Query $prettyIdString received exception $error")
+      logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} received exception " +
+        log"${MDC(ERROR, error)}")
       stopInNewThread()
     }
   }

@@ -29,7 +29,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   import ParserUtils._
 
   val setConfContext = buildContext("set example.setting.name=setting.value") { parser =>
-    parser.statement().asInstanceOf[SetConfigurationContext]
+    parser.setResetStatement().asInstanceOf[SetConfigurationContext]
   }
 
   val showFuncContext = buildContext("show functions foo.bar") { parser =>
@@ -131,6 +131,18 @@ class ParserUtilsSuite extends SparkFunSuite {
         |cd\ef"""".stripMargin) ==
       """ab
         |cdef""".stripMargin)
+
+    // String with an invalid '\' as the last character.
+    assert(unescapeSQLString(""""abc\"""") == "abc\\")
+
+    // Strings containing invalid Unicode escapes with non-hex characters.
+    assert(unescapeSQLString("\"abc\\uXXXXa\"") == "abcuXXXXa")
+    assert(unescapeSQLString("\"abc\\uxxxxa\"") == "abcuxxxxa")
+    assert(unescapeSQLString("\"abc\\UXXXXXXXXa\"") == "abcUXXXXXXXXa")
+    assert(unescapeSQLString("\"abc\\Uxxxxxxxxa\"") == "abcUxxxxxxxxa")
+    // Guard against off-by-one errors in the "all chars are hex" routine:
+    assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
+
     // scalastyle:on nonascii
   }
 

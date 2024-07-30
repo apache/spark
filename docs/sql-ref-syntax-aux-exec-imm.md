@@ -61,11 +61,11 @@ EXECUTE IMMEDIATE sql_string
 
 ```sql
 -- A self-contained execution using a literal string
-EXECUTE IMMEDIATE 'SELECT SUM(c1) FROM VALUES(?), (?)' USING 5, 6;
+EXECUTE IMMEDIATE 'SELECT SUM(col1) FROM VALUES(?), (?)' USING 5, 6;
  11
 
 -- A SQL string composed in a SQL variable
-DECLARE sqlStr = 'SELECT SUM(c1) FROM VALUES(?), (?)';
+DECLARE sqlStr = 'SELECT SUM(col1) FROM VALUES(?), (?)';
 DECLARE arg1 = 5;
 DECLARE arg2 = 6;
 EXECUTE IMMEDIATE sqlStr USING arg1, arg2;
@@ -78,9 +78,8 @@ SELECT sum;
  11
 
 -- Using named parameter markers
-SET VAR sqlStr = 'SELECT SUM(c1) FROM VALUES(:first), (:second)';
-EXECUTE IMMEDIATE sqlStr INTO (sum)
-    USING 5 AS first, arg2 AS second;
+SET VAR sqlStr = 'SELECT SUM(col1) FROM VALUES(:first), (:second)';
+EXECUTE IMMEDIATE sqlStr INTO sum USING 5 AS first, arg2 AS second;
 SELECT sum;
  11
 ```

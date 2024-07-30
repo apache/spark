@@ -30,6 +30,8 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -47,6 +49,38 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
+
+// MaintenanceErrorOnCertainPartitionsProvider is a test-only provider that throws an
+// exception during maintenance for partitions 0 and 1 (these are arbitrary choices). It is
+// used to test that an exception in a single provider's maintenance does not affect other
+// providers that do not experience exceptions.
+class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStoreProvider {
+  private var id: StateStoreId = null
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
+    id = stateStoreId
+
+    super.init(
+      stateStoreId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies,
+      storeConfs, hadoopConf, useMultipleValuesPerKey)
+  }
+
+  override def doMaintenance(): Unit = {
+    if (id.partitionId == 0 || id.partitionId == 1) {
+      throw new RuntimeException("Intentional maintenance failure")
+    }
+    super.doMaintenance()
+  }
+}
 
 class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   import FakeStateStoreProviderWithMaintenanceError._
@@ -361,7 +395,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         getData(provider, snapshotVersion - 1)
       }
       checkError(
-        e.getCause.asInstanceOf[SparkThrowable],
+        e,
         errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
         parameters = Map(
           "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
@@ -1087,14 +1121,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       var e = intercept[SparkException] {
         provider.getStore(2)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+      assert(e.getMessage.contains("does not exist"))
 
       e = intercept[SparkException] {
         getData(provider, 2, useColumnFamilies = colFamiliesEnabled)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+      assert(e.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version
       tryWithProviderResource(newStoreProvider(store.id, colFamiliesEnabled)) { reloadedProvider =>
@@ -1234,19 +1266,37 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   testWithAllCodec(s"getStore with invalid versions") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
-      def checkInvalidVersion(version: Int): Unit = {
+      def checkInvalidVersion(version: Int, isHDFSBackedStoreProvider: Boolean): Unit = {
         val e = intercept[SparkException] {
           provider.getStore(version)
         }
-        checkError(
-          e,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-          parameters = Map.empty
-        )
+        if (version < 0) {
+          checkError(
+            e,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            parameters = Map("version" -> version.toString)
+          )
+        } else {
+          if (isHDFSBackedStoreProvider) {
+            checkError(
+              e,
+              errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+              parameters = Map("fileToRead" -> ".*", "clazz" -> ".*"),
+              matchPVals = true
+            )
+          } else {
+            checkError(
+              e,
+              errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+              parameters = Map("fileToRead" -> ".*"),
+              matchPVals = true
+            )
+          }
+        }
       }
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(1)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
@@ -1256,8 +1306,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(2)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       // Update store version with some data
       val store1 = provider.getStore(1)
@@ -1266,8 +1316,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(store1.commit() === 2)
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(3)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
     }
   }
 
@@ -1442,7 +1492,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
               storeConf, hadoopConf)
           }
           checkError(
-            e.getCause.asInstanceOf[SparkThrowable],
+            e,
             errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
             parameters = Map(
               "fileToRead" -> s"$dir/0/0/1.delta",
@@ -1560,42 +1610,57 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  test("SPARK-44438: maintenance task should be shutdown on error") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
+  test("SPARK-48997: maintenance threads with exceptions unload only themselves") {
     val sqlConf = getDefaultSQLConf(
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
     )
     // Make maintenance interval small so that maintenance task is called right after scheduling.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
-    // Use the `FakeStateStoreProviderWithMaintenanceError` to run the test
-    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
-      classOf[FakeStateStoreProviderWithMaintenanceError].getName)
+    // Use the `MaintenanceErrorOnCertainPartitionsProvider` to run the test
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[MaintenanceErrorOnCertainPartitionsProvider].getName
+    )
 
-    quietly {
-      withSpark(new SparkContext(conf)) { sc =>
-        withCoordinatorRef(sc) { _ =>
-          FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.set(false)
-          val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
-          val storeConf = StateStoreConf(sqlConf)
+    val conf = new SparkConf().setMaster("local").setAppName("test")
 
-          // get the state store and kick off the maintenance task
-          StateStore.get(storeId, null, null,
-            NoPrefixKeyStateEncoderSpec(keySchema), 0, useColumnFamilies = false,
-            storeConf, sc.hadoopConfiguration)
+    withSpark(new SparkContext(conf)) { sc =>
+      withCoordinatorRef(sc) { _ =>
+        // 0 and 1's maintenance will fail
+        val provider0Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 0), UUID.randomUUID)
+        val provider1Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 1), UUID.randomUUID)
+        val provider2Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 2), UUID.randomUUID)
 
-          eventually(timeout(30.seconds)) {
-            assert(!StateStore.isMaintenanceRunning)
-          }
+        // Create provider 2 first to start the maintenance task + pool
+        StateStore.get(
+          provider2Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          // SPARK-45002: The maintenance task thread failure should not invoke the
-          // SparkUncaughtExceptionHandler which could lead to the executor process
-          // getting killed.
-          assert(!FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.get)
+        // The following 2 calls to `get` will cause the associated maintenance to fail
+        StateStore.get(
+          provider0Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          StateStore.stop()
+        StateStore.get(
+          provider1Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
+
+        // Wait for the maintenance task for all the providers to run: it should happen relatively
+        // quickly since the maintenance interval is small.
+        eventually(timeout(5.seconds)) {
+          assert(!StateStore.isLoaded(provider0Id))
+          assert(!StateStore.isLoaded(provider1Id))
+          assert(StateStore.isLoaded(provider2Id))
         }
       }
     }
@@ -1606,12 +1671,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // By default, when there is an invalid pair of value row and value schema, it should throw
     val keyRow = dataToKeyRow("key", 1)
     val valueRow = dataToValueRow(2)
-    val e = intercept[InvalidUnsafeRowException] {
+    val e = intercept[StateStoreValueRowFormatValidationFailure] {
       // Here valueRow doesn't match with prefixKeySchema
       StateStoreProvider.validateStateRowFormat(
         keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
     }
-    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+    assert(e.getMessage.contains("The streaming query failed to validate written state"))
 
     // When sqlConf.stateStoreFormatValidationEnabled is set to false and
     // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
@@ -1624,6 +1689,30 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Shouldn't throw
     StateStoreProvider.validateStateRowFormat(
       keyRow, keySchema, valueRow, keySchema, storeConf)
+  }
+
+  test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of PrefixKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of RangeKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
   }
 
   /** Return a new provider with a random id */

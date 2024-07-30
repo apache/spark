@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.functions._
@@ -332,6 +332,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on
   }
 
+  test("string substring function using columns") {
+    val df = Seq(("Spark", 2, 3)).toDF("a", "b", "c")
+    checkAnswer(df.select(substring($"a", $"b", $"c")), Row("par"))
+  }
+
   test("string encode/decode function") {
     val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
     // scalastyle:off
@@ -419,6 +424,14 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("substring_index(a, '.', 2)"),
       Row("www.apache")
     )
+
+    val testTable = "test_substring_index"
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (num int) USING parquet")
+      sql(s"INSERT INTO $testTable VALUES (1), (2), (3), (NULL)")
+      val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
+      checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
+    }
   }
 
   test("string locate function") {
@@ -1041,7 +1054,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(like(col("a"), col("b"), lit(618))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"618\"")
+      parameters = Map("sqlExpr" -> "\"618\""),
+      context = ExpectedContext("like", getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -1049,7 +1063,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(ilike(col("a"), col("b"), lit(618))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"618\"")
+      parameters = Map("sqlExpr" -> "\"618\""),
+      context = ExpectedContext("ilike", getCurrentClassCallSitePattern)
     )
 
     // scalastyle:off
@@ -1059,7 +1074,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(like(col("a"), col("b"), lit("中国"))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"中国\"")
+      parameters = Map("sqlExpr" -> "\"中国\""),
+      context = ExpectedContext("like", getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -1067,7 +1083,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(ilike(col("a"), col("b"), lit("中国"))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"中国\"")
+      parameters = Map("sqlExpr" -> "\"中国\""),
+      context = ExpectedContext("ilike", getCurrentClassCallSitePattern)
     )
     // scalastyle:on
   }
@@ -1267,5 +1284,14 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         "value" -> "'[a\\\\d]{0, 2}'"
       )
     )
+  }
+
+  test("SPARK-48806: url_decode exception") {
+    val e = intercept[SparkIllegalArgumentException] {
+      sql("select url_decode('https%3A%2F%2spark.apache.org')").collect()
+    }
+    assert(e.getCause.isInstanceOf[IllegalArgumentException] &&
+      e.getCause.getMessage
+        .startsWith("URLDecoder: Illegal hex characters in escape (%) pattern - "))
   }
 }

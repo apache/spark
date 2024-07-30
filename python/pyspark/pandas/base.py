@@ -903,7 +903,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> ser = ps.Series([5, 6, np.NaN])
+        >>> ser = ps.Series([5, 6, np.nan])
         >>> ser.isna()  # doctest: +NORMALIZE_WHITESPACE
         0    False
         1    False
@@ -939,7 +939,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         --------
         Show which entries in a Series are not NA.
 
-        >>> ser = ps.Series([5, 6, np.NaN])
+        >>> ser = ps.Series([5, 6, np.nan])
         >>> ser
         0    5.0
         1    6.0

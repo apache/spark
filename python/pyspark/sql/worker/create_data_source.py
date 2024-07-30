@@ -75,8 +75,8 @@ def main(infile: IO, outfile: IO) -> None:
         data_source_cls = read_command(pickleSer, infile)
         if not (isinstance(data_source_cls, type) and issubclass(data_source_cls, DataSource)):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
                     "expected": "a subclass of DataSource",
                     "actual": f"'{type(data_source_cls).__name__}'",
                 },
@@ -85,8 +85,8 @@ def main(infile: IO, outfile: IO) -> None:
         # Check the name method is a class method.
         if not inspect.ismethod(data_source_cls.name):
             raise PySparkTypeError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
                     "expected": "'name()' method to be a classmethod",
                     "actual": f"'{type(data_source_cls.name).__name__}'",
                 },
@@ -98,8 +98,8 @@ def main(infile: IO, outfile: IO) -> None:
         # Check if the provider name matches the data source's name.
         if provider.lower() != data_source_cls.name().lower():
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
                     "expected": f"provider with name {data_source_cls.name()}",
                     "actual": f"'{provider}'",
                 },
@@ -111,8 +111,8 @@ def main(infile: IO, outfile: IO) -> None:
             user_specified_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             if not isinstance(user_specified_schema, StructType):
                 raise PySparkAssertionError(
-                    error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                    message_parameters={
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
                         "expected": "the user-defined schema to be a 'StructType'",
                         "actual": f"'{type(data_source_cls).__name__}'",
                     },
@@ -131,8 +131,8 @@ def main(infile: IO, outfile: IO) -> None:
             data_source = data_source_cls(options=options)  # type: ignore
         except Exception as e:
             raise PySparkRuntimeError(
-                error_class="DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"error": str(e)},
+                errorClass="DATA_SOURCE_CREATE_ERROR",
+                messageParameters={"error": str(e)},
             )
 
         # Get the schema of the data source.
@@ -149,8 +149,8 @@ def main(infile: IO, outfile: IO) -> None:
                     is_ddl_string = True
             except NotImplementedError:
                 raise PySparkRuntimeError(
-                    error_class="NOT_IMPLEMENTED",
-                    message_parameters={"feature": "DataSource.schema"},
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={"feature": "DataSource.schema"},
                 )
         else:
             schema = user_specified_schema  # type: ignore
