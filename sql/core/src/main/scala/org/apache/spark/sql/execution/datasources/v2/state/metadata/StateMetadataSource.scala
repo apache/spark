@@ -47,7 +47,8 @@ case class StateMetadataTableEntry(
     minBatchId: Long,
     maxBatchId: Long,
     operatorPropertiesJson: String,
-    numColsPrefixKey: Int) {
+    numColsPrefixKey: Int,
+    stateSchemaFilePath: Option[String]) {
   def toRow(): InternalRow = {
     new GenericInternalRow(
       Array[Any](operatorId,
@@ -215,6 +216,8 @@ class StateMetadataPartitionReader(
     }
   }
 
+  // From v2, we also need to populate the operatorProperties and stateSchemaFilePath fields
+  // for use with the state data source reader
   private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)
@@ -228,7 +231,8 @@ class StateMetadataPartitionReader(
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
               null,
-              stateStoreMetadata.numColsPrefixKey
+              stateStoreMetadata.numColsPrefixKey,
+              None
             )
           }
         case v2: OperatorStateMetadataV2 =>
@@ -240,7 +244,8 @@ class StateMetadataPartitionReader(
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
               v2.operatorPropertiesJson,
-              -1 // numColsPrefixKey is not available in OperatorStateMetadataV2
+              -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
+              Some(stateStoreMetadata.stateSchemaFilePath)
             )
           }
         }
