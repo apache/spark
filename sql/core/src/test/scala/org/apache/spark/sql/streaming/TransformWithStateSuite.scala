@@ -23,7 +23,7 @@ import java.util.UUID
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -1070,12 +1070,19 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Append())
+
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
-          ExpectFailure[StateStoreInvalidConfigAfterRestart] { t =>
-            assert(t.getMessage.contains("outputMode"))
-            assert(t.getMessage.contains("is not equal"))
+          ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              parameters = Map(
+                "configName" -> "outputMode",
+                "oldConfig" -> "Update",
+                "newConfig" -> "Append")
+            )
           }
         )
       }
@@ -1110,7 +1117,14 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
           ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
-            assert(t.getMessage.contains("Cannot change countState"))
+            checkError(
+              t.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+              parameters = Map(
+                "stateVarName" -> "countState",
+                "newType" -> "ListState",
+                "oldType" -> "ValueState")
+            )
           }
         )
       }
@@ -1149,9 +1163,15 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             triggerClock = clock),
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
-          ExpectFailure[StateStoreInvalidConfigAfterRestart] { t =>
-            assert(t.getMessage.contains("timeMode"))
-            assert(t.getMessage.contains("is not equal"))
+          ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              parameters = Map(
+                "configName" -> "timeMode",
+                "oldConfig" -> "NoTime",
+                "newConfig" -> "ProcessingTime")
+            )
           }
         )
       }
@@ -1196,7 +1216,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
           ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
-              assert(t.getMessage.contains("StructField(ttlExpirationMs,LongType,true)"))
+            checkError(
+              t.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+              parameters = Map(
+                "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
+                "newValueSchema" ->
+                  ("StructType(StructField(value,StructType(StructField(value,LongType,false))," +
+                    "true),StructField(ttlExpirationMs,LongType,true))")
+              )
+            )
           }
         )
       }

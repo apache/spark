@@ -174,7 +174,6 @@ object StateStoreErrors {
     new StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass)
   }
 
-
   def invalidConfigChangedAfterRestart(configName: String, oldConfig: String, newConfig: String):
     StateStoreInvalidConfigAfterRestart = {
     new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)

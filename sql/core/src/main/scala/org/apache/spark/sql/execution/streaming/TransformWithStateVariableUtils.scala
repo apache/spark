@@ -29,8 +29,22 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 /**
  * This file contains utility classes and functions for managing state variables in
  * the operatorProperties field of the OperatorStateMetadata for TransformWithState.
- * We use these utils to read and write state variable information for validation purposes
+ * We use these utils to read and write state variable information for validation purposes.
  */
+object TransformWithStateVariableUtils {
+  def getValueState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.ValueState, ttlEnabled)
+  }
+
+  def getListState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.ListState, ttlEnabled)
+  }
+
+  def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
+  }
+}
+
 // Enum of possible State Variable types
 object StateVariableType extends Enumeration {
   type StateVariableType = Value
@@ -68,24 +82,11 @@ object TransformWithStateVariableInfo {
     TransformWithStateVariableInfo(stateName, stateVariableType, ttlEnabled)
   }
 }
-object TransformWithStateVariableUtils {
-  def getValueState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-    TransformWithStateVariableInfo(stateName, StateVariableType.ValueState, ttlEnabled)
-  }
-
-  def getListState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-    TransformWithStateVariableInfo(stateName, StateVariableType.ListState, ttlEnabled)
-  }
-
-  def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-    TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
-  }
-}
 
 case class TransformWithStateOperatorProperties(
-    val timeMode: String,
-    val outputMode: String,
-    val stateVariables: List[TransformWithStateVariableInfo]) {
+    timeMode: String,
+    outputMode: String,
+    stateVariables: List[TransformWithStateVariableInfo]) {
 
   def json: String = {
     val stateVariablesJson = stateVariables.map(_.jsonValue)

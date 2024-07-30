@@ -224,9 +224,9 @@ class IncrementalExecution(
                   hadoopConf, ssw.operatorStateMetadataVersion).read()
               } catch {
                 case e: Exception =>
-                  logWarning(s"Error reading metadata path for stateful operator. This " +
-                    s"may due to no prior committed batch, or previously run on lower " +
-                    s"versions: ${e.getMessage}")
+                  logWarning(log"Error reading metadata path for stateful operator. This " +
+                    log"may due to no prior committed batch, or previously run on lower " +
+                    log"versions: ${MDC(ERROR, e.getMessage)}")
                 None
               }
               oldMetadata match {
