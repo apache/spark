@@ -233,7 +233,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.RelationalGroupedDataset$*" // private[sql]
       ),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
 
       // SparkSession
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
@@ -248,11 +247,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
       // SparkSession#implicits
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#implicits._sqlContext"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#implicits.session"),
 
@@ -285,26 +281,9 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.PythonStreamingQueryListenerWrapper"),
       ProblemFilters.exclude[MissingTypesProblem](
         "org.apache.spark.sql.streaming.StreamingQueryListener$Event"),
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryIdleEvent"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryIdleEvent.logEvent"),
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryProgressEvent.logEvent"),
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.logEvent"),
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryTerminatedEvent.logEvent"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
 
       // Artifact Manager
@@ -341,9 +320,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.KeyValueGroupedDatasetImpl"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.KeyValueGroupedDatasetImpl$"),
-      ProblemFilters.exclude[ReversedMissingMethodProblem](
-        "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
-      ),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.SessionCleaner"),
 
       // New public APIs added in the client
@@ -493,7 +469,7 @@ object CheckConnectJvmClientCompatibility {
         }
       }
     excludeRules.filterNot(effectiveExcludeRules.contains).foreach { rule =>
-      println(s"Warning: Exclude rule $rule did not filtered out any problem.")
+      println(s"Warning: $rule did not filter out any problems.")
     }
     problems
   }
