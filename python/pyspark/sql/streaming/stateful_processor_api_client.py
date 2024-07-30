@@ -36,8 +36,6 @@ class StatefulProcessorHandleState(Enum):
 
 
 class StatefulProcessorApiClient:
-    import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-
     def __init__(self, state_server_port: int, key_schema: StructType) -> None:
         self.key_schema = key_schema
         self._client_socket = socket.socket()
@@ -52,21 +50,26 @@ class StatefulProcessorApiClient:
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        proto_state = self._get_proto_state(state)
+        if state == StatefulProcessorHandleState.CREATED:
+            proto_state = stateMessage.CREATED
+        elif state == StatefulProcessorHandleState.INITIALIZED:
+            proto_state = stateMessage.INITIALIZED
+        elif state == StatefulProcessorHandleState.DATA_PROCESSED:
+            proto_state = stateMessage.DATA_PROCESSED
+        else:
+            proto_state = stateMessage.CLOSED
         set_handle_state = stateMessage.SetHandleState(state=proto_state)
         handle_call = stateMessage.StatefulProcessorCall(setHandleState=set_handle_state)
         message = stateMessage.StateRequest(statefulProcessorCall=handle_call)
 
-        self._send_proto_message(message)
+        self._send_proto_message(message.SerializeToString())
 
         response_message = self._receive_proto_message()
-        status = response_message.statusCode
+        status = response_message[0]
         if status == 0:
             self.handle_state = state
         else:
-            raise PySparkRuntimeError(
-                f"Error setting handle state: " f"{response_message.errorMessage}"
-            )
+            raise PySparkRuntimeError(f"Error setting handle state: " f"{response_message[1]}")
 
     def set_implicit_key(self, key: Tuple) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -76,13 +79,11 @@ class StatefulProcessorApiClient:
         request = stateMessage.ImplicitGroupingKeyRequest(setImplicitKey=set_implicit_key)
         message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
 
-        self._send_proto_message(message)
+        self._send_proto_message(message.SerializeToString())
         response_message = self._receive_proto_message()
-        status = response_message.statusCode
+        status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(
-                f"Error setting implicit key: " f"{response_message.errorMessage}"
-            )
+            raise PySparkRuntimeError(f"Error setting implicit key: " f"{response_message[1]}")
 
     def remove_implicit_key(self) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -92,13 +93,11 @@ class StatefulProcessorApiClient:
         request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
         message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
 
-        self._send_proto_message(message)
+        self._send_proto_message(message.SerializeToString())
         response_message = self._receive_proto_message()
-        status = response_message.statusCode
+        status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(
-                f"Error removing implicit key: " f"{response_message.errorMessage}"
-            )
+            raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
 
     def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -112,47 +111,30 @@ class StatefulProcessorApiClient:
         call = stateMessage.StatefulProcessorCall(getValueState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
-        self._send_proto_message(message)
+        self._send_proto_message(message.SerializeToString())
         response_message = self._receive_proto_message()
-        status = response_message.statusCode
+        status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(
-                f"Error initializing value state: " f"{response_message.errorMessage}"
-            )
+            raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
-    def _get_proto_state(
-        self, state: StatefulProcessorHandleState
-    ) -> stateMessage.HandleState.ValueType:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-
-        if state == StatefulProcessorHandleState.CREATED:
-            return stateMessage.CREATED
-        elif state == StatefulProcessorHandleState.INITIALIZED:
-            return stateMessage.INITIALIZED
-        elif state == StatefulProcessorHandleState.DATA_PROCESSED:
-            return stateMessage.DATA_PROCESSED
-        else:
-            return stateMessage.CLOSED
-
-    def _send_proto_message(self, message: stateMessage.StateRequest) -> None:
-        serialized_msg = message.SerializeToString()
+    def _send_proto_message(self, message: str) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.
         write_int(0, self.sockfile)
-        write_int(len(serialized_msg), self.sockfile)
-        self.sockfile.write(serialized_msg)
+        write_int(len(message), self.sockfile)
+        self.sockfile.write(message)
         self.sockfile.flush()
 
-    def _receive_proto_message(self) -> stateMessage.StateResponse:
+    def _receive_proto_message(self) -> Tuple[int, str]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         serialized_msg = self._receive_str()
         # proto3 will not serialize the message if the value is default, in this case 0
         if len(serialized_msg) == 0:
-            return stateMessage.StateResponse(statusCode=0)
+            return 0, ""
         message = stateMessage.StateResponse()
         message.ParseFromString(serialized_msg.encode("utf-8"))
-        return message
+        return message.statusCode, message.errorMessage
 
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
