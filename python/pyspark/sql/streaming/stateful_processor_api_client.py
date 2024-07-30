@@ -17,16 +17,13 @@
 from enum import Enum
 import os
 import socket
-from typing import Union, cast, Tuple, TYPE_CHECKING
+from typing import Union, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
-
-if TYPE_CHECKING:
-    import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 

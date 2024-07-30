@@ -14,14 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Union, cast, Tuple, TYPE_CHECKING
+from typing import Any, Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import StructType, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
-
-if TYPE_CHECKING:
-    import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
 __all__ = ["ValueStateClient"]
 

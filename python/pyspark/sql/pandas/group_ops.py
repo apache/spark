@@ -409,13 +409,20 @@ class PandasGroupedOpsMixin:
         Examples
         --------
         >>> import pandas as pd # doctest: +SKIP
-        >>> from typing import Iterator
         >>> from pyspark.sql import Row
         >>> from pyspark.sql.functions import col, split
         >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
         >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
+        >>> from typing import Iterator
+        >>>
         >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
         ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+        ... # Below is a simple example of a stateful processor that counts the number of violations
+        ... # for a set of temperature sensors. A violation is defined when the temperature is above
+        ... # 100.
+        ... # The input data is a DataFrame with the following schema:
+        ... #    `id: string, temperature: long`.
+        ... # The output schema and state schema are defined as below.
         >>> output_schema = StructType([
         ...     StructField("id", StringType(), True),
         ...     StructField("count", IntegerType(), True)
