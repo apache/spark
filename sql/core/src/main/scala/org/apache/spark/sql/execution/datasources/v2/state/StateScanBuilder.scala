@@ -123,7 +123,7 @@ class StateScan(
 
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
-        stateStoreMetadata)
+        stateStoreMetadata, sourceOptions.stateVarName)
   }
 
   override def toBatch: Batch = this

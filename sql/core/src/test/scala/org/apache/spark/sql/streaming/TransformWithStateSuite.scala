@@ -26,6 +26,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -347,6 +348,28 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
       "listState", Encoders.product[TestClass])
     _mapState = getHandle.getMapState[POJOTestClass, String](
       "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
+  }
+}
+
+/** Stateful processor of single value state var with non-primitive type */
+class StatefulProcessorWithMultipleValueVars extends RunningCountStatefulProcessor {
+  @transient private var _valueState: ValueState[TestClass] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _valueState = getHandle.getValueState[TestClass](
+      "valueState", Encoders.product[TestClass])
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _valueState.getOption().getOrElse(TestClass(0L, "dummyKey")).id + 1
+    _valueState.update(TestClass(count, "dummyKey"))
+    Iterator((key, count.toString))
   }
 }
 
@@ -980,6 +1003,52 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             }
           }
         )
+      }
+    }
+  }
+
+  test("state data source integration - value state with single variable") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithMultipleValueVars(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          AddData(inputData, "b"),
+          CheckNewAnswer(("b", "1")),
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value AS groupingKey",
+          "value.id AS valueId", "value.name AS valueName",
+          "partition_id")
+
+        checkAnswer(resultDf,
+          Seq(Row("a", 1L, "dummyKey", 0), Row("b", 1L, "dummyKey", 1)))
+
+        // TODO this should fail, but currently we'll explicitly call createColFamily
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "non-exist")
+          .load()
       }
     }
   }
