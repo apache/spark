@@ -520,7 +520,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
-   * This is an Analyzer for processing default column values using built-in functions only.
+   * This is an Optimizer for convert default column expressions to foldable literals.
    */
   object DefaultColumnOptimizer extends Optimizer(DefaultColumnAnalyzer.catalogManager)
 
