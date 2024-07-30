@@ -288,7 +288,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Create table with current_user() default") {
+  test("SPARK-49054: Create table with current_user() default") {
     val tableName = "test_current_user"
     val user = spark.sparkContext.sparkUser
     withTable(tableName) {
@@ -298,7 +298,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Alter table with current_user() default") {
+  test("SPARK-49054: Alter table with current_user() default") {
     val tableName = "test_current_user"
     val user = spark.sparkContext.sparkUser
     withTable(tableName) {
