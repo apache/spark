@@ -61,23 +61,33 @@ trait BroadcastExchangeLike extends Exchange {
    */
   def relationFuture: Future[broadcast.Broadcast[Any]]
 
-  /**
-   * The asynchronous job that materializes the broadcast. It's used for registering callbacks on
-   * `relationFuture`. Note that calling this method may not start the execution of broadcast job.
-   * It also does the preparations work, such as waiting for the subqueries.
-   */
-  final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
-    materializationStarted.set(true)
-    completionFuture
+  @transient
+  private lazy val triggerFuture: Future[Any] = {
+    SQLExecution.withThreadLocalCaptured(session, BroadcastExchangeExec.executionContext) {
+      // Trigger broadcast preparation which can involve expensive operations like waiting on
+      // subqueries and file listing.
+      executeQuery(null)
+      null
+    }
   }
 
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
 
   /**
+   * The asynchronous job that materializes the broadcast. It's used for registering callbacks on
+   * `relationFuture`. Note that calling this method may not start the execution of broadcast job.
+   * It also does the preparations work, such as waiting for the subqueries.
+   */
+  final def submitBroadcastJob(): scala.concurrent.Future[broadcast.Broadcast[Any]] = {
+    triggerFuture
+    completionFuture
+  }
+
+  /**
    * Cancels broadcast job with an optional reason.
    */
   final def cancelBroadcastJob(reason: Option[String]): Unit = {
-    if (isMaterializationStarted() && !this.relationFuture.isDone) {
+    if (!this.relationFuture.isDone) {
       reason match {
         case Some(r) => sparkContext.cancelJobsWithTag(this.jobTag, r)
         case None => sparkContext.cancelJobsWithTag(this.jobTag)

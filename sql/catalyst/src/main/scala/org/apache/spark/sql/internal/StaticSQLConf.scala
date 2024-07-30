@@ -170,6 +170,16 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism for doing preparation of shuffle exchange, " +
+        "which includes subquery execution, file listing, etc.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
+      .createWithDefault(1024)
+
   val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
       .internal()
