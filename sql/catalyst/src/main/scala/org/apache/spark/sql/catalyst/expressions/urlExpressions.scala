@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.net.{URI, URISyntaxException, URLDecoder, URLEncoder}
+import java.nio.charset.StandardCharsets
 import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -57,8 +58,8 @@ case class UrlEncode(child: Expression)
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
       "encode",
-      Seq(child, Literal("UTF-8")),
-      Seq(StringTypeAnyCollation, StringTypeAnyCollation))
+      Seq(child),
+      Seq(StringTypeAnyCollation))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
@@ -96,8 +97,8 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
       "decode",
-      Seq(child, Literal("UTF-8"), Literal(failOnError)),
-      Seq(StringTypeAnyCollation, StringTypeAnyCollation, BooleanType))
+      Seq(child, Literal(failOnError)),
+      Seq(StringTypeAnyCollation, BooleanType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
@@ -140,13 +141,13 @@ case class TryUrlDecode(expr: Expression, replacement: Expression)
 }
 
 object UrlCodec {
-  def encode(src: UTF8String, enc: UTF8String): UTF8String = {
-    UTF8String.fromString(URLEncoder.encode(src.toString, enc.toString))
+  def encode(src: UTF8String): UTF8String = {
+    UTF8String.fromString(URLEncoder.encode(src.toString, StandardCharsets.UTF_8))
   }
 
-  def decode(src: UTF8String, enc: UTF8String, failOnError: Boolean): UTF8String = {
+  def decode(src: UTF8String, failOnError: Boolean): UTF8String = {
     try {
-      UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
+      UTF8String.fromString(URLDecoder.decode(src.toString, StandardCharsets.UTF_8))
     } catch {
       case e: IllegalArgumentException if failOnError =>
         throw QueryExecutionErrors.illegalUrlError(src, e)
