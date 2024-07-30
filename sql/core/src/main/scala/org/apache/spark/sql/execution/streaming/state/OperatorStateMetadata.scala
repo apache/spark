@@ -28,8 +28,11 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
@@ -104,12 +107,17 @@ object OperatorStateMetadataUtils extends Logging {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
-  def readMetadata(inputStream: FSDataInputStream): Option[OperatorStateMetadata] = {
+  def readMetadata(
+      inputStream: FSDataInputStream,
+      expectedVersion: Int): Option[OperatorStateMetadata] = {
     val inputReader =
       new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
     try {
       val versionStr = inputReader.readLine()
       val version = MetadataVersionUtil.validateVersion(versionStr, 2)
+      if (version != expectedVersion) {
+        throw new IllegalArgumentException(s"Expected version $expectedVersion, but found $version")
+      }
       Some(deserialize(version, inputReader))
     } finally {
       inputStream.close()
@@ -159,6 +167,15 @@ object OperatorStateMetadataUtils extends Logging {
       case _ =>
         throw new IllegalArgumentException(s"Failed to serialize operator metadata with " +
           s"version=${operatorStateMetadata.version}")
+    }
+  }
+
+  def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
+    val offsetLog = new OffsetSeqLog(session,
+      new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
+    offsetLog.getLatest() match {
+      case Some((lastId, _)) => lastId
+      case None => throw StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation)
     }
   }
 }
@@ -215,7 +232,7 @@ object OperatorStateMetadataV2 {
     .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
   def metadataDirPath(stateCheckpointPath: Path): Path =
-    new Path(new Path(new Path(stateCheckpointPath, "_metadata"), "metadata"), "v2")
+    new Path(new Path(stateCheckpointPath, "_metadata"), "v2")
 
   def metadataFilePath(stateCheckpointPath: Path, currentBatchId: Long): Path =
     new Path(metadataDirPath(stateCheckpointPath), currentBatchId.toString)
@@ -260,7 +277,7 @@ class OperatorStateMetadataV1Reader(
 
   def read(): Option[OperatorStateMetadata] = {
     val inputStream = fm.open(metadataFilePath)
-    OperatorStateMetadataUtils.readMetadata(inputStream)
+    OperatorStateMetadataUtils.readMetadata(inputStream, version)
   }
 }
 
@@ -305,9 +322,6 @@ class OperatorStateMetadataV2Reader(
 
   override def read(): Option[OperatorStateMetadata] = {
     val batches = listBatches()
-    if (batches.isEmpty) {
-      return None
-    }
     val lastBatchId = batches.filter(_ <= batchId).lastOption
     if (lastBatchId.isEmpty) {
       None
@@ -315,7 +329,7 @@ class OperatorStateMetadataV2Reader(
       val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
         stateCheckpointPath, lastBatchId.get)
       val inputStream = fm.open(metadataFilePath)
-      OperatorStateMetadataUtils.readMetadata(inputStream)
+      OperatorStateMetadataUtils.readMetadata(inputStream, version)
     }
   }
 }

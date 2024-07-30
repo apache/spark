@@ -1838,44 +1838,6 @@ class SparkConnectPlanner(
             .Product(transformExpression(fun.getArgumentsList.asScala.head))
             .toAggregateExpression())
 
-      case "when" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(CaseWhen.createFromParser(children))
-
-      case "in" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(In(children.head, children.tail))
-
-      case "nth_value" if fun.getArgumentsCount == 3 =>
-        // NthValue does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(2), "ignoreNulls")
-        Some(NthValue(children(0), children(1), ignoreNulls))
-
-      case "like" if fun.getArgumentsCount == 3 =>
-        // Like does not have a constructor which accepts Expression typed 'escapeChar'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val escapeChar = extractString(children(2), "escapeChar")
-        Some(Like(children(0), children(1), escapeChar.charAt(0)))
-
-      case "ilike" if fun.getArgumentsCount == 3 =>
-        // ILike does not have a constructor which accepts Expression typed 'escapeChar'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val escapeChar = extractString(children(2), "escapeChar")
-        Some(ILike(children(0), children(1), escapeChar.charAt(0)))
-
-      case "lag" if fun.getArgumentsCount == 4 =>
-        // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
-        Some(Lag(children.head, children(1), children(2), ignoreNulls))
-
-      case "lead" if fun.getArgumentsCount == 4 =>
-        // Lead does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
-        Some(Lead(children.head, children(1), children(2), ignoreNulls))
-
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         // [col, expectedNumItems: Long, numBits: Long]
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1892,33 +1854,6 @@ class SparkConnectPlanner(
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val unit = extractString(children(0), "unit")
         Some(TimestampAdd(unit, children(1), children(2)))
-
-      case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val timeCol = children.head
-        val windowDuration = extractString(children(1), "windowDuration")
-        var slideDuration = windowDuration
-        if (fun.getArgumentsCount >= 3) {
-          slideDuration = extractString(children(2), "slideDuration")
-        }
-        var startTime = "0 second"
-        if (fun.getArgumentsCount == 4) {
-          startTime = extractString(children(3), "startTime")
-        }
-        Some(
-          Alias(TimeWindow(timeCol, windowDuration, slideDuration, startTime), "window")(
-            nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
-
-      case "session_window" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val timeCol = children.head
-        val sessionWindow = children.last match {
-          case Literal(s, StringType) if s != null => SessionWindow(timeCol, s.toString)
-          case other => SessionWindow(timeCol, other)
-        }
-        Some(
-          Alias(sessionWindow, "session_window")(nonInheritableMetadataKeys =
-            Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
 
       case "bucket" if fun.getArgumentsCount == 2 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -2066,18 +2001,6 @@ class SparkConnectPlanner(
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
         Some(CatalystDataToProtobuf(children(0), msgName, desc, options))
-
-      case "uuid" if fun.getArgumentsCount == 1 =>
-        // Uuid does not have a constructor which accepts Expression typed 'seed'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val seed = extractLong(children(0), "seed")
-        Some(Uuid(Some(seed)))
-
-      case "shuffle" if fun.getArgumentsCount == 2 =>
-        // Shuffle does not have a constructor which accepts Expression typed 'seed'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val seed = extractLong(children(1), "seed")
-        Some(Shuffle(children(0), Some(seed)))
 
       case _ => None
     }
@@ -3214,6 +3137,10 @@ class SparkConnectPlanner(
 
     if (writeOp.getPartitioningColumnNamesCount > 0) {
       writer.partitionBy(writeOp.getPartitioningColumnNamesList.asScala.toList: _*)
+    }
+
+    if (writeOp.getClusteringColumnNamesCount > 0) {
+      writer.clusterBy(writeOp.getClusteringColumnNamesList.asScala.toList: _*)
     }
 
     writeOp.getTriggerCase match {

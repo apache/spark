@@ -31,9 +31,8 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_COMMITS
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataUtils, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -48,7 +47,8 @@ case class StateMetadataTableEntry(
     minBatchId: Long,
     maxBatchId: Long,
     operatorPropertiesJson: String,
-    numColsPrefixKey: Int) {
+    numColsPrefixKey: Int,
+    stateSchemaFilePath: Option[String]) {
   def toRow(): InternalRow = {
     new GenericInternalRow(
       Array[Any](operatorId,
@@ -99,15 +99,6 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
   override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
 
-  private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val commitLog = new CommitLog(session,
-      new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
-    commitLog.getLatest() match {
-      case Some((lastId, _)) => lastId
-      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
-    }
-  }
-
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     () => {
       if (!options.containsKey("path")) {
@@ -116,8 +107,8 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
       val checkpointLocation = options.get("path")
       var batchId = Option(options.get("batchId")).map(_.toLong)
-      batchId = Some(batchId.getOrElse(getLastCommittedBatch(SparkSession.active,
-        checkpointLocation)))
+      batchId = Some(batchId.getOrElse(OperatorStateMetadataUtils
+        .getLastOffsetBatch(SparkSession.active, checkpointLocation)))
 
       new StateMetadataScan(options.get("path"), batchId.get)
     }
@@ -233,6 +224,8 @@ class StateMetadataPartitionReader(
     }
   }
 
+  // From v2, we also need to populate the operatorProperties and stateSchemaFilePath fields
+  // for use with the state data source reader
   private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)
@@ -246,7 +239,8 @@ class StateMetadataPartitionReader(
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
               null,
-              stateStoreMetadata.numColsPrefixKey
+              stateStoreMetadata.numColsPrefixKey,
+              None
             )
           }
         case v2: OperatorStateMetadataV2 =>
@@ -258,7 +252,8 @@ class StateMetadataPartitionReader(
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
               v2.operatorPropertiesJson,
-              -1 // numColsPrefixKey is not available in OperatorStateMetadataV2
+              -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
+              Some(stateStoreMetadata.stateSchemaFilePath)
             )
           }
         }
