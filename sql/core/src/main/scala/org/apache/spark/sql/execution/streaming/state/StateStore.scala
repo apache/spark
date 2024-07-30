@@ -861,7 +861,7 @@ object StateStore extends Logging {
           } catch {
             case NonFatal(e) =>
               logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
-                log"stopping management thread", e)
+                log"unloading state store provider", e)
               // When we get a non-fatal exception, we just unload the provider.
               //
               // By not bubbling the exception to the maintenance task thread or the query execution
