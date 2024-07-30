@@ -21,10 +21,6 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.JString
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -123,6 +119,12 @@ case class TransformWithStateExec(
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
+  }
+
+  private def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
+    closeProcessorHandle()
+    stateVariableInfos
   }
 
   /**
@@ -423,12 +425,12 @@ case class TransformWithStateExec(
       Array(StateStoreMetadataV2(
         StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
 
-    val operatorPropertiesJson: JValue =
-      ("timeMode" -> JString(timeMode.toString)) ~
-        ("outputMode" -> JString(outputMode.toString))
-
-    val json = compact(render(operatorPropertiesJson))
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
+    val operatorProperties = TransformWithStateOperatorProperties(
+      timeMode.toString,
+      outputMode.toString,
+      getStateVariableInfos().values.toList
+    )
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
   }
 
   private def stateSchemaDirPath(): Path = {
@@ -439,6 +441,23 @@ case class TransformWithStateExec(
 
     val storeNamePath = new Path(stateCheckpointPath, storeName)
     new Path(new Path(storeNamePath, "_metadata"), "schema")
+  }
+
+  override def validateNewMetadata(
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    (oldOperatorMetadata, newOperatorMetadata) match {
+      case (
+        oldMetadataV2: OperatorStateMetadataV2,
+        newMetadataV2: OperatorStateMetadataV2) =>
+        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          oldMetadataV2.operatorPropertiesJson)
+        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          newMetadataV2.operatorPropertiesJson)
+        TransformWithStateOperatorProperties.validateOperatorProperties(
+          oldOperatorProps, newOperatorProps)
+      case (_, _) =>
+    }
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -666,4 +685,3 @@ object TransformWithStateExec {
   }
 }
 // scalastyle:on argcount
-
