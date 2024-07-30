@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SparkException, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.errors.SqlScriptingException.errorMessageWithLineNumber
 
 class SqlScriptingException protected (
     origin: Origin,
@@ -26,8 +27,7 @@ class SqlScriptingException protected (
     cause: Throwable,
     messageParameters: Map[String, String] = Map.empty)
   extends SparkException(
-    message = s"[LINE:${origin.line}] "
-      + SparkThrowableHelper.getMessage(errorClass, messageParameters),
+    message = errorMessageWithLineNumber(origin, errorClass, messageParameters),
     errorClass = Option(errorClass),
     cause = cause,
     messageParameters = messageParameters
@@ -79,6 +79,15 @@ private[sql] object SqlScriptingException {
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+  }
+
+  private def errorMessageWithLineNumber(
+    origin: Origin,
+    errorClass: String,
+    messageParameters: Map[String, String]
+  ): String = {
+    val prefix = if (origin.line.isEmpty) "" else s"[LINE:${origin.line.get}] "
+    prefix + SparkThrowableHelper.getMessage(errorClass, messageParameters)
   }
 
 }
