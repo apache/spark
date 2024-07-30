@@ -2321,25 +2321,52 @@ class CollationSQLExpressionsSuite
 
   // scalastyle:off nonascii
   test("approx_count_distinct returns correct with collation") {
-    Seq(
-      ("utf8_lcase", Seq("a", "a", "A"), Seq(Row(1))),
-      ("utf8_lcase", Seq("aCfew", "acFEw", "ACFEW"), Seq(Row(1))),
-      ("UNICODE_CI_AI", Seq("č", "c", "Ć", "C", "Z", "Ž"), Seq(Row(2))),
-      ("UNICODE_CI_AI", Seq("fAFfewfćČĆfečwćCsŠ", "fAffEWfćČCfeCwcćss"), Seq(Row(1))),
-      ("UNICODE_CI_AI", Seq("fAcfewfćČĆfečwćCsŠ", "fAffEWfćČCfeCwcćss"), Seq(Row(2)))
-    ).foreach{
-      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
-        checkAnswer(sql(
-          s"""
-             with t as (
-             select collate(col1, '$collationName') as c
-             from
-             values ${input.map(s => s"('$s')").mkString(", ")}
-          )
-          SELECT approx_count_distinct(c) FROM t
-             """), expected)
-    }
 
+    case class ACDTestCase(
+      collation: String,
+      input: Seq[String],
+      output: Seq[Row]
+    )
+
+    val testCases = Seq(
+      ACDTestCase("utf8_lcase", Seq("a", "a", "A"), Seq(Row(1))),
+      ACDTestCase("utf8_lcase", Seq("aCfew", "acFEw", "ACFEW"), Seq(Row(1))),
+      ACDTestCase("utf8_lcase", Seq("a"), Seq(Row(1))),
+      ACDTestCase("utf8_lcase", Seq("B"), Seq(Row(1))),
+      ACDTestCase("utf8_lcase", Seq("aCfew", "aCfew", "aCfew", "aCfew", "aCfew"), Seq(Row(1))),
+      ACDTestCase("utf8_lcase", Seq("Aaa", "AAA", "AAA", "aAa", "aAA", "aaa"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("č", "c", "Ć", "C", "Z", "Ž"), Seq(Row(2))),
+      ACDTestCase("UNICODE_CI_AI", Seq("Ž"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("z"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("fAFfewfćČĆfečwćCsŠ", "fAffEWfćČCfeCwcćss"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("fAFfe", "fAFfe", "fAFfe", "fAFfe", "fAFfe"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("fAcfewfćČĆfečwćCsŠ", "fAffEWfćČCfeCwcćss"), Seq(Row(2))),
+      ACDTestCase("UNICODE_CI_AI", Seq("Ćcc", "CCc", "CCC", "ĆĆČ", "CČĆ", "ČcĆ", "Ćčč", "ČČČ",
+        "CĆC", "ććć", "ccc"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("sŠŠ", "SŠS", "SŠS", "ššS", "ššs", "SšS", "ššš", "ŠŠs",
+        "ŠsŠ", "ssŠ", "SSS"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("zŽŽ", "ŽZŽ", "ZŽZ", "ZZZ", "ZžZ", "žžž", "žžZ", "ZžZ",
+        "ŽzZ", "zZZ", "ZZZ"), Seq(Row(1))),
+      ACDTestCase("UNICODE_CI_AI", Seq("zŽŽ", "ŽZŽ", "ZŽZ", "ZZZ", "ZžZ", "žžž", "žžZ", "ZžZ",
+        "ŽzZ", "zZZ", "ZZZ", "ZZŠ"), Seq(Row(2)))
+    )
+
+    testCases.foreach( t => {
+      val insertQuery = s"INSERT INTO t VALUES ${t.input.map(s => s"'${s}'").mkString(", ") }"
+      val testQuery = "SELECT approx_count_distinct(s) FROM t"
+
+      sql(s"CREATE TABLE t(s string collate ${t.collation})")
+      sql(insertQuery)
+      checkAnswer(sql(testQuery), t.output)
+      sql("DROP TABLE t")
+
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collation) {
+        sql("CREATE TABLE t(s string)")
+        sql(insertQuery)
+        checkAnswer(sql(testQuery), t.output)
+        sql("DROP TABLE t")
+      }
+    })
   }
   // scalastyle:on nonascii
 

@@ -94,8 +94,10 @@ class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
     val value = dataType match {
       case FloatType => FLOAT_NORMALIZER.apply(_value)
       case DoubleType => DOUBLE_NORMALIZER.apply(_value)
-      case _: StringType => CollationFactory.getCollationKeyBytes(
-        _value.asInstanceOf[UTF8String], dataType.asInstanceOf[StringType].collationId)
+      case s: StringType => _value match {
+        case v: UTF8String => CollationFactory.getCollationKeyBytes(
+          v, s.collationId)
+      }
       case _ => _value
     }
     // Create the hashed value 'x'.
