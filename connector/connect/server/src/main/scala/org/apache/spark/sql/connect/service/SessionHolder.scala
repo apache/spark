@@ -481,17 +481,6 @@ object SessionHolder {
 
   // The maximum time for an error to stay in the cache.
   private val ERROR_CACHE_TIMEOUT_SEC = 60
-
-  /** Creates a dummy session holder for use in tests. */
-  def forTesting(session: SparkSession): SessionHolder = {
-    val ret =
-      SessionHolder(
-        userId = "testUser",
-        sessionId = UUID.randomUUID().toString,
-        session = session)
-    SparkConnectService.sessionManager.putSessionForTesting(ret)
-    ret
-  }
 }
 
 /** Basic information about SessionHolder. */

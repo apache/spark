@@ -183,7 +183,7 @@ class ProtoToParsedPlanTestSuite
     val name = fileName.stripSuffix(".proto.bin")
     test(name) {
       val relation = readRelation(file)
-      val planner = new SparkConnectPlanner(SessionHolder.forTesting(spark))
+      val planner = new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
       val finalAnalyzedPlan = {
