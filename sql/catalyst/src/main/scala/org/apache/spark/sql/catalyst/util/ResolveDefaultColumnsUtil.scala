@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -285,7 +285,9 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       val analyzer: Analyzer = DefaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
-      ConstantFolding(analyzed)
+      // Eagerly execute finish-analysis and constant-folding rules before checking whether the
+      // expression is foldable and resolved.
+      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
@@ -451,6 +453,11 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
   object DefaultColumnAnalyzer extends Analyzer(
     new CatalogManager(BuiltInFunctionCatalog, BuiltInFunctionCatalog.v1Catalog)) {
   }
+
+  /**
+   * This is an Optimizer for convert default column expressions to foldable literals.
+   */
+  object DefaultColumnOptimizer extends Optimizer(DefaultColumnAnalyzer.catalogManager)
 
   /**
    * This is a FunctionCatalog for performing analysis using built-in functions only. It is a helper

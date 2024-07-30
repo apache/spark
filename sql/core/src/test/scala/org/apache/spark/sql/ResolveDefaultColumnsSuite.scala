@@ -215,4 +215,25 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-49054: Create table with current_user() default") {
+    val tableName = "test_current_user"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s string default current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES ((0))")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
+    }
+  }
+
+  test("SPARK-49054: Alter table with current_user() default") {
+    val tableName = "test_current_user"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s string) USING parquet")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN s SET DEFAULT current_user()")
+      sql(s"INSERT INTO $tableName (i) VALUES ((0))")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
+    }
+  }
 }
