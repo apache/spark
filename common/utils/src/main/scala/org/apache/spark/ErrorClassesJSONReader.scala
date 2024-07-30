@@ -45,7 +45,11 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
-    val sub = new StringSubstitutor(messageParameters.asJava)
+    val sanitizedParameters = messageParameters.map {
+      case (key, null) => key -> "null"
+      case (key, value) => key -> value
+    }
+    val sub = new StringSubstitutor(sanitizedParameters.asJava)
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
     try {
