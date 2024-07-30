@@ -215,12 +215,9 @@ class StateMetadataPartitionReader(
       } else {
         1
       }
-      OperatorStateMetadataReader.createReader(
-        operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId).read() match {
-        case Some(metadata) => metadata
-        case None => throw StateDataSourceErrors.failedToReadOperatorMetadata(checkpointLocation,
-          batchId)
-      }
+      val reader = OperatorStateMetadataReader.createReader(
+        operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId)
+      reader.read().get
     }
   }
 

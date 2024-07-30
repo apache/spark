@@ -89,6 +89,20 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         ))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
         Seq(Row(1), Row(1), Row(1), Row(1)))
+
+      // verify that explicitly passing batchId has no effect if the operator is written with
+      // schema version v1
+      val testBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(spark,
+        checkpointDir.toString) + 1
+      val testDf = spark.read.format("state-metadata")
+        .option("batchId", testBatchId).load(checkpointDir.toString)
+      checkAnswer(testDf, Seq(Row(1, "Join", "store1", 200, -1L, -1L, null),
+          Row(1, "Join", "store2", 200, -1L, -1L, null),
+          Row(1, "Join", "store3", 200, -1L, -1L, null),
+          Row(1, "Join", "store4", 200, -1L, -1L, null)
+        ))
+      checkAnswer(testDf.select(testDf.metadataColumn("_numColsPrefixKey")),
+        Seq(Row(1), Row(1), Row(1), Row(1)))
     }
   }
 
@@ -140,6 +154,21 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         Array(StateStoreMetadataV2("default", 0, numShufflePartitions, checkpointDir.toString)),
         "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
+
+      // Verify that the state store metadata is not available for invalid batches.
+      val ex = intercept[Exception] {
+        val invalidBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(spark,
+          checkpointDir.toString) + 1
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
+          Some(invalidBatchId))
+      }
+      assert(ex.getMessage.contains("Failed to read the operator metadata"))
+
+      val ex1 = intercept[Exception] {
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
+          Some(-1))
+      }
+      assert(ex1.getMessage.contains("Failed to read the operator metadata"))
     }
   }
 
