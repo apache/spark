@@ -620,7 +620,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 31, 1728235666)
   }
 
-  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "UNICODE")) {
     test(s"hash check for collated $collation strings") {
       val s1 = "aaa"
       val s2 = "AAA"
@@ -636,7 +636,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(murmur3Hash1, interpretedHash1)
       checkEvaluation(murmur3Hash2, interpretedHash2)
 
-      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality ||
+        collation == "UNICODE") {
         assert(interpretedHash1 != interpretedHash2)
       } else {
         assert(interpretedHash1 == interpretedHash2)

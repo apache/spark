@@ -607,8 +607,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       // need to skip as plans differ in STRING <-> STRING COLLATE UTF8_LCASE
       "current_timezone",
       "schema_of_variant",
-      "hash",
-      "xxhash64",
       // need to skip as result is expected to differ
       "collation",
       "contains",
@@ -620,6 +618,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "reflect",
       "try_reflect",
       "java_method",
+      "hash",
+      "xxhash64",
       // need to skip as these are random functions
       "rand",
       "random",
