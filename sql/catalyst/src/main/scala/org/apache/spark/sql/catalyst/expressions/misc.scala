@@ -244,6 +244,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   def this() = this(None)
 
+  def this(seed: Expression) = this(ExpressionWithRandomSeed.expressionToSeed(seed, "UUID"))
+
   override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))

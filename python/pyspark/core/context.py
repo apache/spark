@@ -184,8 +184,8 @@ class SparkContext:
     ):
         if "SPARK_CONNECT_MODE_ENABLED" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
             raise PySparkRuntimeError(
-                error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
-                message_parameters={},
+                errorClass="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
+                messageParameters={},
             )
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
@@ -271,13 +271,13 @@ class SparkContext:
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
             raise PySparkRuntimeError(
-                error_class="MASTER_URL_NOT_SET",
-                message_parameters={},
+                errorClass="MASTER_URL_NOT_SET",
+                messageParameters={},
             )
         if not self._conf.contains("spark.app.name"):
             raise PySparkRuntimeError(
-                error_class="APPLICATION_NAME_NOT_SET",
-                message_parameters={},
+                errorClass="APPLICATION_NAME_NOT_SET",
+                messageParameters={},
             )
 
         # Read back our properties from the conf in case we loaded some of them from
@@ -465,8 +465,8 @@ class SparkContext:
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise PySparkRuntimeError(
-            error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
-            message_parameters={},
+            errorClass="CONTEXT_ONLY_VALID_ON_DRIVER",
+            messageParameters={},
         )
 
     def __enter__(self) -> "SparkContext":
@@ -2535,8 +2535,8 @@ class SparkContext:
             self.profiler_collector.show_profiles()
         else:
             raise PySparkRuntimeError(
-                error_class="INCORRECT_CONF_FOR_PROFILE",
-                message_parameters={},
+                errorClass="INCORRECT_CONF_FOR_PROFILE",
+                messageParameters={},
             )
 
     def dump_profiles(self, path: str) -> None:
@@ -2552,8 +2552,8 @@ class SparkContext:
             self.profiler_collector.dump_profiles(path)
         else:
             raise PySparkRuntimeError(
-                error_class="INCORRECT_CONF_FOR_PROFILE",
-                message_parameters={},
+                errorClass="INCORRECT_CONF_FOR_PROFILE",
+                messageParameters={},
             )
 
     def getConf(self) -> SparkConf:
@@ -2591,8 +2591,8 @@ class SparkContext:
         """
         if TaskContext.get() is not None:
             raise PySparkRuntimeError(
-                error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
-                message_parameters={},
+                errorClass="CONTEXT_ONLY_VALID_ON_DRIVER",
+                messageParameters={},
             )
 
 

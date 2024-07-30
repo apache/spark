@@ -2129,6 +2129,17 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT =
+    buildConf("spark.sql.streaming.ratioExtraSpaceAllowedInCheckpoint")
+    .internal()
+    .doc("The ratio of extra space allowed for batch deletion of files when maintenance is" +
+      "invoked. When value > 0, it optimizes the cost of discovering and deleting old checkpoint " +
+      "versions. The minimum number of stale versions we retain in checkpoint location for batch " +
+      "deletion is calculated by minBatchesToRetain * ratioExtraSpaceAllowedInCheckpoint.")
+    .version("4.0.0")
+    .doubleConf
+    .createWithDefault(0.3)
+
   val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
     .internal()
     .doc("The maximum number of batches which will be retained in memory to avoid " +
@@ -5404,6 +5415,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
