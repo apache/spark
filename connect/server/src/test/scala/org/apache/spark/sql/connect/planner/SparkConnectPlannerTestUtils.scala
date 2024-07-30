@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionStatus, SparkConnectService}
 
 object SparkConnectPlannerTestUtils {
   def transform(spark: SparkSession, relation: proto.Relation): LogicalPlan = {
