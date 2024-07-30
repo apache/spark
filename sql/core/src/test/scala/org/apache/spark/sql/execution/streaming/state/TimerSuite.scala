@@ -165,4 +165,23 @@ class TimerSuite extends StateVariableSuiteBase {
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted.takeWhile(_ < 8000L))
     }
   }
+
+  testWithTimeMode("Timer state operations with non-primitive type") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
+      val timerState = new TimerStateImpl(store, timeMode,
+        Encoders.product[TestClass].asInstanceOf[ExpressionEncoder[Any]])
+
+      timerState.registerTimer(1L * 1000)
+      assert(timerState.listTimers().toSet === Set(1000L))
+      assert(timerState.getExpiredTimers(Long.MaxValue).toSeq === Seq((TestClass(1L, "k1"), 1000L)))
+      assert(timerState.getExpiredTimers(Long.MinValue).toSeq === Seq.empty[Long])
+
+      timerState.registerTimer(20L * 1000)
+      assert(timerState.listTimers().toSet === Set(20000L, 1000L))
+      timerState.deleteTimer(20000L)
+      assert(timerState.listTimers().toSet === Set(1000L))
+    }
+  }
 }

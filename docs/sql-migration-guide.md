@@ -64,7 +64,6 @@ license: |
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
 - Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
-- Since 3.5.2, the `base64` function will return a non-chunked string. To restore the behavior of chunking base64 encoded strings into lines of at most 76 characters, set `spark.sql.legacy.chunkBase64String.enabled` to `true`.
 
 ## Upgrading from Spark SQL 3.5.0 to 3.5.1
 

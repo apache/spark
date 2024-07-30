@@ -240,6 +240,9 @@ message WriteStreamOperationStart {
 
   StreamingForeachFunction foreach_writer = 13;
   StreamingForeachFunction foreach_batch = 14;
+
+  // (Optional) Columns used for clustering the table.
+  repeated string clustering_column_names = 15;
 }
 
 message StreamingForeachFunction {

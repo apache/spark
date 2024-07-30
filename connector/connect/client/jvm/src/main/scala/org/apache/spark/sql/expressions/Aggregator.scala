@@ -133,10 +133,20 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
     import scala.reflect.api._
     def areCompatibleMirrors(one: Mirror[_], another: Mirror[_]): Boolean = {
+      def checkAllParents(target: JavaMirror, candidate: JavaMirror): Boolean = {
+        var current = candidate.classLoader
+        while (current != null) {
+          if (current == target.classLoader) {
+            return true
+          }
+          current = current.getParent
+        }
+        false
+      }
+
       (one, another) match {
         case (a: JavaMirror, b: JavaMirror) =>
-          Iterator.iterate(b.classLoader)(_.getParent).contains(a.classLoader) ||
-          Iterator.iterate(a.classLoader)(_.getParent).contains(b.classLoader)
+          a == b || checkAllParents(a, b) || checkAllParents(b, a)
         case _ => one == another
       }
     }

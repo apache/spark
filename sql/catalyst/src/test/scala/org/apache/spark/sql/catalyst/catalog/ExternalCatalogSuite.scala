@@ -229,7 +229,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     catalog.alterTable(tbl1.copy(properties = Map("toh" -> "frem")))
     val newTbl1 = catalog.getTable("db2", "tbl1")
     assert(!tbl1.properties.contains("toh"))
-    assert(newTbl1.properties.size == tbl1.properties.size + 1)
+    // clusteringColumns property is injected during newTable, so we need
+    // to filter it out before comparing the properties.
+    assert(newTbl1.properties.size ==
+      tbl1.properties.filter { case (key, _) => key != "clusteringColumns" }.size + 1)
     assert(newTbl1.properties.get("toh") == Some("frem"))
   }
 
@@ -1111,7 +1114,9 @@ abstract class CatalogTestUtils {
       },
       provider = Some(defaultProvider),
       partitionColumnNames = Seq("a", "b"),
-      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
+      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)),
+      properties = Map(
+        ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2")))))
   }
 
   def newView(

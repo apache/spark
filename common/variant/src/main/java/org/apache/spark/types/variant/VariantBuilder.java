@@ -214,6 +214,22 @@ public class VariantBuilder {
     writePos += 8;
   }
 
+  public void appendYearMonthInterval(long value, byte startField, byte endField) {
+    checkCapacity(1 + 5);
+    writeBuffer[writePos++] = primitiveHeader(YEAR_MONTH_INTERVAL);
+    writeBuffer[writePos++] = (byte) ((startField & 0x1) | ((endField & 0x1) << 1));
+    writeLong(writeBuffer, writePos, value, 4);
+    writePos += 4;
+  }
+
+  public void appendDayTimeInterval(long value, byte startField, byte endField) {
+    checkCapacity(1 + 9);
+    writeBuffer[writePos++] = primitiveHeader(DAY_TIME_INTERVAL);
+    writeBuffer[writePos++] = (byte) ((startField & 0x3) | ((endField & 0x3) << 2));
+    writeLong(writeBuffer, writePos, value, 8);
+    writePos += 8;
+  }
+
   public void appendFloat(float f) {
     checkCapacity(1 + 4);
     writeBuffer[writePos++] = primitiveHeader(FLOAT);

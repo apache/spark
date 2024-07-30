@@ -36,9 +36,9 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, ExpressionInfo, NamedExpression, UpCast}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -962,19 +962,14 @@ class SessionCatalog(
       throw SparkException.internalError("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
-    val origin = Origin(
+    val origin = CurrentOrigin.get.copy(
       objectType = Some("VIEW"),
       objectName = Some(metadata.qualifiedName)
     )
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
-      try {
         CurrentOrigin.withOrigin(origin) {
           parser.parseQuery(viewText)
         }
-      } catch {
-        case _: ParseException =>
-          throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)
-      }
     }
     val schemaMode = metadata.viewSchemaMode
     if (schemaMode == SchemaEvolution) {
