@@ -32,6 +32,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
+import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
@@ -42,7 +43,7 @@ import org.apache.spark.util.ArrayImplicits._
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   test("DataFrame cache: Successful put and get") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     import sessionHolder.session.implicits._
 
     val data1 = Seq(("k1", "v1"), ("k2", "v2"), ("k3", "v3"))
@@ -63,7 +64,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("DataFrame cache: Should throw when dataframe is not found") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     import sessionHolder.session.implicits._
 
     val key1 = "key_1"
@@ -84,7 +85,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("DataFrame cache: Remove cache and then get should fail") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     import sessionHolder.session.implicits._
 
     val key1 = "key_1"
@@ -179,7 +180,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
     // scalastyle:on assume
 
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
       SparkConnectService.start(spark.sparkContext)
 
@@ -229,7 +230,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
     // scalastyle:on assume
 
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
       SparkConnectService.start(spark.sparkContext)
 
@@ -319,7 +320,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("Test session plan cache") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
       // Set cache size to 2
       SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, 2)
@@ -374,7 +375,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("Test session plan cache - cache size zero or negative") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
       // Set cache size to -1
       SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, -1)
@@ -396,7 +397,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("Test session plan cache - disabled") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     // Disable plan cache of the session
     sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, false)
     val planner = new SparkConnectPlanner(sessionHolder)
