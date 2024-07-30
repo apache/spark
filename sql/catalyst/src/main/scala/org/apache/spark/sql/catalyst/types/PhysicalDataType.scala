@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.types
 import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortArray, SortOrder}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
@@ -234,9 +234,36 @@ case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalMapType")
-  override private[sql] type InternalType = Any
+  override private[sql] def ordering = interpretedOrdering
+
+  @transient
+  private lazy val keyOrdering = PhysicalDataType.ordering(keyType)
+  @transient
+  private lazy val valueOrdering = PhysicalDataType.ordering(valueType)
+
+  @transient
+  private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
+    override def compare(m1: MapData, m2: MapData): Int = {
+      if (m1.numElements() == 0 && m2.numElements() == 0) {
+        return 0;
+      } else if (m1.numElements() == 0) {
+        return -1;
+      } else if (m2.numElements() == 0) {
+        return 1;
+      }
+      val sortedKey1 = SortArray.sortEval(m1.keyArray(), keyOrdering, keyType)
+      val sortedKey2 = SortArray.sortEval(m2.keyArray(), keyOrdering, keyType)
+      val keyComparedResult = keyOrdering.compare(sortedKey1, sortedKey2)
+      if (keyComparedResult != 0) {
+        keyComparedResult
+      } else {
+        val sortedValue1 = SortArray.sortEval(m1.valueArray(), valueOrdering, valueType)
+        val sortedValue2 = SortArray.sortEval(m2.valueArray(), valueOrdering, valueType)
+        valueOrdering.compare(sortedValue1, sortedValue2)
+      }
+    }
+  }
+  override private[sql] type InternalType = MapData
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 

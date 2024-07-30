@@ -704,8 +704,10 @@ class CodegenContext extends Logging {
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case map: MapType =>
+      // Note that, we do not support sort on map type, see `OrderUtils`.
+      // It now only supports group by on map type.
       val compareFunc = freshName("compareMapData")
-      val funcCode = genCompMapData(map.keyType, map.valueType, compareFunc)
+      val funcCode = genCompMapData(map.keyType, map.valueType, map.valueContainsNull, compareFunc)
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
@@ -713,27 +715,60 @@ class CodegenContext extends Logging {
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
   }
 
+  private def genSortedArray(
+      elementType: DataType,
+      funcName: String,
+      containsNull: Boolean = false): String = {
+    val ev = ExprCode.forNonNullValue(JavaCode.variable("tmpArray", elementType))
+    addNewFunction(
+      funcName,
+      s"""
+         |private ArrayData $funcName(ArrayData baseArray) {
+         |  ArrayData ${ev.value} = baseArray;
+         |  boolean ascending = true;
+         |  ${SortArray.sortCodegen(elementType, containsNull, this, ev, "baseArray", "ascending")}
+         |  return ${ev.value};
+         |}
+       """.stripMargin)
+  }
+
   private def genCompMapData(
       keyType: DataType,
       valueType: DataType,
+      valueContainsNull: Boolean,
       compareFunc: String): String = {
+    val sortKeyFuncName = freshName("sortKeyArray")
+    val sortValueFuncName = freshName("sortValueArray")
+    genSortedArray(keyType, sortKeyFuncName)
+    genSortedArray(valueType, sortValueFuncName, containsNull = valueContainsNull)
     s"""
-       |public int $compareFunc(MapData a, MapData b) {
-       |  int lengthA = a.numElements();
-       |  int lengthB = b.numElements();
-       |  ArrayData keyArrayA = a.keyArray();
-       |  ArrayData valueArrayA = a.valueArray();
-       |  ArrayData keyArrayB = b.keyArray();
-       |  ArrayData valueArrayB = b.valueArray();
-       |  int minLength = (lengthA > lengthB) ? lengthB : lengthA;
+       |public int $compareFunc(MapData m1, MapData m2) {
+       |  int len1 = m1.numElements();
+       |  int len2 = m2.numElements();
+       |  if (len1 == 0 && len2 == 0) {
+       |    return 0;
+       |  } else if (len1 == 0) {
+       |    return -1;
+       |  } else if (len2 == 0) {
+       |    return 1;
+       |  }
+       |  int minLength = (len1 > len2) ? len2 : len1;
+       |
+       |  ArrayData keyArray1 = $sortKeyFuncName(m1.keyArray());
+       |  ArrayData keyArray2 = $sortKeyFuncName(m2.keyArray());
        |  for (int i = 0; i < minLength; i++) {
-       |    ${genCompElementsAt("keyArrayA", "keyArrayB", "i", keyType)}
-       |    ${genCompElementsAt("valueArrayA", "valueArrayB", "i", valueType)}
+       |    ${genCompElementsAt("keyArray1", "keyArray2", "i", keyType)}
        |  }
        |
-       |  if (lengthA < lengthB) {
+       |  ArrayData valueArray1 = $sortValueFuncName(m1.valueArray());
+       |  ArrayData valueArray2 = $sortValueFuncName(m2.valueArray());
+       |  for (int i = 0; i < minLength; i++) {
+       |    ${genCompElementsAt("valueArray1", "valueArray2", "i", valueType)}
+       |  }
+       |
+       |  if (len1 < len2) {
        |    return -1;
-       |  } else if (lengthA > lengthB) {
+       |  } else if (len1 > len2) {
        |    return 1;
        |  }
        |  return 0;
@@ -741,8 +776,11 @@ class CodegenContext extends Logging {
      """.stripMargin
   }
 
-  private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
-    elementType : DataType): String = {
+  private def genCompElementsAt(
+      arrayA: String,
+      arrayB: String,
+      i: String,
+      elementType : DataType): String = {
     val elementA = freshName("elementA")
     val isNullA = freshName("isNullA")
     val elementB = freshName("elementB")
