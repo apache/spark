@@ -62,8 +62,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "tableName", "arg_type": "NoneType"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "tableName", "arg_type": "NoneType"},
         )
 
     def test_dataframe_star(self):
@@ -217,8 +217,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
+            errorClass="NOT_DICT",
+            messageParameters={"arg_name": "colsMap", "arg_type": "tuple"},
         )
 
     def test_with_columns_renamed_with_duplicated_names(self):
@@ -269,6 +269,43 @@ class DataFrameTestsMixin:
         self.assertEqual(df.dropDuplicates("name", "age").count(), 2)
         self.assertEqual(df.drop_duplicates("name").count(), 1)
         self.assertEqual(df.drop_duplicates("name", "age").count(), 2)
+
+        # Should raise proper error when taking non-string values
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates([None]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(None).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates([1]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(1).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
+        )
 
     def test_drop_duplicates_with_ambiguous_reference(self):
         df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
@@ -414,8 +451,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_FLOAT_OR_INT",
-            message_parameters={
+            errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+            messageParameters={
                 "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
                 "arg_type": "NoneType, NoneType, NoneType",
             },
@@ -447,8 +484,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OF_STR",
-            message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
+            errorClass="NOT_LIST_OF_STR",
+            messageParameters={"arg_name": "cols", "arg_type": "NoneType"},
         )
 
     def test_toDF_with_schema_string(self):
@@ -684,8 +721,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATAFRAME",
-            message_parameters={"arg_name": "other", "arg_type": "int"},
+            errorClass="NOT_DATAFRAME",
+            messageParameters={"arg_name": "other", "arg_type": "int"},
         )
 
     def test_input_files(self):
@@ -720,8 +757,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_INT",
-            message_parameters={"arg_name": "n", "arg_type": "bool"},
+            errorClass="NOT_INT",
+            messageParameters={"arg_name": "n", "arg_type": "bool"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -729,8 +766,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL",
-            message_parameters={"arg_name": "vertical", "arg_type": "str"},
+            errorClass="NOT_BOOL",
+            messageParameters={"arg_name": "vertical", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -738,8 +775,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL",
-            message_parameters={"arg_name": "truncate", "arg_type": "str"},
+            errorClass="NOT_BOOL",
+            messageParameters={"arg_name": "truncate", "arg_type": "str"},
         )
 
     def test_df_merge_into(self):
@@ -871,8 +908,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "colName", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "colName", "arg_type": "int"},
         )
 
     def test_where(self):
@@ -881,8 +918,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "condition", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "condition", "arg_type": "int"},
         )
 
     def test_duplicate_field_names(self):
@@ -929,8 +966,8 @@ class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
-            message_parameters={"member": "queryExecution"},
+            errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            messageParameters={"member": "queryExecution"},
         )
 
 

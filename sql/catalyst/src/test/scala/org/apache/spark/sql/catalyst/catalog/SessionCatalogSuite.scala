@@ -529,7 +529,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.alterTable(tbl1.copy(properties = Map("toh" -> "frem")))
       val newTbl1 = catalog.getTableRawMetadata(TableIdentifier("tbl1", Some("db2")))
       assert(!tbl1.properties.contains("toh"))
-      assert(newTbl1.properties.size == tbl1.properties.size + 1)
+      // clusteringColumns property is injected during newTable, so we need
+      // to filter it out before comparing the properties.
+      assert(newTbl1.properties.size ==
+        tbl1.properties.filter { case (key, _) => key != "clusteringColumns" }.size + 1)
       assert(newTbl1.properties.get("toh") == Some("frem"))
       // Alter table without explicitly specifying database
       catalog.setCurrentDatabase("db2")

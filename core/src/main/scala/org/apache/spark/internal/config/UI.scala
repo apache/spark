@@ -244,6 +244,13 @@ private[spark] object UI {
     .checkValues(Set("ALLOW", "LOCAL", "DENY"))
     .createWithDefault("LOCAL")
 
+  val MASTER_UI_TITLE = ConfigBuilder("spark.master.ui.title")
+    .version("4.0.0")
+    .doc("Specifies the title of the Master UI page. If unset, `Spark Master at <MasterURL>` " +
+      "is used by default.")
+    .stringConf
+    .createOptional
+
   val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
     .doc("Whether to group sub executions together in SQL UI when they belong to the same " +
       "root execution")

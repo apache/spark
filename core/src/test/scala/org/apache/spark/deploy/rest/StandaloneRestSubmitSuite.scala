@@ -445,6 +445,30 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
+  test("SPARK-49033: Support server-side environment variable replacement in REST Submission API") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    request.environmentVariables = Map("AWS_ENDPOINT_URL" -> "{{SPARK_SCALA_VERSION}}")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.environment.get("AWS_ENDPOINT_URL") === Some("2.13"))
+  }
+
+  test("SPARK-49034: Support server-side sparkProperties replacement in REST Submission API") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map("spark.hadoop.fs.s3a.endpoint" -> "{{SPARK_SCALA_VERSION}}")
+    request.environmentVariables = Map.empty[String, String]
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.javaOpts.exists(_.contains("-Dspark.hadoop.fs.s3a.endpoint=2.13")))
+  }
+
   test("SPARK-45197: Make StandaloneRestServer add JavaModuleOptions to drivers") {
     val request = new CreateSubmissionRequest
     request.appResource = ""
