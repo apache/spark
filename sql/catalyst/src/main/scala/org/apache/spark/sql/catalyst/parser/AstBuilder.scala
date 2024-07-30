@@ -2410,6 +2410,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.primaryExpression), dataType)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    cast.setTagValue(FUNC_ALIAS, ctx.DOUBLE_COLON().getText)
     cast
   }
 
