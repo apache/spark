@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.expressions.Hex.unhexDigits
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -280,7 +280,12 @@ object CatalogUtils {
    * @return the URI of the path
    */
   def stringToURI(str: String): URI = {
-    new Path(str).toUri
+    try {
+      new Path(str).toUri
+    } catch {
+      case e: IllegalArgumentException =>
+        throw QueryExecutionErrors.invalidLocationError(str, e)
+    }
   }
 
   def makeQualifiedDBObjectPath(

@@ -25,6 +25,7 @@ import java.util.Locale
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
@@ -2522,10 +2523,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
+  def invalidLocationError(
+      location: String,
+      cause: Throwable = null): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_EMPTY_LOCATION",
-      messageParameters = Map("location" -> location))
+      errorClass =
+        if (StringUtils.isEmpty(location)) "INVALID_EMPTY_LOCATION" else "INVALID_LOCATION",
+      messageParameters = Map("location" -> location),
+      cause = cause)
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
