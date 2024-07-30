@@ -127,8 +127,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // session ID.
   def serverSessionId: String = {
     if (Utils.isTesting && session == null) {
-      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
-      // and don't have an underlying SparkSession.
+      // Testing-only: Some sessions created by SparkConnectTestUtils.createDummySessionHolder are
+      // not fully initialized and don't have an underlying SparkSession.
       ""
     } else {
       assert(session.sessionUUID != sessionId)
@@ -282,8 +282,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {
-      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
-      // and can't be closed.
+      // Testing-only: Some sessions created by SparkConnectTestUtils.createDummySessionHolder are
+      // not fully initialized and can't be closed.
       return
     }
 
