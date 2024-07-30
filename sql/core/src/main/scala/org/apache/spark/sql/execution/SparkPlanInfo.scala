@@ -52,6 +52,8 @@ class SparkPlanInfo(
 }
 
 private[execution] object SparkPlanInfo {
+  val sizeInBytesKey = "sizeInBytes"
+  val rowCountKey = "rowCounts"
 
   private def fromLogicalPlan(plan: LogicalPlan): SparkPlanInfo = {
     val childrenInfo = plan match {
@@ -80,11 +82,20 @@ private[execution] object SparkPlanInfo {
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
+    //dump the logical plan info to metadata
+    val stats = plan.logicalLink.map(plan => {
+      val size = plan.stats.sizeInBytes
+      val rowCount = plan.stats.rowCount
+      Seq(sizeInBytesKey -> size.toString) ++ 
+      rowCount.map(rowCountKey -> _.toString)
+    }).toSeq.flatten
+
+
     // dump the file scan metadata (e.g file path) to event log
-    val metadata = plan match {
+    val metadata = (plan match {
       case fileScan: FileSourceScanLike => fileScan.metadata
       case _ => Map[String, String]()
-    }
+    }) ++ stats
     val childrenInfo = children.flatMap {
       case child: SparkPlan =>
         Some(fromSparkPlan(child))

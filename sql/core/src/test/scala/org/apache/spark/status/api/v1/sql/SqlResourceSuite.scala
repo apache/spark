@@ -41,13 +41,14 @@ object SqlResourceSuite {
 
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
-  val filterNode = new SparkPlanGraphNode(1, FILTER, "",
+  val filterNode = new SparkPlanGraphNode(1, FILTER, "", Map.empty[String, String],
     metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
     new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
       nodes = ArrayBuffer(filterNode),
+      metadata = Map.empty[String, String],
       metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
-    new SparkPlanGraphNode(2, SCAN_TEXT, "",
+    new SparkPlanGraphNode(2, SCAN_TEXT, "", Map.empty[String, String],
       metrics = Seq(
       SQLPlanMetric(METADATA_TIME, 2, ""),
       SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
