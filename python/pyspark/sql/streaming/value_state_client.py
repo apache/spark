@@ -18,12 +18,14 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import Any, Union, cast, Tuple
+from typing import Any, Union, cast, Tuple, TYPE_CHECKING
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-import pyspark.sql.streaming.proto as stateMessage
 from pyspark.sql.types import StructType, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
+
+if TYPE_CHECKING:
+    import pyspark.sql.streaming.proto as stateMessage
 
 __all__ = ["ValueStateClient"]
 
@@ -33,6 +35,7 @@ class ValueStateClient:
         self._stateful_processor_api_client = stateful_processor_api_client
 
     def exists(self, state_name: str) -> bool:
+        import pyspark.sql.streaming.proto as stateMessage
         exists_call = stateMessage.Exists()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, exists=exists_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
@@ -52,6 +55,7 @@ class ValueStateClient:
             )
 
     def get(self, state_name: str) -> Any:
+        import pyspark.sql.streaming.proto as stateMessage
         get_call = stateMessage.Get()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, get=get_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
@@ -66,6 +70,7 @@ class ValueStateClient:
             raise PySparkRuntimeError(f"Error getting value state: {response_message.errorMessage}")
 
     def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
         bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
@@ -85,6 +90,7 @@ class ValueStateClient:
             )
 
     def clear(self, state_name: str) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         clear_call = stateMessage.Clear()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, clear=clear_call)
         state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)

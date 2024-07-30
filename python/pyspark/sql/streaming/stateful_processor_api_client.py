@@ -21,17 +21,18 @@ check_dependencies(__name__)
 from enum import Enum
 import os
 import socket
-from typing import Union, cast, Tuple
+from typing import Union, cast, Tuple, TYPE_CHECKING
 
-import pyspark.sql.streaming.proto as stateMessage
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 
-__all__ = ["StatefulProcessorHandleState", "StatefulProcessorApiClient"]
+if TYPE_CHECKING:
+    import pyspark.sql.streaming.proto as stateMessage
 
+__all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
 class StatefulProcessorHandleState(Enum):
     CREATED = 1
@@ -39,8 +40,9 @@ class StatefulProcessorHandleState(Enum):
     DATA_PROCESSED = 3
     CLOSED = 4
 
-
 class StatefulProcessorApiClient:
+    import pyspark.sql.streaming.proto as stateMessage
+
     def __init__(self, state_server_port: int, key_schema: StructType) -> None:
         self.key_schema = key_schema
         self._client_socket = socket.socket()
@@ -53,6 +55,7 @@ class StatefulProcessorApiClient:
         self.pickleSer = CPickleSerializer()
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         proto_state = self._get_proto_state(state)
         set_handle_state = stateMessage.SetHandleState(state=proto_state)
         handle_call = stateMessage.StatefulProcessorCall(setHandleState=set_handle_state)
@@ -70,6 +73,7 @@ class StatefulProcessorApiClient:
             )
 
     def set_implicit_key(self, key: Tuple) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         key_bytes = self._serialize_to_bytes(self.key_schema, key)
         set_implicit_key = stateMessage.SetImplicitKey(key=key_bytes)
         request = stateMessage.ImplicitGroupingKeyRequest(setImplicitKey=set_implicit_key)
@@ -84,6 +88,7 @@ class StatefulProcessorApiClient:
             )
 
     def remove_implicit_key(self) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         print("calling remove_implicit_key on python side")
         remove_implicit_key = stateMessage.RemoveImplicitKey()
         request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
@@ -98,6 +103,7 @@ class StatefulProcessorApiClient:
             )
 
     def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
 
@@ -118,6 +124,7 @@ class StatefulProcessorApiClient:
     def _get_proto_state(
         self, state: StatefulProcessorHandleState
     ) -> stateMessage.HandleState.ValueType:
+        import pyspark.sql.streaming.proto as stateMessage
         if state == StatefulProcessorHandleState.CREATED:
             return stateMessage.CREATED
         elif state == StatefulProcessorHandleState.INITIALIZED:
@@ -128,6 +135,7 @@ class StatefulProcessorApiClient:
             return stateMessage.CLOSED
 
     def _send_proto_message(self, message: stateMessage.StateRequest) -> None:
+        import pyspark.sql.streaming.proto as stateMessage
         serialized_msg = message.SerializeToString()
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.
@@ -137,6 +145,7 @@ class StatefulProcessorApiClient:
         self.sockfile.flush()
 
     def _receive_proto_message(self) -> stateMessage.StateResponse:
+        import pyspark.sql.streaming.proto as stateMessage
         serialized_msg = self._receive_str()
         # proto3 will not serialize the message if the value is default, in this case 0
         if len(serialized_msg) == 0:

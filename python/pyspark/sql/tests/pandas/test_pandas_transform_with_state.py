@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import pandas as pd
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
 from pyspark.errors import PySparkRuntimeError
 from typing import Iterator
@@ -40,6 +39,9 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+
+if have_pandas:
+    import pandas as pd
 
 
 @unittest.skipIf(

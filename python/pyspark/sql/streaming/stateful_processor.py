@@ -22,12 +22,10 @@ from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcesso
 from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.types import StructType
 
-import pandas as pd
-
-__all__ = ["StatefulProcessor", "StatefulProcessorHandle"]
-
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+
+__all__ = ["StatefulProcessor", "StatefulProcessorHandle"]
 
 
 class ValueState:
@@ -51,6 +49,7 @@ class ValueState:
         return self._value_state_client.exists(self._state_name)
 
     def get(self) -> Any:
+        import pandas as pd
         """
         Get the state value if it exists.
         """
