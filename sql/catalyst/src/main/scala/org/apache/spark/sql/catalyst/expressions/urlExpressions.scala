@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -86,16 +86,18 @@ case class UrlEncode(child: Expression)
   since = "3.4.0",
   group = "url_funcs")
 // scalastyle:on line.size.limit
-case class UrlDecode(child: Expression)
+case class UrlDecode(child: Expression, failOnError: Boolean = true)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, true)
 
   override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
       "decode",
-      Seq(child, Literal("UTF-8")),
-      Seq(StringTypeAnyCollation, StringTypeAnyCollation))
+      Seq(child, Literal("UTF-8"), Literal(failOnError)),
+      Seq(StringTypeAnyCollation, StringTypeAnyCollation, BooleanType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
@@ -126,7 +128,7 @@ case class UrlDecode(child: Expression)
 case class TryUrlDecode(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(expr: Expression) = this(expr, TryEval(UrlDecode(expr)))
+  def this(expr: Expression) = this(expr, UrlDecode(expr, false))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)
@@ -142,12 +144,13 @@ object UrlCodec {
     UTF8String.fromString(URLEncoder.encode(src.toString, enc.toString))
   }
 
-  def decode(src: UTF8String, enc: UTF8String): UTF8String = {
+  def decode(src: UTF8String, enc: UTF8String, failOnError: Boolean): UTF8String = {
     try {
       UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
     } catch {
-      case e: IllegalArgumentException =>
+      case e: IllegalArgumentException if failOnError =>
         throw QueryExecutionErrors.illegalUrlError(src, e)
+      case _: IllegalArgumentException => null
     }
   }
 }

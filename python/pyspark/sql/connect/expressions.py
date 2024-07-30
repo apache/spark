@@ -77,7 +77,7 @@ from pyspark.sql.connect.types import (
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import current_origin
-from pyspark.sql.utils import is_timestamp_ntz_preferred
+from pyspark.sql.utils import is_timestamp_ntz_preferred, enum_to_value
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
@@ -113,8 +113,8 @@ class Expression:
         metadata = kwargs.pop("metadata", None)
         if len(alias) > 1 and metadata is not None:
             raise PySparkValueError(
-                error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
-                message_parameters={"arg_name": "metadata"},
+                errorClass="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+                messageParameters={"arg_name": "metadata"},
             )
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
@@ -188,8 +188,8 @@ class ColumnAlias(Expression):
         else:
             if self._metadata:
                 raise PySparkValueError(
-                    error_class="CANNOT_PROVIDE_METADATA",
-                    message_parameters={},
+                    errorClass="CANNOT_PROVIDE_METADATA",
+                    messageParameters={},
                 )
             exp = self._create_proto_expression()
             exp.alias.name.extend(self._alias)
@@ -231,6 +231,7 @@ class LiteralExpression(Expression):
             ),
         )
 
+        value = enum_to_value(value)
         if isinstance(dataType, NullType):
             assert value is None
 
@@ -286,8 +287,8 @@ class LiteralExpression(Expression):
                 assert isinstance(value, list)
             else:
                 raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE",
-                    message_parameters={"data_type": str(dataType)},
+                    errorClass="UNSUPPORTED_DATA_TYPE",
+                    messageParameters={"data_type": str(dataType)},
                 )
 
         self._value = value
@@ -295,6 +296,7 @@ class LiteralExpression(Expression):
 
     @classmethod
     def _infer_type(cls, value: Any) -> DataType:
+        value = enum_to_value(value)
         if value is None:
             return NullType()
         elif isinstance(value, (bytes, bytearray)):
@@ -308,8 +310,8 @@ class LiteralExpression(Expression):
                 return LongType()
             else:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_BETWEEN",
-                    message_parameters={
+                    errorClass="VALUE_NOT_BETWEEN",
+                    messageParameters={
                         "arg_name": "value",
                         "min": str(JVM_LONG_MIN),
                         "max": str(JVM_SHORT_MAX),
@@ -340,20 +342,20 @@ class LiteralExpression(Expression):
             # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
             if len(value) == 0:
                 raise PySparkValueError(
-                    error_class="CANNOT_BE_EMPTY",
-                    message_parameters={"item": "value"},
+                    errorClass="CANNOT_BE_EMPTY",
+                    messageParameters={"item": "value"},
                 )
             first = value[0]
             if first is None:
                 raise PySparkTypeError(
-                    error_class="CANNOT_INFER_ARRAY_TYPE",
-                    message_parameters={},
+                    errorClass="CANNOT_INFER_ARRAY_TYPE",
+                    messageParameters={},
                 )
             return ArrayType(LiteralExpression._infer_type(first), True)
 
         raise PySparkTypeError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(value).__name__},
+            errorClass="UNSUPPORTED_DATA_TYPE",
+            messageParameters={"data_type": type(value).__name__},
         )
 
     @classmethod
@@ -416,8 +418,8 @@ class LiteralExpression(Expression):
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
 
         raise PySparkTypeError(
-            error_class="UNSUPPORTED_LITERAL",
-            message_parameters={"literal": str(literal)},
+            errorClass="UNSUPPORTED_LITERAL",
+            messageParameters={"literal": str(literal)},
         )
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
@@ -466,8 +468,8 @@ class LiteralExpression(Expression):
                 )
         else:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": str(self._dataType)},
+                errorClass="UNSUPPORTED_DATA_TYPE",
+                messageParameters={"data_type": str(self._dataType)},
             )
 
         return expr
@@ -1035,8 +1037,8 @@ class WindowExpression(Expression):
                     expr.window.frame_spec.lower.value.literal.integer = start
                 else:
                     raise PySparkValueError(
-                        error_class="VALUE_NOT_BETWEEN",
-                        message_parameters={
+                        errorClass="VALUE_NOT_BETWEEN",
+                        messageParameters={
                             "arg_name": "start",
                             "min": str(JVM_INT_MIN),
                             "max": str(JVM_INT_MAX),
@@ -1052,8 +1054,8 @@ class WindowExpression(Expression):
                     expr.window.frame_spec.upper.value.literal.integer = end
                 else:
                     raise PySparkValueError(
-                        error_class="VALUE_NOT_BETWEEN",
-                        message_parameters={
+                        errorClass="VALUE_NOT_BETWEEN",
+                        messageParameters={
                             "arg_name": "end",
                             "min": str(JVM_INT_MIN),
                             "max": str(JVM_INT_MAX),

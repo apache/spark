@@ -217,8 +217,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "float",
             },
@@ -229,8 +229,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "NoneType",
             },
@@ -241,8 +241,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "DataFrame",
             },
@@ -651,8 +651,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.check_error(
                 exception=pe.exception,
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "args", "arg_type": "set"},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": "args", "arg_type": "set"},
             )
 
     def test_deduplicate(self):
@@ -924,8 +924,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "exprs"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "exprs"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -933,8 +933,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OF_COLUMN",
-            message_parameters={"arg_name": "exprs"},
+            errorClass="NOT_LIST_OF_COLUMN",
+            messageParameters={"arg_name": "exprs"},
         )
 
     def test_with_columns(self):
@@ -1030,8 +1030,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_ITEM_FOR_CONTAINER",
-            message_parameters={
+            errorClass="INVALID_ITEM_FOR_CONTAINER",
+            messageParameters={
                 "arg_name": "parameters",
                 "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
@@ -1094,8 +1094,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.check_error(
             exception=pe.exception,
-            error_class="UNKNOWN_EXPLAIN_MODE",
-            message_parameters={"explain_mode": "unknown"},
+            errorClass="UNKNOWN_EXPLAIN_MODE",
+            messageParameters={"explain_mode": "unknown"},
         )
 
     def test_count(self) -> None:
@@ -1237,8 +1237,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={
+            errorClass="NOT_DICT",
+            messageParameters={
                 "arg_name": "metadata",
                 "arg_type": "list",
             },

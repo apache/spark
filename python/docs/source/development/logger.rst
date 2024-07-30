@@ -50,9 +50,9 @@ Example log entry:
       "msg": "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22012\n== DataFrame ==\n\"divide\" was called from\n/.../spark/python/test_error_context.py:17\n",
       "context": {
         "file": "/path/to/file.py",
-        "line_no": "17",
+        "line": "17",
         "fragment": "divide"
-        "error_class": "DIVIDE_BY_ZERO"
+        "errorClass": "DIVIDE_BY_ZERO"
       },
       "exception": {
         "class": "Py4JJavaError",

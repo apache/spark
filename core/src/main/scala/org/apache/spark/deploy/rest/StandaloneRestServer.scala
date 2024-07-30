@@ -174,6 +174,11 @@ private[rest] class StandaloneSubmitRequestServlet(
     conf: SparkConf)
   extends SubmitRequestServlet {
 
+  private def replacePlaceHolder(variable: String) = variable match {
+    case s"{{$name}}" if System.getenv(name) != null => System.getenv(name)
+    case _ => variable
+  }
+
   /**
    * Build a driver description from the fields specified in the submit request.
    *
@@ -196,6 +201,7 @@ private[rest] class StandaloneSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
+      .map(x => (x._1, replacePlaceHolder(x._2)))
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
     val driverDefaultJavaOptions = sparkProperties.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
@@ -214,8 +220,10 @@ private[rest] class StandaloneSubmitRequestServlet(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = request.appArgs
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+        .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description
     val conf = new SparkConf(false)
