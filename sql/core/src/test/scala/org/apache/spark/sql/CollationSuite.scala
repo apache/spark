@@ -997,17 +997,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withSQLConf(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (s string collate utf8_lcase, a string)")
-        sql(s"insert into $table values ('aaa', 'aaa')")
-        sql(s"insert into $table values ('AAA', 'aaa')")
+        sql(s"create table $table (a string collate utf8_lcase, b string)")
+        sql(s"insert into $table values ('aaa', 'bbb')")
+        sql(s"insert into $table values ('AAA', 'bbb')")
 
-        val df = sql(s"select count(*) from $table group by s")
+        val df = sql(s"select count(*), a from $table group by a")
 
-        checkAnswer(df, Seq(Row(2)))
+        checkAnswer(df, Seq(Row(2, "aaa")))
 
         val queryPlan = df.queryExecution.executedPlan
-
-        // confirm that hash join is used instead of sort merge join
+        // confirm that hash aggregate is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
             case _: ObjectHashAggregateExec => ()
@@ -1022,24 +1021,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("Group by on map with collated strings") {
+  test("Group by on multiple columns containing collated string") {
     val table = "t"
 
     withTable(table) {
       withSQLConf(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (m map<string collate utf8_lcase, string>)")
-        sql(s"insert into $table values (map('aaa', 'aaa'))")
-        sql(s"insert into $table values (map('AAA', 'aaa'))")
+        sql(s"create table $table (a string collate utf8_lcase, b string, c string)")
+        sql(s"insert into $table values ('aaa', 'bbb', 'ccc')")
+        sql(s"insert into $table values ('AAA', 'bbb', 'ccc')")
 
-        val df = sql(s"select count(*) from $table group by m")
+        val df = sql(s"select count(*), a, b from $table group by a, b")
 
-        checkAnswer(df, Seq(Row(2)))
+        checkAnswer(df, Seq(Row(2, "aaa", "bbb")))
 
         val queryPlan = df.queryExecution.executedPlan
-
-        // confirm that hash join is used instead of sort merge join
+        // confirm that hash aggregate is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
             case _: ObjectHashAggregateExec => ()
@@ -1047,25 +1045,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
         assert(
           collectFirst(queryPlan) {
-            case _: SortMergeJoinExec => ()
+            case _: SortAggregateExec => ()
           }.isEmpty
         )
-      }
-    }
-  }
-
-  test("Group by on collated string a") {
-    val table = "t"
-
-    withTable(table) {
-      withSQLConf(
-        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (s array<collate utf8_lcase>)")
-        sql(s"insert into $table values (array('aaa'))")
-        sql(s"insert into $table values (array('AAA'))")
-
-        checkAnswer(sql(s"select count(*) from $table group by s"), Seq(Row(2)))
       }
     }
   }
