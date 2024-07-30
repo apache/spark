@@ -424,6 +424,14 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("substring_index(a, '.', 2)"),
       Row("www.apache")
     )
+
+    val testTable = "test_substring_index"
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (num int) USING parquet")
+      sql(s"INSERT INTO $testTable VALUES (1), (2), (3), (NULL)")
+      val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
+      checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
+    }
   }
 
   test("string locate function") {

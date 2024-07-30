@@ -24,7 +24,8 @@ import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StreamTest, TimeMode}
 import org.apache.spark.sql.streaming.OutputMode.{Complete, Update}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -38,13 +39,30 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
   private def checkOperatorStateMetadata(
       checkpointDir: String,
       operatorId: Int,
-      expectedMetadata: OperatorStateMetadataV1): Unit = {
+      expectedMetadata: OperatorStateMetadata,
+      expectedVersion: Int = 1): Unit = {
     val statePath = new Path(checkpointDir, s"state/$operatorId")
-    val operatorMetadata = new OperatorStateMetadataV1Reader(statePath, hadoopConf).read()
-      .asInstanceOf[Option[OperatorStateMetadataV1]]
+    val operatorMetadata = OperatorStateMetadataReader.createReader(statePath,
+      hadoopConf, expectedVersion).read()
     assert(operatorMetadata.isDefined)
-    assert(operatorMetadata.get.operatorInfo == expectedMetadata.operatorInfo &&
-      operatorMetadata.get.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
+    assert(operatorMetadata.get.version == expectedVersion)
+
+    if (expectedVersion == 1) {
+      val operatorMetadataV1 = operatorMetadata.get.asInstanceOf[OperatorStateMetadataV1]
+      val expectedMetadataV1 = expectedMetadata.asInstanceOf[OperatorStateMetadataV1]
+      assert(operatorMetadataV1.operatorInfo == expectedMetadata.operatorInfo &&
+        operatorMetadataV1.stateStoreInfo.sameElements(expectedMetadataV1.stateStoreInfo))
+    } else {
+      val operatorMetadataV2 = operatorMetadata.get.asInstanceOf[OperatorStateMetadataV2]
+      val expectedMetadataV2 = expectedMetadata.asInstanceOf[OperatorStateMetadataV2]
+      assert(operatorMetadataV2.operatorInfo == expectedMetadataV2.operatorInfo)
+      assert(operatorMetadataV2.operatorPropertiesJson.nonEmpty)
+      val stateStoreInfo = operatorMetadataV2.stateStoreInfo.head
+      val expectedStateStoreInfo = expectedMetadataV2.stateStoreInfo.head
+      assert(stateStoreInfo.stateSchemaFilePath.nonEmpty)
+      assert(stateStoreInfo.storeName == expectedStateStoreInfo.storeName)
+      assert(stateStoreInfo.numPartitions == expectedStateStoreInfo.numPartitions)
+    }
   }
 
   test("Serialize and deserialize stateful operator metadata") {
@@ -86,6 +104,35 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val expectedMetadata = OperatorStateMetadataV1(OperatorInfoV1(0, "stateStoreSave"),
         Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
+    }
+  }
+
+  test("Stateful operator metadata for streaming transformWithState") {
+    withTempDir { checkpointDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> numShufflePartitions.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.toString),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+      }
+
+      // Assign some placeholder values to the state store metadata since they are generated
+      // dynamically by the operator.
+      val expectedMetadata = OperatorStateMetadataV2(OperatorInfoV1(0, "transformWithStateExec"),
+        Array(StateStoreMetadataV2("default", 0, numShufflePartitions, checkpointDir.toString)),
+        "")
+      checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
     }
   }
 
