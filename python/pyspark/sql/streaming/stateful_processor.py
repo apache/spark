@@ -18,6 +18,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, TYPE_CHECKING, Iterator, Union
 
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
@@ -27,8 +29,6 @@ __all__ = ["StatefulProcessor", "StatefulProcessorHandle"]
 
 
 class ValueState:
-    from pyspark.sql.streaming.value_state_client import ValueStateClient
-
     """
     Class used for arbitrary stateful operations with the v2 API to capture single value state.
 
@@ -74,8 +74,6 @@ class ValueState:
 
 
 class StatefulProcessorHandle:
-    from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-
     """
     Represents the operation handle provided to the stateful processor used in the arbitrary state
     API v2.
@@ -87,8 +85,6 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client = stateful_processor_api_client
 
     def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
-        from pyspark.sql.streaming.value_state_client import ValueStateClient
-
         """
         Function to create new or return existing single value state variable of given type.
         The user must ensure to call this function only within the `init()` method of the
