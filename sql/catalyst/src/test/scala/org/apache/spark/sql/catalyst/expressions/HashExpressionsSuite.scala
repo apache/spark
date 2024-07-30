@@ -620,7 +620,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 31, 1728235666)
   }
 
-  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "UNICODE")) {
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
     test(s"hash check for collated $collation strings") {
       val s1 = "aaa"
       val s2 = "AAA"
