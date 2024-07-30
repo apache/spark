@@ -167,12 +167,13 @@ object OperatorStateMetadataReader {
   def createReader(
       stateCheckpointPath: Path,
       hadoopConf: Configuration,
-      version: Int): OperatorStateMetadataReader = {
+      version: Int,
+      batchId: Long): OperatorStateMetadataReader = {
     version match {
       case 1 =>
         new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
       case 2 =>
-        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf)
+        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId)
       case _ =>
         throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
           s"with version=$version")
@@ -286,7 +287,8 @@ class OperatorStateMetadataV2Writer(
 
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
-    hadoopConf: Configuration) extends OperatorStateMetadataReader {
+    hadoopConf: Configuration,
+    batchId: Long) extends OperatorStateMetadataReader {
 
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
@@ -306,10 +308,14 @@ class OperatorStateMetadataV2Reader(
     if (batches.isEmpty) {
       return None
     }
-    val lastBatchId = batches.last
-    val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
-      stateCheckpointPath, lastBatchId)
-    val inputStream = fm.open(metadataFilePath)
-    OperatorStateMetadataUtils.readMetadata(inputStream)
+    val lastBatchId = batches.filter(_ <= batchId).lastOption
+    if (lastBatchId.isEmpty) {
+      None
+    } else {
+      val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
+        stateCheckpointPath, lastBatchId.get)
+      val inputStream = fm.open(metadataFilePath)
+      OperatorStateMetadataUtils.readMetadata(inputStream)
+    }
   }
 }

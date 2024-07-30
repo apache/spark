@@ -394,7 +394,7 @@ case class TransformWithStateExec(
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
     val metadataReader = OperatorStateMetadataReader.createReader(
-      metadataPath, hadoopConf, operatorStateMetadataVersion)
+      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
     val operatorStateMetadata = metadataReader.read()
     val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
       case Some(metadata) =>
@@ -437,8 +437,9 @@ case class TransformWithStateExec(
       new Path(getStateInfo.checkpointLocation,
         s"${getStateInfo.operatorId.toString}")
 
-    val storeNamePath = new Path(stateCheckpointPath, storeName)
-    new Path(new Path(storeNamePath, "_metadata"), "schema")
+    val stateSchemaPath = new Path(stateCheckpointPath, "_stateSchema")
+    val storeNamePath = new Path(stateSchemaPath, storeName)
+    storeNamePath
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

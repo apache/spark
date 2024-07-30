@@ -3957,6 +3957,14 @@
     ],
     "sqlState" : "42613"
   },
+  "STDS_FAILED_TO_READ_OPERATOR_METADATA" : {
+    "message" : [
+      "Failed to read the operator metadata for checkpointLocation=<checkpointLocation> and batchId=<batchId>.",
+      "Either the file does not exist, or the file is corrupted.",
+      "Rerun the streaming query to construct the operator metadata, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
+  },
   "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
     "message" : [
       "Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: <sourceOptions>.",

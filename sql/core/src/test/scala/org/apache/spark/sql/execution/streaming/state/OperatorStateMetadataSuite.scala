@@ -55,7 +55,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val operatorMetadata = OperatorStateMetadataV1(operatorInfo, stateStoreInfo.toArray)
       new OperatorStateMetadataV1Writer(statePath, hadoopConf).write(operatorMetadata)
       checkOperatorStateMetadata(checkpointDir.toString, 0, operatorMetadata)
-      val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+      val df = spark.read.format("state-metadata").option("batchId", "0")
+        .load(checkpointDir.toString)
       // Commit log is empty, there is no available batch id.
       checkAnswer(df, Seq(Row(1, "Join", "store1", 200, -1L, -1L, null),
           Row(1, "Join", "store2", 200, -1L, -1L, null),
