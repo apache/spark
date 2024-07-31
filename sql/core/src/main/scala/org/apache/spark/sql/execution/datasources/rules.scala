@@ -89,7 +89,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
-        case e: SparkIllegalArgumentException =>
+        case e: SparkIllegalArgumentException if e.getErrorClass != null =>
           u.failAnalysis(
             errorClass = e.getErrorClass,
             messageParameters = e.getMessageParameters.asScala.toMap,
