@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkThrowableHelper}
+import scala.jdk.CollectionConverters.MapHasAsJava
+
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.SqlScriptingException.errorMessageWithLineNumber
 
@@ -26,11 +28,13 @@ class SqlScriptingException protected (
     errorClass: String,
     cause: Throwable,
     messageParameters: Map[String, String] = Map.empty)
-  extends SparkException(
-    message = errorMessageWithLineNumber(origin, errorClass, messageParameters),
-    errorClass = Option(errorClass),
-    cause = cause,
-    messageParameters = messageParameters)
+  extends Exception(errorMessageWithLineNumber(origin, errorClass, messageParameters), cause)
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+}
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
