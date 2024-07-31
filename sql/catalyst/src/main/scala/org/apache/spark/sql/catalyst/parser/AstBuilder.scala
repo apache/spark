@@ -185,7 +185,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
               el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
           throw SqlScriptingException.labelsMismatch(
-          CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
         }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {

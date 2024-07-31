@@ -30,10 +30,7 @@ class SqlScriptingException protected (
     message = errorMessageWithLineNumber(origin, errorClass, messageParameters),
     errorClass = Option(errorClass),
     cause = cause,
-    messageParameters = messageParameters
-  ) {
-
-}
+    messageParameters = messageParameters)
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
@@ -58,10 +55,9 @@ private[sql] object SqlScriptingException {
   }
 
   def variableDeclarationNotAllowedInScope(
-    origin: Origin,
-    varName: String,
-    lineNumber: String
-  ): Throwable = {
+      origin: Origin,
+      varName: String,
+      lineNumber: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
@@ -70,10 +66,9 @@ private[sql] object SqlScriptingException {
   }
 
   def variableDeclarationOnlyAtBeginning(
-    origin: Origin,
-    varName: String,
-    lineNumber: String
-  ): Throwable = {
+      origin: Origin,
+      varName: String,
+      lineNumber: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
@@ -84,9 +79,8 @@ private[sql] object SqlScriptingException {
   private def errorMessageWithLineNumber(
     origin: Origin,
     errorClass: String,
-    messageParameters: Map[String, String]
-  ): String = {
-    val prefix = if (origin.line.isEmpty) "" else s"[LINE:${origin.line.get}] "
+    messageParameters: Map[String, String]): String = {
+    val prefix = origin.line.map(l => s"[LINE:$l] ").getOrElse("")
     prefix + SparkThrowableHelper.getMessage(errorClass, messageParameters)
   }
 
