@@ -164,14 +164,14 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec])
  *                   while others (if any) correspond to following ELSE IF clauses.
  * @param conditionalBodies  Collection of executable bodies that have a corresponding condition,
 *                 in IF or ELSE IF branches.
- * @param unconditionalBody Body that is executed if none of the conditions are met,
+ * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  * @param booleanEvaluator Evaluator for Boolean conditions.
  */
 class IfElseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
-    unconditionalBody: Option[CompoundBodyExec],
+    elseBody: Option[CompoundBodyExec],
     booleanEvaluator: StatementBooleanEvaluator) extends NonLeafStatementExec {
   private object IfElseState extends Enumeration {
     val Condition, Body = Value
@@ -201,10 +201,10 @@ class IfElseStatementExec(
               // There are ELSE IF clauses remaining.
               state = IfElseState.Condition
               curr = Some(conditions(clauseIdx))
-            } else if (unconditionalBody.isDefined) {
+            } else if (elseBody.isDefined) {
               // ELSE clause exists.
               state = IfElseState.Body
-              curr = Some(unconditionalBody.get)
+              curr = Some(elseBody.get)
             } else {
               // No remaining clauses.
               curr = None
@@ -230,16 +230,12 @@ class IfElseStatementExec(
     clauseIdx = 0
     conditions.foreach(c => c.reset())
     conditionalBodies.foreach(b => b.reset())
-    unconditionalBody.foreach(b => b.reset())
+    elseBody.foreach(b => b.reset())
   }
 }
 
-trait StatementBooleanEvaluator {
-  def eval(statement: LeafStatementExec): Boolean
-}
-
-case class DataFrameEvaluator(session: SparkSession) extends StatementBooleanEvaluator {
-  override def eval(statement: LeafStatementExec): Boolean = statement match {
+class StatementBooleanEvaluator(session: SparkSession) {
+  def eval(statement: LeafStatementExec): Boolean = statement match {
     case statement: SingleStatementExec =>
       assert(!statement.isExecuted)
       statement.isExecuted = true

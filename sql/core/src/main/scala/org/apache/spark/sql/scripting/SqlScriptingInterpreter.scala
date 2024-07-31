@@ -77,12 +77,12 @@ case class SqlScriptingInterpreter() {
           .reverse
         new CompoundBodyExec(
           body.collection.map(st => transformTreeIntoExecutable(st, evaluator)) ++ dropVariables)
-      case IfElseStatement(conditions, conditionalBodies, unconditionalBody) =>
+      case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
         val conditionalBodiesExec = conditionalBodies.map(body =>
           transformTreeIntoExecutable(body, evaluator).asInstanceOf[CompoundBodyExec])
-        val unconditionalBodiesExec = unconditionalBody.map(body =>
+        val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, evaluator).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, evaluator)

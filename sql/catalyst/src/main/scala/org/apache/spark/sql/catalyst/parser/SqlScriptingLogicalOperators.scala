@@ -65,12 +65,12 @@ case class CompoundBody(
  *                   while others (if any) correspond to following ELSE IF clauses.
  * @param conditionalBodies Collection of bodies that have a corresponding condition,
  *                          in IF or ELSE IF branches.
- * @param unconditionalBody Body that is executed if none of the conditions are met,
+ * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  */
 case class IfElseStatement(
     conditions: Seq[SingleStatement],
     conditionalBodies: Seq[CompoundBody],
-    unconditionalBody: Option[CompoundBody]) extends CompoundPlanStatement {
+    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
 }

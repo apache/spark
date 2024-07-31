@@ -218,7 +218,7 @@ class AstBuilder extends DataTypeAstBuilder
             OneRowRelation()))
       }),
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
-      unconditionalBody = Option(ctx.unconditionalBody).map(body => visitCompoundBody(body))
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
     )
   }
 

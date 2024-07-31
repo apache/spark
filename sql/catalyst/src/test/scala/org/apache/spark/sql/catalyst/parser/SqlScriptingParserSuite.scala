@@ -383,7 +383,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
     assert(ifStmt.conditions.length == 1)
     assert(ifStmt.conditionalBodies.length == 1)
-    assert(ifStmt.unconditionalBody.isDefined)
+    assert(ifStmt.elseBody.isDefined)
 
     assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(ifStmt.conditions.head.getText == "1 = 1")
@@ -393,9 +393,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 1")
 
-    assert(ifStmt.unconditionalBody.get.collection.length == 1)
-    assert(ifStmt.unconditionalBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.unconditionalBody.get.collection.head.asInstanceOf[SingleStatement]
+    assert(ifStmt.elseBody.get.collection.length == 1)
+    assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 2")
   }
 
@@ -418,7 +418,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
     assert(ifStmt.conditions.length == 2)
     assert(ifStmt.conditionalBodies.length == 2)
-    assert(ifStmt.unconditionalBody.isDefined)
+    assert(ifStmt.elseBody.isDefined)
 
     assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(ifStmt.conditions.head.getText == "1 = 1")
@@ -434,8 +434,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 2")
 
-    assert(ifStmt.unconditionalBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.unconditionalBody.get.collection.head.asInstanceOf[SingleStatement]
+    assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 3")
   }
 
@@ -458,7 +458,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
     assert(ifStmt.conditions.length == 3)
     assert(ifStmt.conditionalBodies.length == 3)
-    assert(ifStmt.unconditionalBody.isEmpty)
+    assert(ifStmt.elseBody.isEmpty)
 
     assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(ifStmt.conditions.head.getText == "1 = 1")
@@ -502,7 +502,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
     assert(ifStmt.conditions.length == 1)
     assert(ifStmt.conditionalBodies.length == 1)
-    assert(ifStmt.unconditionalBody.isEmpty)
+    assert(ifStmt.elseBody.isEmpty)
 
     assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(ifStmt.conditions.head.getText == "1=1")
@@ -512,7 +512,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
     assert(nestedIfStmt.conditions.length == 1)
     assert(nestedIfStmt.conditionalBodies.length == 1)
-    assert(nestedIfStmt.unconditionalBody.isDefined)
+    assert(nestedIfStmt.elseBody.isDefined)
 
     assert(nestedIfStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(nestedIfStmt.conditions.head.getText == "2=1")
@@ -521,8 +521,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedIfStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 41")
 
-    assert(nestedIfStmt.unconditionalBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedIfStmt.unconditionalBody.get.collection.head.asInstanceOf[SingleStatement]
+    assert(nestedIfStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+    assert(nestedIfStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 42")
   }
 

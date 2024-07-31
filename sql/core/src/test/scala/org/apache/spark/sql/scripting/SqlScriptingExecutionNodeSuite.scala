@@ -47,13 +47,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
   case class TestIfElse(
       conditions: Seq[TestSingleStatement],
       conditionalBodies: Seq[TestBody],
-      unconditionalBody: Option[TestBody],
+      elseBody: Option[TestBody],
       booleanEvaluator: StatementBooleanEvaluator)
     extends IfElseStatementExec(
-      conditions, conditionalBodies, unconditionalBody, booleanEvaluator)
+      conditions, conditionalBodies, elseBody, booleanEvaluator)
 
   // Repeat retValue reps times, then return !retValue once.
-  case class RepEval(retValue: Boolean, reps: Int) extends StatementBooleanEvaluator {
+  case class RepEval(retValue: Boolean, reps: Int) extends StatementBooleanEvaluator(null) {
     private var callCount: Int = 0;
     override def eval(statement: LeafStatementExec): Boolean = {
       callCount += 1
@@ -106,7 +106,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1")))
         ),
-        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
+        elseBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
         booleanEvaluator = RepEval(retValue = false, reps = 0)
       )
     )).getTreeIterator
@@ -123,7 +123,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1")))
         ),
-        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
+        elseBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
         booleanEvaluator = RepEval(retValue = false, reps = 1)
       )
     )).getTreeIterator
@@ -142,7 +142,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
-        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
+        elseBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
         booleanEvaluator = RepEval(retValue = false, reps = 0)
       )
     )).getTreeIterator
@@ -161,7 +161,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
-        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
+        elseBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
         booleanEvaluator = RepEval(retValue = false, reps = 1)
       )
     )).getTreeIterator
@@ -182,7 +182,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body2"))),
           TestBody(Seq(TestLeafStatement("body3")))
         ),
-        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body4")))),
+        elseBody = Some(TestBody(Seq(TestLeafStatement("body4")))),
         booleanEvaluator = RepEval(retValue = false, reps = 2)
       )
     )).getTreeIterator
@@ -201,7 +201,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
-        unconditionalBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
+        elseBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
         booleanEvaluator = RepEval(retValue = false, reps = 2)
       )
     )).getTreeIterator
@@ -220,7 +220,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
-        unconditionalBody = None,
+        elseBody = None,
         booleanEvaluator = RepEval(retValue = false, reps = 1)
       )
     )).getTreeIterator
@@ -239,7 +239,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
-        unconditionalBody = None,
+        elseBody = None,
         booleanEvaluator = RepEval(retValue = false, reps = 2)
       )
     )).getTreeIterator

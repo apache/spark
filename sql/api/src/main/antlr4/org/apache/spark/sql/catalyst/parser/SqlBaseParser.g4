@@ -75,7 +75,7 @@ setStatementWithOptionalVarKeyword
 ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
         (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
-        (ELSE unconditionalBody=compoundBody)? END IF
+        (ELSE elseBody=compoundBody)? END IF
     ;
 
 singleStatement
