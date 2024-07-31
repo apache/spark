@@ -618,6 +618,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "reflect",
       "try_reflect",
       "java_method",
+      "hash",
+      "xxhash64",
       // need to skip as these are random functions
       "rand",
       "random",
@@ -630,11 +632,11 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     )
 
     for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      for (m <- "> .*;".r.findAllIn(funInfo.getExamples)) {
+      for (query <- "> .*;".r.findAllIn(funInfo.getExamples).map(s => s.substring(2))) {
         try {
-          val resultUTF8 = sql(m.substring(2))
+          val resultUTF8 = sql(query)
           withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-            val resultUTF8Lcase = sql(m.substring(2))
+            val resultUTF8Lcase = sql(query)
             assert(resultUTF8.collect() === resultUTF8Lcase.collect())
           }
         } catch {

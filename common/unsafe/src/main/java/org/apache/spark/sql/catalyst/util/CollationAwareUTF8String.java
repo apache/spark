@@ -51,9 +51,8 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
    * specified position (0-based index referring to character position in UTF8String), with respect
-   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased
-   * prior to method call to avoid the overhead of calling .toLowerCase() multiple times on the
-   * same prefix string.
+   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased prior
+   * to method call to avoid the overhead of lowercasing the same prefix string multiple times.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
@@ -155,8 +154,7 @@ public class CollationAwareUTF8String {
    * Returns whether the target string ends with the specified suffix, ending at the specified
    * position (0-based index referring to character position in UTF8String), with respect to the
    * UTF8_LCASE collation. The method assumes that the suffix is already lowercased prior
-   * to method call to avoid the overhead of calling .toLowerCase() multiple times on the same
-   * suffix string.
+   * to method call to avoid the overhead of lowercasing the same suffix string multiple times.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
@@ -255,10 +253,9 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Lowercase UTF8String comparison used for UTF8_LCASE collation. While the default
-   * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
-   * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
-   * as well as handling special rules for one-to-many case mappings (see: lowerCaseCodePoints).
+   * Lowercase UTF8String comparison used for UTF8_LCASE collation. This method uses lowercased
+   * code points to compare the strings in a case-insensitive manner using ICU rules, taking into
+   * account special rules for one-to-many case mappings (see: lowerCaseCodePoints).
    *
    * @param left The first UTF8String to compare.
    * @param right The second UTF8String to compare.
@@ -389,8 +386,7 @@ public class CollationAwareUTF8String {
       return src;
     }
 
-    // TODO(SPARK-48725): Use lowerCaseCodePoints instead of UTF8String.toLowerCase.
-    UTF8String lowercaseSearch = search.toLowerCase();
+    UTF8String lowercaseSearch = lowerCaseCodePoints(search);
 
     int start = 0;
     int end = lowercaseFind(src, lowercaseSearch, start);
@@ -637,7 +633,7 @@ public class CollationAwareUTF8String {
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
     if (pattern.numChars() == 0) return target.indexOfEmpty(start);
-    return lowercaseFind(target, pattern.toLowerCase(), start);
+    return lowercaseFind(target, lowerCaseCodePoints(pattern), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
@@ -734,7 +730,7 @@ public class CollationAwareUTF8String {
       return UTF8String.EMPTY_UTF8;
     }
 
-    UTF8String lowercaseDelimiter = delimiter.toLowerCase();
+    UTF8String lowercaseDelimiter = lowerCaseCodePoints(delimiter);
 
     if (count > 0) {
       // Search left to right (note: the start code point is inclusive).
