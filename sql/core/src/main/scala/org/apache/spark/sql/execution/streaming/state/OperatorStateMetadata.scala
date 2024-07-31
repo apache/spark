@@ -30,9 +30,9 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
@@ -176,6 +176,14 @@ object OperatorStateMetadataUtils extends Logging {
     offsetLog.getLatest() match {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation)
+    }
+  }
+
+  def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
+    val commitLog = new CommitLog(session, new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    commitLog.getLatest() match {
+      case Some((lastId, _)) => Some(lastId)
+      case None => None
     }
   }
 }

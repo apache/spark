@@ -107,8 +107,10 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
       val checkpointLocation = options.get("path")
       var batchId = Option(options.get("batchId")).map(_.toLong)
+      // if a batchId is provided, use it. Otherwise, use the last committed batch. If there is no
+      // committed batch, use batchId 0.
       batchId = Some(batchId.getOrElse(OperatorStateMetadataUtils
-        .getLastOffsetBatch(SparkSession.active, checkpointLocation)))
+        .getLastCommittedBatch(SparkSession.active, checkpointLocation).getOrElse(0L)))
 
       new StateMetadataScan(options.get("path"), batchId.get)
     }
