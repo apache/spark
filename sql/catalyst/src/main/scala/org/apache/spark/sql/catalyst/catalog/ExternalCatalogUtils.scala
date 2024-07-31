@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
@@ -280,7 +281,6 @@ object CatalogUtils {
    * @return the URI of the path
    */
   def stringToURI(str: String): URI = {
-    import org.apache.commons.lang3.StringUtils
     if (StringUtils.isEmpty(str)) {
       throw QueryExecutionErrors.invalidLocationError(str, "INVALID_EMPTY_LOCATION")
     }
