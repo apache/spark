@@ -166,20 +166,6 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics
 
-  def stateSchemaFilePath(storeName: Option[String] = None): Path = {
-    def stateInfo = getStateInfo
-    val stateCheckpointPath =
-      new Path(getStateInfo.checkpointLocation,
-        s"${stateInfo.operatorId.toString}")
-    storeName match {
-      case Some(storeName) =>
-        val storeNamePath = new Path(stateCheckpointPath, storeName)
-        new Path(new Path(storeNamePath, "_metadata"), "schema")
-      case None =>
-        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
-    }
-  }
-
   /**
    * Get the progress made by this stateful operator after execution. This should be called in
    * the driver after this SparkPlan has been executed and metrics have been updated.

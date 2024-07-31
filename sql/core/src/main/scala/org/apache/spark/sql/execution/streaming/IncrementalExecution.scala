@@ -88,24 +88,53 @@ class IncrementalExecution(
 
   override protected def purge(threshold: Long): Unit = {}
 
-  override protected def purgeOldest(planWithStateOpId: SparkPlan): Unit = {
-    planWithStateOpId.collect {
+
+  def stateSchemaDirPath(
+      ssw: StateStoreWriter,
+      storeName: Option[String] = None): Path = {
+    def stateInfo = ssw.getStateInfo
+    val stateCheckpointPath =
+      new Path(stateInfo.checkpointLocation,
+        s"${stateInfo.operatorId.toString}")
+    storeName match {
+      case Some(storeName) =>
+        val storeNamePath = new Path(stateCheckpointPath, storeName)
+        new Path(new Path(storeNamePath, "_metadata"), "schema")
+      case None =>
+        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+    }
+  }
+
+  override protected def purgeOldest(statefulOp: StatefulOperator): Unit = {
+    statefulOp match {
       case ssw: StateStoreWriter =>
         ssw.operatorStateMetadataVersion match {
           case 2 =>
+            // checkpointLocation of the operator is runId/state, and commitLog path is
+            // runId/commits, so we want the parent of the checkpointLocation to get the
+            // commit log path.
+            val parentCheckpointLocation = new Path(checkpointLocation).getParent
             val fileManager = new OperatorStateMetadataV2FileManager(
               new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-              ssw.stateSchemaFilePath(Some(StateStoreId.DEFAULT_STORE_NAME)),
+              stateSchemaDirPath(ssw, Some(StateStoreId.DEFAULT_STORE_NAME)),
+              new CommitLog(
+                sparkSession,
+                new Path(parentCheckpointLocation, "commits").toString
+              ),
               hadoopConf)
-              fileManager.keepNEntries(minLogEntriesToMaintain)
+              fileManager.purgeMetadataFiles()
           case _ =>
         }
       case _ =>
     }
   }
 
-  private def purgeMetadataFiles(planWithStateOpId: SparkPlan): Unit = {
-    purgeOldestAsync(planWithStateOpId)
+  private def purgeMetadataFiles(statefulOp: StatefulOperator): Unit = {
+    if (useAsyncPurge) {
+      purgeOldestAsync(statefulOp)
+    } else {
+      purgeOldest(statefulOp)
+    }
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -269,6 +298,7 @@ class IncrementalExecution(
                 ssw.operatorStateMetadataVersion,
                 Some(currentBatchId))
             metadataWriter.write(metadata)
+            purgeMetadataFiles(statefulOp)
           case _ =>
         }
         statefulOp
@@ -568,7 +598,6 @@ class IncrementalExecution(
       // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
       planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
-      purgeMetadataFiles(planWithStateOpId)
 
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule

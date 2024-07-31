@@ -95,6 +95,7 @@ class StateSchemaCompatibilityChecker(
       stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       stateSchemaVersion: Int): Unit = {
     // Ensure that schema file path is passed explicitly for schema version 3
+
     if (stateSchemaVersion == 3 && newSchemaFilePath.isEmpty) {
       throw new IllegalStateException("Schema file path is required for schema version 3")
     }
@@ -113,6 +114,7 @@ class StateSchemaCompatibilityChecker(
         path
       case None => schemaFileLocation
     }
+
     val outStream = fm.createAtomic(schemaFilePath, overwriteIfPossible = false)
     try {
       schemaWriter.write(stateStoreColFamilySchema, outStream)
@@ -186,6 +188,7 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
+      createSchemaFile(newStateSchemaList, stateSchemaVersion)
       false
     }
   }
