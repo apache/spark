@@ -280,11 +280,15 @@ object CatalogUtils {
    * @return the URI of the path
    */
   def stringToURI(str: String): URI = {
+    import org.apache.commons.lang3.StringUtils
+    if (StringUtils.isEmpty(str)) {
+      throw QueryExecutionErrors.invalidLocationError(str, "INVALID_EMPTY_LOCATION")
+    }
     try {
       new Path(str).toUri
     } catch {
       case e: IllegalArgumentException =>
-        throw QueryExecutionErrors.invalidLocationError(str, e)
+        throw QueryExecutionErrors.invalidLocationError(str, "INVALID_LOCATION", e)
     }
   }
 
