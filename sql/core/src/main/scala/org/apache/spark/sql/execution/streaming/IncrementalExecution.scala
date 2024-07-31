@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataV2FileManager, OperatorStateMetadataWriter, StateStoreId}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataV2FileManager, OperatorStateMetadataWriter, StateStoreId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -105,11 +105,7 @@ class IncrementalExecution(
   }
 
   private def purgeMetadataFiles(planWithStateOpId: SparkPlan): Unit = {
-    if (useAsyncPurge) {
-      purgeOldestAsync(planWithStateOpId)
-    } else {
-      purgeOldest(planWithStateOpId)
-    }
+    purgeOldestAsync(planWithStateOpId)
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
