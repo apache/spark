@@ -65,7 +65,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -1838,44 +1838,6 @@ class SparkConnectPlanner(
             .Product(transformExpression(fun.getArgumentsList.asScala.head))
             .toAggregateExpression())
 
-      case "when" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(CaseWhen.createFromParser(children))
-
-      case "in" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(In(children.head, children.tail))
-
-      case "nth_value" if fun.getArgumentsCount == 3 =>
-        // NthValue does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(2), "ignoreNulls")
-        Some(NthValue(children(0), children(1), ignoreNulls))
-
-      case "like" if fun.getArgumentsCount == 3 =>
-        // Like does not have a constructor which accepts Expression typed 'escapeChar'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val escapeChar = extractString(children(2), "escapeChar")
-        Some(Like(children(0), children(1), escapeChar.charAt(0)))
-
-      case "ilike" if fun.getArgumentsCount == 3 =>
-        // ILike does not have a constructor which accepts Expression typed 'escapeChar'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val escapeChar = extractString(children(2), "escapeChar")
-        Some(ILike(children(0), children(1), escapeChar.charAt(0)))
-
-      case "lag" if fun.getArgumentsCount == 4 =>
-        // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
-        Some(Lag(children.head, children(1), children(2), ignoreNulls))
-
-      case "lead" if fun.getArgumentsCount == 4 =>
-        // Lead does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
-        Some(Lead(children.head, children(1), children(2), ignoreNulls))
-
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         // [col, expectedNumItems: Long, numBits: Long]
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1892,33 +1854,6 @@ class SparkConnectPlanner(
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val unit = extractString(children(0), "unit")
         Some(TimestampAdd(unit, children(1), children(2)))
-
-      case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val timeCol = children.head
-        val windowDuration = extractString(children(1), "windowDuration")
-        var slideDuration = windowDuration
-        if (fun.getArgumentsCount >= 3) {
-          slideDuration = extractString(children(2), "slideDuration")
-        }
-        var startTime = "0 second"
-        if (fun.getArgumentsCount == 4) {
-          startTime = extractString(children(3), "startTime")
-        }
-        Some(
-          Alias(TimeWindow(timeCol, windowDuration, slideDuration, startTime), "window")(
-            nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
-
-      case "session_window" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val timeCol = children.head
-        val sessionWindow = children.last match {
-          case Literal(s, StringType) if s != null => SessionWindow(timeCol, s.toString)
-          case other => SessionWindow(timeCol, other)
-        }
-        Some(
-          Alias(sessionWindow, "session_window")(nonInheritableMetadataKeys =
-            Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
 
       case "bucket" if fun.getArgumentsCount == 2 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1946,31 +1881,32 @@ class SparkConnectPlanner(
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        var schema: DataType = null
-        children(1) match {
-          case Literal(s, StringType) if s != null =>
-            try {
-              schema = DataType.fromJson(s.toString)
-            } catch {
-              case _: Exception =>
-            }
-          case _ =>
-        }
-
-        if (schema != null) {
+        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
+          val children = fun.getArgumentsList.asScala.map(transformExpression)
+          val schema = CharVarcharUtils.failIfHasCharVarchar(dataType)
           var options = Map.empty[String, String]
           if (children.length == 3) {
             options = extractMapData(children(2), "Options")
           }
-          Some(
-            JsonToStructs(
-              schema = CharVarcharUtils.failIfHasCharVarchar(schema),
-              options = options,
-              child = children.head))
-        } else {
-          None
+          JsonToStructs(schema = schema, options = options, child = children.head)
+        }
+
+      case "from_xml" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        // XmlToStructs constructor doesn't accept JSON-formatted schema.
+        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
+          val children = fun.getArgumentsList.asScala.map(transformExpression)
+          val schema = dataType match {
+            case t: StructType =>
+              CharVarcharUtils
+                .failIfHasCharVarchar(t)
+                .asInstanceOf[StructType]
+            case _ => throw DataTypeErrors.failedParsingStructTypeError(dataType.sql)
+          }
+          var options = Map.empty[String, String]
+          if (children.length == 3) {
+            options = extractMapData(children(2), "Options")
+          }
+          XmlToStructs(schema = schema, options = options, child = children.head)
         }
 
       // Avro-specific functions
@@ -2066,18 +2002,6 @@ class SparkConnectPlanner(
         val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
         Some(CatalystDataToProtobuf(children(0), msgName, desc, options))
 
-      case "uuid" if fun.getArgumentsCount == 1 =>
-        // Uuid does not have a constructor which accepts Expression typed 'seed'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val seed = extractLong(children(0), "seed")
-        Some(Uuid(Some(seed)))
-
-      case "shuffle" if fun.getArgumentsCount == 2 =>
-        // Shuffle does not have a constructor which accepts Expression typed 'seed'
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val seed = extractLong(children(1), "seed")
-        Some(Shuffle(children(0), Some(seed)))
-
       case _ => None
     }
   }
@@ -2153,6 +2077,23 @@ class SparkConnectPlanner(
     case UnresolvedFunction(Seq("map"), args, _, _, _, _) =>
       extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
+  }
+
+  // Extract the schema from a literal string representing a JSON-formatted schema
+  private def extractDataTypeFromJSON(exp: proto.Expression): Option[DataType] = {
+    exp.getExprTypeCase match {
+      case proto.Expression.ExprTypeCase.LITERAL =>
+        exp.getLiteral.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
+            try {
+              Some(DataType.fromJson(exp.getLiteral.getString))
+            } catch {
+              case _: Exception => None
+            }
+          case _ => None
+        }
+      case _ => None
+    }
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -3072,6 +3013,11 @@ class SparkConnectPlanner(
       w.partitionBy(names.toSeq: _*)
     }
 
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
     if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
@@ -3135,6 +3081,11 @@ class SparkConnectPlanner(
       w.partitionedBy(names.head, names.tail: _*)
     }
 
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
     writeOperation.getMode match {
       case proto.WriteOperationV2.Mode.MODE_CREATE =>
         if (writeOperation.hasProvider) {
@@ -3186,6 +3137,10 @@ class SparkConnectPlanner(
 
     if (writeOp.getPartitioningColumnNamesCount > 0) {
       writer.partitionBy(writeOp.getPartitioningColumnNamesList.asScala.toList: _*)
+    }
+
+    if (writeOp.getClusteringColumnNamesCount > 0) {
+      writer.clusterBy(writeOp.getClusteringColumnNamesList.asScala.toList: _*)
     }
 
     writeOp.getTriggerCase match {
