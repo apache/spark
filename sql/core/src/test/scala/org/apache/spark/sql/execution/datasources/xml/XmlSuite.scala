@@ -3055,6 +3055,7 @@ abstract class XmlSuite
           .option("rowTag", "row")
           .xml(path)
 
+        XmlSuiteDebugFileSystem.reset()
         // Serialized file read for Schema inference
         val dfRead = spark.read
           .option("rowTag", "row")
