@@ -1443,7 +1443,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         plan2 = cdf2._plan.to_proto(self.connect._client)
 
         proto_string_2 = self.connect._client._proto_to_string(plan2, False)
-        self.assertTrue(len(proto_string_2) > 5000, len(proto_string_2))
+        self.assertTrue(len(proto_string_2) > 5000)
 
         # the truncated message is like:
         # root {
