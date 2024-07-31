@@ -310,6 +310,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 failUnresolvedAttribute(a, se.scope.attrs, "UNRESOLVED_COLUMN")
               case _ =>
             }
+          case se: ScopedExpression => throw SparkException.internalError(
+            "Resolved scoped expression operator should be removed " +
+              f"during analysis: ${toSQLExpr(se)}",
+            context = se.origin.getQueryContext,
+            summary = se.origin.context.summary)
           case _ =>
         })
 
