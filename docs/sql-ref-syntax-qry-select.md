@@ -68,7 +68,7 @@ except_clause
     These table expressions are allowed to be referenced later in the FROM clause. This is useful to abstract
     out repeated subquery blocks in the FROM clause and improves readability of the query.
 
-* **[hints](sql-ref-syntax-qry-select-hints.htm)**
+* **[hints](sql-ref-syntax-qry-select-hints.html)**
 
     Hints can be specified to help spark optimizer make better planning decisions. Currently spark supports hints
     that influence selection of join strategies and repartitioning of the data.
