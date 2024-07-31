@@ -81,6 +81,10 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
     assert(output === expectedOutput)
   }
 
+  test("verify that the DriverConfigMapName are different") {
+    assert(!KubernetesClientUtils.configMapNameDriver.equals(KubernetesClientUtils.configMapNameDriver))
+  }
+  
   test("verify that configmap built as expected") {
     val configMapName = s"configmap-name-${UUID.randomUUID.toString}"
     val configMapNameSpace = s"configmap-namespace-${UUID.randomUUID.toString}"
