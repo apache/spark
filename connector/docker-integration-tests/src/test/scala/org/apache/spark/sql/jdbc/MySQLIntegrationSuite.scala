@@ -213,6 +213,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val nulls = spark.read.jdbc(jdbcUrl, "numbers", new Properties).tail(1).head
     assert(nulls === Row(null, null, null, null, null, null, null, null, null))
   }
+
+  test("SPARK-44638: Char/Varchar in Custom Schema") {
+    val df = spark.read.option("url", jdbcUrl)
+      .option("query", "SELECT c, d from strings")
+      .option("customSchema", "c CHAR(10), d VARCHAR(10)")
+      .format("jdbc")
+      .load()
+    assert(df.head === Row("brown     ", "fox"))
+  }
 }
 
 /**
