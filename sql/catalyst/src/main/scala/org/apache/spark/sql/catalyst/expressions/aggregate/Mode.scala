@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, MapData, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -95,105 +95,48 @@ case class Mode(
       buffer.groupMapReduce(t =>
         groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
     }
+    def getMyBuffer(
+        childDataType: DataType): Option[AnyRef => _] = {
+      childDataType match {
+        case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
+        case _ => Some(f(_, childDataType))
+      }
+    }
     getMyBuffer(childDataType).map(getBuffer).getOrElse(buffer)
   }
 
-  private def getMyBuffer(
-      childDataType: DataType): Option[AnyRef => _] = {
-    childDataType match {
+  private def f(myData: AnyRef, myElementType: DataType): AnyRef = {
+    if (UnsafeRowUtils.isBinaryStable(myElementType)) {
       // Short-circuit if there is no collation.
-      case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
-      case c: StringType =>
-        Some(k =>
-        CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], c.collationId))
-      case at: ArrayType => Some(k =>
-        recursivelyGetBufferForArrayType(at, k.asInstanceOf[ArrayData]))
-      case st: StructType =>
-        Some(k => recursivelyGetBufferForStructType(
-          k.asInstanceOf[InternalRow].toSeq(st).zip(st.fields)))
-      case mt: MapType => None // No support for collation in map keys or values
-      case _ => None
+      myData
+    } else if (myElementType.isInstanceOf[StructType]) {
+      recursivelyGetBufferForStructType(
+        myData.asInstanceOf[InternalRow].toSeq(
+          myElementType.asInstanceOf[StructType]).zip(
+          myElementType.asInstanceOf[StructType].fields))
+    } else if (myElementType.isInstanceOf[ArrayType]) {
+      recursivelyGetBufferForArrayType(
+        myElementType.asInstanceOf[ArrayType],
+        myData.asInstanceOf[ArrayData])
+    } else if (myElementType.isInstanceOf[StringType]) {
+      CollationFactory.getCollationKey(
+        myData.asInstanceOf[UTF8String],
+        myElementType.asInstanceOf[StringType].collationId)
+    } else {
+      throw new UnsupportedOperationException(
+        s"Unsupported data type for collation-aware mode: $myElementType")
     }
   }
 
-  private def recursivelyGetBufferForMapType(mt: MapType, data: MapData): MapData = {
-    val keyFunctionMaybe = getMyBuffer(mt.keyType)
-    val valueFunctionMaybe = getMyBuffer(mt.valueType)
-    data.foreach(mt.keyType, mt.valueType, (key, value) =>
-      (key, value) match {
-        case (k: AnyRef, v: AnyRef) =>
-          (keyFunctionMaybe.map(keyFunction =>
-            keyFunction(k)).getOrElse(key),
-            valueFunctionMaybe.map(valueFunction =>
-              valueFunction(v)).getOrElse(value))
-        case _ => throw new IllegalStateException("Unexpected null value in map data")
-      })
-    data
+  private def recursivelyGetBufferForStructType(
+      tuples: Seq[(Any, StructField)]): Seq[Any] = {
+   tuples.map(t => f(t._1.asInstanceOf[AnyRef], t._2.dataType))
   }
 
   private def recursivelyGetBufferForArrayType(
       a: ArrayType,
       data: ArrayData): Seq[Any] = {
-    val fToUse: Int => Any = if (a.elementType.isInstanceOf[StructType]) {
-      i: Int =>
-        recursivelyGetBufferForStructType(
-          data.get(i, a.elementType).asInstanceOf[InternalRow].toSeq(
-            a.elementType.asInstanceOf[StructType]).zip(
-            a.elementType.asInstanceOf[StructType].fields))
-    } else if (a.elementType.isInstanceOf[ArrayType]) {
-      i: Int =>
-        recursivelyGetBufferForArrayType(
-          a.elementType.asInstanceOf[ArrayType],
-          data.get(i, a.elementType).asInstanceOf[ArrayData])
-    } else if (a.elementType.isInstanceOf[StringType] &&
-      !UnsafeRowUtils.isBinaryStable(a.elementType)) {
-      i: Int =>
-        CollationFactory.getCollationKey(
-          data.get(i, a.elementType).asInstanceOf[UTF8String],
-          a.elementType.asInstanceOf[StringType].collationId)
-    } else {
-      i: Int => data.get(i, a.elementType)
-    }
-    (0 until data.numElements()).map(fToUse)
-  }
-
-  private def isSpecificStringTypeMatch(field: StructField, fieldName: String): Boolean =
-    field.dataType.isInstanceOf[StringType] &&
-      !UnsafeRowUtils.isBinaryStable(field.dataType) &&
-      field.name == fieldName
-
-  private def isSpecificStructTypeMatch(field: StructField, fieldName: String): Boolean =
-    field.dataType.isInstanceOf[StructType] &&
-      field.name == fieldName
-
-  private def handleStringType(key: Any, field: StructField): Any = {
-    val strKey = key match {
-      case k: String => UTF8String.fromString(k)
-      case k: UTF8String => k
-    }
-    CollationFactory.getCollationKey(strKey, field.dataType.asInstanceOf[StringType].collationId)
-  }
-
-  private def recursivelyGetBufferForStructType(
-      tuples: Seq[(Any, StructField)]): Seq[Any] = {
-
-    val stringTypeFields = tuples.filter(f => isSpecificStringTypeMatch(f._2, f._2.name))
-    val structTypeFields = tuples.filter(f => isSpecificStructTypeMatch(f._2, f._2.name))
-
-    tuples.map {
-      case (k, field) if stringTypeFields.exists(_._2 == field) =>
-        handleStringType(k, field)
-      case (k, field) if structTypeFields.exists(_._2 == field) =>
-        recursivelyGetBufferForStructType(
-          k.asInstanceOf[InternalRow].toSeq(field.dataType.asInstanceOf[StructType]).zip(
-            field.dataType.asInstanceOf[StructType].fields))
-      case (k, structField: StructField) if structField.dataType.isInstanceOf[ArrayType] &&
-        !UnsafeRowUtils.isBinaryStable(structField.dataType.asInstanceOf[ArrayType]) =>
-        recursivelyGetBufferForArrayType(
-          structField.dataType.asInstanceOf[ArrayType],
-          k.asInstanceOf[ArrayData])
-      case (k, _) => k
-    }
+    (0 until data.numElements()).map(i => f(data.get(i, a.elementType), a.elementType))
   }
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
