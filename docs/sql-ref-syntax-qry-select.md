@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names | star ] [ , ... ] | TRANSFORM (...) ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names | star_clause ] [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ UNPIVOT clause ]
@@ -49,6 +49,15 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     [ WHERE boolean_expression ]
     [ GROUP BY expression [ , ... ] ]
     [ HAVING boolean_expression ]
+
+named_expression
+   expression [[AS] alias]
+
+star_clause
+   [ { table_name | view_name } . ] * [ except_clause ]
+
+except_clause
+   EXCEPT ( { column_name | field_name } [, ...] )
 ```
 
 ### Parameters
@@ -59,7 +68,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     These table expressions are allowed to be referenced later in the FROM clause. This is useful to abstract
     out repeated subquery blocks in the FROM clause and improves readability of the query.
 
-* **hints**
+* **[hints](sql-ref-syntax-qry-select-hints.htm)**
 
     Hints can be specified to help spark optimizer make better planning decisions. Currently spark supports hints
     that influence selection of join strategies and repartitioning of the data.
@@ -76,11 +85,9 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 
     An expression with an assigned name. In general, it denotes a column expression.
 
-    **Syntax:** `expression [[AS] alias]`
+* **[star_clause](sql-ref-syntax-qry-star.html)**
 
-* **star**
-
-    The `*` (star) clause is used to select all or most columns from one or all relations in a FROM clause.
+    A shorthand to name all the referenceable columns in the FROM clause or a specific table reference’s columns or fields in the FROM clause.
 
 * **from_item**
 
@@ -94,56 +101,56 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
-* **PIVOT**
+* **[PIVOT](sql-ref-syntax-qry-select-pivot.html)**
 
      The `PIVOT` clause is used for data perspective; We can get the aggregated values based on specific column value.
 
-* **UNPIVOT**
+* **[UNPIVOT](sql-ref-syntax-qry-select-unpivot.html)**
 
      The `UNPIVOT` clause transforms columns into rows. It is the reverse of `PIVOT`, except for aggregation of values.
 
-* **LATERAL VIEW**
+* **[LATERAL VIEW](sql-ref-syntax-qry-select-lateral-view.html)**
      
      The `LATERAL VIEW` clause is used in conjunction with generator functions such as `EXPLODE`, which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
  
-* **WHERE**
+* **[WHERE](sql-ref-syntax-qry-select-where.html)**
 
      Filters the result of the FROM clause based on the supplied predicates.
 
-* **GROUP BY**
+* **[GROUP BY](sql-ref-syntax-qry-select-groupby.html)**
 
      Specifies the expressions that are used to group the rows. This is used in conjunction with aggregate functions
      (MIN, MAX, COUNT, SUM, AVG, etc.) to group rows based on the grouping expressions and aggregate values in each group.
      When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
 
-* **HAVING**
+* **[HAVING](sql-ref-syntax-qry-select-having.html)**
 
      Specifies the predicates by which the rows produced by GROUP BY are filtered. The HAVING clause is used to
      filter rows after the grouping is performed. If HAVING is specified without GROUP BY, it indicates a GROUP BY
      without grouping expressions (global aggregate).
 
-* **ORDER BY**
+* **[ORDER BY](sql-ref-syntax-qry-select-orderby.html)**
 
      Specifies an ordering of the rows of the complete result set of the query. The output rows are ordered
      across the partitions. This parameter is mutually exclusive with `SORT BY`,
      `CLUSTER BY` and `DISTRIBUTE BY` and can not be specified together.
 
-* **SORT BY**
+* **[SORT BY](sql-ref-syntax-qry-select-sortby.html)**
 
      Specifies an ordering by which the rows are ordered within each partition. This parameter is mutually
      exclusive with `ORDER BY` and `CLUSTER BY` and can not be specified together.
 
-* **CLUSTER BY**
+* **[CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)**
 
      Specifies a set of expressions that is used to repartition and sort the rows. Using this clause has
      the same effect of using `DISTRIBUTE BY` and `SORT BY` together.
 
-* **DISTRIBUTE BY**
+* **[DISTRIBUTE BY](sql-ref-syntax-qry-select-distribute-by.html)**
 
      Specifies a set of expressions by which the result rows are repartitioned. This parameter is mutually
      exclusive with `ORDER BY` and `CLUSTER BY` and can not be specified together.
 
-* **LIMIT**
+* **[LIMIT](sql-ref-syntax-qry-select-limit.html)**
 
      Specifies the maximum number of rows that can be returned by a statement or subquery. This clause
      is mostly used in the conjunction with `ORDER BY` to produce a deterministic result.
@@ -175,7 +182,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      )
      ```
 
-* **TRANSFORM**
+* **[TRANSFORM](sql-ref-syntax-qry-select-transform.html)**
 
      Specifies a hive-style transform query specification to transform the input by forking and running user-specified command or script.
 
