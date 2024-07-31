@@ -272,8 +272,8 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums: Seq[AccumulatorV2[_, _]] = withReadLock {
-    _externalAccums.toArray.toImmutableArraySeq
+  private[spark] def externalAccums: ArrayBuffer[AccumulatorV2[_, _]] = withReadLock {
+    _externalAccums
   }
 
   private def withReadLock[B](fn: => B): B = {
@@ -298,7 +298,9 @@ class TaskMetrics private[spark] () extends Serializable {
     _externalAccums += a
   }
 
-  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
+  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = withReadLock {
+    internalAccums ++ externalAccums
+  }
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
     // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
