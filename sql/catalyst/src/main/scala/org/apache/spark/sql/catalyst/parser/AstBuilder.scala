@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingException}
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
@@ -158,12 +158,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
     declareVarStatement match {
       case Some(c: CreateVariable) =>
         if (allowVarDeclare) {
-          throw SqlScriptingException.variableDeclarationOnlyAtBeginning(
+          throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
             c.origin,
             toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
             c.origin.line.get.toString)
         } else {
-          throw SqlScriptingException.variableDeclarationNotAllowedInScope(
+          throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
             c.origin,
             toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
             c.origin.line.get.toString)
@@ -184,12 +184,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
               el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
-          throw SqlScriptingException.labelsMismatch(
+          throw SqlScriptingErrors.labelsMismatch(
             CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
         }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
-          throw SqlScriptingException.endLabelWithoutBeginLabel(
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
             CurrentOrigin.get, el.multipartIdentifier().getText)
         }
       case _ =>
