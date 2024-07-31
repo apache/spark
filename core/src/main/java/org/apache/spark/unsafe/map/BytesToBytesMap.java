@@ -18,10 +18,12 @@
 package org.apache.spark.unsafe.map;
 
 import javax.annotation.Nullable;
+import javax.xml.crypto.Data;
 import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.function.Function;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
@@ -36,6 +38,7 @@ import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
@@ -215,6 +218,24 @@ public final class BytesToBytesMap extends MemoryConsumer {
       0.5,
       pageSizeBytes);
   }
+
+  public BytesToBytesMap(
+          TaskMemoryManager taskMemoryManager,
+          int initialCapacity,
+          long pageSizeBytes,
+          Function<ComparingStruct, Boolean> fun) {
+    this(
+            taskMemoryManager,
+            SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
+            SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
+            initialCapacity,
+            // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
+            0.5,
+            pageSizeBytes);
+    cmp = fun;
+  }
+
+  private Function<ComparingStruct, Boolean> cmp;
 
   /**
    * Returns the number of keys defined in the map.
@@ -499,7 +520,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
     safeLookup(keyBase, keyOffset, keyLength, loc,
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42), null);
     return loc;
   }
 
@@ -510,9 +531,25 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
    */
-  public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
-    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
+  public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash, DataType[] dataTypes) {
+    safeLookup(keyBase, keyOffset, keyLength, loc, hash, dataTypes);
     return loc;
+  }
+
+  public static class ComparingStruct {
+    public ComparingStruct(Object keyBase1, long keyOffset1, int keyLength1, Object keyBase2, long keyOffset2, int keyLength2, DataType[] dataTypes) {
+      this.keyBase1 = keyBase1;
+      this.keyBase2 = keyBase2;
+      this.keyOffset1 = keyOffset1;
+      this.keyOffset2 = keyOffset2;
+      this.keyLength1 = keyLength1;
+      this.keyLength2 = keyLength2;
+      this.dataTypes = dataTypes;
+    }
+    public Object keyBase1, keyBase2;
+    public long keyOffset1, keyOffset2;
+    public int keyLength1, keyLength2;
+    public DataType[] dataTypes;
   }
 
   /**
@@ -520,7 +557,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
-  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash, DataType[] dataTypes) {
     assert(longArray != null);
 
     numKeyLookups++;
@@ -539,16 +576,24 @@ public final class BytesToBytesMap extends MemoryConsumer {
           // Full hash code matches.  Let's compare the keys for equality.
           loc.with(pos, hash, true);
           if (loc.getKeyLength() == keyLength) {
-            final boolean areEqual = ByteArrayMethods.arrayEquals(
-              keyBase,
-              keyOffset,
-              loc.getKeyBase(),
-              loc.getKeyOffset(),
-              keyLength
-            );
-            if (areEqual) {
-              return;
+            if (cmp == null) {
+              final boolean areEqual = ByteArrayMethods.arrayEquals(
+                      keyBase,
+                      keyOffset,
+                      loc.getKeyBase(),
+                      loc.getKeyOffset(),
+                      keyLength
+              );
+              if (areEqual) {
+                return;
+              }
+            } else {
+              boolean equal = cmp.apply(new ComparingStruct(keyBase, keyOffset, keyLength, loc.getKeyBase(), loc.getKeyOffset(), keyLength, dataTypes));
+              if (equal) {
+                return;
+              }
             }
+
           }
         }
       }

@@ -1,4 +1,4 @@
-/*
+ /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
+import java.util.function.Function;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate$;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
@@ -92,8 +94,24 @@ public final class UnsafeFixedWidthAggregationMap {
     this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
+
+    Function<BytesToBytesMap.ComparingStruct, Boolean> unsafeRowEqualWrapper = x -> {
+            if (x.keyLength1 != x.keyLength2) {
+              return false;
+            }
+
+            UnsafeRow u1 = new UnsafeRow();
+            u1.pointTo(x.keyBase1, x.keyOffset1, x.keyLength1);
+            u1.setColumnsDataType(x.dataTypes);
+            UnsafeRow u2 = new UnsafeRow();
+            u2.pointTo(x.keyBase2, x.keyOffset2, x.keyLength2);
+            u2.setColumnsDataType(x.dataTypes);
+
+            return u1.equals(u2);
+    };
+
     this.map = new BytesToBytesMap(
-      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes);
+      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes, unsafeRowEqualWrapper);
 
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
@@ -122,13 +140,51 @@ public final class UnsafeFixedWidthAggregationMap {
     return getAggregationBufferFromUnsafeRow(key, key.hashCode());
   }
 
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, DataType[] dataTypes) {
+    return getAggregationBufferFromUnsafeRow(key, key.hashCode(), dataTypes);
+  }
+
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash) {
+    // Probe our map using the serialized key
+    final BytesToBytesMap.Location loc = map.lookup(
+            key.getBaseObject(),
+            key.getBaseOffset(),
+            key.getSizeInBytes(),
+            hash,
+            null);
+    if (!loc.isDefined()) {
+      // This is the first time that we've seen this grouping key, so we'll insert a copy of the
+      // empty aggregation buffer into the map:
+      boolean putSucceeded = loc.append(
+              key.getBaseObject(),
+              key.getBaseOffset(),
+              key.getSizeInBytes(),
+              emptyAggregationBuffer,
+              Platform.BYTE_ARRAY_OFFSET,
+              emptyAggregationBuffer.length
+      );
+      if (!putSucceeded) {
+        return null;
+      }
+    }
+
+    // Reset the pointer to point to the value that we just stored or looked up:
+    currentAggregationBuffer.pointTo(
+            loc.getValueBase(),
+            loc.getValueOffset(),
+            loc.getValueLength()
+    );
+    return currentAggregationBuffer;
+  }
+
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash, DataType[] dataTypes) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
       key.getBaseObject(),
       key.getBaseOffset(),
       key.getSizeInBytes(),
-      hash);
+      hash,
+      dataTypes);
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:

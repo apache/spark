@@ -285,23 +285,24 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("aggregates count respects collation") {
-    Seq(
-      ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("utf8_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("utf8_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("utf8_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
-    ).foreach {
-      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
-        checkAnswer(sql(
-          s"""
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+      Seq(
+        ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+        ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+        ("utf8_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("utf8_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+        ("utf8_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+        ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+        ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+        ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+        ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+      ).foreach {
+        case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+          checkAnswer(sql(
+            s"""
           with t as (
           select collate(col1, '$collationName') as c
           from
@@ -309,6 +310,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
         SELECT COUNT(*), c FROM t GROUP BY c
         """), expected)
+      }
     }
   }
 
@@ -990,33 +992,47 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("Group by on collated string") {
-    val table = "t"
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "")) {
+    for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      val collationSetup = if (collation.isEmpty) "" else "collate " + collation
 
-    withTable(table) {
-      withSQLConf(
-        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $table (a string collate utf8_lcase, b string)")
-        sql(s"insert into $table values ('aaa', 'bbb')")
-        sql(s"insert into $table values ('AAA', 'bbb')")
+      test(s"Group by on string $collationSetup ($codeGen)") {
+        val table = "t"
 
-        val df = sql(s"select count(*), a from $table group by a")
+        withTable(table) {
+          withSQLConf(
+            "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $table (a string $collationSetup, b string)")
+            sql(s"insert into $table values ('aaa', 'ccc')")
+            sql(s"insert into $table values ('AAA', 'ccc')")
+            sql(s"insert into $table values ('bbb', 'ccc')")
+            sql(s"insert into $table values ('BBB', 'ccc')")
+            sql(s"insert into $table values ('AAa', 'ccc')")
+            sql(s"insert into $table values ('aAa', 'ccc')")
 
-        checkAnswer(df, Seq(Row(2, "aaa")))
+            val df = sql(s"select count(*) from $table group by a")
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4), Row(2)))
+            }
 
-        val queryPlan = df.queryExecution.executedPlan
-        // confirm that hash aggregate is used instead of sort merge join
-        assert(
-          collectFirst(queryPlan) {
-            case _: ObjectHashAggregateExec => ()
-          }.nonEmpty
-        )
-        assert(
-          collectFirst(queryPlan) {
-            case _: SortAggregateExec => ()
-          }.isEmpty
-        )
+            val queryPlan = df.queryExecution.executedPlan
+            // confirm that hash aggregate is used instead of sort merge join
+            assert(
+              collectFirst(queryPlan) {
+                case _: ObjectHashAggregateExec => ()
+              }.nonEmpty
+            )
+            assert(
+              collectFirst(queryPlan) {
+                case _: SortAggregateExec => ()
+              }.isEmpty
+            )
+          }
+        }
       }
     }
   }

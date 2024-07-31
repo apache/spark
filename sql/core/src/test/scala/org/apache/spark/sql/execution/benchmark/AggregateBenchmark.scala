@@ -569,7 +569,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           while (i < numKeys) {
             key.setInt(0, i % 65536)
             val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-              Murmur3_x86_32.hashLong(i % 65536, 42))
+              Murmur3_x86_32.hashLong(i % 65536, 42), null)
             if (!loc.isDefined) {
               loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
                 value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
@@ -581,7 +581,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           while (i < N) {
             key.setInt(0, i % 100000)
             val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-              Murmur3_x86_32.hashLong(i % 100000, 42))
+              Murmur3_x86_32.hashLong(i % 100000, 42), null)
             if (loc.isDefined) {
               s += 1
             }

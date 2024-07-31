@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import javax.xml.crypto.Data;
 import java.io.*;
-import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
-
-import scala.collection.mutable.Seq;
-import scala.util.hashing.MurmurHash3;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -40,7 +33,6 @@ import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
-import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -96,17 +88,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public boolean equals(Object obj) {
-    if (!(obj instanceof UnsafeRow o)) {
+    if (!(obj instanceof UnsafeRow other)) {
       return false;
-    } else if (attributesDataType == null) {
-      return this.sizeInBytes == o.sizeInBytes && ByteArrayMethods.arrayEquals(this.baseObject, this.baseOffset, o.baseObject, o.baseOffset, (long)this.sizeInBytes);
+    } else if (columnsDataType == null) {
+      return this.sizeInBytes == other.sizeInBytes && ByteArrayMethods.arrayEquals(this.baseObject, this.baseOffset, other.baseObject, other.baseOffset, this.sizeInBytes);
     }
 
-    UnsafeRow other = (UnsafeRow) obj;
     for (int idx = 0; idx < numFields; ++idx) {
-      int equal = PhysicalDataType.apply(attributesDataType[idx]).ordering().compare(get(idx, attributesDataType[idx]), other.get(idx, attributesDataType[idx]));
-      if (equal != 0)
+      int comp = PhysicalDataType.apply(columnsDataType[idx]).ordering().compare(get(idx, columnsDataType[idx]), other.get(idx, columnsDataType[idx]));
+      if (comp != 0) {
         return false;
+      }
     }
     return true;
   }
@@ -522,7 +514,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       sizeInBytes
     );
     rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-    rowCopy.setAttributesDataType(attributesDataType);
+    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    rowCopy.setColumnsDataType(columnsDataType);
     return rowCopy;
   }
 
@@ -551,6 +544,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       row.baseObject, row.baseOffset, this.baseObject, this.baseOffset, row.sizeInBytes);
     // update the sizeInBytes.
     this.sizeInBytes = row.sizeInBytes;
+    this.columnsDataType = row.columnsDataType;
   }
 
   /**
@@ -581,23 +575,23 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public int hashCode() {
-    if (attributesDataType == null) {
+    if (columnsDataType == null) {
       return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
     }
 
-    ArrayList exp = new ArrayList<Expression>(numFields);
+    ArrayList<Expression> exp = new ArrayList<>(numFields);
     for (int i = 0; i < numFields; ++i) {
-      exp.add(new Literal(get(i, attributesDataType[i]), attributesDataType[i]));
+      exp.add(new Literal(get(i, columnsDataType[i]), columnsDataType[i]));
     }
 
-    return (int) new Murmur3Hash(scala.collection.JavaConverters.asScala(exp).toSeq(), 42).eval(copy());
+    return (int) new Murmur3Hash(scala.jdk.CollectionConverters.ListHasAsScala(exp).asScala().toSeq(), 42).eval(this);
   }
 
-  private DataType[] attributesDataType;
+  private DataType[] columnsDataType;
 
-  public void setAttributesDataType(DataType[] _attributesDataType) {
-    assert (numFields == attributesDataType.length);
-    attributesDataType = _attributesDataType;
+  public void setColumnsDataType(DataType[] _columnsDataType) {
+    assert (numFields == columnsDataType.length);
+    columnsDataType = _columnsDataType;
   }
 
   /**

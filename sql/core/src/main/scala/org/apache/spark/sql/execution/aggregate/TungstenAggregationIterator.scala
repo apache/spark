@@ -184,7 +184,9 @@ class TungstenAggregationIterator(
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
       // Note that it would be better to eliminate the hash map entirely in the future.
       val groupingKey = groupingProjection.apply(null)
-      val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+      groupingKey.setColumnsDataType(originalInputAttributes.map(_.dataType).toArray)
+      val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey,
+        originalInputAttributes.map(_.dataType).toArray)
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
         processRow(buffer, newInput)
@@ -194,9 +196,11 @@ class TungstenAggregationIterator(
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
         val groupingKey = groupingProjection.apply(newInput)
+        groupingKey.setColumnsDataType(originalInputAttributes.map(_.dataType).toArray)
         var buffer: UnsafeRow = null
         if (i < fallbackStartsAt._2) {
-          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey,
+            originalInputAttributes.map(_.dataType).toArray)
         }
         if (buffer == null) {
           val sorter = hashMap.destructAndCreateExternalSorter()
@@ -206,7 +210,8 @@ class TungstenAggregationIterator(
             externalSorter.merge(sorter)
           }
           i = 0
-          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey,
+            originalInputAttributes.map(_.dataType).toArray)
           if (buffer == null) {
             // failed to allocate the first page
             // scalastyle:off throwerror
