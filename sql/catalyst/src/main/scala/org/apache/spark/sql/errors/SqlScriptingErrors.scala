@@ -17,30 +17,14 @@
 
 package org.apache.spark.sql.errors
 
-import scala.jdk.CollectionConverters.MapHasAsJava
-
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.errors.SqlScriptingException.errorMessageWithLineNumber
-
-class SqlScriptingException protected (
-    origin: Origin,
-    errorClass: String,
-    cause: Throwable,
-    messageParameters: Map[String, String] = Map.empty)
-  extends Exception(errorMessageWithLineNumber(origin, errorClass, messageParameters), cause)
-    with SparkThrowable {
-
-  override def getErrorClass: String = errorClass
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
-
-}
+import org.apache.spark.sql.exceptions.SqlScriptingException
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
  * of the SQL Scripting Language interpreter.
  */
-private[sql] object SqlScriptingException {
+private[sql] object SqlScriptingErrors {
 
   def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
     new SqlScriptingException(
@@ -79,13 +63,4 @@ private[sql] object SqlScriptingException {
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
   }
-
-  private def errorMessageWithLineNumber(
-    origin: Origin,
-    errorClass: String,
-    messageParameters: Map[String, String]): String = {
-    val prefix = origin.line.map(l => s"[LINE:$l] ").getOrElse("")
-    prefix + SparkThrowableHelper.getMessage(errorClass, messageParameters)
-  }
-
 }
