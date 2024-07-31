@@ -939,6 +939,31 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(windowGroupLimit.get.metrics("numOutputRows").value == 2L)
   }
 
+  test("SPARK-49038: Correctly filter out invalid accumulator metrics") {
+    val metric1 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+    val metric2 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+    val metric3 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+    val metric4 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+    val metric5 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+    val metric6 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+    val metric7 = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    metric3.add(0)
+    metric4.add(2)
+    metric5.add(4)
+    metric6.add(5)
+    metric7.add(10)
+
+    val metricTypeTiming = "timing"
+    val values = Array(metric1.value, metric2.value,
+      metric3.value, metric4.value, metric5.value, metric6.value, metric7.value)
+    val maxMetrics = Array(metric7.value, 2, 0, 4) // maxValue stageId attemptId taskId
+    val expectedOutput =
+      "total (min, med, max (stageId: taskId))\n21 ms (0 ms, 4 ms, 10 ms (stage 2.0: task 4))"
+
+    assert(SQLMetrics.stringValue(metricTypeTiming, values, maxMetrics).equals(expectedOutput))
+  }
+
   test("Creating metrics with initial values") {
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").value === -1)
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).value === -1)
