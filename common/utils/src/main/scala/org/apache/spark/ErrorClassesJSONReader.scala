@@ -43,7 +43,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   private[spark] val errorInfoMap =
     jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
 
-  def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
+  def getErrorMessage(errorClass: String, messageParameters: Map[String, Any]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
     val sanitizedParameters = messageParameters.map {
       case (key, null) => key -> "null"
