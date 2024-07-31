@@ -1233,10 +1233,18 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   private def getOperatorStateMetadataFileManager(
+      checkpointPath: Path,
       stateCheckpointPath: Path,
       stateSchemaPath: Path): OperatorStateMetadataV2FileManager = {
     val hadoopConf = spark.sessionState.newHadoopConf()
-    new OperatorStateMetadataV2FileManager(stateCheckpointPath, stateSchemaPath, hadoopConf)
+    new OperatorStateMetadataV2FileManager(
+      stateCheckpointPath,
+      stateSchemaPath,
+      new CommitLog(
+        spark.cloneSession(),
+        new Path(checkpointPath, "commit").toString
+      ),
+      hadoopConf)
   }
 
   private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
@@ -1275,10 +1283,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
 
         val fm = getOperatorStateMetadataFileManager(
+          new Path(chkptDir.getCanonicalPath),
           stateOpIdPath,
           stateSchemaPath)
-        assert(fm.listSchemaFiles().length == 1)
-        assert(fm.listMetadataFiles().length == 1)
+        assert(fm.listSchemaFiles().length == 2)
+        assert(fm.listMetadataFiles().length == 2)
       }
     }
   }

@@ -29,7 +29,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.BATCH_ID
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
@@ -332,6 +332,7 @@ class OperatorStateMetadataV2Reader(
 class OperatorStateMetadataV2FileManager(
     stateCheckpointPath: Path,
     stateSchemaPath: Path,
+    commitLog: CommitLog,
     hadoopConf: Configuration) extends Logging {
 
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
@@ -368,28 +369,27 @@ class OperatorStateMetadataV2FileManager(
     path.getName.toLong
   }
 
-  def keepNEntries(minLogEntriesToMaintain: Int): Unit = {
-    val thresholdBatchId = findThresholdBatchId(minLogEntriesToMaintain)
+  def purgeMetadataFiles(): Unit = {
+    val thresholdBatchId = findThresholdBatchId()
     if (thresholdBatchId != -1) {
       deleteSchemaFiles(thresholdBatchId)
       deleteMetadataFiles(thresholdBatchId)
     }
   }
 
-  private def findThresholdBatchId(minLogEntriesToMaintain: Int): Long = {
-    val metadataFiles = listBatches
-    if (metadataFiles.length > minLogEntriesToMaintain) {
-      metadataFiles.sorted.take(metadataFiles.length - minLogEntriesToMaintain).last + 1
-    } else {
-      -1
-    }
+  private def findThresholdBatchId(): Long = {
+    commitLog.listBatchesOnDisk.headOption.getOrElse(0L) - 1L
   }
 
   private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
+
+    if (schemaFiles.length <= 1) {
+      return
+    }
     val filesBeforeThreshold = schemaFiles.filter { path =>
       val batchIdInPath = path.getName.split("_").head.toLong
-      batchIdInPath < thresholdBatchId
+      batchIdInPath <= thresholdBatchId
     }
     filesBeforeThreshold.foreach { path =>
       fm.delete(path)
@@ -397,11 +397,15 @@ class OperatorStateMetadataV2FileManager(
   }
 
   private def deleteMetadataFiles(thresholdBatchId: Long): Unit = {
-      val metadataFiles = fm.list(metadataDirPath, batchFilesFilter)
-      metadataFiles.foreach { batchFile =>
+    val metadataFiles = fm.list(metadataDirPath, batchFilesFilter)
+
+    if (metadataFiles.length <= 1) {
+      return
+    }
+    metadataFiles.foreach { batchFile =>
       val batchId = pathToBatchId(batchFile.getPath)
-      if (batchId < thresholdBatchId) {
-          fm.delete(batchFile.getPath)
+      if (batchId <= thresholdBatchId) {
+        fm.delete(batchFile.getPath)
       }
     }
   }
