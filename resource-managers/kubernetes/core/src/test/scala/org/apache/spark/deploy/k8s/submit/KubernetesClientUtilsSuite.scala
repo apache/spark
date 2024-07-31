@@ -82,7 +82,7 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("verify that the DriverConfigMapName are different") {
-    assert(!KubernetesClientUtils.configMapNameDriver.equals(KubernetesClientUtils.configMapNameDriver))
+    assert(KubernetesClientUtils.configMapNameDriver!=KubernetesClientUtils.configMapNameDriver)
   }
   
   test("verify that configmap built as expected") {
