@@ -3640,7 +3640,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."
     ],
     "sqlState" : "42K0G"
   },
@@ -3824,6 +3824,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
+    "message" : [
+      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
+    ],
+    "sqlState" : "42802"
+  },
   "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
     "message" : [
       "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
@@ -3873,9 +3879,21 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INVALID_CONFIG_AFTER_RESTART" : {
+    "message" : [
+      "Cannot change <configName> from <oldConfig> to <newConfig> between restarts. Please set <configName> to <oldConfig>, or restart with a new checkpoint directory."
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_INVALID_PROVIDER" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
+  },
+  "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
+    "message" : [
+      "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
     ],
     "sqlState" : "42K06"
   },
