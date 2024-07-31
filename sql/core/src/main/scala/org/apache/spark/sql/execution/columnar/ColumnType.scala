@@ -832,7 +832,7 @@ private[columnar] object VARIANT
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val v = getField(row, ordinal)
     // 4 bytes each for the integers representing the 'value' and 'metadata' lengths.
-    8 + v.getValue().length +  v.getMetadata().length
+    8 + v.getValue().length + v.getMetadata().length
   }
 
   override def getField(row: InternalRow, ordinal: Int): VariantVal = row.getVariant(ordinal)
