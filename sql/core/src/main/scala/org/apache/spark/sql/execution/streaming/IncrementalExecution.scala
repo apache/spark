@@ -221,7 +221,7 @@ class IncrementalExecution(
               val oldMetadata = try {
                 OperatorStateMetadataReader.createReader(
                   new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                  hadoopConf, ssw.operatorStateMetadataVersion).read()
+                  hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
               } catch {
                 case e: Exception =>
                   logWarning(log"Error reading metadata path for stateful operator. This " +
