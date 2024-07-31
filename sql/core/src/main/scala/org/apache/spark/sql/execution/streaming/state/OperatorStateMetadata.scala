@@ -359,6 +359,15 @@ class OperatorStateMetadataV2Reader(
   }
 }
 
+/**
+ * A helper class to manage the metadata files for the operator state checkpoint.
+ * This class is used to manage the metadata files for OperatorStateMetadataV2, and
+ * provides utils to purge the oldest files such that we only keep the metadata files
+ * from the latest N runs
+ * @param stateCheckpointPath The root path of the state checkpoint directory
+ * @param stateSchemaPath The path where the schema files are stored
+ * @param hadoopConf The Hadoop configuration to create the file manager
+ */
 class OperatorStateMetadataV2FileManager(
     stateCheckpointPath: Path,
     stateSchemaPath: Path,
