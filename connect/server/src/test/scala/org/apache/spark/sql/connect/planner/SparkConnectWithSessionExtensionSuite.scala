@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CompoundBody, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
 class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
@@ -72,7 +72,8 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
       .build()
     val rel = proto.Relation.newBuilder.setRead(readWithTable).build()
 
-    val res = new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
+    val res = new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
+      .transformRelation(rel)
 
     assert(res !== null)
     assert(res.nodeName === "UnresolvedRelation")

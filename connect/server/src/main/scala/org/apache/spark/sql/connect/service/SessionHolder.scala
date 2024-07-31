@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
-import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
@@ -129,8 +128,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // session ID.
   def serverSessionId: String = {
     if (Utils.isTesting && session == null) {
-      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
-      // and don't have an underlying SparkSession.
+      // Testing-only: Some sessions created by SparkConnectTestUtils.createDummySessionHolder are
+      // not fully initialized and don't have an underlying SparkSession.
       ""
     } else {
       assert(session.sessionUUID != sessionId)
@@ -290,8 +289,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {
-      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
-      // and can't be closed.
+      // Testing-only: Some sessions created by SparkConnectTestUtils.createDummySessionHolder are
+      // not fully initialized and can't be closed.
       return
     }
 
@@ -489,17 +488,6 @@ object SessionHolder {
 
   // The maximum time for an error to stay in the cache.
   private val ERROR_CACHE_TIMEOUT_SEC = 60
-
-  /** Creates a dummy session holder for use in tests. */
-  def forTesting(session: SparkSession): SessionHolder = {
-    val ret =
-      SessionHolder(
-        userId = "testUser",
-        sessionId = UUID.randomUUID().toString,
-        session = session)
-    SparkConnectService.sessionManager.putSessionForTesting(ret)
-    ret
-  }
 }
 
 /** Basic information about SessionHolder. */
