@@ -117,7 +117,7 @@ class StatefulProcessorApiClient:
         if status != 0:
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
-    def _send_proto_message(self, message: str) -> None:
+    def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.
         write_int(0, self.sockfile)

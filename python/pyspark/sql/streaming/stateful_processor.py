@@ -16,11 +16,11 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING, Iterator, Union
+from typing import Any, TYPE_CHECKING, Iterator, Union, cast
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.value_state_client import ValueStateClient
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -55,7 +55,10 @@ class ValueState:
         Get the state value if it exists.
         """
         value = self._value_state_client.get(self._state_name)
-        columns = [field.name for field in self.schema.fields]
+        schema = self.schema
+        if isinstance(schema, str):
+            schema = cast(StructType, _parse_datatype_string(schema))
+        columns = [field.name for field in schema.fields]
         # Create the DataFrame using the values and schema
         df = pd.DataFrame([value], columns=columns)
         return df

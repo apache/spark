@@ -494,7 +494,7 @@ class PandasGroupedOpsMixin:
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         udf = pandas_udf(
-            transformWithStateUDF,  # type: ignore[call-overload]
+            transformWithStateUDF,  # type: ignore[arg-type]
             returnType=outputStructType,
             functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
         )
