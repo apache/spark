@@ -748,91 +748,91 @@ Project [cast(10.654321 as interval month) AS CAST(10.654321 AS INTERVAL MONTH)#
 -- !query
 SELECT '1.23' :: int
 -- !query analysis
-Project [1.23 :: int AS 1.23 :: INT#x]
+Project [1.23::int AS 1.23::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT 'abc' :: int
 -- !query analysis
-Project [abc :: int AS abc :: INT#x]
+Project [abc::int AS abc::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '12345678901234567890123' :: long
 -- !query analysis
-Project [12345678901234567890123 :: bigint AS 12345678901234567890123 :: BIGINT#xL]
+Project [12345678901234567890123::bigint AS 12345678901234567890123::BIGINT#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT '' :: int
 -- !query analysis
-Project [ :: int AS  :: INT#x]
+Project [::int AS ::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT NULL :: int
 -- !query analysis
-Project [null :: int AS NULL :: INT#x]
+Project [null::int AS NULL::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '123.a' :: int
 -- !query analysis
-Project [123.a :: int AS 123.a :: INT#x]
+Project [123.a::int AS 123.a::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '-2147483648' :: int
 -- !query analysis
-Project [-2147483648 :: int AS -2147483648 :: INT#x]
+Project [-2147483648::int AS -2147483648::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX('abc' :: binary)
 -- !query analysis
-Project [hex(abc :: binary) AS hex(abc :: BINARY)#x]
+Project [hex(abc::binary) AS hex(abc::BINARY)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX((123 :: byte) :: binary)
 -- !query analysis
-Project [hex(123 :: tinyint :: binary) AS hex(123 :: TINYINT :: BINARY)#x]
+Project [hex(123::tinyint::binary) AS hex(123::TINYINT::BINARY)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT 'interval 3 month 1 hour' :: interval
 -- !query analysis
-Project [interval 3 month 1 hour :: interval AS interval 3 month 1 hour :: INTERVAL#x]
+Project [interval 3 month 1 hour::interval AS interval 3 month 1 hour::INTERVAL#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT interval 3 day 1 second :: string
 -- !query analysis
-Project [INTERVAL '3 00:00:01' DAY TO SECOND :: string AS INTERVAL '3 00:00:01' DAY TO SECOND :: STRING#x]
+Project [INTERVAL '3 00:00:01' DAY TO SECOND::string AS INTERVAL '3 00:00:01' DAY TO SECOND::STRING#x]
 +- OneRowRelation
 
 
 -- !query
 select ' 1 ' :: DOUBLE
 -- !query analysis
-Project [ 1  :: double AS  1  :: DOUBLE#x]
+Project [ 1 ::double AS  1 ::DOUBLE#x]
 +- OneRowRelation
 
 
 -- !query
 select '1.0 ' :: DEC
 -- !query analysis
-Project [1.0  :: decimal(10,0) AS 1.0  :: DECIMAL(10,0)#x]
+Project [1.0 ::decimal(10,0) AS 1.0 ::DECIMAL(10,0)#x]
 +- OneRowRelation
 
 
@@ -840,71 +840,71 @@ Project [1.0  :: decimal(10,0) AS 1.0  :: DECIMAL(10,0)#x]
 select '\t\t true \n\r ' :: boolean
 -- !query analysis
 Project [		 true 
-  :: boolean AS 		 true 
-  :: BOOLEAN#x]
+ ::boolean AS 		 true 
+ ::BOOLEAN#x]
 +- OneRowRelation
 
 
 -- !query
 select '2022-01-01 00:00:00' :: timestamp
 -- !query analysis
-Project [2022-01-01 00:00:00 :: timestamp AS 2022-01-01 00:00:00 :: TIMESTAMP#x]
+Project [2022-01-01 00:00:00::timestamp AS 2022-01-01 00:00:00::TIMESTAMP#x]
 +- OneRowRelation
 
 
 -- !query
 select interval '-10-2' year to month :: smallint
 -- !query analysis
-Project [INTERVAL '-10-2' YEAR TO MONTH :: smallint AS INTERVAL '-10-2' YEAR TO MONTH :: SMALLINT#x]
+Project [INTERVAL '-10-2' YEAR TO MONTH::smallint AS INTERVAL '-10-2' YEAR TO MONTH::SMALLINT#x]
 +- OneRowRelation
 
 
 -- !query
 select -10L :: interval second
 -- !query analysis
-Project [-10 :: interval second AS -10 :: INTERVAL SECOND#x]
+Project [-10::interval second AS -10::INTERVAL SECOND#x]
 +- OneRowRelation
 
 
 -- !query
 select interval '08:11:10.001' hour to second :: decimal(10, 4)
 -- !query analysis
-Project [INTERVAL '08:11:10.001' HOUR TO SECOND :: decimal(10,4) AS INTERVAL '08:11:10.001' HOUR TO SECOND :: DECIMAL(10,4)#x]
+Project [INTERVAL '08:11:10.001' HOUR TO SECOND::decimal(10,4) AS INTERVAL '08:11:10.001' HOUR TO SECOND::DECIMAL(10,4)#x]
 +- OneRowRelation
 
 
 -- !query
 select 10.123456BD :: interval day to second
 -- !query analysis
-Project [10.123456 :: interval day to second AS 10.123456 :: INTERVAL DAY TO SECOND#x]
+Project [10.123456::interval day to second AS 10.123456::INTERVAL DAY TO SECOND#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '1.23' :: int :: long
 -- !query analysis
-Project [1.23 :: int :: bigint AS 1.23 :: INT :: BIGINT#xL]
+Project [1.23::int::bigint AS 1.23::INT::BIGINT#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT '2147483648' :: long :: int
 -- !query analysis
-Project [2147483648 :: bigint :: int AS 2147483648 :: BIGINT :: INT#x]
+Project [2147483648::bigint::int AS 2147483648::BIGINT::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CAST('2147483648' :: long AS int)
 -- !query analysis
-Project [cast(2147483648 :: bigint as int) AS CAST(2147483648 :: BIGINT AS INT)#x]
+Project [cast(2147483648::bigint as int) AS CAST(2147483648::BIGINT AS INT)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query analysis
-Project [map(1, 123, 2, 456)[1] :: int AS map(1, 123, 2, 456)[1] :: INT#x]
+Project [map(1, 123, 2, 456)[1]::int AS map(1, 123, 2, 456)[1]::INT#x]
 +- OneRowRelation
 
 

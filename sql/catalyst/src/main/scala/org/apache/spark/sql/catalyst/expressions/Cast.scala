@@ -2142,7 +2142,7 @@ case class Cast(
 
   override def toString: String = {
     getTagValue(FUNC_ALIAS) match {
-      case Some(op) => s"$child $op ${dataType.simpleString}"
+      case Some(op) => s"$child$op${dataType.simpleString}"
       case _ => s"$prettyName($child as ${dataType.simpleString})"
     }
   }
@@ -2153,7 +2153,7 @@ case class Cast(
     // back to SQL query string.
     case _: ArrayType | _: MapType | _: StructType => child.sql
     case _ => getTagValue(FUNC_ALIAS) match {
-      case Some(op) => s"${child.sql} $op ${dataType.sql}"
+      case Some(op) => s"${child.sql}$op${dataType.sql}"
       case _ => s"${prettyName.toUpperCase(Locale.ROOT)}(${child.sql} AS ${dataType.sql})"
     }
   }
