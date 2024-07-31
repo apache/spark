@@ -435,11 +435,11 @@ class LegacyFastTimestampFormatter(
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
     val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
-    rebaseJulianToGregorianMicros(julianMicros)
+    rebaseJulianToGregorianMicros(TimeZone.getTimeZone(zoneId), julianMicros)
   }
 
   override def format(timestamp: Long): String = {
-    val julianMicros = rebaseGregorianToJulianMicros(timestamp)
+    val julianMicros = rebaseGregorianToJulianMicros(TimeZone.getTimeZone(zoneId), timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
     cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
