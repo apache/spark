@@ -17,7 +17,6 @@
 
 package org.apache.spark.unsafe.hash;
 
-import javax.xml.crypto.Data;
 import java.nio.ByteOrder;
 
 import org.apache.spark.unsafe.Platform;

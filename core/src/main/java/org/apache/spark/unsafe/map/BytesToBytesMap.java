@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.map;
 
 import javax.annotation.Nullable;
-import javax.xml.crypto.Data;
 import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
@@ -232,7 +231,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
             // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
             0.5,
             pageSizeBytes);
-    cmp = fun;
+            cmp = fun;
   }
 
   private Function<ComparingStruct, Boolean> cmp;
@@ -593,7 +592,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
                 return;
               }
             }
-
           }
         }
       }
