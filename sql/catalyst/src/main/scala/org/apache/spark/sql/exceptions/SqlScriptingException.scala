@@ -41,7 +41,7 @@ private object SqlScriptingException {
       origin: Option[Origin],
       errorClass: String,
       messageParameters: Map[String, String]): String = {
-    val prefix = origin.map(o => o.line.map(l => s"[LINE:$l] ").getOrElse("")).getOrElse("")
+    val prefix = origin.flatMap(o => o.line.map(l => s"[LINE:$l] ")).getOrElse("")
     prefix + SparkThrowableHelper.getMessage(errorClass, messageParameters)
   }
 }
