@@ -23,7 +23,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.test.SharedSparkSession
@@ -46,7 +46,8 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     val query1 = mockQuery()
     val query2 = mockQuery()
 
-    val cache = new StreamingForeachBatchHelper.CleanerCache(SessionHolder.forTesting(spark))
+    val cache = new StreamingForeachBatchHelper.CleanerCache(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
 
     cache.registerCleanerForQuery(query1, cleaner1)
 

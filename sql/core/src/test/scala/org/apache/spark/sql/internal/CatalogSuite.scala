@@ -67,6 +67,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     sessionCatalog.createTable(utils.newTable(name, db), ignoreIfExists = false)
   }
 
+  private def createClusteredTable(name: String, db: Option[String] = None): Unit = {
+    sessionCatalog.createTable(utils.newTable(name, db, clusterBy = true), ignoreIfExists = false)
+  }
+
   private def createTable(name: String, db: String, catalog: String, source: String,
     schema: StructType, option: Map[String, String], description: String): DataFrame = {
     spark.catalog.createTable(Array(catalog, db, name).mkString("."), source,
@@ -106,9 +110,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       .map { db => spark.catalog.listColumns(db, tableName) }
       .getOrElse { spark.catalog.listColumns(tableName) }
     assert(tableMetadata.schema.nonEmpty, "bad test")
-    assert(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
-    assert(tableMetadata.bucketSpec.isDefined, "bad test")
-    assert(tableMetadata.clusterBySpec.isDefined, "bad test")
+    if (tableMetadata.clusterBySpec.isEmpty) {
+      assert(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
+      assert(tableMetadata.bucketSpec.isDefined, "bad test")
+    }
     assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
     val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     val clusteringColumnNames = tableMetadata.clusterBySpec.map { clusterBySpec =>
@@ -406,6 +411,12 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   test("list columns in database") {
     createDatabase("db1")
     createTable("tab1", Some("db1"))
+    testListColumns("tab1", dbName = Some("db1"))
+  }
+
+  test("list columns in clustered table") {
+    createDatabase("db1")
+    createClusteredTable("tab1", Some("db1"))
     testListColumns("tab1", dbName = Some("db1"))
   }
 

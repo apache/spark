@@ -31,6 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto.{Command, ExecutePlanResponse}
+import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.planner.SparkConnectStreamingQueryListenerHandler
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
@@ -96,7 +97,7 @@ class SparkConnectListenerBusListenerSuite
     test(
       "Basic functionalities - onQueryStart, onQueryProgress, onQueryTerminated" +
         s" - $queryNum queries") {
-      val sessionHolder = SessionHolder.forTesting(spark)
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
       val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
       val eventJsonBuffer = ArrayBuffer.empty[String]
       val startEventsBuffer = ArrayBuffer.empty[StreamingQueryListener.QueryStartedEvent]
@@ -139,7 +140,7 @@ class SparkConnectListenerBusListenerSuite
   }
 
   test("Basic functionalities - Slow query") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
     val eventJsonBuffer = ArrayBuffer.empty[String]
     val startEventsBuffer = ArrayBuffer.empty[StreamingQueryListener.QueryStartedEvent]
@@ -179,7 +180,7 @@ class SparkConnectListenerBusListenerSuite
   }
 
   test("Proper handling on onNext throw - initial response") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
 
     val executeHolder = mock[ExecuteHolder]
     when(executeHolder.sessionHolder).thenReturn(sessionHolder)
@@ -209,7 +210,7 @@ class SparkConnectListenerBusListenerSuite
   }
 
   test("Proper handling on onNext throw - query progress") {
-    val sessionHolder = SessionHolder.forTesting(spark)
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
     doThrow(new RuntimeException("I'm dead"))
       .when(responseObserver)
