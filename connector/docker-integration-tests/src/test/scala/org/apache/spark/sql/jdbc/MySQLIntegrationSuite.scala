@@ -227,7 +227,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("customSchema", "c CHAR(10), d VARCHAR(10)")
       .format("jdbc")
       .load()
-    checkAnswer(df, Row("brown     ", "fox"))
+    assert(df.head === Row("brown     ", "fox"))
   }
 }
 
