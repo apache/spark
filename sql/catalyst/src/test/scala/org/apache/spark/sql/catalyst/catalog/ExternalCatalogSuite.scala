@@ -229,10 +229,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     catalog.alterTable(tbl1.copy(properties = Map("toh" -> "frem")))
     val newTbl1 = catalog.getTable("db2", "tbl1")
     assert(!tbl1.properties.contains("toh"))
-    // clusteringColumns property is injected during newTable, so we need
-    // to filter it out before comparing the properties.
-    assert(newTbl1.properties.size ==
-      tbl1.properties.filter { case (key, _) => key != "clusteringColumns" }.size + 1)
+    assert(newTbl1.properties.size == tbl1.properties.size + 1)
     assert(newTbl1.properties.get("toh") == Some("frem"))
   }
 
@@ -1076,7 +1073,8 @@ abstract class CatalogTestUtils {
   def newTable(
       name: String,
       database: Option[String] = None,
-      defaultColumns: Boolean = false): CatalogTable = {
+      defaultColumns: Boolean = false,
+      clusterBy: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
@@ -1113,10 +1111,14 @@ abstract class CatalogTestUtils {
           .add("b", "string")
       },
       provider = Some(defaultProvider),
-      partitionColumnNames = Seq("a", "b"),
-      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)),
-      properties = Map(
-        ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2")))))
+      partitionColumnNames = if (clusterBy) Seq.empty else Seq("a", "b"),
+      bucketSpec = if (clusterBy) None else Some(BucketSpec(4, Seq("col1"), Nil)),
+      properties = if (clusterBy) {
+        Map(
+          ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2"))))
+      } else {
+        Map.empty
+      })
   }
 
   def newView(

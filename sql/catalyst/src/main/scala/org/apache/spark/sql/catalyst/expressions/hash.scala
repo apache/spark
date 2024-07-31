@@ -570,7 +570,7 @@ abstract class InterpretedHashFunction {
           hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
         } else {
           val stringHash = CollationFactory
-            .fetchCollation(dataType.asInstanceOf[StringType].collationId)
+            .fetchCollation(st.collationId)
             .hashFunction.applyAsLong(s)
           hashLong(stringHash, seed)
         }
