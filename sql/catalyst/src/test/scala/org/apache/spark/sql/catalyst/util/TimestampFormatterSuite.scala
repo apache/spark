@@ -299,7 +299,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     }
   }
 
-  test("SPARK-[TODO]: rebasing in legacy formatters/parsers with non-default time zone") {
+  test("SPARK-49065: rebasing in legacy formatters/parsers with non-default time zone") {
     val defaultTimeZone = LA
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
       outstandingZoneIds.foreach { zoneId =>
