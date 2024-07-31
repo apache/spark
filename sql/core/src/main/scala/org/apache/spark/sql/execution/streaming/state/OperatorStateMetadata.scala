@@ -328,7 +328,9 @@ class OperatorStateMetadataV2Reader(
     if (!fm.exists(offsetLog)) {
       return Array.empty
     }
-    fm.list(offsetLog).map(_.getPath.getName.toLong).sorted
+    fm.list(offsetLog)
+      .filter(f => !f.getPath.getName.startsWith(".")) // ignore hidden files
+      .map(_.getPath.getName.toLong).sorted
   }
 
   // List the available batches in the operator metadata directory
