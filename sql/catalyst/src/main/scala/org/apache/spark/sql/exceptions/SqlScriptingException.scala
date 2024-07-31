@@ -26,8 +26,8 @@ import org.apache.spark.sql.exceptions.SqlScriptingException.errorMessageWithLin
 class SqlScriptingException (
     errorClass: String,
     cause: Throwable,
-    messageParameters: Map[String, String] = Map.empty,
-    origin: Option[Origin] = None)
+    origin: Option[Origin],
+    messageParameters: Map[String, String] = Map.empty)
   extends Exception(errorMessageWithLineNumber(origin, errorClass, messageParameters), cause)
   with SparkThrowable {
 
@@ -41,7 +41,7 @@ private object SqlScriptingException {
       origin: Option[Origin],
       errorClass: String,
       messageParameters: Map[String, String]): String = {
-    val prefix = origin.flatMap(o => o.line.map(l => s"[LINE:$l] ")).getOrElse("")
+    val prefix = origin.flatMap(o => o.line.map(l => s"{LINE:$l} ")).getOrElse("")
     prefix + SparkThrowableHelper.getMessage(errorClass, messageParameters)
   }
 }
