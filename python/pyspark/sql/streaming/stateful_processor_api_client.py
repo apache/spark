@@ -17,7 +17,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Union, cast, Tuple
+from typing import Any, Union, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
@@ -161,7 +161,7 @@ class StatefulProcessorApiClient:
         row_value = Row(*converted)
         return self.pickleSer.dumps(schema.toInternal(row_value))
 
-    def _receive_and_deserialize(self):
+    def _receive_and_deserialize(self) -> Any:
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
         return self.pickleSer.loads(bytes)
