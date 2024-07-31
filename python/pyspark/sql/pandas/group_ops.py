@@ -392,6 +392,9 @@ class PandasGroupedOpsMixin:
         The size of each `pandas.DataFrame` in both the input and output can be arbitrary. The
         number of `pandas.DataFrame` in both the input and output can also be arbitrary.
 
+        `transformWithStateInPandas` requires protobuf as a dependency to transmit state
+        messages/data.
+
         .. versionadded:: 4.0.0
 
         Parameters
@@ -413,8 +416,8 @@ class PandasGroupedOpsMixin:
         >>> from pyspark.sql.functions import col, split
         >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
         >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
-        >>> from typing import Iterator
         >>>
+        >>> from typing import Iterator
         >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
         ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         ... # Below is a simple example of a stateful processor that counts the number of violations

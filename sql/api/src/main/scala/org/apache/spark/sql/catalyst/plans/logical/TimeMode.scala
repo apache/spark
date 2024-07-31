@@ -31,7 +31,7 @@ case object EventTime extends TimeMode
 object TimeModes {
   def apply(timeMode: String): TimeMode = {
     timeMode.toLowerCase(Locale.ROOT) match {
-      case "none" | "notime" =>
+      case "none" =>
         NoTime
       case "processingtime" =>
         ProcessingTime
