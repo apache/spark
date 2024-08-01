@@ -297,7 +297,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             while q.isActive:
                 q.awaitTermination(0.5)
 
-            # need to wait a while before QueryTerminatedEvent reaches client
+            # Need to wait a while before QueryTerminatedEvent reaches client
             while len(listener.terminated) == 0:
                 time.sleep(1)
 
