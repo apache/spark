@@ -590,7 +590,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   private DataType[] columnsDataType;
 
   public void setColumnsDataType(DataType[] _columnsDataType) {
-    assert ((numFields == 0 && _columnsDataType == null) || numFields == _columnsDataType.length);
+    assert((numFields == 0 && _columnsDataType == null) || (_columnsDataType != null && numFields == _columnsDataType.length));
     if (_columnsDataType != null) {
       columnsDataType = _columnsDataType;
     }
