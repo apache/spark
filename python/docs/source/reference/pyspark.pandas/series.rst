@@ -462,8 +462,8 @@ specific plotting methods of the form ``Series.plot.<kind>``.
    Series.plot.density
    Series.plot.hist
    Series.plot.line
-   Series.plot.pie
    Series.plot.kde
+   Series.plot.pie
 
 .. autosummary::
    :toctree: api/
