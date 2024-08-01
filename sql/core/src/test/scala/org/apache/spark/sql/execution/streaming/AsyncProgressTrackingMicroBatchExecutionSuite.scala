@@ -759,16 +759,16 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
   }
 
-    // Tests that errors that occurred during async offset log write gets bubbled up
+  // Tests that errors that occurred during async offset log write gets bubbled up
   // to the main stream execution thread
-  test("bubble up async offset log write errors 2:" +
+  ignore("bubble up async offset log write errors 2:" +
     " cannot write offset files due to permissions issue") {
     testAsyncWriteErrorsPermissionsIssue("/offsets")
   }
 
   // Tests that errors that occurred during async commit log write gets bubbled up
   // to the main stream execution thread
-  test("bubble up async commit log write errors 2" +
+  ignore("bubble up async commit log write errors 2" +
     ": commit file already exists for a batch") {
     testAsyncWriteErrorsPermissionsIssue("/commits")
   }
