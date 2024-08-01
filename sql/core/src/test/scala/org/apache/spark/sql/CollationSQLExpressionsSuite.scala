@@ -2320,7 +2320,6 @@ class CollationSQLExpressionsSuite
   }
 
   test("Support HyperLogLogPlusPlus expression with collation") {
-
     case class HyperLogLogPlusPlusTestCase(
       collation: String,
       input: Seq[String],
@@ -2339,6 +2338,7 @@ class CollationSQLExpressionsSuite
     )
 
     testCases.foreach( t => {
+      // Using explicit collate clause
       val query =
         s"""
            |SELECT approx_count_distinct(col) FROM VALUES
@@ -2346,6 +2346,7 @@ class CollationSQLExpressionsSuite
            |""".stripMargin
       checkAnswer(sql(query), t.output)
 
+      // Using default collation
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collation) {
         val query =
           s"""
