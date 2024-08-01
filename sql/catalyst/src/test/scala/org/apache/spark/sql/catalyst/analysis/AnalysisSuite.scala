@@ -1582,7 +1582,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       func,
       rel.output.head :: Nil,
       rel.output,
-      SortOrder($"b", Ascending) :: Nil,
+      SortOrder($"b", Ascending, $"b".as("b2") :: Nil) :: Nil,
       rel
     )
 
@@ -1594,14 +1594,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     def hasScope(scope: Seq[Attribute])(sortOrder: SortOrder): Boolean = {
       sortOrder.child.isInstanceOf[ScopedExpression] &&
-        sortOrder.child.asInstanceOf[ScopedExpression].scope.equals(scope)
+        sortOrder.child.asInstanceOf[ScopedExpression].scope.equals(scope) &&
+        // because we have aliased the order column
+        sortOrder.sameOrderExpressions.nonEmpty &&
+        sortOrder.sameOrderExpressions.forall(_.isInstanceOf[ScopedExpression])
     }
 
     // assert sort order to be scoped
     assert(mg.isDefined)
     mg.foreach { mg =>
       assert(mg.dataOrder.size == 1)
-      assert(mg.dataOrder.forall(hasScope(mg.dataAttributes)))
+      assert(mg.dataOrder.forall(hasScope(mg.dataAttributes)), mg.dataOrder.mkString(", "))
     }
   }
 
@@ -1617,7 +1620,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val leftWithKey = AppendColumns[Int, Int]((x: Int) => x, left)
     val rightWithKey = AppendColumns[Int, Int]((x: Int) => x, right)
     val leftOrder = SortOrder($"e", Ascending) :: Nil
-    val rightOrder = SortOrder($"e", Ascending) :: SortOrder($"f", Descending) :: Nil
+    val rightOrder =
+      SortOrder($"e", Ascending, $"e".as("e2") :: Nil) ::
+        SortOrder($"f", Descending, $"f".as("f2") :: Nil) ::
+        Nil
 
     val cogroup = leftWithKey.cogroup[Int, Int, Int, Int](
       rightWithKey,
@@ -1636,9 +1642,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       case cg: CoGroup => cg
     }
 
-    def hasScope(scope: Seq[Attribute])(sortOrder: SortOrder): Boolean = {
+    def hasScope(scope: Seq[Attribute], hasSameOrderExpr: Boolean)
+                (sortOrder: SortOrder): Boolean = {
       sortOrder.child.isInstanceOf[ScopedExpression] &&
-        sortOrder.child.asInstanceOf[ScopedExpression].scope.equals(scope)
+        sortOrder.child.asInstanceOf[ScopedExpression].scope.equals(scope) &&
+        // because we (may) have aliased the order column
+        sortOrder.sameOrderExpressions.nonEmpty == hasSameOrderExpr &&
+        sortOrder.sameOrderExpressions.forall(_.isInstanceOf[ScopedExpression])
     }
 
     // assert sort order to be scoped
@@ -1646,8 +1656,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     cg.foreach { cg =>
       assert(cg.leftOrder.size == 1)
       assert(cg.rightOrder.size == 2)
-      assert(cg.leftOrder.forall(hasScope(left.output)))
-      assert(cg.rightOrder.forall(hasScope(right.output)))
+      assert(cg.leftOrder.forall(hasScope(left.output, hasSameOrderExpr = false)))
+      assert(cg.rightOrder.forall(hasScope(right.output, hasSameOrderExpr = true)))
     }
   }
 

@@ -3516,7 +3516,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def scopeOrder(scope: Seq[Attribute])(sortOrder: SortOrder): SortOrder = {
       sortOrder match {
         case so if so.child.isInstanceOf[ScopedExpression] => so
-        case so => so.copy(child = ScopedExpression(so.child, scope))
+        case so => so.copy(
+          child = ScopedExpression(so.child, scope),
+          sameOrderExpressions = so.sameOrderExpressions.map(soe => ScopedExpression(soe, scope))
+        )
       }
     }
 
