@@ -182,7 +182,7 @@ class StateSchemaCompatibilityChecker(
         case (existingStateSchema, newStateSchema) =>
           check(existingStateSchema, newStateSchema, ignoreValueSchema)
       }
-      // we want to write the new schema file on each new run
+      // we want to write the new schema file on each new run for state schema v3
       if (stateSchemaVersion == 3) {
         createSchemaFile(newStateSchemaList, stateSchemaVersion)
       }
