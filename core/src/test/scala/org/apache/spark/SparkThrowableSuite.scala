@@ -493,4 +493,26 @@ class SparkThrowableSuite extends SparkFunSuite {
       assert(e.getMessage.contains("BY.ZERO"))
     }
   }
+
+  test("handle null values in message parameters") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      FileUtils.writeStringToFile(json,
+        """
+          |{
+          |  "MISSING_PARAMETER" : {
+          |    "message" : [
+          |      "Parameter ${param} is missing."
+          |    ]
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      // Attempt to get the error message with a null parameter
+      val errorMessage = reader.getErrorMessage("MISSING_PARAMETER", Map("param" -> null))
+
+      assert(errorMessage.contains("Parameter null is missing."))
+    }
+  }
 }

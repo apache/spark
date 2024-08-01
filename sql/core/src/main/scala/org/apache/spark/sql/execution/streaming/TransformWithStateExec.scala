@@ -96,6 +96,8 @@ case class TransformWithStateExec(
     }
   }
 
+  override def operatorStateMetadataVersion: Int = 2
+
   /**
    * We initialize this processor handle in the driver to run the init function
    * and fetch the schemas of the state variables initialized in this processor.
@@ -117,6 +119,12 @@ case class TransformWithStateExec(
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
+  }
+
+  private def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
+    closeProcessorHandle()
+    stateVariableInfos
   }
 
   /**
@@ -382,12 +390,47 @@ case class TransformWithStateExec(
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
-    val newColumnFamilySchemas = getColFamilySchemas()
+    val newSchemas = getColFamilySchemas()
     val stateSchemaDir = stateSchemaDirPath()
-    val stateSchemaFilePath = new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
-    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newColumnFamilySchemas.values.toList, session.sessionState, stateSchemaVersion,
-      schemaFilePath = Some(stateSchemaFilePath)))
+    val newStateSchemaFilePath =
+      new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
+    val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
+    val metadataReader = OperatorStateMetadataReader.createReader(
+      metadataPath, hadoopConf, operatorStateMetadataVersion)
+    val operatorStateMetadata = metadataReader.read()
+    val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
+      case Some(metadata) =>
+        metadata match {
+          case v2: OperatorStateMetadataV2 =>
+            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
+          case _ => None
+        }
+      case None => None
+    }
+    List(StateSchemaCompatibilityChecker.
+      validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newSchemas.values.toList, session.sessionState, stateSchemaVersion,
+      storeName = StateStoreId.DEFAULT_STORE_NAME,
+      oldSchemaFilePath = oldStateSchemaFilePath,
+      newSchemaFilePath = Some(newStateSchemaFilePath)))
+  }
+
+  /** Metadata of this stateful operator and its states stores. */
+  override def operatorStateMetadata(
+      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    // stateSchemaFilePath should be populated at this point
+    val stateStoreInfo =
+      Array(StateStoreMetadataV2(
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+
+    val operatorProperties = TransformWithStateOperatorProperties(
+      timeMode.toString,
+      outputMode.toString,
+      getStateVariableInfos().values.toList
+    )
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
   }
 
   private def stateSchemaDirPath(): Path = {
@@ -398,6 +441,23 @@ case class TransformWithStateExec(
 
     val storeNamePath = new Path(stateCheckpointPath, storeName)
     new Path(new Path(storeNamePath, "_metadata"), "schema")
+  }
+
+  override def validateNewMetadata(
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    (oldOperatorMetadata, newOperatorMetadata) match {
+      case (
+        oldMetadataV2: OperatorStateMetadataV2,
+        newMetadataV2: OperatorStateMetadataV2) =>
+        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          oldMetadataV2.operatorPropertiesJson)
+        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          newMetadataV2.operatorPropertiesJson)
+        TransformWithStateOperatorProperties.validateOperatorProperties(
+          oldOperatorProps, newOperatorProps)
+      case (_, _) =>
+    }
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -625,4 +685,3 @@ object TransformWithStateExec {
   }
 }
 // scalastyle:on argcount
-

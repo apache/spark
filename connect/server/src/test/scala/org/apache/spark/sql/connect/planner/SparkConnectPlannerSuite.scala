@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -114,7 +114,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
-      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
+      new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder
             .setLimit(proto.Limit.newBuilder.setLimit(10))
@@ -125,11 +125,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
+      new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
-      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
+      new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
   }
