@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.lang.invoke.MethodHandles
 import java.util.{Map => JMap}
 import java.util.Random
 
@@ -59,9 +58,9 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
 
   private val keyProviderCacheRef: JMap[String, KeyProvider] = {
     val clazz = classOf[CryptoUtils]
-    val lookup = MethodHandles.privateLookupIn(clazz, MethodHandles.lookup())
-    lookup.findStaticVarHandle(clazz, "keyProviderCache", classOf[JMap[_, _]])
-      .get().asInstanceOf[JMap[String, KeyProvider]]
+    val field = clazz.getDeclaredField("keyProviderCache")
+    field.setAccessible(true)
+    field.get(null).asInstanceOf[JMap[String, KeyProvider]]
   }
 
   test("Write and read an encrypted file") {
