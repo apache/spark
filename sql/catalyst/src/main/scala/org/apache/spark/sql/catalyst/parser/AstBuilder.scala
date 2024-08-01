@@ -61,8 +61,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder
-  extends DataTypeAstBuilder with SQLConfHelper with Logging with DataTypeErrorsBase {
+class AstBuilder extends DataTypeAstBuilder
+  with SQLConfHelper with Logging with DataTypeErrorsBase {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
