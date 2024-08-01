@@ -284,8 +284,6 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 .start()
             )
 
-            # Both listeners should have listener events already because onQueryStarted
-            # is always called before DataStreamWriter.start() returns
             self.assertEqual(len(listener.start), 1)
             self.assertEqual(str(listener.start[0].id), q.id)
 
