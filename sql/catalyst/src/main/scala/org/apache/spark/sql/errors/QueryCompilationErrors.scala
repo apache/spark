@@ -2152,12 +2152,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
   }
 
-  def identifierTooManyNamePartsError(originalIdentifier: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
-  }
-
   def emptyMultipartIdentifierError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1186",
