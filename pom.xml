@@ -434,7 +434,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>net.aichler</groupId>
+      <groupId>com.github.sbt.junit</groupId>
       <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
     </dependency>
