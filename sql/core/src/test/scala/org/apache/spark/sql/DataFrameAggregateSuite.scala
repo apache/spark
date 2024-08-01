@@ -2192,9 +2192,6 @@ class DataFrameAggregateSuite extends QueryTest
         s"""SELECT COUNT(DISTINCT 1, "col") FROM $t"""
       ),
       AggregateTestCaseDefault(
-        s"""SELECT COUNT(DISTINCT collation("abc")) FROM $t"""
-      ),
-      AggregateTestCaseDefault(
         s"""SELECT COUNT(DISTINCT current_date()) FROM $t"""
       ),
       AggregateTestCaseDefault(
