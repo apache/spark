@@ -56,14 +56,14 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
         // and special handle this case.
         val mapSortExpr = if (m.valueType.existsRecursively(_.isInstanceOf[MapType])) {
           MapFromArrays(MapKeys(e), insertMapSortRecursively(MapValues(e)))
-        }
-        else {
+        } else {
           e
         }
 
         MapSort(mapSortExpr)
 
-      case StructType(fields) =>
+      case StructType(fields)
+        if fields.exists(_.dataType.existsRecursively(_.isInstanceOf[MapType])) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
           Seq(Literal(f.name), insertMapSortRecursively(
             GetStructField(e, i, Some(f.name))))
@@ -77,7 +77,7 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
           struct
         }
 
-      case ArrayType(et, containsNull) =>
+      case ArrayType(et, containsNull) if et.existsRecursively(_.isInstanceOf[MapType]) =>
         val param = NamedLambdaVariable("x", et, containsNull)
         val funcBody = insertMapSortRecursively(param)
 
