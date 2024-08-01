@@ -280,7 +280,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 self.spark.readStream.format("rate")
                 .load()
                 .writeStream.format("noop")
-                .queryName("test_local")
+                .queryName("test_listener_uninterruptible")
                 .start()
             )
 
@@ -291,9 +291,10 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 q.awaitTermination(0.5)
 
             # Interrupt should stop the query but should not impact the listener,
-            # therefore there should be a listener termination event.
+            # therefore there should be a QueryTerminatedEvent sent from the server.
             self.spark.interruptAll()
 
+            # Need to wait a while before the query really stops
             while q.isActive:
                 q.awaitTermination(0.5)
 

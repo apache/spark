@@ -238,10 +238,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         }
         completed = true // no longer interruptible
 
-        // If the request returns a long running iterator (e.g. StreamingQueryListener needs
-        // a long-running iterator to continuously stream back events),
-        // we delegate the sending of the final ResultComplete to the handler itself.
-        if (!createsLongRunningIterator(executeHolder.request)) {
+        // If the request starts a long running iterator (e.g. StreamingQueryListener needs
+        // a long-running iterator to continuously stream back events, it runs in a separate
+        // thread, and holds the responseObserver to send back the listener events.)
+        // In such cases, even after the ExecuteThread returns, we still want to keep the
+        // client side iterator open, i.e. don't send the ResultComplete to the client.
+        // So delegate the sending of the final ResultComplete to the listener thread itself.
+        if (!shouldDelegateCompleteResponse(executeHolder.request)) {
           if (executeHolder.reattachable) {
             // Reattachable execution sends a ResultComplete at the end of the stream
             // to signal that there isn't more coming.
@@ -255,15 +258,17 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /**
-   * Perform a check to see if the request creates a long running iterator. Currently, only the
-   * ADD_LISTENER_BUS_LISTENER command creates a long running iterator. This is used to
-   * continuously stream back events to the client side StreamingQueryListener.
+   * Perform a check to see if we should delegate sending ResultCompelete. Currently, the
+   * ADD_LISTENER_BUS_LISTENER command creates a new thread and continuously streams back
+   * listener events to the client side StreamingQueryListenerBus. In this case, we would like to
+   * delegate the sending of the final ResultComplete to the handler thread itself.
    * @param request
    *   The request to check
    * @return
-   *   True if the iterator is long running
+   *   True if we should delegate sending the final ResultComplete to the handler thread,
+   *   i.e. don't send a ResultComplete when the ExecuteThread returns.
    */
-  private def createsLongRunningIterator(request: proto.ExecutePlanRequest): Boolean = {
+  private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.COMMAND =>
         request.getPlan.getCommand.getCommandTypeCase match {
