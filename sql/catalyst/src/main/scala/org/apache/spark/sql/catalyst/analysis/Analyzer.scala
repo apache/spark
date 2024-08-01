@@ -287,7 +287,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
-      ResolveScopedExpression ::
+      new ResolveScopedExpression(resolver) ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -3507,55 +3507,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         j.getTagValue(LogicalPlan.PLAN_ID_TAG)
           .foreach(project.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
         project
-    }
-  }
-
-  /**
-   * Restricts the scope of resolving some expressions.
-   */
-  object ScopeExpressions extends Rule[LogicalPlan] {
-    private def scopeOrder(scope: Seq[Attribute])(sortOrder: SortOrder): SortOrder = {
-      sortOrder match {
-        case so if so.child.isInstanceOf[ScopedExpression] => so
-        case so => so.copy(
-          child = ScopedExpression(so.child, scope),
-          sameOrderExpressions = so.sameOrderExpressions.map(soe => ScopedExpression(soe, scope))
-        )
-      }
-    }
-
-    private def isNotScoped(sortOrder: SortOrder): Boolean =
-      !sortOrder.child.isInstanceOf[ScopedExpression]
-
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      // SPARK-42199: sort order of MapGroups must be scoped to their dataAttributes
-      case mg: MapGroups if mg.dataOrder.exists(isNotScoped) =>
-        mg.copy(dataOrder = mg.dataOrder.map(scopeOrder(mg.dataAttributes)))
-
-      // SPARK-42199: sort order of CoGroups must be scoped to their respective dataAttributes
-      case cg: CoGroup if Seq(cg.leftOrder, cg.rightOrder).exists(_.exists(isNotScoped)) =>
-        val scopedLeftOrder = cg.leftOrder.map(scopeOrder(cg.leftAttr))
-        val scopedRightOrder = cg.rightOrder.map(scopeOrder(cg.rightAttr))
-        cg.copy(leftOrder = scopedLeftOrder, rightOrder = scopedRightOrder)
-    }
-  }
-
-  /**
-   * Resolves expressions against their scope of attributes.
-   */
-  object ResolveScopedExpression extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-      case se: ScopedExpression if se.resolved => se.expr
-      case se @ ScopedExpression(expr, attributes) =>
-        val resolved = expr.transformDown {
-          case u@UnresolvedAttribute(nameParts) =>
-            attributes.resolve(nameParts, resolver).getOrElse(u)
-        }
-        if (resolved.fastEquals(expr)) {
-          se
-        } else {
-          resolved
-        }
     }
   }
 

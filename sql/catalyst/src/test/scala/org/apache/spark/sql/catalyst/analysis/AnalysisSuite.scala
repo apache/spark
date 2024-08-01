@@ -1587,7 +1587,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     // apply the ScopeExpressions
-    val actualPlan = getAnalyzer.ScopeExpressions(group)
+    val actualPlan = ScopeExpressions(group)
     val mg = actualPlan.collectFirst {
       case mg: MapGroups => mg
     }
@@ -1637,7 +1637,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     // apply the ScopeExpressions
-    val actualPlan = getAnalyzer.ScopeExpressions(cogroup)
+    val actualPlan = ScopeExpressions(cogroup)
     val cg = actualPlan.collectFirst {
       case cg: CoGroup => cg
     }
