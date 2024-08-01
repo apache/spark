@@ -201,8 +201,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       distinctAggs: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
     // If there are any distinct AggregateExpressions with filter, we need to rewrite the query.
-    // Also, if there are no grouping expressions and all aggregate expressions are foldable,
-    // we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this condition,
+    // Also, if there are no grouping expressions and all distinct aggregate expressions are
+    // foldable, we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this case,
     // non-grouping aggregation queries with distinct aggregate expressions will be incorrectly
     // handled by the aggregation strategy, causing wrong results when working with empty tables.
     distinctAggs.exists(_.filter.isDefined) || (groupingExpressions.isEmpty &&
