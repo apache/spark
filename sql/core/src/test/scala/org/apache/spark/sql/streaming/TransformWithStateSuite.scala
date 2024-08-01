@@ -404,7 +404,7 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
 }
 
 /** Stateful processor of single value state var with non-primitive type */
-class StatefulProcessorWithMultipleValueVars extends RunningCountStatefulProcessor {
+class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor {
   @transient private var _valueState: ValueState[TestClass] = _
 
   override def init(
@@ -1078,7 +1078,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val inputData = MemoryStream[String]
         val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new StatefulProcessorWithMultipleValueVars(),
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
             TimeMode.None(),
             OutputMode.Update())
 

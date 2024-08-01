@@ -64,7 +64,7 @@ case class StateMetadataTableEntry(
 }
 
 object StateMetadataTableEntry {
-  private[sql] val schema: StructType = {
+  private[sql] val schema = {
     new StructType()
       .add("operatorId", LongType)
       .add("operatorName", StringType)

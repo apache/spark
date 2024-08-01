@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils
  */
 trait StateStoreMetadata {
   def storeName: String
+  def numColsPrefixKey: Int
   def numPartitions: Int
 }
 
