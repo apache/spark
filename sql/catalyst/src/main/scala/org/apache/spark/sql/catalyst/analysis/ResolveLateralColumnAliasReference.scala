@@ -147,7 +147,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           && pOriginal.projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         val p @ Project(projectList, child) = pOriginal.mapChildren(apply0)
         var aliasMap = AttributeMap.empty[AliasEntry]
-        val referencedAliases = collection.mutable.Set.empty[AliasEntry]
+        val referencedAliases = collection.mutable.LinkedHashSet.empty[AliasEntry]
         def unwrapLCAReference(e: NamedExpression): NamedExpression = {
           e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
             case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
