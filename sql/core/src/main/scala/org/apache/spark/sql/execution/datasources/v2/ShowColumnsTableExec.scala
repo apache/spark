@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -37,14 +36,8 @@ case class ShowColumnsTableExec(
   }
 
   private def showColumnsTable(resolvedTable: ResolvedTable, builder: StringBuilder): Unit = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val table = resolvedTable.table;
-    val columns = CharVarcharUtils.getRawSchema(table.columns.asSchema, conf).fields.map(_.toDDL)
-    builder ++= concatByMultiLines(columns)
-  }
-
-  private def concatByMultiLines(iter: Iterable[String]): String = {
-    iter.mkString("(\n  ", ",\n  ", ")\n")
+    table.columns().foreach(f => builder.append(f.name()).append("\n"))
   }
 
 }
