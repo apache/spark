@@ -25,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -93,7 +93,9 @@ trait ShuffleExchangeLike extends Exchange {
           if (isCancelled) {
             promise.tryFailure(new SparkException("Shuffle cancelled."))
           } else {
-            val shuffleJob = mapOutputStatisticsFuture
+            val shuffleJob = RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+              mapOutputStatisticsFuture
+            }
             shuffleJob match {
               case action: FutureAction[MapOutputStatistics] => futureAction.set(Some(action))
               case _ =>

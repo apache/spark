@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -62,12 +62,18 @@ trait BroadcastExchangeLike extends Exchange {
   def relationFuture: Future[broadcast.Broadcast[Any]]
 
   @transient
+  private lazy val promise = Promise[Unit]()
+
+  @transient
+  private lazy val scalaFuture: scala.concurrent.Future[Unit] = promise.future
+
+  @transient
   private lazy val triggerFuture: Future[Any] = {
     SQLExecution.withThreadLocalCaptured(session, BroadcastExchangeExec.executionContext) {
       // Trigger broadcast preparation which can involve expensive operations like waiting on
       // subqueries and file listing.
       executeQuery(null)
-      null
+      promise.trySuccess(())
     }
   }
 
@@ -80,7 +86,11 @@ trait BroadcastExchangeLike extends Exchange {
    */
   final def submitBroadcastJob(): scala.concurrent.Future[broadcast.Broadcast[Any]] = {
     triggerFuture
-    completionFuture
+    scalaFuture.flatMap { _ =>
+      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+        completionFuture
+      }
+    }(BroadcastExchangeExec.executionContext)
   }
 
   /**
