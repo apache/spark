@@ -62,7 +62,7 @@ case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
     otherPlans: Seq[LogicalPlan],
     planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
-  extends UnresolvedLeafNode {
+  extends UnresolvedNode {
 
   def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
@@ -72,9 +72,13 @@ case class PlanWithUnresolvedIdentifier(
     PlanWithUnresolvedIdentifier(identifierExpr, plans, planBuilder)
   }
 
-  override def innerChildren: Seq[LogicalPlan] = otherPlans
+  override def children: Seq[LogicalPlan] = otherPlans
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+    copy(identifierExpr, newChildren, planBuilder)
 }
 
 /**
