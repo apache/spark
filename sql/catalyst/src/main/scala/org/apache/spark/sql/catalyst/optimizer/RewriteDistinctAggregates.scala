@@ -215,7 +215,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // We need at least two distinct aggregates or the single distinct aggregate group exists filter
     // clause for this rule because aggregation strategy can handle a single distinct aggregate
     // group without filter clause.
-    // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
     distinctAggs.size > 1 || mustRewrite(distinctAggs, a.groupingExpressions)
   }
 
