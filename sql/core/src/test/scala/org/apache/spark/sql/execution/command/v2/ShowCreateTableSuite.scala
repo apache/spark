@@ -36,6 +36,31 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
     }
   }
 
+  test("SPARK-49078: show columns from table") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""CREATE TABLE $t
+           |$defaultUsing
+           |PARTITIONED BY (a)
+           |COMMENT 'This is a comment'
+           |TBLPROPERTIES ('a' = '1')
+           |AS SELECT 1 AS a, "foo" AS b
+         """.stripMargin
+      )
+      val showDDL = getShowColumnDDL(t)
+      assert(showDDL === Array(
+        s"CREATE TABLE $t (",
+        "a INT,",
+        "b STRING)",
+        defaultUsing,
+        "PARTITIONED BY (a)",
+        "COMMENT 'This is a comment'",
+        "TBLPROPERTIES (",
+        "'a' = '1')"
+      ))
+    }
+  }
+
   test("SPARK-33898: show create table[CTAS]") {
     // does not work with hive, also different order between v2 with v1/hive
     withNamespaceAndTable(ns, table) { t =>

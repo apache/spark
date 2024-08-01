@@ -191,4 +191,9 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
     result.head().getString(0).split("\n").map(_.trim)
   }
+
+  def getShowColumnDDL(table: String): Array[String] = {
+    val result = sql(s"SHOW CREATE TABLE $table")
+    result.head().getString(0).split("\n").map(_.trim)
+  }
 }
