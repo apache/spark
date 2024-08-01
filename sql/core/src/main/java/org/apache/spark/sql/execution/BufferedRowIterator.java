@@ -25,6 +25,7 @@ import scala.collection.Iterator;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
  */
 public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
+  protected DataType[] groupingColumnsDataType;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
   private long startTimeNs = System.nanoTime();
@@ -60,7 +62,7 @@ public abstract class BufferedRowIterator {
   /**
    * Initializes from array of iterators of InternalRow.
    */
-  public abstract void init(int index, Iterator<InternalRow>[] iters);
+  public abstract void init(int index, Iterator<InternalRow>[] iters, DataType[] groupingColumnsDataType);
 
   /*
    * Attributes of the following four methods are public. Thus, they can be also accessed from

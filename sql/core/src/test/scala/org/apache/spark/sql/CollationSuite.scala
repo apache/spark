@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
@@ -313,7 +313,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("hash agg is not used for non binary collations") {
+  test("hash agg is used for non binary collations") {
     val tableNameNonBinary = "T_NON_BINARY"
     val tableNameBinary = "T_BINARY"
     withTable(tableNameNonBinary) {
@@ -324,14 +324,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
 
         val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
-        assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
-          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.isEmpty)
+        checkAnswer(dfNonBinary, Seq(Row(1, "aaa")))
 
         val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
-        assert(collectFirst(dfBinary.queryExecution.executedPlan) {
-          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.nonEmpty)
+        checkAnswer(dfBinary, Seq(Row(1, "aaa")))
       }
     }
   }
@@ -911,23 +907,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val table = "table_agg"
     // array
     withTable(table) {
-      sql(s"create table $table (a array<string collate utf8_lcase>) using parquet")
-      sql(s"insert into $table values (array('aaa')), (array('AAA'))")
+      sql(s"create table $table (a array<string collate utf8_lcase>, b string) using parquet")
+      sql(s"insert into $table values (array('aaa'), 'aaa'), (array('AAA'), 'aaa')")
       checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("aaa"))))
     }
-    // map doesn't support aggregation
+    // map
     withTable(table) {
       sql(s"create table $table (m map<string collate utf8_lcase, string>) using parquet")
-      val query = s"select distinct m from $table"
-      checkError(
-        exception = intercept[ExtendedAnalysisException](sql(query)),
-        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
-        parameters = Map(
-          "colName" -> "`m`",
-          "dataType" -> toSQLType(MapType(
-            StringType(CollationFactory.collationNameToId("UTF8_LCASE")),
-            StringType))),
-        context = ExpectedContext(query, 0, query.length - 1)
+      sql(s"insert into $table values (map('aaa', 'aaa')), (map('AAA', 'AAA'))")
+      checkAnswer(sql(s"select count(distinct m) from $table"), Seq(Row(2))
       )
     }
     // struct

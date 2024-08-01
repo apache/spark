@@ -695,6 +695,15 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
           this.references = references;
         }
 
+        public void init(int index, scala.collection.Iterator[] inputs,
+         org.apache.spark.sql.types.DataType[] groupingColumnsDataType) {
+          partitionIndex = index;
+          this.inputs = inputs;
+          this.groupingColumnsDataType = groupingColumnsDataType;
+          ${ctx.initMutableStates()}
+          ${ctx.initPartition()}
+        }
+
         public void init(int index, scala.collection.Iterator[] inputs) {
           partitionIndex = index;
           this.inputs = inputs;
@@ -762,7 +771,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     val cleanedSourceOpt = tryBroadcastCleanedSource(cleanedSource)
     val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
-      cleanedSourceOpt, durationMs, references)
+      cleanedSourceOpt, durationMs, references, UnsafeRow.groupingColumnsDataType.get())
     if (rdds.length == 1) {
       if (conf.usePartitionEvaluator) {
         rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)

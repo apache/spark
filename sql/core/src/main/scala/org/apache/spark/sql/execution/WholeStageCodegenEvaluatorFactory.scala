@@ -22,17 +22,20 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.types.DataType
 
 class WholeStageCodegenEvaluatorFactory(
     cleanedSourceOpt: Either[Broadcast[CodeAndComment], CodeAndComment],
     durationMs: SQLMetric,
-    references: Array[Any]) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    references: Array[Any],
+    groupingColumnsDataType: Array[DataType])
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WholeStageCodegenPartitionEvaluator()
   }
 
-  class WholeStageCodegenPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
+  class WholeStageCodegenPartitionEvaluator() extends PartitionEvaluator[InternalRow, InternalRow] {
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
@@ -44,7 +47,7 @@ class WholeStageCodegenEvaluatorFactory(
       }
       val (clazz, _) = CodeGenerator.compile(cleanedSource)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-      buffer.init(partitionIndex, inputs.toArray)
+      buffer.init(partitionIndex, inputs.toArray, groupingColumnsDataType)
       new Iterator[InternalRow] {
         override def hasNext: Boolean = {
           val v = buffer.hasNext
