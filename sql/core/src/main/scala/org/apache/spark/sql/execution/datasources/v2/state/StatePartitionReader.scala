@@ -20,7 +20,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
@@ -36,17 +35,17 @@ class StatePartitionReaderFactory(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry],
-    stateVarName: Option[String] = None) extends PartitionReaderFactory {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVarName: String) extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, stateStoreMetadata)
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateVarName)
     } else {
       new StatePartitionReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, stateStoreMetadata, stateVarName)
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateVarName)
     }
   }
 }
@@ -60,49 +59,36 @@ abstract class StatePartitionReaderBase(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry],
-    stateVarName: Option[String] = None)
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVarName: String)
   extends PartitionReader[InternalRow] with Logging {
   protected val keySchema = SchemaUtil.getSchemaAsDataType(
     schema, "key").asInstanceOf[StructType]
   protected val valueSchema = SchemaUtil.getSchemaAsDataType(
     schema, "value").asInstanceOf[StructType]
 
-  // TODO better way to avoid this?
-  protected val transformWithState: Boolean =
-    stateStoreMetadata.head.operatorName == "transformWithStateExec"
-
-  protected var keyStateEncoderType: KeyStateEncoderSpec = _
-
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val numColsPrefixKey = if (stateStoreMetadata.isEmpty) {
-      logWarning("Metadata for state store not found, possible cause is this checkpoint " +
-        "is created by older version of spark. If the query has session window aggregation, " +
-        "the state can't be read correctly and runtime exception will be thrown. " +
-        "Run the streaming query in newer spark version to generate state metadata " +
-        "can fix the issue.")
-      0
+
+    val useColFamilies = if (stateVarName != StateStore.DEFAULT_COL_FAMILY_NAME) {
+      true
     } else {
-      require(stateStoreMetadata.length == 1)
-      stateStoreMetadata.head.numColsPrefixKey
+      false
     }
 
-    // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
-    // added in the future along with state metadata changes.
-    // Filed JIRA here: https://issues.apache.org/jira/browse/SPARK-47524
-    keyStateEncoderType = if (numColsPrefixKey > 0) {
-      PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
-    } else {
-      NoPrefixKeyStateEncoderSpec(keySchema)
-    }
-
-    StateStoreProvider.createAndInit(
-      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
-      useColumnFamilies = transformWithState, storeConf, hadoopConf.value,
+    val provider = StateStoreProvider.createAndInit(
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+      useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
       useMultipleValuesPerKey = false)
+
+    if (useColFamilies) {
+      val store = provider.getStore(partition.sourceOptions.batchId + 1)
+      store.createColFamilyIfAbsent(stateVarName, keySchema, valueSchema, keyStateEncoderSpec,
+        useMultipleValuesPerKey = false)
+    }
+    provider
   }
 
   protected val iter: Iterator[InternalRow]
@@ -136,10 +122,10 @@ class StatePartitionReader(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry],
-    stateVarName: Option[String] = None)
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVarName: String)
   extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
-    stateStoreMetadata, stateVarName) {
+    keyStateEncoderSpec, stateVarName) {
 
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
@@ -157,25 +143,11 @@ class StatePartitionReader(
     }
   }
 
-  private var stateStore: Option[StateStore] = None
-
   override lazy val iter: Iterator[InternalRow] = {
-    if (transformWithState) {
-      stateStore = Option(provider.getStore(partition.sourceOptions.batchId + 1))
-      assert(stateVarName.isDefined, "state variable name has to be defined for TWS")
-      stateStore.get.createColFamilyIfAbsent(
-        stateVarName.get, keySchema, valueSchema, keyStateEncoderType)
-      stateStore.get.iterator(stateVarName.get)
-        .map(pair => unifyStateRowPair((pair.key, pair.value)))
-    } else {
-      store.iterator().map(pair => unifyStateRowPair((pair.key, pair.value)))
-    }
+    store.iterator(stateVarName).map(pair => unifyStateRowPair((pair.key, pair.value)))
   }
 
   override def close(): Unit = {
-    if (stateStore.isDefined) {
-      stateStore.get.abort()
-    }
     store.abort()
     super.close()
   }
@@ -198,8 +170,10 @@ class StateStoreChangeDataPartitionReader(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
-  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVarName: String)
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
+    keyStateEncoderSpec, stateVarName) {
 
   private lazy val changeDataReader:
     NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] = {

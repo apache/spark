@@ -27,7 +27,7 @@ import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationExcepti
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
+import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceInvalidOptionValue, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -1105,12 +1105,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(resultDf,
           Seq(Row("a", 1L, "dummyKey", 0), Row("b", 1L, "dummyKey", 1)))
 
-        // TODO this should fail, but currently we'll explicitly call createColFamily
-        spark.read
-          .format("statestore")
-          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-          .option(StateSourceOptions.STATE_VAR_NAME, "non-exist")
-          .load()
+        // non existent state variable should fail
+        val ex = intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "non-exist")
+            .load()
+        }
+        assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
+        assert(ex.getMessage.contains("State variable non-exist is not defined"))
       }
     }
   }

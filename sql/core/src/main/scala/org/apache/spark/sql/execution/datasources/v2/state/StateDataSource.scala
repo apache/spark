@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
@@ -31,10 +32,11 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{JoinSideValues, STATE_VAR_NAME}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
+import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TransformWithStateOperatorProperties}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -43,7 +45,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
  */
-class StateDataSource extends TableProvider with DataSourceRegister {
+class StateDataSource extends TableProvider with DataSourceRegister with Logging {
   private lazy val session: SparkSession = SparkSession.active
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
@@ -52,16 +54,19 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
   override def shortName(): String = "statestore"
 
-  private lazy val TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME = "transformWithStateExec"
+  private var stateStoreMetadata: Option[Array[StateMetadataTableEntry]] = None
+
+  private var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
 
   private def runStateVarChecks(
       sourceOptions: StateSourceOptions,
       stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
+    val twsShortName = "transformWithStateExec"
     if (sourceOptions.stateVarName.isDefined) {
       // Perform checks for transformWithState operator in case state variable name is provided
       require(stateStoreMetadata.size == 1)
       val opMetadata = stateStoreMetadata.head
-      if (opMetadata.operatorName != TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
+      if (opMetadata.operatorName != twsShortName) {
         // if we are trying to query state source with state variable name, then the operator
         // should be transformWithState
         val errorMsg = "Providing state variable names is only supported with the " +
@@ -81,16 +86,34 @@ class StateDataSource extends TableProvider with DataSourceRegister {
       val stateVarName = sourceOptions.stateVarName.get
       val twsOperatorProperties = TransformWithStateOperatorProperties.fromJson(operatorProperties)
       val stateVars = twsOperatorProperties.stateVariables
-      if (!stateVars.contains(stateVarName)) {
+      if (stateVars.filter(stateVar => stateVar.stateName == stateVarName).size != 1) {
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
-
     } else {
       if (stateStoreMetadata.size == 1 &&
-        stateStoreMetadata.head.operatorName == TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
+        stateStoreMetadata.head.operatorName == twsShortName) {
         throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
       }
+    }
+  }
+
+  private def getStateStoreMetadata(stateSourceOptions: StateSourceOptions):
+    Array[StateMetadataTableEntry] = {
+    val allStateStoreMetadata = new StateMetadataPartitionReader(
+      stateSourceOptions.stateCheckpointLocation.getParent.toString,
+      serializedHadoopConf).stateMetadata.toArray
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == stateSourceOptions.operatorId &&
+        entry.stateStoreName == stateSourceOptions.storeName
+    }
+    stateStoreMetadata
+  }
+
+  private def getStoreMetadataAndRunChecks(stateSourceOptions: StateSourceOptions): Unit = {
+    if (stateStoreMetadata.isEmpty) {
+      stateStoreMetadata = Some(getStateStoreMetadata(stateSourceOptions))
+      runStateVarChecks(stateSourceOptions, stateStoreMetadata.get)
     }
   }
 
@@ -100,24 +123,49 @@ class StateDataSource extends TableProvider with DataSourceRegister {
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, properties)
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    // Read the operator metadata once to see if we can find the information for prefix scan
-    // encoder used in session window aggregation queries.
-    val allStateStoreMetadata = new StateMetadataPartitionReader(
-      sourceOptions.stateCheckpointLocation.getParent.toString, serializedHadoopConf)
-      .stateMetadata.toArray
-    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
-      entry.operatorId == sourceOptions.operatorId &&
-        entry.stateStoreName == sourceOptions.storeName
+    getStoreMetadataAndRunChecks(sourceOptions)
+
+    val keyStateEncoderSpec = if (keyStateEncoderSpecOpt.isDefined) {
+      keyStateEncoderSpecOpt.get
+    } else {
+      val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
+      NoPrefixKeyStateEncoderSpec(keySchema)
     }
 
-    runStateVarChecks(sourceOptions, stateStoreMetadata)
+    new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec)
+  }
 
-    new StateTable(session, schema, sourceOptions, stateConf, stateStoreMetadata)
+  private def getKeyStateEncoderSpec(colFamilySchema: StateStoreColFamilySchema):
+    KeyStateEncoderSpec = {
+    val storeMetadata = stateStoreMetadata.get
+    // If operator metadata is not found, then log a warning and continue with using the no-prefix
+    // key state encoder
+    val keyStateEncoderSpec = if (storeMetadata.length == 0) {
+      NoPrefixKeyStateEncoderSpec(colFamilySchema.keySchema)
+    } else {
+      require(storeMetadata.length == 1)
+      val storeMetadataEntry = storeMetadata.head
+      if (storeMetadataEntry.version == 1 && storeMetadataEntry.numColsPrefixKey == 0) {
+        NoPrefixKeyStateEncoderSpec(colFamilySchema.keySchema)
+      } else if (storeMetadataEntry.version == 1 && storeMetadataEntry.numColsPrefixKey > 0) {
+        PrefixKeyScanStateEncoderSpec(colFamilySchema.keySchema,
+          storeMetadataEntry.numColsPrefixKey)
+      } else if (storeMetadataEntry.version == 2) {
+        require(colFamilySchema.keyStateEncoderSpec.isDefined)
+        colFamilySchema.keyStateEncoderSpec.get
+      } else {
+        throw StateDataSourceErrors.internalError(s"Failed to read " +
+          s"key state encoder spec for operator=${storeMetadataEntry.operatorId}")
+      }
+    }
+    keyStateEncoderSpec
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, options)
+
+    getStoreMetadataAndRunChecks(sourceOptions)
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
@@ -134,9 +182,26 @@ class StateDataSource extends TableProvider with DataSourceRegister {
           val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
             partitionId, sourceOptions.storeName)
           val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
-          val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-          val stateSchema = manager.readSchemaFile().head
-          (stateSchema.keySchema, stateSchema.valueSchema)
+          val storeMetadata = stateStoreMetadata.get
+
+          // Read the schema file path from operator metadata version v2 onwards
+          val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2) {
+            val schemaFilePath = new Path(storeMetadata.head.stateSchemaFilePath.get)
+            Some(schemaFilePath)
+          } else {
+            None
+          }
+
+          val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
+            oldSchemaFilePath = oldSchemaFilePath)
+          val stateSchema = manager.readSchemaFile()
+          val stateVarName = sourceOptions.stateVarName
+            .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
+
+          val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
+          keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema))
+
+          (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
       if (sourceOptions.readChangeFeed) {
@@ -217,7 +282,7 @@ case class StateSourceOptions(
   }
 }
 
-object StateSourceOptions extends DataSourceOptions {
+object StateSourceOptions extends DataSourceOptions with Logging {
   val PATH = newOption("path")
   val BATCH_ID = newOption("batchId")
   val OPERATOR_ID = newOption("operatorId")
@@ -246,6 +311,7 @@ object StateSourceOptions extends DataSourceOptions {
       sparkSession: SparkSession,
       hadoopConf: Configuration,
       options: CaseInsensitiveStringMap): StateSourceOptions = {
+
     val checkpointLocation = Option(options.get(PATH)).orElse {
       throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
     }.get

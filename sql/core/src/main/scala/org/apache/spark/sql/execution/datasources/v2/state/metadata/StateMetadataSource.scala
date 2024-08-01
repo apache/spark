@@ -46,6 +46,7 @@ case class StateMetadataTableEntry(
     numPartitions: Int,
     minBatchId: Long,
     maxBatchId: Long,
+    version: Int,
     operatorPropertiesJson: String,
     numColsPrefixKey: Int,
     stateSchemaFilePath: Option[String]) {
@@ -230,6 +231,7 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
+              operatorStateMetadata.version,
               null,
               stateStoreMetadata.numColsPrefixKey,
               None
@@ -243,6 +245,7 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
+              operatorStateMetadata.version,
               v2.operatorPropertiesJson,
               -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
               Some(stateStoreMetadata.stateSchemaFilePath)

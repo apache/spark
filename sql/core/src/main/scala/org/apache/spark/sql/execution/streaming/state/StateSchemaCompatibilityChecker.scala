@@ -54,39 +54,7 @@ class StateSchemaCompatibilityChecker(
   private val schemaFileLocation =
     if (oldSchemaFilePath.isEmpty) {
       val storeCpLocation = providerId.storeId.storeCheckpointLocation()
-      val f = CheckpointFileManager.create(storeCpLocation.getParent, hadoopConf)
-
-      val schemaDir = schemaFile(new Path(storeCpLocation.getParent,
-        providerId.storeId.storeName))
-      if (f.exists(schemaDir)) {
-        val schemaSeq = f.list(schemaDir).toSeq
-        assert(!schemaSeq.isEmpty, "Schema file directory is empty!")
-
-        // get latest schema files with highest batch Id for version 3 schema file
-        val regexPattern = """(\d+)_.*""".r
-        var schemaFileOfLatestBatch = schemaSeq.head.getPath
-        var latestBatchId = 0L
-        schemaSeq.foreach { fileStatus =>
-          val filePath = fileStatus.getPath
-          filePath.getName match {
-            case regexPattern(batchId) =>
-              if (batchId.toLong > latestBatchId) {
-                latestBatchId = batchId.toLong
-                schemaFileOfLatestBatch = filePath
-              }
-            case "schema" =>
-              // if we are not using schema format version 3,
-              // schema fileName should be "schema"
-              filePath
-            case _ =>
-              throw new IllegalStateException("Schema files are not in correct file name format; " +
-                "Likely schema files are corrupted.")
-          }
-        }
-        schemaFileOfLatestBatch
-      } else {
-        schemaFile(storeCpLocation)
-      }
+      schemaFile(storeCpLocation)
     } else {
       oldSchemaFilePath.get
     }
