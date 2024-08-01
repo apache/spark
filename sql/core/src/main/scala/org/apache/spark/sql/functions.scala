@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, CollectTopK}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
@@ -1026,8 +1027,7 @@ object functions {
    * @group agg_funcs
    * @since 3.2.0
    */
-  def product(e: Column): Column =
-    withAggregateFunction { new Product(e.expr) }
+  def product(e: Column): Column = Column.internalFn("product", e)
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
