@@ -94,7 +94,6 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
                 return
             }
         }
-
         logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
           log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
           log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +

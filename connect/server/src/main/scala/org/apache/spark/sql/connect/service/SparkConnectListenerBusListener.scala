@@ -65,8 +65,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * @param responseObserver
    *   the responseObserver created from the first long running executeThread.
    */
-  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit =
-    lock.synchronized {
+  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = lock.synchronized {
       val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
       sessionHolder.session.streams.addListener(serverListener)
       streamingQueryServerSideListener = Some(serverListener)
