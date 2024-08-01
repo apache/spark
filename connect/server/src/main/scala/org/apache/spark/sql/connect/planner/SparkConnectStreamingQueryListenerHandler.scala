@@ -94,10 +94,11 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
                 return
             }
         }
-        logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
-          log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-          log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
-          log"Server side listener added.")
+        logInfo(
+          log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+            log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
+            log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
+            log"Server side listener added.")
 
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {

@@ -66,16 +66,16 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    *   the responseObserver created from the first long running executeThread.
    */
   def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = lock.synchronized {
-      val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
-      sessionHolder.session.streams.addListener(serverListener)
-      streamingQueryServerSideListener = Some(serverListener)
-    }
+    val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
+    sessionHolder.session.streams.addListener(serverListener)
+    streamingQueryServerSideListener = Some(serverListener)
+  }
 
   /**
    * The cleanup of the server side listener and related resources. This method is called when the
    * REMOVE_LISTENER_BUS_LISTENER command is received or when responseObserver.onNext throws an
-   * exception. It removes the listener from the session, clears the cache. Also it sends back
-   * the final ResultComplete response.
+   * exception. It removes the listener from the session, clears the cache. Also it sends back the
+   * final ResultComplete response.
    */
   def cleanUp(): Unit = lock.synchronized {
     streamingQueryServerSideListener.foreach { listener =>
@@ -137,10 +137,13 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   def sendResultComplete(): Unit = {
-    responseObserver.asInstanceOf[ExecuteResponseObserver[ExecutePlanResponse]]
-      .onNextComplete(ExecutePlanResponse.newBuilder()
-        .setResultComplete(ExecutePlanResponse.ResultComplete.newBuilder().build())
-        .build())
+    responseObserver
+      .asInstanceOf[ExecuteResponseObserver[ExecutePlanResponse]]
+      .onNextComplete(
+        ExecutePlanResponse
+          .newBuilder()
+          .setResultComplete(ExecutePlanResponse.ResultComplete.newBuilder().build())
+          .build())
   }
 
   // QueryStartedEvent is sent to client along with WriteStreamOperationStartResult

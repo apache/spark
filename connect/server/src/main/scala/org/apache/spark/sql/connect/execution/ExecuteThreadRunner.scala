@@ -258,8 +258,10 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    * Perform a check to see if the request creates a long running iterator. Currently, only the
    * ADD_LISTENER_BUS_LISTENER command creates a long running iterator. This is used to
    * continuously stream back events to the client side StreamingQueryListener.
-   * @param request The request to check
-   * @return True if the iterator is long running
+   * @param request
+   *   The request to check
+   * @return
+   *   True if the iterator is long running
    */
   private def createsLongRunningIterator(request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase match {
