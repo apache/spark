@@ -135,6 +135,12 @@ jobs:
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
 
+  maven-test:
+    name: "Run Maven Test"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/maven_test.yml
+
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
