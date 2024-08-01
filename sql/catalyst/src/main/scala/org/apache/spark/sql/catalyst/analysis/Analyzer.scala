@@ -2320,42 +2320,26 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
 
     def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
-      } else {
-        None
-      }
+      v1SessionCatalog.lookupBuiltinOrTempFunction(FunctionIdentifier(name))
     }
 
     def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
-      } else {
-        None
-      }
+      v1SessionCatalog.lookupBuiltinOrTempTableFunction(FunctionIdentifier(name))
     }
 
     private def resolveBuiltinOrTempFunction(
         name: Seq[String],
         arguments: Seq[Expression],
         u: Option[UnresolvedFunction]): Option[Expression] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
-          if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
-        }
-      } else {
-        None
+      v1SessionCatalog.resolveBuiltinOrTempFunction(FunctionIdentifier(name), arguments).map {
+        func => if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
       }
     }
 
     private def resolveBuiltinOrTempTableFunction(
         name: Seq[String],
         arguments: Seq[Expression]): Option[LogicalPlan] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
-      } else {
-        None
-      }
+      v1SessionCatalog.resolveBuiltinOrTempTableFunction(FunctionIdentifier(name), arguments)
     }
 
     private def resolveV1Function(
