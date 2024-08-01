@@ -829,6 +829,12 @@ private[columnar] object VARIANT
   /** Chosen to match the default size set in `VariantType`. */
   override def defaultSize: Int = 2048
 
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    val v = getField(row, ordinal)
+    // 4 bytes each for the integers representing the 'value' and 'metadata' lengths.
+    8 + v.getValue().length + v.getMetadata().length
+  }
+
   override def getField(row: InternalRow, ordinal: Int): VariantVal = row.getVariant(ordinal)
 
   override def setField(row: InternalRow, ordinal: Int, value: VariantVal): Unit =

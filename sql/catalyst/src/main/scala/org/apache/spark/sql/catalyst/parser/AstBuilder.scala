@@ -61,8 +61,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
-                  with Logging with DataTypeErrorsBase {
+class AstBuilder extends DataTypeAstBuilder
+  with SQLConfHelper with Logging with DataTypeErrorsBase {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -4452,7 +4452,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   }
 
   /**
-   * Parse a [[AlterTableAddColumns]] command.
+   * Parse a [[AddColumns]] command.
    *
    * For example:
    * {{{
@@ -4469,7 +4469,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   }
 
   /**
-   * Parse a [[AlterTableRenameColumn]] command.
+   * Parse a [[RenameColumn]] command.
    *
    * For example:
    * {{{
@@ -4485,7 +4485,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   }
 
   /**
-   * Parse a [[AlterTableAlterColumn]] command to alter a column's property.
+   * Parse a [[AlterColumn]] command to alter a column's property.
    *
    * For example:
    * {{{
@@ -4555,7 +4555,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   }
 
   /**
-   * Parse a [[AlterTableAlterColumn]] command. This is Hive SQL syntax.
+   * Parse a [[AlterColumn]] command. This is Hive SQL syntax.
    *
    * For example:
    * {{{
@@ -4639,7 +4639,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
   }
 
   /**
-   * Parse a [[AlterTableDropColumns]] command.
+   * Parse a [[DropColumns]] command.
    *
    * For example:
    * {{{
@@ -4979,7 +4979,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper
    * A command for users to list the partition names of a table. If partition spec is specified,
    * partitions that match the spec are returned. Otherwise an empty result set is returned.
    *
-   * This function creates a [[ShowPartitionsStatement]] logical plan
+   * This function creates a [[ShowPartitions]] logical plan
    *
    * The syntax of using this command in SQL is:
    * {{{

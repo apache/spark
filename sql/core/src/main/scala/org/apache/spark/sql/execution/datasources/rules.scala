@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -55,7 +56,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     val ident = unresolved.multipartIdentifier
     val dataSource = DataSource(
       sparkSession,
-      paths = Seq(ident.last),
+      paths = Seq(CatalogUtils.stringToURI(ident.last).toString),
       className = ident.head,
       options = unresolved.options.asScala.toMap)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
@@ -67,12 +68,6 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
-    if (isFileFormat && ident.last.isEmpty) {
-      unresolved.failAnalysis(
-        errorClass = "INVALID_EMPTY_LOCATION",
-        messageParameters = Map("location" -> ident.last))
-    }
-
     dataSource
   }
 
@@ -95,6 +90,11 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
+        case e: SparkIllegalArgumentException if e.getErrorClass != null =>
+          u.failAnalysis(
+            errorClass = e.getErrorClass,
+            messageParameters = e.getMessageParameters.asScala.toMap,
+            cause = e)
         case e: Exception if !e.isInstanceOf[AnalysisException] =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(

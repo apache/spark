@@ -72,6 +72,15 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
     }
   }
 
+  protected def hasDesiredHashPartitioningInChildren(
+      children: Seq[SparkPlan],
+      desiredClusterColumns: Seq[Seq[String]],
+      desiredNumPartitions: Int): Boolean = {
+    children.zip(desiredClusterColumns).forall { case (child, clusterColumns) =>
+      hasDesiredHashPartitioning(child, clusterColumns, desiredNumPartitions)
+    }
+  }
+
   private def partitionExpressionsColumns(expressions: Seq[Expression]): Seq[String] = {
     expressions.flatMap {
       case ref: AttributeReference => Some(ref.name)
