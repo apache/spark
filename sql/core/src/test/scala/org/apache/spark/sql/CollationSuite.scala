@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.ParseException
