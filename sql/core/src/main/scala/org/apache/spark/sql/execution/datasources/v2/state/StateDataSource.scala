@@ -141,16 +141,24 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     // If operator metadata is not found, then log a warning and continue with using the no-prefix
     // key state encoder
     val keyStateEncoderSpec = if (storeMetadata.length == 0) {
+      logWarning("Metadata for state store not found, possible cause is this checkpoint " +
+        "is created by older version of spark. If the query has session window aggregation, " +
+        "the state can't be read correctly and runtime exception will be thrown. " +
+        "Run the streaming query in newer spark version to generate state metadata " +
+        "can fix the issue.")
       NoPrefixKeyStateEncoderSpec(colFamilySchema.keySchema)
     } else {
       require(storeMetadata.length == 1)
       val storeMetadataEntry = storeMetadata.head
+      // if version has metadata info, then use numColsPrefixKey as specified
       if (storeMetadataEntry.version == 1 && storeMetadataEntry.numColsPrefixKey == 0) {
         NoPrefixKeyStateEncoderSpec(colFamilySchema.keySchema)
       } else if (storeMetadataEntry.version == 1 && storeMetadataEntry.numColsPrefixKey > 0) {
         PrefixKeyScanStateEncoderSpec(colFamilySchema.keySchema,
           storeMetadataEntry.numColsPrefixKey)
       } else if (storeMetadataEntry.version == 2) {
+        // for version 2, we have the encoder spec recorded to the state schema file. so we just
+        // use that directly
         require(colFamilySchema.keyStateEncoderSpec.isDefined)
         colFamilySchema.keyStateEncoderSpec.get
       } else {
