@@ -195,77 +195,77 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(progress.metrics, dict))
 
     # This is a generic test work for both classic Spark and Spark Connect
-    # def test_listener_observed_metrics(self):
-    #     class MyErrorListener(StreamingQueryListener):
-    #         def __init__(self):
-    #             self.num_rows = -1
-    #             self.num_error_rows = -1
-    #
-    #         def onQueryStarted(self, event):
-    #             pass
-    #
-    #         def onQueryProgress(self, event):
-    #             row = event.progress.observedMetrics.get("my_event")
-    #             # Save observed metrics for later verification
-    #             self.num_rows = row["rc"]
-    #             self.num_error_rows = row["erc"]
-    #
-    #         def onQueryIdle(self, event):
-    #             pass
-    #
-    #         def onQueryTerminated(self, event):
-    #             pass
-    #
-    #     try:
-    #         error_listener = MyErrorListener()
-    #         self.spark.streams.addListener(error_listener)
-    #
-    #         sdf = self.spark.readStream.format("rate").load().withColumn("error", col("value"))
-    #
-    #         # Observe row count (rc) and error row count (erc) in the streaming Dataset
-    #         observed_ds = sdf.observe(
-    #             "my_event", count(lit(1)).alias("rc"), count(col("error")).alias("erc")
-    #         )
-    #
-    #         q = observed_ds.writeStream.format("noop").start()
-    #
-    #         while q.lastProgress is None or q.lastProgress.batchId == 0:
-    #             q.awaitTermination(0.5)
-    #
-    #         time.sleep(5)
-    #
-    #         self.assertTrue(error_listener.num_rows > 0)
-    #         self.assertTrue(error_listener.num_error_rows > 0)
-    #
-    #     finally:
-    #         q.stop()
-    #         self.spark.streams.removeListener(error_listener)
+    def test_listener_observed_metrics(self):
+        class MyErrorListener(StreamingQueryListener):
+            def __init__(self):
+                self.num_rows = -1
+                self.num_error_rows = -1
 
-    # def test_streaming_progress(self):
-    #     try:
-    #         # Test a fancier query with stateful operation and observed metrics
-    #         df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-    #         df_observe = df.observe("my_event", count(lit(1)).alias("rc"))
-    #         df_stateful = df_observe.groupBy().count()  # make query stateful
-    #         q = (
-    #             df_stateful.writeStream.format("noop")
-    #             .queryName("test")
-    #             .outputMode("update")
-    #             .trigger(processingTime="5 seconds")
-    #             .start()
-    #         )
-    #
-    #         while q.lastProgress is None or q.lastProgress.batchId == 0:
-    #             q.awaitTermination(0.5)
-    #
-    #         q.stop()
-    #
-    #         self.check_streaming_query_progress(q.lastProgress, True)
-    #         for p in q.recentProgress:
-    #             self.check_streaming_query_progress(p, True)
-    #
-    #     finally:
-    #         q.stop()
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                row = event.progress.observedMetrics.get("my_event")
+                # Save observed metrics for later verification
+                self.num_rows = row["rc"]
+                self.num_error_rows = row["erc"]
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+        try:
+            error_listener = MyErrorListener()
+            self.spark.streams.addListener(error_listener)
+
+            sdf = self.spark.readStream.format("rate").load().withColumn("error", col("value"))
+
+            # Observe row count (rc) and error row count (erc) in the streaming Dataset
+            observed_ds = sdf.observe(
+                "my_event", count(lit(1)).alias("rc"), count(col("error")).alias("erc")
+            )
+
+            q = observed_ds.writeStream.format("noop").start()
+
+            while q.lastProgress is None or q.lastProgress.batchId == 0:
+                q.awaitTermination(0.5)
+
+            time.sleep(5)
+
+            self.assertTrue(error_listener.num_rows > 0)
+            self.assertTrue(error_listener.num_error_rows > 0)
+
+        finally:
+            q.stop()
+            self.spark.streams.removeListener(error_listener)
+
+    def test_streaming_progress(self):
+        try:
+            # Test a fancier query with stateful operation and observed metrics
+            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+            df_observe = df.observe("my_event", count(lit(1)).alias("rc"))
+            df_stateful = df_observe.groupBy().count()  # make query stateful
+            q = (
+                df_stateful.writeStream.format("noop")
+                .queryName("test")
+                .outputMode("update")
+                .trigger(processingTime="5 seconds")
+                .start()
+            )
+
+            while q.lastProgress is None or q.lastProgress.batchId == 0:
+                q.awaitTermination(0.5)
+
+            q.stop()
+
+            self.check_streaming_query_progress(q.lastProgress, True)
+            for p in q.recentProgress:
+                self.check_streaming_query_progress(p, True)
+
+        finally:
+            q.stop()
 
 
 class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
