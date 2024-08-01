@@ -237,6 +237,9 @@ trait SparkDateTimeUtils {
   def toJavaTimestamp(micros: Long): Timestamp =
     toJavaTimestampNoRebase(rebaseGregorianToJulianMicros(micros))
 
+  def toJavaTimestamp(timeZoneId: String, micros: Long): Timestamp =
+    toJavaTimestampNoRebase(rebaseGregorianToJulianMicros(timeZoneId, micros))
+
   /**
    * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`.
    *
@@ -272,6 +275,9 @@ trait SparkDateTimeUtils {
    */
   def fromJavaTimestamp(t: Timestamp): Long =
     rebaseJulianToGregorianMicros(fromJavaTimestampNoRebase(t))
+
+  def fromJavaTimestamp(timeZoneId: String, t: Timestamp): Long =
+    rebaseJulianToGregorianMicros(timeZoneId, fromJavaTimestampNoRebase(t))
 
   /**
    * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
