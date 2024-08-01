@@ -2473,12 +2473,12 @@ class CollationSQLExpressionsSuite
 
   test("array_sort supports collation") {
     val collation = "UNICODE"
-    val query = s"SELECT array_sort(array('b', null, 'a'));"
+    val query = s"SELECT array_sort(array('b', null, 'A'));"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
       checkAnswer(
         sql(query),
         Seq(
-          Row(Seq("a", "b", null))
+          Row(Seq("A", "b", null))
         )
       )
       // check result row data type
