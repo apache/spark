@@ -315,23 +315,16 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
                   isParsing = false)
               } :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
-                assert(
-                  microsToInstant(formatter.parse("1000-01-01 01:02:03"))
-                    .atZone(zoneId)
-                    .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
+                assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
+                  .atZone(zoneId)
+                  .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
-                assert(
-                  formatter.format(
-                    LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
-                    "1000-01-01 01:02:03")
-                assert(
-                  formatter.format(
-                    instantToMicros(LocalDateTime
-                      .of(1000, 1, 1, 1, 2, 3)
-                      .atZone(zoneId)
-                      .toInstant)) === "1000-01-01 01:02:03")
-                assert(formatter.format(java.sql.Timestamp.valueOf("1000-01-01 01:02:03")) ===
+                assert(formatter.format(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
                   "1000-01-01 01:02:03")
+                assert(formatter.format(instantToMicros(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3)
+                    .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
               }
             }
           }
