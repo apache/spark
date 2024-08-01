@@ -1286,6 +1286,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           new Path(chkptDir.getCanonicalPath),
           stateOpIdPath,
           stateSchemaPath)
+        // by the end of the test, there have been 3 batches,
+        // so the metadata and schema logs, and commitLog has been purged
+        // for batch 0, so metadata and schema files should only exist for
+        // batches 1 and 2
         assert(fm.listSchemaFiles().length == 2)
         assert(fm.listMetadataFiles().length == 2)
       }
