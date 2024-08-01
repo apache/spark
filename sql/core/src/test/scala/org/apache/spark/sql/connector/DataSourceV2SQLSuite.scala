@@ -3492,6 +3492,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+<<<<<<< HEAD
   test("SPARK-48286: Add new column with default value which is not foldable") {
     val foldableExpressions = Seq("1", "2 + 1")
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
@@ -3545,6 +3546,8 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+=======
+>>>>>>> c0bc7823047 (fix conf)
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
