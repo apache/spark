@@ -129,11 +129,7 @@ class IncrementalExecution(
   }
 
   private def purgeMetadataFiles(statefulOp: StatefulOperator): Unit = {
-    if (useAsyncPurge) {
-      purgeOldestAsync(statefulOp)
-    } else {
-      purgeOldest(statefulOp)
-    }
+    purgeOldestAsync(statefulOp)
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
