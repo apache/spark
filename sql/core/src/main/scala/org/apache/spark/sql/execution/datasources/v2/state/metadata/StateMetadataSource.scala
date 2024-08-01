@@ -216,6 +216,8 @@ class StateMetadataPartitionReader(
     }
   }
 
+  // From v2, we also need to populate the operatorProperties and stateSchemaFilePath fields
+  // for use with the state data source reader
   private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)

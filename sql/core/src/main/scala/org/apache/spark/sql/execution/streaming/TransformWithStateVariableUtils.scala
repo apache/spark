@@ -22,7 +22,28 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
+import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
+
+/**
+ * This file contains utility classes and functions for managing state variables in
+ * the operatorProperties field of the OperatorStateMetadata for TransformWithState.
+ * We use these utils to read and write state variable information for validation purposes.
+ */
+object TransformWithStateVariableUtils {
+  def getValueState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.ValueState, ttlEnabled)
+  }
+
+  def getListState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.ListState, ttlEnabled)
+  }
+
+  def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
+  }
+}
 
 // Enum of possible State Variable types
 object StateVariableType extends Enumeration {
@@ -61,19 +82,6 @@ object TransformWithStateVariableInfo {
     TransformWithStateVariableInfo(stateName, stateVariableType, ttlEnabled)
   }
 }
-object TransformWithStateVariableUtils {
-  def getValueState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-    TransformWithStateVariableInfo(stateName, StateVariableType.ValueState, ttlEnabled)
-  }
-
-  def getListState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-    TransformWithStateVariableInfo(stateName, StateVariableType.ListState, ttlEnabled)
-  }
-
-  def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
-    TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
-  }
-}
 
 case class TransformWithStateOperatorProperties(
     timeMode: String,
@@ -90,7 +98,7 @@ case class TransformWithStateOperatorProperties(
   }
 }
 
-object TransformWithStateOperatorProperties {
+object TransformWithStateOperatorProperties extends Logging {
   def fromJson(json: String): TransformWithStateOperatorProperties = {
     implicit val formats: DefaultFormats.type = DefaultFormats
     val jsonMap = JsonMethods.parse(json).extract[Map[String, Any]]
@@ -101,5 +109,41 @@ object TransformWithStateOperatorProperties {
         TransformWithStateVariableInfo.fromMap(stateVarMap)
       }
     )
+  }
+
+  // This function is to confirm that the operator properties and state variables have
+  // only changed in an acceptable way after query restart. If the properties have changed
+  // in an unacceptable way, this function will throw an exception.
+  def validateOperatorProperties(
+      oldOperatorProperties: TransformWithStateOperatorProperties,
+      newOperatorProperties: TransformWithStateOperatorProperties): Unit = {
+    if (oldOperatorProperties.timeMode != newOperatorProperties.timeMode) {
+      throw StateStoreErrors.invalidConfigChangedAfterRestart(
+        "timeMode", oldOperatorProperties.timeMode, newOperatorProperties.timeMode)
+    }
+
+    if (oldOperatorProperties.outputMode != newOperatorProperties.outputMode) {
+      throw StateStoreErrors.invalidConfigChangedAfterRestart(
+        "outputMode", oldOperatorProperties.outputMode, newOperatorProperties.outputMode)
+    }
+
+    val oldStateVariableInfos = oldOperatorProperties.stateVariables
+    val newStateVariableInfos = newOperatorProperties.stateVariables.map { stateVarInfo =>
+      stateVarInfo.stateName -> stateVarInfo
+    }.toMap
+    oldStateVariableInfos.foreach { oldInfo =>
+      val newInfo = newStateVariableInfos.get(oldInfo.stateName)
+      newInfo match {
+        case Some(stateVarInfo) =>
+          if (oldInfo.stateVariableType != stateVarInfo.stateVariableType) {
+            throw StateStoreErrors.invalidVariableTypeChange(
+              stateVarInfo.stateName,
+              oldInfo.stateVariableType.toString,
+              stateVarInfo.stateVariableType.toString
+            )
+          }
+        case None =>
+      }
+    }
   }
 }

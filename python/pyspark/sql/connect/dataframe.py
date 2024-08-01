@@ -434,19 +434,29 @@ class DataFrame(ParentDataFrame):
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
         # if subset length is greater than 1, it must be a sequence of str
-        if len(subset) > 1:
-            assert all(isinstance(c, str) for c in subset)
-
         if not subset:
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         elif len(subset) == 1 and isinstance(subset[0], list):
+            item = subset[0]
+            for c in item:
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             res = DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset[0]),
+                plan.Deduplicate(child=self._plan, column_names=item),
                 session=self._session,
             )
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
                 session=self._session,

@@ -302,6 +302,43 @@ public class CollationSupportSuite {
     assertContains("adİos", "Io", "UTF8_LCASE", false);
     assertContains("adİos", "i̇o", "UTF8_LCASE", true);
     assertContains("adİos", "İo", "UTF8_LCASE", true);
+    // Greek sigmas.
+    assertContains("σ", "σ", "UTF8_BINARY", true);
+    assertContains("σ", "ς", "UTF8_BINARY", false);
+    assertContains("σ", "Σ", "UTF8_BINARY", false);
+    assertContains("ς", "σ", "UTF8_BINARY", false);
+    assertContains("ς", "ς", "UTF8_BINARY", true);
+    assertContains("ς", "Σ", "UTF8_BINARY", false);
+    assertContains("Σ", "σ", "UTF8_BINARY", false);
+    assertContains("Σ", "ς", "UTF8_BINARY", false);
+    assertContains("Σ", "Σ", "UTF8_BINARY", true);
+    assertContains("σ", "σ", "UTF8_LCASE", true);
+    assertContains("σ", "ς", "UTF8_LCASE", true);
+    assertContains("σ", "Σ", "UTF8_LCASE", true);
+    assertContains("ς", "σ", "UTF8_LCASE", true);
+    assertContains("ς", "ς", "UTF8_LCASE", true);
+    assertContains("ς", "Σ", "UTF8_LCASE", true);
+    assertContains("Σ", "σ", "UTF8_LCASE", true);
+    assertContains("Σ", "ς", "UTF8_LCASE", true);
+    assertContains("Σ", "Σ", "UTF8_LCASE", true);
+    assertContains("σ", "σ", "UNICODE", true);
+    assertContains("σ", "ς", "UNICODE", false);
+    assertContains("σ", "Σ", "UNICODE", false);
+    assertContains("ς", "σ", "UNICODE", false);
+    assertContains("ς", "ς", "UNICODE", true);
+    assertContains("ς", "Σ", "UNICODE", false);
+    assertContains("Σ", "σ", "UNICODE", false);
+    assertContains("Σ", "ς", "UNICODE", false);
+    assertContains("Σ", "Σ", "UNICODE", true);
+    assertContains("σ", "σ", "UNICODE_CI", true);
+    assertContains("σ", "ς", "UNICODE_CI", true);
+    assertContains("σ", "Σ", "UNICODE_CI", true);
+    assertContains("ς", "σ", "UNICODE_CI", true);
+    assertContains("ς", "ς", "UNICODE_CI", true);
+    assertContains("ς", "Σ", "UNICODE_CI", true);
+    assertContains("Σ", "σ", "UNICODE_CI", true);
+    assertContains("Σ", "ς", "UNICODE_CI", true);
+    assertContains("Σ", "Σ", "UNICODE_CI", true);
   }
 
   private void assertStartsWith(
@@ -880,6 +917,43 @@ public class CollationSupportSuite {
     assertStringInstr("ai̇oxXİo", "Xx", "UTF8_LCASE", 5);
     assertStringInstr("abİoi̇o", "\u0307o", "UTF8_LCASE", 6);
     assertStringInstr("aİoi̇oxx", "XX", "UTF8_LCASE", 7);
+    // Greek sigmas.
+    assertStringInstr("σ", "σ", "UTF8_BINARY", 1);
+    assertStringInstr("σ", "ς", "UTF8_BINARY", 0);
+    assertStringInstr("σ", "Σ", "UTF8_BINARY", 0);
+    assertStringInstr("ς", "σ", "UTF8_BINARY", 0);
+    assertStringInstr("ς", "ς", "UTF8_BINARY", 1);
+    assertStringInstr("ς", "Σ", "UTF8_BINARY", 0);
+    assertStringInstr("Σ", "σ", "UTF8_BINARY", 0);
+    assertStringInstr("Σ", "ς", "UTF8_BINARY", 0);
+    assertStringInstr("Σ", "Σ", "UTF8_BINARY", 1);
+    assertStringInstr("σ", "σ", "UTF8_LCASE", 1);
+    assertStringInstr("σ", "ς", "UTF8_LCASE", 1);
+    assertStringInstr("σ", "Σ", "UTF8_LCASE", 1);
+    assertStringInstr("ς", "σ", "UTF8_LCASE", 1);
+    assertStringInstr("ς", "ς", "UTF8_LCASE", 1);
+    assertStringInstr("ς", "Σ", "UTF8_LCASE", 1);
+    assertStringInstr("Σ", "σ", "UTF8_LCASE", 1);
+    assertStringInstr("Σ", "ς", "UTF8_LCASE", 1);
+    assertStringInstr("Σ", "Σ", "UTF8_LCASE", 1);
+    assertStringInstr("σ", "σ", "UNICODE", 1);
+    assertStringInstr("σ", "ς", "UNICODE", 0);
+    assertStringInstr("σ", "Σ", "UNICODE", 0);
+    assertStringInstr("ς", "σ", "UNICODE", 0);
+    assertStringInstr("ς", "ς", "UNICODE", 1);
+    assertStringInstr("ς", "Σ", "UNICODE", 0);
+    assertStringInstr("Σ", "σ", "UNICODE", 0);
+    assertStringInstr("Σ", "ς", "UNICODE", 0);
+    assertStringInstr("Σ", "Σ", "UNICODE", 1);
+    assertStringInstr("σ", "σ", "UNICODE_CI", 1);
+    assertStringInstr("σ", "ς", "UNICODE_CI", 1);
+    assertStringInstr("σ", "Σ", "UNICODE_CI", 1);
+    assertStringInstr("ς", "σ", "UNICODE_CI", 1);
+    assertStringInstr("ς", "ς", "UNICODE_CI", 1);
+    assertStringInstr("ς", "Σ", "UNICODE_CI", 1);
+    assertStringInstr("Σ", "σ", "UNICODE_CI", 1);
+    assertStringInstr("Σ", "ς", "UNICODE_CI", 1);
+    assertStringInstr("Σ", "Σ", "UNICODE_CI", 1);
   }
 
   private void assertFindInSet(String word, UTF8String set, String collationName,
@@ -981,6 +1055,43 @@ public class CollationSupportSuite {
     assertFindInSet("c", UTF8String.fromBytes(
       new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
       "UNICODE_CI", 2);
+    // Greek sigmas.
+    assertFindInSet("σ", UTF8String.fromString("σ"), "UTF8_BINARY", 1);
+    assertFindInSet("σ", UTF8String.fromString("ς"), "UTF8_BINARY", 0);
+    assertFindInSet("σ", UTF8String.fromString("Σ"), "UTF8_BINARY", 0);
+    assertFindInSet("ς", UTF8String.fromString("σ"), "UTF8_BINARY", 0);
+    assertFindInSet("ς", UTF8String.fromString("ς"), "UTF8_BINARY", 1);
+    assertFindInSet("ς", UTF8String.fromString("Σ"), "UTF8_BINARY", 0);
+    assertFindInSet("Σ", UTF8String.fromString("σ"), "UTF8_BINARY", 0);
+    assertFindInSet("Σ", UTF8String.fromString("ς"), "UTF8_BINARY", 0);
+    assertFindInSet("Σ", UTF8String.fromString("Σ"), "UTF8_BINARY", 1);
+    assertFindInSet("σ", UTF8String.fromString("σ"), "UTF8_LCASE", 1);
+    assertFindInSet("σ", UTF8String.fromString("ς"), "UTF8_LCASE", 1);
+    assertFindInSet("σ", UTF8String.fromString("Σ"), "UTF8_LCASE", 1);
+    assertFindInSet("ς", UTF8String.fromString("σ"), "UTF8_LCASE", 1);
+    assertFindInSet("ς", UTF8String.fromString("ς"), "UTF8_LCASE", 1);
+    assertFindInSet("ς", UTF8String.fromString("Σ"), "UTF8_LCASE", 1);
+    assertFindInSet("Σ", UTF8String.fromString("σ"), "UTF8_LCASE", 1);
+    assertFindInSet("Σ", UTF8String.fromString("ς"), "UTF8_LCASE", 1);
+    assertFindInSet("Σ", UTF8String.fromString("Σ"), "UTF8_LCASE", 1);
+    assertFindInSet("σ", UTF8String.fromString("σ"), "UNICODE", 1);
+    assertFindInSet("σ", UTF8String.fromString("ς"), "UNICODE", 0);
+    assertFindInSet("σ", UTF8String.fromString("Σ"), "UNICODE", 0);
+    assertFindInSet("ς", UTF8String.fromString("σ"), "UNICODE", 0);
+    assertFindInSet("ς", UTF8String.fromString("ς"), "UNICODE", 1);
+    assertFindInSet("ς", UTF8String.fromString("Σ"), "UNICODE", 0);
+    assertFindInSet("Σ", UTF8String.fromString("σ"), "UNICODE", 0);
+    assertFindInSet("Σ", UTF8String.fromString("ς"), "UNICODE", 0);
+    assertFindInSet("Σ", UTF8String.fromString("Σ"), "UNICODE", 1);
+    assertFindInSet("σ", UTF8String.fromString("σ"), "UNICODE_CI", 1);
+    assertFindInSet("σ", UTF8String.fromString("ς"), "UNICODE_CI", 1);
+    assertFindInSet("σ", UTF8String.fromString("Σ"), "UNICODE_CI", 1);
+    assertFindInSet("ς", UTF8String.fromString("σ"), "UNICODE_CI", 1);
+    assertFindInSet("ς", UTF8String.fromString("ς"), "UNICODE_CI", 1);
+    assertFindInSet("ς", UTF8String.fromString("Σ"), "UNICODE_CI", 1);
+    assertFindInSet("Σ", UTF8String.fromString("σ"), "UNICODE_CI", 1);
+    assertFindInSet("Σ", UTF8String.fromString("ς"), "UNICODE_CI", 1);
+    assertFindInSet("Σ", UTF8String.fromString("Σ"), "UNICODE_CI", 1);
   }
 
   private void assertReplace(String source, String search, String replace, String collationName,
@@ -1034,6 +1145,44 @@ public class CollationSupportSuite {
       "İx\u0307İx\u0307İx\u0307"); // != UNICODE_CI
     assertReplace("abİo12i̇o", "i̇o", "xx", "UTF8_LCASE", "abxx12xx");
     assertReplace("abi̇o12i̇o", "İo", "yy", "UTF8_LCASE", "abyy12yy");
+    // Greek sigmas.
+    assertReplace("σ", "σ", "x", "UTF8_BINARY", "x");
+    assertReplace("σ", "ς", "x", "UTF8_BINARY", "σ");
+    assertReplace("σ", "Σ", "x", "UTF8_BINARY", "σ");
+    assertReplace("ς", "σ", "x", "UTF8_BINARY", "ς");
+    assertReplace("ς", "ς", "x", "UTF8_BINARY", "x");
+    assertReplace("ς", "Σ", "x", "UTF8_BINARY", "ς");
+    assertReplace("Σ", "σ", "x", "UTF8_BINARY", "Σ");
+    assertReplace("Σ", "ς", "x", "UTF8_BINARY", "Σ");
+    assertReplace("Σ", "Σ", "x", "UTF8_BINARY", "x");
+    assertReplace("σ", "σ", "x", "UTF8_LCASE", "x");
+    assertReplace("σ", "ς", "x", "UTF8_LCASE", "x");
+    assertReplace("σ", "Σ", "x", "UTF8_LCASE", "x");
+    assertReplace("ς", "σ", "x", "UTF8_LCASE", "x");
+    assertReplace("ς", "ς", "x", "UTF8_LCASE", "x");
+    assertReplace("ς", "Σ", "x", "UTF8_LCASE", "x");
+    assertReplace("Σ", "σ", "x", "UTF8_LCASE", "x");
+    assertReplace("Σ", "ς", "x", "UTF8_LCASE", "x");
+    assertReplace("Σ", "Σ", "x", "UTF8_LCASE", "x");
+    assertReplace("σ", "σ", "x", "UNICODE", "x");
+    assertReplace("σ", "ς", "x", "UNICODE", "σ");
+    assertReplace("σ", "Σ", "x", "UNICODE", "σ");
+    assertReplace("ς", "σ", "x", "UNICODE", "ς");
+    assertReplace("ς", "ς", "x", "UNICODE", "x");
+    assertReplace("ς", "Σ", "x", "UNICODE", "ς");
+    assertReplace("Σ", "σ", "x", "UNICODE", "Σ");
+    assertReplace("Σ", "ς", "x", "UNICODE", "Σ");
+    assertReplace("Σ", "Σ", "x", "UNICODE", "x");
+    assertReplace("σ", "σ", "x", "UNICODE_CI", "x");
+    assertReplace("σ", "ς", "x", "UNICODE_CI", "x");
+    assertReplace("σ", "Σ", "x", "UNICODE_CI", "x");
+    assertReplace("ς", "σ", "x", "UNICODE_CI", "x");
+    assertReplace("ς", "ς", "x", "UNICODE_CI", "x");
+    assertReplace("ς", "Σ", "x", "UNICODE_CI", "x");
+    assertReplace("Σ", "σ", "x", "UNICODE_CI", "x");
+    assertReplace("Σ", "ς", "x", "UNICODE_CI", "x");
+    assertReplace("Σ", "Σ", "x", "UNICODE_CI", "x");
+
   }
 
   private void assertLocate(String substring, String string, Integer start, String collationName,
@@ -1111,6 +1260,43 @@ public class CollationSupportSuite {
     assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
     assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
     assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12);
+    // Greek sigmas.
+    assertLocate("σ", "σ", 1, "UTF8_BINARY", 1);
+    assertLocate("σ", "ς", 1, "UTF8_BINARY", 0);
+    assertLocate("σ", "Σ", 1, "UTF8_BINARY", 0);
+    assertLocate("ς", "σ", 1, "UTF8_BINARY", 0);
+    assertLocate("ς", "ς", 1, "UTF8_BINARY", 1);
+    assertLocate("ς", "Σ", 1, "UTF8_BINARY", 0);
+    assertLocate("Σ", "σ", 1, "UTF8_BINARY", 0);
+    assertLocate("Σ", "ς", 1, "UTF8_BINARY", 0);
+    assertLocate("Σ", "Σ", 1, "UTF8_BINARY", 1);
+    assertLocate("σ", "σ", 1, "UTF8_LCASE", 1);
+    assertLocate("σ", "ς", 1, "UTF8_LCASE", 1);
+    assertLocate("σ", "Σ", 1, "UTF8_LCASE", 1);
+    assertLocate("ς", "σ", 1, "UTF8_LCASE", 1);
+    assertLocate("ς", "ς", 1, "UTF8_LCASE", 1);
+    assertLocate("ς", "Σ", 1, "UTF8_LCASE", 1);
+    assertLocate("Σ", "σ", 1, "UTF8_LCASE", 1);
+    assertLocate("Σ", "ς", 1, "UTF8_LCASE", 1);
+    assertLocate("Σ", "Σ", 1, "UTF8_LCASE", 1);
+    assertLocate("σ", "σ", 1, "UNICODE", 1);
+    assertLocate("σ", "ς", 1, "UNICODE", 0);
+    assertLocate("σ", "Σ", 1, "UNICODE", 0);
+    assertLocate("ς", "σ", 1, "UNICODE", 0);
+    assertLocate("ς", "ς", 1, "UNICODE", 1);
+    assertLocate("ς", "Σ", 1, "UNICODE", 0);
+    assertLocate("Σ", "σ", 1, "UNICODE", 0);
+    assertLocate("Σ", "ς", 1, "UNICODE", 0);
+    assertLocate("Σ", "Σ", 1, "UNICODE", 1);
+    assertLocate("σ", "σ", 1, "UNICODE_CI", 1);
+    assertLocate("σ", "ς", 1, "UNICODE_CI", 1);
+    assertLocate("σ", "Σ", 1, "UNICODE_CI", 1);
+    assertLocate("ς", "σ", 1, "UNICODE_CI", 1);
+    assertLocate("ς", "ς", 1, "UNICODE_CI", 1);
+    assertLocate("ς", "Σ", 1, "UNICODE_CI", 1);
+    assertLocate("Σ", "σ", 1, "UNICODE_CI", 1);
+    assertLocate("Σ", "ς", 1, "UNICODE_CI", 1);
+    assertLocate("Σ", "Σ", 1, "UNICODE_CI", 1);
   }
 
   private void assertSubstringIndex(String string, String delimiter, Integer count,
@@ -1220,6 +1406,44 @@ public class CollationSupportSuite {
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UTF8_LCASE", "ai̇bİoi̇o12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UTF8_LCASE", "ai̇bİoi̇o12");
     assertSubstringIndex("bİoi̇o12i̇o", "\u0307oi", 1, "UTF8_LCASE", "bİoi̇o12i̇o");
+    // Greek sigmas.
+    assertSubstringIndex("σ", "σ", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("σ", "ς", 1, "UTF8_BINARY", "σ");
+    assertSubstringIndex("σ", "Σ", 1, "UTF8_BINARY", "σ");
+    assertSubstringIndex("ς", "σ", 1, "UTF8_BINARY", "ς");
+    assertSubstringIndex("ς", "ς", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("ς", "Σ", 1, "UTF8_BINARY", "ς");
+    assertSubstringIndex("Σ", "σ", 1, "UTF8_BINARY", "Σ");
+    assertSubstringIndex("Σ", "ς", 1, "UTF8_BINARY", "Σ");
+    assertSubstringIndex("Σ", "Σ", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("σ", "σ", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("σ", "ς", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("σ", "Σ", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("ς", "σ", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("ς", "ς", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("ς", "Σ", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("Σ", "σ", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("Σ", "ς", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("Σ", "Σ", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("σ", "σ", 1, "UNICODE", "");
+    assertSubstringIndex("σ", "ς", 1, "UNICODE", "σ");
+    assertSubstringIndex("σ", "Σ", 1, "UNICODE", "σ");
+    assertSubstringIndex("ς", "σ", 1, "UNICODE", "ς");
+    assertSubstringIndex("ς", "ς", 1, "UNICODE", "");
+    assertSubstringIndex("ς", "Σ", 1, "UNICODE", "ς");
+    assertSubstringIndex("Σ", "σ", 1, "UNICODE", "Σ");
+    assertSubstringIndex("Σ", "ς", 1, "UNICODE", "Σ");
+    assertSubstringIndex("Σ", "Σ", 1, "UNICODE", "");
+    assertSubstringIndex("σ", "σ", 1, "UNICODE_CI", "");
+    assertSubstringIndex("σ", "ς", 1, "UNICODE_CI", "");
+    assertSubstringIndex("σ", "Σ", 1, "UNICODE_CI", "");
+    assertSubstringIndex("ς", "σ", 1, "UNICODE_CI", "");
+    assertSubstringIndex("ς", "ς", 1, "UNICODE_CI", "");
+    assertSubstringIndex("ς", "Σ", 1, "UNICODE_CI", "");
+    assertSubstringIndex("Σ", "σ", 1, "UNICODE_CI", "");
+    assertSubstringIndex("Σ", "ς", 1, "UNICODE_CI", "");
+    assertSubstringIndex("Σ", "Σ", 1, "UNICODE_CI", "");
+
   }
 
   private void assertStringTrim(
