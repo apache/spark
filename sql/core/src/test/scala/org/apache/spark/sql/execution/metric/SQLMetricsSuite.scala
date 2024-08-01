@@ -961,7 +961,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val expectedOutput =
       "total (min, med, max (stageId: taskId))\n21 ms (0 ms, 4 ms, 10 ms (stage 2.0: task 4))"
 
-    assert(SQLMetrics.stringValue(metricTypeTiming, values, maxMetrics).equals(expectedOutput))
+    assert(SQLMetrics.stringValue(metricTypeTiming, values, maxMetrics) === expectedOutput)
   }
 
   test("Creating metrics with initial values") {
