@@ -22,8 +22,7 @@ import java.time.Duration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Encoders, Row}
-import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
