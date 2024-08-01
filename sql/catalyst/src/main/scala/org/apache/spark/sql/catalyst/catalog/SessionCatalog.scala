@@ -1647,17 +1647,10 @@ class SessionCatalog(
    * Look up the `ExpressionInfo` of the given function by name if it's a built-in or temp function.
    * This only supports scalar functions.
    */
-  def lookupBuiltinOrTempFunction(funcIdent: FunctionIdentifier): Option[ExpressionInfo] = {
-    val operator = funcIdent match {
-      case FunctionIdentifier(name, None, None) =>
-        FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT))
-      case _ => None
-    }
-    operator.orElse {
+  def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
+    FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
       synchronized(lookupTempFuncWithViewContext(
-        funcIdent,
-        FunctionRegistry.builtin.functionExists,
-        functionRegistry.lookupFunction))
+        name, FunctionRegistry.builtin.functionExists, functionRegistry.lookupFunction))
     }
   }
 
@@ -1665,26 +1658,18 @@ class SessionCatalog(
    * Look up the `ExpressionInfo` of the given function by name if it's a built-in or
    * temp table function.
    */
-  def lookupBuiltinOrTempTableFunction(funcIdent: FunctionIdentifier): Option[ExpressionInfo] =
-    synchronized {
-      lookupTempFuncWithViewContext(
-        funcIdent,
-        TableFunctionRegistry.builtin.functionExists,
-        tableFunctionRegistry.lookupFunction)
-    }
+  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
+    lookupTempFuncWithViewContext(
+      name, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry.lookupFunction)
+  }
 
   /**
    * Look up a built-in or temp scalar function by name and resolves it to an Expression if such
    * a function exists.
    */
-  def resolveBuiltinOrTempFunction(
-      funcIdent: FunctionIdentifier,
-      arguments: Seq[Expression]): Option[Expression] = {
+  def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
     resolveBuiltinOrTempFunctionInternal(
-      funcIdent,
-      arguments,
-      FunctionRegistry.builtin.functionExists,
-      functionRegistry)
+      name, arguments, FunctionRegistry.builtin.functionExists, functionRegistry)
   }
 
   /**
@@ -1692,36 +1677,35 @@ class SessionCatalog(
    * a function exists.
    */
   def resolveBuiltinOrTempTableFunction(
-      funcIdent: FunctionIdentifier,
-      arguments: Seq[Expression]): Option[LogicalPlan] = {
+      name: String, arguments: Seq[Expression]): Option[LogicalPlan] = {
     resolveBuiltinOrTempFunctionInternal(
-      funcIdent, arguments, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry)
+      name, arguments, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry)
   }
 
   private def resolveBuiltinOrTempFunctionInternal[T](
-      funcIdent: FunctionIdentifier,
+      name: String,
       arguments: Seq[Expression],
       isBuiltin: FunctionIdentifier => Boolean,
       registry: FunctionRegistryBase[T]): Option[T] = synchronized {
+    val funcIdent = FunctionIdentifier(name)
     if (!registry.functionExists(funcIdent)) {
       None
     } else {
       lookupTempFuncWithViewContext(
-        funcIdent, isBuiltin, ident => Option(registry.lookupFunction(ident, arguments)))
+        name, isBuiltin, ident => Option(registry.lookupFunction(ident, arguments)))
     }
   }
 
   private def lookupTempFuncWithViewContext[T](
-      funcIdent: FunctionIdentifier,
+      name: String,
       isBuiltin: FunctionIdentifier => Boolean,
       lookupFunc: FunctionIdentifier => Option[T]): Option[T] = {
+    val funcIdent = FunctionIdentifier(name)
     if (isBuiltin(funcIdent)) {
       lookupFunc(funcIdent)
-    } else if (funcIdent.catalog.isEmpty && funcIdent.database.isEmpty) {
-      val name = funcIdent.funcName
-      val context = AnalysisContext.get
-      val isResolvingView = context.catalogAndNamespace.nonEmpty
-      val referredTempFunctionNames = context.referredTempFunctionNames
+    } else {
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
       if (isResolvingView) {
         // When resolving a view, only return a temp function if it's referred by this view.
         if (referredTempFunctionNames.contains(name)) {
@@ -1735,12 +1719,10 @@ class SessionCatalog(
           // We are not resolving a view and the function is a temp one, add it to
           // `AnalysisContext`, so during the view creation, we can save all referred temp
           // functions to view metadata.
-          context.referredTempFunctionNames.add(name)
+          AnalysisContext.get.referredTempFunctionNames.add(name)
         }
         result
       }
-    } else {
-      None
     }
   }
 
@@ -1827,21 +1809,33 @@ class SessionCatalog(
    * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
    */
   def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
-    lookupBuiltinOrTempFunction(name)
-      .orElse(lookupBuiltinOrTempTableFunction(name))
-      .getOrElse(lookupPersistentFunction(name))
+    if (name.database.isEmpty) {
+      lookupBuiltinOrTempFunction(name.funcName)
+        .orElse(lookupBuiltinOrTempTableFunction(name.funcName))
+        .getOrElse(lookupPersistentFunction(name))
+    } else {
+      lookupPersistentFunction(name)
+    }
   }
 
   // The actual function lookup logic looks up temp/built-in function first, then persistent
   // function from either v1 or v2 catalog. This method only look up v1 catalog.
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
-    resolveBuiltinOrTempFunction(name, children)
-      .getOrElse(resolvePersistentFunction(name, children))
+    if (name.database.isEmpty) {
+      resolveBuiltinOrTempFunction(name.funcName, children)
+        .getOrElse(resolvePersistentFunction(name, children))
+    } else {
+      resolvePersistentFunction(name, children)
+    }
   }
 
   def lookupTableFunction(name: FunctionIdentifier, children: Seq[Expression]): LogicalPlan = {
-    resolveBuiltinOrTempTableFunction(name, children)
-      .getOrElse(resolvePersistentTableFunction(name, children))
+    if (name.database.isEmpty) {
+      resolveBuiltinOrTempTableFunction(name.funcName, children)
+        .getOrElse(resolvePersistentTableFunction(name, children))
+    } else {
+      resolvePersistentTableFunction(name, children)
+    }
   }
 
   /**

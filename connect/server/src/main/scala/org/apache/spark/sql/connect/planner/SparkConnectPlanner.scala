@@ -45,12 +45,13 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{withOrigin, Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -64,8 +65,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -1614,28 +1614,12 @@ class SparkConnectPlanner(
       fun: proto.Expression.UnresolvedFunction): Expression = {
     if (fun.getIsUserDefinedFunction) {
       UnresolvedFunction(
-        parser.parseMultipartIdentifier(fun.getFunctionName),
+        parser.parseFunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     } else {
-      // In order to retain backwards compatibility we allow functions registered in the
-      // `system`.`internal` namespace to looked by their name (instead of their FQN).
-      val builtInName = FunctionIdentifier(fun.getFunctionName)
-      val functionRegistry = session.sessionState.functionRegistry
-      val internalName = builtInName.copy(
-        database = Option(CatalogManager.INTERNAL_NAMESPACE),
-        catalog = Option(CatalogManager.SYSTEM_CATALOG_NAME))
-      // We need to drop the global built-ins because we can't parse symbolic names
-      // (e.g. `+`, `-`, ...).
-      val names = if (functionRegistry.functionExists(builtInName)) {
-        builtInName.nameParts
-      } else if (functionRegistry.functionExists(internalName)) {
-        internalName.nameParts
-      } else {
-        parser.parseMultipartIdentifier(fun.getFunctionName)
-      }
       UnresolvedFunction(
-        names,
+        FunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     }
@@ -1848,6 +1832,18 @@ class SparkConnectPlanner(
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
     fun.getFunctionName match {
+      case "product" if fun.getArgumentsCount == 1 =>
+        Some(
+          aggregate
+            .Product(transformExpression(fun.getArgumentsList.asScala.head))
+            .toAggregateExpression())
+
+      case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
+        // [col, expectedNumItems: Long, numBits: Long]
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(
+          new BloomFilterAggregate(children(0), children(1), children(2))
+            .toAggregateExpression())
 
       case "timestampdiff" if fun.getArgumentsCount == 3 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1867,6 +1863,21 @@ class SparkConnectPlanner(
           case (other, _) =>
             throw InvalidPlanInput(s"numBuckets should be a literal integer, but got $other")
         }
+
+      case "years" if fun.getArgumentsCount == 1 =>
+        Some(Years(transformExpression(fun.getArguments(0))))
+
+      case "months" if fun.getArgumentsCount == 1 =>
+        Some(Months(transformExpression(fun.getArguments(0))))
+
+      case "days" if fun.getArgumentsCount == 1 =>
+        Some(Days(transformExpression(fun.getArguments(0))))
+
+      case "hours" if fun.getArgumentsCount == 1 =>
+        Some(Hours(transformExpression(fun.getArguments(0))))
+
+      case "unwrap_udt" if fun.getArgumentsCount == 1 =>
+        Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
@@ -1917,6 +1928,9 @@ class SparkConnectPlanner(
         Some(CatalystDataToAvro(children.head, jsonFormatSchema))
 
       // PS(Pandas API on Spark)-specific functions
+      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
+        Some(DistributedSequenceID())
+
       case "pandas_product" if fun.getArgumentsCount == 2 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val dropna = extractBoolean(children(1), "dropna")
@@ -1926,6 +1940,14 @@ class SparkConnectPlanner(
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ddof = extractInteger(children(1), "ddof")
         Some(aggregate.PandasStddev(children(0), ddof).toAggregateExpression(false))
+
+      case "pandas_skew" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(aggregate.PandasSkewness(children(0)).toAggregateExpression(false))
+
+      case "pandas_kurt" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(aggregate.PandasKurtosis(children(0)).toAggregateExpression(false))
 
       case "pandas_var" if fun.getArgumentsCount == 2 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1946,7 +1968,11 @@ class SparkConnectPlanner(
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val alpha = extractDouble(children(1), "alpha")
         val ignoreNA = extractBoolean(children(2), "ignoreNA")
-        Some(new EWM(children(0), alpha, ignoreNA))
+        Some(EWM(children(0), alpha, ignoreNA))
+
+      case "null_index" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(NullIndex(children(0)))
 
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>

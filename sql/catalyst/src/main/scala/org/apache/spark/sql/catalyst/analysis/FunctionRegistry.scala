@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -203,7 +202,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   // Resolution of the function name is always case insensitive, but the database name
   // depends on the caller
   private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-    name.copy(funcName = name.funcName.toLowerCase(Locale.ROOT))
+    FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
   }
 
   override def registerFunction(
@@ -883,32 +882,6 @@ object FunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
-
-  /**
-   * Expressions registered in the system.internal.
-   */
-  registerInternalExpression[Product]("product")
-  registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
-  registerInternalExpression[Years]("years")
-  registerInternalExpression[Months]("months")
-  registerInternalExpression[Days]("days")
-  registerInternalExpression[Hours]("hours")
-  registerInternalExpression[UnwrapUDT]("unwrap_udt")
-  registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
-  registerInternalExpression[PandasSkewness]("pandas_skew")
-  registerInternalExpression[PandasKurtosis]("pandas_kurt")
-  registerInternalExpression[NullIndex]("null_index")
-
-  private def registerInternalExpression[T <: Expression : ClassTag](name: String): Unit = {
-    val (info, builder) = FunctionRegistryBase.build(name, None)
-    builtin.internalRegisterFunction(
-      FunctionIdentifier(
-        name,
-        Option(CatalogManager.INTERNAL_NAMESPACE),
-        Option(CatalogManager.SYSTEM_CATALOG_NAME)),
-      info,
-      builder)
-  }
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

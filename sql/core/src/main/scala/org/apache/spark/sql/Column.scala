@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.CatalogManager.{INTERNAL_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -62,25 +61,21 @@ private[sql] object Column {
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
-    fn(name, isDistinct = false, inputs: _*)
+    fn(name, isDistinct = false, ignoreNulls = false, inputs: _*)
   }
 
   private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
-    fn(name :: Nil, isDistinct = isDistinct, inputs: _*)
+    fn(name, isDistinct = isDistinct, ignoreNulls = false, inputs: _*)
   }
 
-  private[sql] def internalFn(name: String, inputs: Column*): Column = {
-    fn(
-      SYSTEM_CATALOG_NAME :: INTERNAL_NAMESPACE :: name :: Nil,
-      isDistinct = false,
-      inputs: _*)
-  }
-
-  private def fn(
-      names: Seq[String],
+  private[sql] def fn(
+      name: String,
       isDistinct: Boolean,
+      ignoreNulls: Boolean,
       inputs: Column*): Column = withOrigin {
-    Column(UnresolvedFunction(names, inputs.map(_.expr), isDistinct))
+    Column {
+      UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
+    }
   }
 }
 

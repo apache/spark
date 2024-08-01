@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.errors.QueryCompilationErrors
-
 /**
  * An identifier that optionally specifies a database.
  *
@@ -138,15 +136,6 @@ case class FunctionIdentifier(funcName: String, database: Option[String], catalo
 
 object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
-
   def apply(funcName: String, database: Option[String]): FunctionIdentifier =
     new FunctionIdentifier(funcName, database)
-
-  def apply(names: Seq[String]): FunctionIdentifier = names match {
-    case Seq() => throw QueryCompilationErrors.emptyMultipartIdentifierError()
-    case Seq(name) => new FunctionIdentifier(name)
-    case Seq(database, name) => FunctionIdentifier(name, Option(database))
-    case Seq(catalog, database, name) => FunctionIdentifier(name, Option(database), Option(catalog))
-    case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(names)
-  }
 }

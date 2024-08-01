@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
@@ -8464,7 +8465,9 @@ object functions {
    * @group udf_funcs
    * @since 3.4.0
    */
-  def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
+  def unwrap_udt(column: Column): Column = withExpr {
+    UnwrapUDT(column.expr)
+  }
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those
@@ -8478,7 +8481,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def years(e: Column): Column = Column.internalFn("years", e)
+    def years(e: Column): Column = withExpr { Years(e.expr) }
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into months.
@@ -8486,7 +8489,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def months(e: Column): Column = Column.internalFn("months", e)
+    def months(e: Column): Column = withExpr { Months(e.expr) }
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into days.
@@ -8494,7 +8497,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def days(e: Column): Column = Column.internalFn("days", e)
+    def days(e: Column): Column = withExpr { Days(e.expr) }
 
     /**
      * (Scala-specific) A transform for timestamps to partition data into hours.
@@ -8502,7 +8505,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def hours(e: Column): Column = Column.internalFn("hours", e)
+    def hours(e: Column): Column = withExpr { Hours(e.expr) }
 
     /**
      * (Scala-specific) A transform for any type that partitions by a hash of the input column.
