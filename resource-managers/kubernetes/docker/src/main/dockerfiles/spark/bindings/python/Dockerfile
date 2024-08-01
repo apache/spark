@@ -26,7 +26,8 @@ USER 0
 RUN mkdir ${SPARK_HOME}/python
 RUN apt-get update && \
     apt install -y python3 python3-pip && \
-    pip3 install --upgrade pip setuptools && \
+    rm -f /usr/lib/python3.12/EXTERNALLY-MANAGED && \
+    pip3 install --ignore-installed --upgrade pip setuptools && \
     # Removed the .cache to save space
     rm -rf /root/.cache && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
