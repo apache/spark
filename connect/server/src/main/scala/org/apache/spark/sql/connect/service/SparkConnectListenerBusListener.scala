@@ -81,9 +81,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   def cleanUp(): Unit = lock.synchronized {
     streamingQueryServerSideListener.foreach { listener =>
       sessionHolder.session.streams.removeListener(listener)
-      println("wei== before sendResultComplete")
       listener.sendResultComplete()
-      println("wei== after sendResultComplete")
     }
     streamingQueryStartedEventCache.clear()
     streamingQueryServerSideListener = None

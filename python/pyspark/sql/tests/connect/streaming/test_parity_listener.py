@@ -287,42 +287,28 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             # Both listeners should have listener events already because onQueryStarted
             # is always called before DataStreamWriter.start() returns
             self.assertEqual(len(listener.start), 1)
-            self.check_start_event(listener.start[0])
-
-            print("wei== query started")
+            self.assertEqual(str(listener.start[0].id), q.id)
 
             while q.lastProgress is None:
                 q.awaitTermination(0.5)
 
-            print("wei== query made progress")
-
             # Interrupt should stop the query but should not impact the listener,
             # therefore there should be a listener termination event.
             self.spark.interruptAll()
-            print("wei== after interrupt")
 
             while q.isActive:
                 q.awaitTermination(0.5)
-            # eventually(timeout=10, catch_assertions=True)(not q.isActive)()
 
-            print("wei== query is not active")
-
+            # need to wait a while before QueryTerminatedEvent reaches client
             while len(listener.terminated) == 0:
                 time.sleep(1)
-            # need to wait a while before QueryTerminatedEvent reaches client
-            # eventually(timeout=10, catch_assertions=True)(
-            #     self.assertEqual(len(listener.terminated), 1)
-            # )()
 
             self.assertEqual(len(listener.terminated), 1)
-
-            print("wei== listener termination event checked")
+            self.assertEqual(str(listener.terminated[0].id), q.id)
 
         finally:
             for listener in self.spark.streams._sqlb._listener_bus:
-                print("wei== before remove listener")
                 self.spark.streams.removeListener(listener)
-                print("wei== after remove listener")
             for q in self.spark.streams.active:
                 q.stop()
 

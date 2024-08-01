@@ -100,25 +100,14 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
           log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
           log"Server side listener added.")
 
-//        logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
-//          log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-//          log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
-//          log"Server side listener added. Now blocking until " +
-//          log"all client side listeners are removed or there is error transmitting the
-      //          event back.")
-//        // Block the handling thread, and have serverListener continuously send back new events
-//        listenerHolder.streamingQueryListenerLatch.await()
-//        logInfo(
-//          log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
-//            log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-//            log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
-//            log"Server side listener long-running handling thread ended.")
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {
           case true =>
-            println("wei== before streamingServersideListenerHolder cleanUp")
             sessionHolder.streamingServersideListenerHolder.cleanUp()
-            println("wei== before after streamingServersideListenerHolder cleanUp")
+            logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+              log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
+              log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
+              log"Server side listener removed.")
           case false =>
             logWarning(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
               log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
@@ -130,8 +119,6 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
       case StreamingQueryListenerBusCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryListenerBusCommand")
     }
-    println("wei== before executeHolder.eventsManager.postFinished")
     executeHolder.eventsManager.postFinished()
-    println("wei== after executeHolder.eventsManager.postFinished")
   }
 }

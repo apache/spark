@@ -331,9 +331,7 @@ class StreamingQueryListenerBus:
                 exec_cmd = pb2.Command()
                 exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
                 try:
-                    print("wei=== before sending remove listener request")
                     self._sqm._session.client.execute_command(exec_cmd)
-                    print("wei=== after sending remove listener request")
                 except Exception as e:
                     warnings.warn(
                         f"Failed to remove the listener because of exception: {e}\n"
@@ -341,10 +339,8 @@ class StreamingQueryListenerBus:
                     )
                     return
                 if self._execution_thread is not None:
-                    print("wei=== before joining thread")
                     self._execution_thread.join()
                     self._execution_thread = None
-                    print("wei=== after joining thread")
 
             self._listener_bus.remove(listener)
 

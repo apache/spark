@@ -241,7 +241,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         // If the request returns a long running iterator (e.g. StreamingQueryListener needs
         // a long-running iterator to continuously stream back events),
         // we delegate the sending of the final ResultComplete to the handler itself.
-        if (!isLongRunningIterator(executeHolder.request)) {
+        if (!createsLongRunningIterator(executeHolder.request)) {
           if (executeHolder.reattachable) {
             // Reattachable execution sends a ResultComplete at the end of the stream
             // to signal that there isn't more coming.
@@ -254,7 +254,14 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     }
   }
 
-  private def isLongRunningIterator(request: proto.ExecutePlanRequest): Boolean = {
+  /**
+   * Perform a check to see if the request creates a long running iterator. Currently, only the
+   * ADD_LISTENER_BUS_LISTENER command creates a long running iterator. This is used to
+   * continuously stream back events to the client side StreamingQueryListener.
+   * @param request The request to check
+   * @return True if the iterator is long running
+   */
+  private def createsLongRunningIterator(request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.COMMAND =>
         request.getPlan.getCommand.getCommandTypeCase match {
