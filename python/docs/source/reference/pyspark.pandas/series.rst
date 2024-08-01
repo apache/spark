@@ -461,8 +461,8 @@ specific plotting methods of the form ``Series.plot.<kind>``.
    Series.plot.box
    Series.plot.density
    Series.plot.hist
-   Series.plot.line
    Series.plot.kde
+   Series.plot.line
    Series.plot.pie
 
 .. autosummary::
