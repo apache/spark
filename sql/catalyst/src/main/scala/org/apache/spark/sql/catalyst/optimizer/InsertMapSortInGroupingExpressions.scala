@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapSort, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
@@ -51,7 +51,17 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
    */
   private def insertMapSortRecursively(e: Expression): Expression = {
     e.dataType match {
-      case _: MapType => MapSort(e)
+      case m: MapType =>
+        // Check if value type of MapType contains MapType (possibly nested)
+        // and special handle this case.
+        val mapSortExpr = if (m.valueType.existsRecursively(_.isInstanceOf[MapType])) {
+          MapFromArrays(MapKeys(e), insertMapSortRecursively(MapValues(e)))
+        }
+        else {
+          e
+        }
+
+        MapSort(mapSortExpr)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>

@@ -327,3 +327,14 @@ group BY a;
 SELECT count(*)
 FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
 group BY a.b;
+
+-- Map valueType contains MapType (possibly nested)
+-- MAP<INT, MAP<INT,INT>>
+SELECT count(*)
+FROM VALUES (Map(1, Map(1,2), 2, Map(2, 3, 1, 2))), (Map(2, Map(1, 2, 2,3), 1, Map(1, 2))), (Map(1, Map(1,2), 2, Map(2, 4))) as t(a)
+GROUP BY a;
+
+-- MAP<INT, ARRAY<MAP<INT,INT>>>
+SELECT count(*)
+FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
+GROUP BY a;

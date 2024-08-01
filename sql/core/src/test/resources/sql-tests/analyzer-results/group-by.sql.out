@@ -1300,3 +1300,23 @@ group BY a.b
 Aggregate [a#x.b], [count(1) AS count(1)#xL]
 +- SubqueryAlias t
    +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Map(1,2), 2, Map(2, 3, 1, 2))), (Map(2, Map(1, 2, 2,3), 1, Map(1, 2))), (Map(1, Map(1,2), 2, Map(2, 4))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]

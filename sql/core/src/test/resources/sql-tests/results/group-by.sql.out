@@ -1245,3 +1245,25 @@ struct<count(1):bigint>
 -- !query output
 1
 2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Map(1,2), 2, Map(2, 3, 1, 2))), (Map(2, Map(1, 2, 2,3), 1, Map(1, 2))), (Map(1, Map(1,2), 2, Map(2, 4))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
