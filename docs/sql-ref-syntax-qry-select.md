@@ -68,7 +68,7 @@ except_clause
     These table expressions are allowed to be referenced later in the FROM clause. This is useful to abstract
     out repeated subquery blocks in the FROM clause and improves readability of the query.
 
-* **[hints](sql-ref-syntax-qry-select-hints.html)**
+* **hints**
 
     Hints can be specified to help spark optimizer make better planning decisions. Currently spark supports hints
     that influence selection of join strategies and repartitioning of the data.
@@ -85,7 +85,7 @@ except_clause
 
     An expression with an assigned name. In general, it denotes a column expression.
 
-* **[star_clause](sql-ref-syntax-qry-star.html)**
+* **star_clause**
 
     A shorthand to name all the referenceable columns in the FROM clause or a specific table reference’s columns or fields in the FROM clause.
 
@@ -101,56 +101,56 @@ except_clause
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
-* **[PIVOT](sql-ref-syntax-qry-select-pivot.html)**
+* **PIVOT**
 
      The `PIVOT` clause is used for data perspective; We can get the aggregated values based on specific column value.
 
-* **[UNPIVOT](sql-ref-syntax-qry-select-unpivot.html)**
+* **UNPIVOT**
 
      The `UNPIVOT` clause transforms columns into rows. It is the reverse of `PIVOT`, except for aggregation of values.
 
-* **[LATERAL VIEW](sql-ref-syntax-qry-select-lateral-view.html)**
+* **LATERAL VIEW**
      
      The `LATERAL VIEW` clause is used in conjunction with generator functions such as `EXPLODE`, which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
  
-* **[WHERE](sql-ref-syntax-qry-select-where.html)**
+* **WHERE**
 
      Filters the result of the FROM clause based on the supplied predicates.
 
-* **[GROUP BY](sql-ref-syntax-qry-select-groupby.html)**
+* **GROUP BY**
 
      Specifies the expressions that are used to group the rows. This is used in conjunction with aggregate functions
      (MIN, MAX, COUNT, SUM, AVG, etc.) to group rows based on the grouping expressions and aggregate values in each group.
      When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
 
-* **[HAVING](sql-ref-syntax-qry-select-having.html)**
+* **HAVING**
 
      Specifies the predicates by which the rows produced by GROUP BY are filtered. The HAVING clause is used to
      filter rows after the grouping is performed. If HAVING is specified without GROUP BY, it indicates a GROUP BY
      without grouping expressions (global aggregate).
 
-* **[ORDER BY](sql-ref-syntax-qry-select-orderby.html)**
+* **ORDER BY**
 
      Specifies an ordering of the rows of the complete result set of the query. The output rows are ordered
      across the partitions. This parameter is mutually exclusive with `SORT BY`,
      `CLUSTER BY` and `DISTRIBUTE BY` and can not be specified together.
 
-* **[SORT BY](sql-ref-syntax-qry-select-sortby.html)**
+* **SORT BY**
 
      Specifies an ordering by which the rows are ordered within each partition. This parameter is mutually
      exclusive with `ORDER BY` and `CLUSTER BY` and can not be specified together.
 
-* **[CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)**
+* **CLUSTER BY**
 
      Specifies a set of expressions that is used to repartition and sort the rows. Using this clause has
      the same effect of using `DISTRIBUTE BY` and `SORT BY` together.
 
-* **[DISTRIBUTE BY](sql-ref-syntax-qry-select-distribute-by.html)**
+* **DISTRIBUTE BY**
 
      Specifies a set of expressions by which the result rows are repartitioned. This parameter is mutually
      exclusive with `ORDER BY` and `CLUSTER BY` and can not be specified together.
 
-* **[LIMIT](sql-ref-syntax-qry-select-limit.html)**
+* **LIMIT**
 
      Specifies the maximum number of rows that can be returned by a statement or subquery. This clause
      is mostly used in the conjunction with `ORDER BY` to produce a deterministic result.
@@ -182,7 +182,7 @@ except_clause
      )
      ```
 
-* **[TRANSFORM](sql-ref-syntax-qry-select-transform.html)**
+* **TRANSFORM**
 
      Specifies a hive-style transform query specification to transform the input by forking and running user-specified command or script.
 
