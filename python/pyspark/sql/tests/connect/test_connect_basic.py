@@ -1411,82 +1411,22 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 ("a B c"),
                 ("X y Z"),
             ],
-            ["a" * 128],
+            ["a" * 4096],
         )
         plan1 = cdf1._plan.to_proto(self.connect._client)
 
         proto_string_1 = self.connect._client._proto_to_string(plan1, False)
-        self.assertTrue(len(proto_string_1) > 1600)
-
-        # the truncated message is like:
-        # root {
-        #   common {
-        #     plan_id: 1
-        #   }
-        #   to_df {
-        #     input {
-        #       common {
-        #         plan_id: 0
-        #       }
-        #       local_relation {
-        #         data: "\377\377\377\377p\004\000\000[truncated]"
-        #         schema: "{\"fields\":[{\"metadata\":{},\"name\"[truncated]"
-        #       }
-        #     }
-        #     column_names: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[truncated]"
-        #   }
-        # }
+        self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
         proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
-        self.assertTrue(len(proto_string_truncated_1) < 400)
+        self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
 
-        cdf2 = cdf1.select("a" * 1024, "a" * 1024, "a" * 1024)
+        cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
         plan2 = cdf2._plan.to_proto(self.connect._client)
 
         proto_string_2 = self.connect._client._proto_to_string(plan2, False)
-        self.assertTrue(len(proto_string_2) > 5000)
-
-        # the truncated message is like:
-        # root {
-        #   common {
-        #     plan_id: 5
-        #   }
-        #   project {
-        #     input {
-        #       common {
-        #         plan_id: 4
-        #       }
-        #       to_df {
-        #         input {
-        #           common {
-        #             plan_id: 3
-        #           }
-        #           local_relation {
-        #             data: "\377\377\377\377p\004\000\000[truncated]"
-        #             schema: "{\"fields\":[{\"metadata\":{},\"name\"[truncated]"
-        #           }
-        #         }
-        #         column_names: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[truncated]"
-        #       }
-        #     }
-        #     expressions {
-        #       unresolved_attribute {
-        #         unparsed_identifier: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[truncated]"
-        #       }
-        #     }
-        #     expressions {
-        #       unresolved_attribute {
-        #         unparsed_identifier: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[truncated]"
-        #       }
-        #     }
-        #     expressions {
-        #       unresolved_attribute {
-        #         unparsed_identifier: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[truncated]"
-        #       }
-        #     }
-        #   }
-        # }
+        self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
         proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
-        self.assertTrue(len(proto_string_truncated_2) < 700)
+        self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
 
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):

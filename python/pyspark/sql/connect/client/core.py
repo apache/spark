@@ -1005,8 +1005,8 @@ class SparkConnectClient(object):
         """
 
         def truncate_str(s: str) -> str:
-            if len(s) > 32:
-                return s[:32] + "[truncated]"
+            if len(s) > 1024:
+                return s[:1024] + "[truncated]"
             return s
 
         def truncate_bytes(b: bytes) -> bytes:
