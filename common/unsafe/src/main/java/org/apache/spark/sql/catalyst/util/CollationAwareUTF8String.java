@@ -650,7 +650,7 @@ public class CollationAwareUTF8String {
       return target.toLowerCase().startsWith(pattern.toLowerCase());
     }
     // Slow path for non-ASCII strings.
-    return CollationAwareUTF8String.lowercaseMatchFrom(target, pattern.toLowerCase(), 0);
+    return CollationAwareUTF8String.lowercaseMatchFrom(target, lowerCaseCodePointsSlow(pattern), 0);
   }
 
   /**
@@ -667,7 +667,7 @@ public class CollationAwareUTF8String {
       return target.toLowerCase().endsWith(pattern.toLowerCase());
     }
     // Slow path for non-ASCII strings.
-    return CollationAwareUTF8String.lowercaseMatchUntil(target, pattern.toLowerCase(),
+    return CollationAwareUTF8String.lowercaseMatchUntil(target, lowerCaseCodePointsSlow(pattern),
       target.numChars());
   }
 
@@ -707,7 +707,7 @@ public class CollationAwareUTF8String {
     return stringSearch.next();
   }
 
-  public static int find(UTF8String target, UTF8String pattern, int start,
+  private static int find(UTF8String target, UTF8String pattern, int start,
       int collationId) {
     assert (pattern.numBytes() > 0);
 

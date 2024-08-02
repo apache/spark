@@ -491,7 +491,7 @@ public final class CollationSupport {
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
       return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
-              collationId);
+        collationId);
     }
   }
 
