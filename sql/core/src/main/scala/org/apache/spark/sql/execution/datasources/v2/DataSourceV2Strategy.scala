@@ -474,7 +474,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         recacheTable(r)) :: Nil
 
     case ShowColumns(resolvedTable: ResolvedTable, _, output) =>
-      ShowColumnsTableExec(output, resolvedTable) :: Nil
+      ShowColumnsExec(output, resolvedTable) :: Nil
 
     case r @ ShowPartitions(
         ResolvedTable(catalog, _, table: SupportsPartitionManagement, _),

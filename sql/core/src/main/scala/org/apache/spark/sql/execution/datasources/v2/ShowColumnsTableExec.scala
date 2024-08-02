@@ -27,14 +27,12 @@ import org.apache.spark.sql.execution.LeafExecNode
 /**
  * Physical plan node for show columns from table.
  */
-case class ShowColumnsTableExec(
+case class ShowColumnsExec(
      output: Seq[Attribute],
      resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val table = resolvedTable.table
     val rows = new ArrayBuffer[InternalRow]()
-    table.columns().foreach(f => rows += toCatalystRow(f.name()))
+    resolvedTable.table.columns().map(f => rows += toCatalystRow(f.name()))
     rows.toSeq
   }
-
 }
