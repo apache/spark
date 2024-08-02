@@ -415,4 +415,23 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-49094: ignoreCorruptFiles works for hive orc") {
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(0, 1).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+        spark.range(0, 1).toDF("b").write.json(new Path(basePath, "foo=2").toString)
+
+        withSQLConf(
+          SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+          SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+          checkAnswer(spark.read
+            .option("mergeSchema", value = false)
+            .option("ignoreCorruptFiles", value = true)
+            .orc(basePath), Row(0L, 1))
+        }
+      }
+    }
+  }
 }
