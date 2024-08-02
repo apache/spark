@@ -416,7 +416,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  test("SPARK-49094: ignoreCorruptFiles works for hive orc") {
+  test("SPARK-49094: ignoreCorruptFiles works for hive orc w/ mergeSchema off") {
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
