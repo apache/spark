@@ -58,6 +58,12 @@ trait NonLeafStatementExec extends CompoundStatementExec {
    */
   def getTreeIterator: Iterator[CompoundStatementExec]
 
+  /**
+   * Evaluate the boolean condition represented by the statement.
+   * @param session SparkSession that SQL script is executed within.
+   * @param statement Statement representing the boolean condition to evaluate.
+   * @return Whether the condition evaluates to True.
+   */
   protected def evaluateBooleanCondition(
       session: SparkSession,
       statement: LeafStatementExec): Boolean = statement match {
