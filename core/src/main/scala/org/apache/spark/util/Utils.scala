@@ -2444,6 +2444,14 @@ private[spark] object Utils
   }
 
   /**
+   * @return whether it is local mode
+   */
+  def isLocalRemote(conf: SparkConf): Boolean = {
+    val master = conf.get("spark.remote", "")
+    master == "local" || master.startsWith("local[")
+  }
+
+  /**
    * Push based shuffle can only be enabled when below conditions are met:
    *   - the application is submitted to run in YARN mode
    *   - external shuffle service enabled

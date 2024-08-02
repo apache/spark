@@ -210,8 +210,10 @@ class SparkSession:
                     ]:
                         try:
                             session.conf.set(k, v)
-                        except Exception as e:
-                            warnings.warn(str(e))
+                        except Exception:
+                            # The configurations might not be all runtime configurations.
+                            # Try to set them with ignoring failures for now.
+                            pass
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None

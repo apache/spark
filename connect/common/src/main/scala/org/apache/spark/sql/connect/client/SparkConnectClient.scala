@@ -399,7 +399,7 @@ private[sql] class SparkConnectClient(
 
 object SparkConnectClient {
 
-  private val SPARK_REMOTE: String = "SPARK_REMOTE"
+  private[sql] val SPARK_REMOTE: String = "SPARK_REMOTE"
 
   private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
 
