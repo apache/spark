@@ -211,6 +211,7 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
+      // TODO (SPARK-49096):
       // Mima check might complain the following Dataset rules does not filter any problem.
       // This is due to a potential bug in Mima that all methods in `class Dataset` are not being
       // checked for problems due to the presence of a private[sql] companion object.
@@ -441,7 +442,6 @@ object CheckConnectJvmClientCompatibility {
   }
 
   /**
-   * TODO (SPARK-49096):
    * MiMa takes a new jar and an old jar as inputs and then reports all incompatibilities found in
    * the new jar. The incompatibility result is then filtered using include and exclude rules.
    * Include rules are first applied to find all client classes that need to be checked. Then
