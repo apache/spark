@@ -259,14 +259,14 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
   /**
    * Perform a check to see if we should delegate sending ResultCompelete. Currently, the
-   * ADD_LISTENER_BUS_LISTENER command creates a new thread and continuously streams back
-   * listener events to the client side StreamingQueryListenerBus. In this case, we would like to
-   * delegate the sending of the final ResultComplete to the handler thread itself.
+   * ADD_LISTENER_BUS_LISTENER command creates a new thread and continuously streams back listener
+   * events to the client side StreamingQueryListenerBus. In this case, we would like to delegate
+   * the sending of the final ResultComplete to the handler thread itself.
    * @param request
    *   The request to check
    * @return
-   *   True if we should delegate sending the final ResultComplete to the handler thread,
-   *   i.e. don't send a ResultComplete when the ExecuteThread returns.
+   *   True if we should delegate sending the final ResultComplete to the handler thread, i.e.
+   *   don't send a ResultComplete when the ExecuteThread returns.
    */
   private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase match {
