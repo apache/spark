@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, TimerStateImpl}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, TimerStateImpl, TimerStateUtils}
 import org.apache.spark.sql.streaming.TimeMode
 
 /**
@@ -28,24 +28,36 @@ import org.apache.spark.sql.streaming.TimeMode
  */
 class TimerSuite extends StateVariableSuiteBase {
   private def testWithTimeMode(testName: String)
-      (testFunc: TimeMode => Unit): Unit = {
+      (testFunc: (TimeMode, String, String) => Unit): Unit = {
     Seq("Processing", "Event").foreach { timeoutMode =>
       test(s"$timeoutMode timer - " + testName) {
-        timeoutMode match {
-          case "Processing" => testFunc(TimeMode.ProcessingTime())
-          case "Event" => testFunc(TimeMode.EventTime())
+        val timeMode = timeoutMode match {
+          case "Processing" => TimeMode.ProcessingTime()
+          case "Event" => TimeMode.EventTime()
         }
+
+        val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
+          TimerStateUtils.PROC_TIMERS_STATE_NAME
+        } else {
+          TimerStateUtils.EVENT_TIMERS_STATE_NAME
+        }
+        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+
+        testFunc(timeMode, keyToTsCFName, tsToKeyCFName)
       }
     }
   }
 
-  testWithTimeMode("single instance with single key") { timeMode =>
+  testWithTimeMode("single instance with single key") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       val timerState = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       timerState.registerTimer(1L * 1000)
       assert(timerState.listTimers().toSet === Set(1000L))
       assert(timerState.getExpiredTimers(Long.MaxValue).toSeq === Seq(("test_key", 1000L)))
@@ -58,15 +70,18 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithTimeMode("multiple instances with single key") { timeMode =>
+  testWithTimeMode("multiple instances with single key") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       val timerState1 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       val timerState2 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       timerState1.registerTimer(1L * 1000)
       timerState2.registerTimer(15L * 1000)
       assert(timerState1.listTimers().toSet === Set(15000L, 1000L))
@@ -83,13 +98,15 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithTimeMode("multiple instances with multiple keys") { timeMode =>
+  testWithTimeMode("multiple instances with multiple keys") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
       val timerState1 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       timerState1.registerTimer(1L * 1000)
       timerState1.registerTimer(2L * 1000)
       assert(timerState1.listTimers().toSet === Set(1000L, 2000L))
@@ -97,7 +114,8 @@ class TimerSuite extends StateVariableSuiteBase {
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key2")
       val timerState2 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       timerState2.registerTimer(15L * 1000)
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
@@ -116,13 +134,15 @@ class TimerSuite extends StateVariableSuiteBase {
   }
 
   testWithTimeMode("Range scan on second index timer key - " +
-    "verify timestamp is sorted for single instance") { timeMode =>
+    "verify timestamp is sorted for single instance") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       val timerState = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       val timerTimerstamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       // register/put unordered timestamp into rocksDB
       timerTimerstamps.foreach(timerState.registerTimer)
@@ -135,25 +155,29 @@ class TimerSuite extends StateVariableSuiteBase {
   }
 
   testWithTimeMode("test range scan on second index timer key - " +
-    "verify timestamp is sorted for multiple instances") { timeMode =>
+    "verify timestamp is sorted for multiple instances") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
       val timerState1 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L, 1L)
       timerTimestamps1.foreach(timerState1.registerTimer)
 
       val timerState2 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       val timerTimestamps2 = Seq(931L, 8000L, 452300L, 4200L)
       timerTimestamps2.foreach(timerState2.registerTimer)
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key3")
       val timerState3 = new TimerStateImpl(store, timeMode,
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
       val timerTimerStamps3 = Seq(1L, 2L, 8L, 3L)
       timerTimerStamps3.foreach(timerState3.registerTimer)
       ImplicitGroupingKeyTracker.removeImplicitKey()
@@ -166,12 +190,14 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithTimeMode("Timer state operations with non-primitive type") { timeMode =>
+  testWithTimeMode("Timer state operations with non-primitive type") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
       val timerState = new TimerStateImpl(store, timeMode,
-        Encoders.product[TestClass].asInstanceOf[ExpressionEncoder[Any]])
+        Encoders.product[TestClass].asInstanceOf[ExpressionEncoder[Any]],
+        Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
 
       timerState.registerTimer(1L * 1000)
       assert(timerState.listTimers().toSet === Set(1000L))

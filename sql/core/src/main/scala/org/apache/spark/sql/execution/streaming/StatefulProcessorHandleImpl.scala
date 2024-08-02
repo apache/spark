@@ -91,6 +91,7 @@ class StatefulProcessorHandleImpl(
   extends StatefulProcessorHandleImplBase(timeMode, keyEncoder) with Logging {
   import StatefulProcessorHandleState._
 
+  logError(s"### colFamilyIds: $columnFamilyIds")
   /**
    * Stores all the active ttl states, and is used to cleanup expired values
    * in [[doTtlCleanup()]] function.

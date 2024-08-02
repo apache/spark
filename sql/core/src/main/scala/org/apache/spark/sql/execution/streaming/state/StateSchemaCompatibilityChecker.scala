@@ -174,7 +174,7 @@ class StateSchemaCompatibilityChecker(
     val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
     val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName).zipWithIndex.map {
       case (schema, index) =>
-        schema.copy(colFamilyId = index.toShort)
+        schema.copy(colFamilyId = (index + 1).toShort)
     }
     // assign colFamilyIds based on position in list
     var maxId: Short = existingStateSchemaList.map(_.colFamilyId).maxOption.getOrElse(0)

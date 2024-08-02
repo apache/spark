@@ -56,6 +56,10 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
+    override def columnFamilyIds: Map[String, Short] = colFamilySchemas.asScala.map {
+      case (name, schema) => name -> schema.colFamilyId
+    }.toMap
+
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         colFamilyId: Short,
@@ -327,6 +331,12 @@ private[sql] class RocksDBStateStoreProvider
       keyValueEncoderMap.remove(colFamilyName)
       result
     }
+  }
+
+  def colFamilyIds: Map[String, Short] = {
+    colFamilySchemas.asScala.map { case (name, schema) =>
+      name -> schema.colFamilyId
+    }.toMap
   }
 
   override def init(

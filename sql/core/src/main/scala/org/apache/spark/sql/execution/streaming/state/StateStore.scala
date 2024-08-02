@@ -119,6 +119,8 @@ trait ReadStateStore {
  */
 trait StateStore extends ReadStateStore {
 
+  def columnFamilyIds: Map[String, Short] = Map.empty
+
   /**
    * Remove column family with given name, if present.
    */
