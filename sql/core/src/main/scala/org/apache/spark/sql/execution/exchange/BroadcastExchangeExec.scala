@@ -70,10 +70,16 @@ trait BroadcastExchangeLike extends Exchange {
   @transient
   private lazy val triggerFuture: Future[Any] = {
     SQLExecution.withThreadLocalCaptured(session, BroadcastExchangeExec.executionContext) {
-      // Trigger broadcast preparation which can involve expensive operations like waiting on
-      // subqueries and file listing.
-      executeQuery(null)
-      promise.trySuccess(())
+      try {
+        // Trigger broadcast preparation which can involve expensive operations like waiting on
+        // subqueries and file listing.
+        executeQuery(null)
+        promise.trySuccess(())
+      } catch {
+        case e: Throwable =>
+          promise.tryFailure(e)
+          throw e
+      }
     }
   }
 
