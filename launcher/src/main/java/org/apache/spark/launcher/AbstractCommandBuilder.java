@@ -150,8 +150,8 @@ abstract class AbstractCommandBuilder {
         "common/sketch",
         "common/tags",
         "common/unsafe",
-        "connect/common",
-        "connect/server",
+        "sql/connect/common",
+        "sql/connect/server",
         "core",
         "examples",
         "graphx",
@@ -174,7 +174,9 @@ abstract class AbstractCommandBuilder {
         for (String project : projects) {
           // Do not use locally compiled class files for Spark server because it should use shaded
           // dependencies.
-          if (project.equals("connect/server") || project.equals("connect/common")) continue;
+          if (project.equals("sql/connect/server") || project.equals("sql/connect/common")) {
+            continue;
+          }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
         }
