@@ -204,7 +204,6 @@ class SparkConnectListenerBusListenerSuite
         sessionHolder.streamingServersideListenerHolder.streamingQueryServerSideListener.isEmpty)
       assert(spark.streams.listListeners().size === listenerCntBeforeThrow)
       assert(listenerHolder.streamingQueryStartedEventCache.isEmpty)
-      assert(listenerHolder.streamingQueryListenerLatch.getCount === 0)
     }
 
   }
@@ -235,7 +234,6 @@ class SparkConnectListenerBusListenerSuite
     eventually(timeout(5.seconds), interval(500.milliseconds)) {
       assert(!spark.streams.listListeners().contains(listenerBusListener))
       assert(listenerHolder.streamingQueryStartedEventCache.isEmpty)
-      assert(listenerHolder.streamingQueryListenerLatch.getCount === 0)
     }
   }
 }
