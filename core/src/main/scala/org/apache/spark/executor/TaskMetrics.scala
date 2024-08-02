@@ -275,15 +275,6 @@ class TaskMetrics private[spark] () extends Serializable {
     op(_externalAccums)
   }
 
-  def foreachExternalAccums[T](op: AccumulatorV2[_, _] => Unit): Unit = withReadLock {
-    _externalAccums.foreach(op)
-  }
-
-  private[spark] def flatMapExternlAccums[T](op: AccumulatorV2[_, _] => Option[T])
-    : ArrayBuffer[T] = withReadLock {
-    _externalAccums.flatMap(op(_))
-  }
-
   private def withReadLock[B](fn: => B): B = {
     readLock.lock()
     try {
