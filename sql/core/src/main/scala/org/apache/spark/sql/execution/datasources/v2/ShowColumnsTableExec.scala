@@ -31,8 +31,6 @@ case class ShowColumnsExec(
      output: Seq[Attribute],
      resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val rows = new ArrayBuffer[InternalRow]()
-    resolvedTable.table.columns().map(f => rows += toCatalystRow(f.name()))
-    rows.toSeq
+    resolvedTable.table.columns().map(f => toCatalystRow(f.name())).toSeq
   }
 }
