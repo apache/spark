@@ -125,7 +125,7 @@ class StatefulProcessor(ABC):
             Handle to the stateful processor that provides access to the state store and other
             stateful processing related APIs.
         """
-        pass
+        ...
 
     @abstractmethod
     def handleInputRows(
@@ -149,7 +149,7 @@ class StatefulProcessor(ABC):
         rows : iterable of :class:`pandas.DataFrame`
             iterator of input rows associated with grouping key
         """
-        pass
+        ...
 
     @abstractmethod
     def close(self) -> None:
@@ -157,4 +157,4 @@ class StatefulProcessor(ABC):
         Function called as the last method that allows for users to perform any cleanup or teardown
         operations.
         """
-        pass
+        ...
