@@ -83,6 +83,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           "No state variable names are defined for the transformWithState operator")
       }
 
+      // if the state variable is not one of the defined/available state variables, then we
+      // fail the query
       val stateVarName = sourceOptions.stateVarName.get
       val twsOperatorProperties = TransformWithStateOperatorProperties.fromJson(operatorProperties)
       val stateVars = twsOperatorProperties.stateVariables
@@ -91,6 +93,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
     } else {
+      // if the operator is transformWithState, then a state variable argument is mandatory
       if (stateStoreMetadata.size == 1 &&
         stateStoreMetadata.head.operatorName == twsShortName) {
         throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
@@ -200,12 +203,16 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
             None
           }
 
+          // Read the actual state schema from the provided path for v2 or from the dedicated path
+          // for v1
           val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
             oldSchemaFilePath = oldSchemaFilePath)
           val stateSchema = manager.readSchemaFile()
           val stateVarName = sourceOptions.stateVarName
             .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
 
+          // Based on the version and read schema, populate the keyStateEncoderSpec used for
+          // reading the column families
           val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
           keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema))
 
