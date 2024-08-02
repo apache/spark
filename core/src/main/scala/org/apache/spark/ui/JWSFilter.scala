@@ -29,17 +29,17 @@ import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
  * A servlet filter that requires JWS, a cryptographically signed JSON Web Token, in the header.
  *
  * Like the other UI filters, the following configurations are required to use this filter.
- *
+ * {{{
  *   - spark.ui.filters=org.apache.spark.ui.JWSFilter
  *   - spark.org.apache.spark.ui.JWSFilter.param.key=BASE64URL-ENCODED-YOUR-PROVIDED-KEY
- *
- * The HTTP request should have 'Authorization: Bearer <jws>' header.
- *
+ * }}}
+ * The HTTP request should have {@code Authorization: Bearer <jws>} header.
+ * {{{
  *   - <jws> is a string with three fields, '<header>.<payload>.<signature>'.
  *   - <header> is supposed to be a base64url-encoded string of '{"alg":"HS256","typ":"JWT"}'.
  *   - <payload> is a base64url-encoded string of fully-user-defined content.
  *   - <signature> is a signature based on '<header>.<payload>' and a user-provided key parameter.
- *
+ * }}}
  */
 private class JWSFilter extends Filter {
   private val AUTHORIZATION = "Authorization"
