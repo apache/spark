@@ -379,7 +379,7 @@ trait StateStoreProvider {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, Short],
+      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit
@@ -441,7 +441,7 @@ object StateStoreProvider {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, Short],
+      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
@@ -701,7 +701,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, Short],
+      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): ReadStateStore = {
@@ -722,7 +722,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, Short],
+      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): StateStore = {
@@ -741,7 +741,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, Short],
+      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {

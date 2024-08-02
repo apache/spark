@@ -78,7 +78,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     useColumnFamilies: Boolean = false,
-    columnFamilyIds: Map[String, Short] = Map.empty,
+    columnFamilyIds: Map[String, StateStoreColFamilySchema] = Map.empty,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
@@ -114,7 +114,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     useColumnFamilies: Boolean = false,
-    columnFamilyIds: Map[String, Short] = Map.empty,
+    columnFamilyIds: Map[String, StateStoreColFamilySchema] = Map.empty,
     extraOptions: Map[String, String] = Map.empty,
     useMultipleValuesPerKey: Boolean = false)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,

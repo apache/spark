@@ -196,6 +196,7 @@ class IncrementalExecution(
   // Planning rule used to record the state schema for the first run and validate state schema
   // changes across query runs.
   object StateSchemaAndOperatorMetadataRule extends SparkPlanPartialRule {
+    logError(s"### StateSchemaAndOperatorMetadataRule ###")
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       // In the case of TransformWithStateExec, we want to collect this StateSchema
       // filepath, and write this path out in the OperatorStateMetadata file
@@ -247,7 +248,7 @@ class IncrementalExecution(
             // create map of columnFamilyName -> columnFamilyId
             val columnFamilySchemas = schemaValidationResult.head.newSchemas
             val columnFamilyIds = columnFamilySchemas.map { case schema =>
-              schema.colFamilyName -> schema.colFamilyId
+              schema.colFamilyName -> schema
             }.toMap
             val stateInfo = tws.getStateInfo
             tws.copy(stateInfo = Some(stateInfo.copy(columnFamilyIds = columnFamilyIds)))

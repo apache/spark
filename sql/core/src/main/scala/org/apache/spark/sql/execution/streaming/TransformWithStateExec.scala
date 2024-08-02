@@ -514,6 +514,7 @@ case class TransformWithStateExec(
 
             processDataWithInitialState(store, childDataIterator, initStateIterator)
           } else {
+            logError(s"### BATCH 1")
             initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
               processDataWithInitialState(store, childDataIterator, initStateIterator)
             }
@@ -535,6 +536,7 @@ case class TransformWithStateExec(
             processData(store, singleIterator)
         }
       } else {
+        logError(s"### BATCH 2")
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
         val hadoopConfBroadcast = sparkContext.broadcast(
@@ -560,7 +562,6 @@ case class TransformWithStateExec(
     (f: StateStore => CompletionIterator[InternalRow, Iterator[InternalRow]]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
 
-    logError(s"### columnFamilyIds: ${getStateInfo.columnFamilyIds}")
     val providerId = {
       val tempDirPath = Utils.createTempDir().getAbsolutePath
       new StateStoreProviderId(

@@ -190,7 +190,6 @@ class StateSchemaCompatibilityChecker(
           case Some(newSchema) =>
             if (check(existingSchema, newSchema, ignoreValueSchema)) {
               maxId = (maxId + 1).toShort
-              logError(s"### assigning $maxId to ${newSchema.colFamilyName}")
               newSchema.copy(colFamilyId = maxId)
             } else {
               existingSchema

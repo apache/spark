@@ -111,8 +111,7 @@ object StateStoreColumnFamilySchemaUtils extends Logging {
     val rowEncoder = new TimerKeyEncoder(keyEncoder)
     val schemaForKeyRow = rowEncoder.schemaForKeyRow
     val schemaForValueRow = StructType(Array(StructField("__dummy__", NullType)))
-    logError(s"### schemaForKeyRow: $schemaForKeyRow")
-    logError(s"### keySchemaForSecIndex: ${rowEncoder.keySchemaForSecIndex}")
+
     List(
       StateStoreColFamilySchema(
         timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF,
