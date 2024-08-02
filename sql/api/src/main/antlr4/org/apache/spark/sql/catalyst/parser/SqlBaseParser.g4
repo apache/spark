@@ -64,6 +64,7 @@ compoundStatement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
     | ifElseStatement
+    | caseStatement
     ;
 
 setStatementWithOptionalVarKeyword
@@ -76,6 +77,14 @@ ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
         (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
         (ELSE elseBody=compoundBody)? END IF
+    ;
+//todo: does the statement after then and else need to be a compound?
+// do i need the #searchedCaseStatement labels
+
+
+caseStatement
+    : CASE (WHEN condition=booleanExpression THEN statement)+ (ELSE elseStatement=statement)? END CASE
+    | CASE value=expression (WHEN condition=booleanExpression THEN statement)+ (ELSE elseExpression=expression)? END
     ;
 
 singleStatement
