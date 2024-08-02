@@ -23,10 +23,10 @@ import org.apache.spark.SparkFunSuite
 trait ResourceHelper extends SparkFunSuite {
 
   protected val baseResourcePath: Path = {
-    getWorkspaceFilePath("connect", "server", "src", "test", "resources").toAbsolutePath
+    getWorkspaceFilePath("sql", "connect", "server", "src", "test", "resources").toAbsolutePath
   }
 
   protected val commonResourcePath: Path = {
-    getWorkspaceFilePath("connect", "common", "src", "test", "resources").toAbsolutePath
+    getWorkspaceFilePath("sql", "connect", "common", "src", "test", "resources").toAbsolutePath
   }
 }
