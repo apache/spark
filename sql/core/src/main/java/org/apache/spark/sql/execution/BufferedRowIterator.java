@@ -33,7 +33,6 @@ import org.apache.spark.sql.types.DataType;
  */
 public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
-  protected DataType[] groupingColumnsDataType;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
   private long startTimeNs = System.nanoTime();

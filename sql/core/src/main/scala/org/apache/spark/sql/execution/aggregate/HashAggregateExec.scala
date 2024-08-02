@@ -634,7 +634,8 @@ case class HashAggregateExec(
     val fastRowKeys = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val groupingColumnsDataType = groupingExpressions.map(_.dataType).toArray
-    val idx = UnsafeRow.setGroupingColumnsDataType(groupingColumnsDataType)
+    val idx = UnsafeRow.setGroupingColumnsDataType(
+      if (groupingColumnsDataType.nonEmpty) groupingColumnsDataType else null)
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
