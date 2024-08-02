@@ -161,7 +161,7 @@ class ObjectAggregationIterator(
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
       val groupingKey = groupingProjection.apply(null)
-      groupingKey.setColumnsDataType(originalInputAttributes.map(_.dataType).toArray)
+      groupingKey.setColumnsDataType(groupingExpressions.map(_.dataType).toArray)
       val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
       while (inputRows.hasNext) {
         processRow(buffer, inputRows.next())
@@ -170,7 +170,7 @@ class ObjectAggregationIterator(
       while (inputRows.hasNext && !sortBased) {
         val newInput = inputRows.next()
         val groupingKey = groupingProjection.apply(newInput)
-        groupingKey.setColumnsDataType(originalInputAttributes.map(_.dataType).toArray)
+        groupingKey.setColumnsDataType(groupingExpressions.map(_.dataType).toArray)
         val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
         processRow(buffer, newInput)
 
