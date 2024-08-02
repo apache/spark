@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.unsafe.types.UTF8String
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Physical plan node for show columns from table.
