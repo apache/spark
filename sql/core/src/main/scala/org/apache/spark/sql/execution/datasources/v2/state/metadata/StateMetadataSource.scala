@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -149,7 +150,8 @@ case class StateMetadataPartitionReaderFactory(hadoopConf: SerializableConfigura
 
 class StateMetadataPartitionReader(
     checkpointLocation: String,
-    serializedHadoopConf: SerializableConfiguration) extends PartitionReader[InternalRow] {
+    serializedHadoopConf: SerializableConfiguration) extends PartitionReader[InternalRow]
+    with Logging {
 
   override def next(): Boolean = {
     stateMetadata.hasNext
@@ -195,25 +197,34 @@ class StateMetadataPartitionReader(
 
   // Need this to be accessible from IncrementalExecution for the planning rule.
   private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
-    val stateDir = new Path(checkpointLocation, "state")
-    val opIds = fileManager
-      .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
-    opIds.map { opId =>
-      val operatorIdPath = new Path(stateDir, opId.toString)
-      // check if OperatorStateMetadataV2 path exists, if it does, read it
-      // otherwise, fall back to OperatorStateMetadataV1
-      val operatorStateMetadataV2Path = OperatorStateMetadataV2.metadataDirPath(operatorIdPath)
-      val operatorStateMetadataVersion = if (fileManager.exists(operatorStateMetadataV2Path)) {
-        2
-      } else {
-        1
+    try {
+      val stateDir = new Path(checkpointLocation, "state")
+      val opIds = fileManager
+        .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
+      opIds.map { opId =>
+        val operatorIdPath = new Path(stateDir, opId.toString)
+        // check if OperatorStateMetadataV2 path exists, if it does, read it
+        // otherwise, fall back to OperatorStateMetadataV1
+        val operatorStateMetadataV2Path = OperatorStateMetadataV2.metadataDirPath(operatorIdPath)
+        val operatorStateMetadataVersion = if (fileManager.exists(operatorStateMetadataV2Path)) {
+          2
+        } else {
+          1
+        }
+        OperatorStateMetadataReader.createReader(
+          operatorIdPath, hadoopConf, operatorStateMetadataVersion).read() match {
+          case Some(metadata) => metadata
+          case None => OperatorStateMetadataV1(OperatorInfoV1(opId, null),
+            Array(StateStoreMetadataV1(null, -1, -1)))
+        }
       }
-      OperatorStateMetadataReader.createReader(
-        operatorIdPath, hadoopConf, operatorStateMetadataVersion).read() match {
-        case Some(metadata) => metadata
-        case None => OperatorStateMetadataV1(OperatorInfoV1(opId, null),
-          Array(StateStoreMetadataV1(null, -1, -1)))
-      }
+    } catch {
+      // if the operator metadata is not present, catch the exception
+      // and return an empty array
+      case ex: Exception =>
+        logWarning(s"Failed to find operator metadata for " +
+          s"path=$checkpointLocation with exception=$ex")
+        Array.empty
     }
   }
 
