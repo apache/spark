@@ -426,10 +426,12 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         withSQLConf(
           SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
           SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
-          checkAnswer(spark.read
-            .option("mergeSchema", value = false)
-            .option("ignoreCorruptFiles", value = true)
-            .orc(basePath), Row(0L, 1))
+          Seq(true, false).foreach { mergeSchema =>
+            checkAnswer(spark.read
+              .option("mergeSchema", value = mergeSchema)
+              .option("ignoreCorruptFiles", value = true)
+              .orc(basePath), Row(0L, 1))
+          }
         }
       }
     }
