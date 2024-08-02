@@ -2554,7 +2554,7 @@ class CollationSQLExpressionsSuite
         )
       )
       // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
+      val dataType = ArrayType(StringType(collation), false)
       assert(sql(query).schema.head.dataType == dataType)
     }
   }
