@@ -244,4 +244,32 @@ class ListStateSuite extends StateVariableSuiteBase {
       }
     }
   }
+
+  test("ListState TTL with non-primitive types") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.bean(classOf[POJOTestClass]).asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: ListStateImplWithTTL[TestClass] =
+        handle.getListState[TestClass]("testState",
+        Encoders.product[TestClass], ttlConfig).asInstanceOf[ListStateImplWithTTL[TestClass]]
+      ImplicitGroupingKeyTracker.setImplicitKey(new POJOTestClass("gk1", 1))
+      testState.put(Array(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+      assert(testState.get().toSeq ===
+        Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+      assert(testState.getWithoutEnforcingTTL().toSeq ===
+        Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+
+      val ttlExpirationMs = timestampMs + 60000
+      val ttlValues = testState.getTTLValues()
+      assert(ttlValues.nonEmpty)
+      assert(ttlValues.forall(_._2 === ttlExpirationMs))
+      val ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
+    }
+  }
 }

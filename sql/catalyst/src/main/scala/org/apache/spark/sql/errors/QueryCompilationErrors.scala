@@ -175,6 +175,35 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(funcName)))
   }
 
+  def invalidRandomSeedParameter(functionName: String, invalidValue: Expression): Throwable = {
+    invalidParameter("LONG", functionName, "seed", invalidValue)
+  }
+
+  def invalidReverseParameter(invalidValue: Expression): Throwable = {
+    invalidParameter("BOOLEAN", "collect_top_k", "reverse", invalidValue)
+  }
+
+  def invalidNumParameter(invalidValue: Expression): Throwable = {
+    invalidParameter("INTEGER", "collect_top_k", "num", invalidValue)
+  }
+
+  def invalidIgnoreNullsParameter(functionName: String, invalidValue: Expression): Throwable = {
+    invalidParameter("Boolean", functionName, "ignoreNulls", invalidValue)
+  }
+
+  def invalidParameter(
+      subClass: String,
+      functionName: String,
+      parameter: String,
+      invalidValue: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE." + subClass,
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId(parameter),
+        "invalidValue" -> toSQLExpr(invalidValue)))
+  }
+
   def nullDataSourceOption(option: String): Throwable = {
     new AnalysisException(
       errorClass = "NULL_DATA_SOURCE_OPTION",
@@ -419,8 +448,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowSpecificationNotDefinedError(windowName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1004",
-      messageParameters = Map("windowName" -> windowName))
+      errorClass = "MISSING_WINDOW_SPECIFICATION",
+      messageParameters = Map(
+        "windowName" -> windowName,
+        "docroot" -> SPARK_DOC_ROOT)
+      )
   }
 
   def selectExprNotInGroupByError(expr: Expression, groupByAliases: Seq[Alias]): Throwable = {
@@ -1864,6 +1896,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> tableName,
         "specifiedBucketString" -> specifiedBucketString,
         "existingBucketString" -> existingBucketString))
+  }
+
+  def mismatchedTableClusteringError(
+      tableName: String,
+      specifiedClusteringString: String,
+      existingClusteringString: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "specifiedClusteringString" -> specifiedClusteringString,
+        "existingClusteringString" -> existingClusteringString))
   }
 
   def specifyPartitionNotAllowedWhenTableSchemaNotDefinedError(): Throwable = {
@@ -3464,14 +3508,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("errorMessage" -> errorMessage))
   }
 
-  def invalidViewText(viewText: String, viewName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_VIEW_TEXT",
-      messageParameters = Map(
-        "viewText" -> viewText,
-        "viewName" -> toSQLId(viewName)))
-  }
-
   def invalidTimeTravelSpecError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_TIME_TRAVEL_SPEC",
@@ -3675,7 +3711,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       messageParameters = Map(
-        "explicitTypes" -> toSQLId(explicitTypes)
+        "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
       )
     )
   }
@@ -3823,6 +3859,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
+  }
+
+  def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> dt.sql))
   }
 
   def funcBuildError(funcName: String, cause: Exception): Throwable = {
@@ -4101,5 +4143,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
       messageParameters = Map("functionName" -> functionName)
     )
+  }
+
+  def operationNotSupportClusteringError(operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CLUSTERING_NOT_SUPPORTED",
+      messageParameters = Map("operation" -> operation))
+  }
+
+  def clusterByWithPartitionedBy(): Throwable = {
+    new AnalysisException(
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+      messageParameters = Map.empty)
+  }
+
+  def clusterByWithBucketing(): Throwable = {
+    new AnalysisException(
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
+      messageParameters = Map.empty)
   }
 }

@@ -905,6 +905,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     FOREACH_WRITER_FIELD_NUMBER: builtins.int
     FOREACH_BATCH_FIELD_NUMBER: builtins.int
+    CLUSTERING_COLUMN_NAMES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -932,6 +933,11 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     def foreach_writer(self) -> global___StreamingForeachFunction: ...
     @property
     def foreach_batch(self) -> global___StreamingForeachFunction: ...
+    @property
+    def clustering_column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns used for clustering the table."""
     def __init__(
         self,
         *,
@@ -949,6 +955,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         table_name: builtins.str = ...,
         foreach_writer: global___StreamingForeachFunction | None = ...,
         foreach_batch: global___StreamingForeachFunction | None = ...,
+        clustering_column_names: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -982,6 +989,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "available_now",
             b"available_now",
+            "clustering_column_names",
+            b"clustering_column_names",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
             "foreach_batch",

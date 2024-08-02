@@ -60,6 +60,10 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
       partitions += spec.asTransform
     }
 
+    v1Table.clusterBySpec.foreach { spec =>
+      partitions += spec.asTransform
+    }
+
     partitions.toArray
   }
 

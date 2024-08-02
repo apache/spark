@@ -223,7 +223,7 @@ object DataType {
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
       assertValidTypeForCollations(fieldPath, "array", collationsMap)
-      val elementType = parseDataType(t, fieldPath + ".element", collationsMap)
+      val elementType = parseDataType(t, appendFieldToPath(fieldPath, "element"), collationsMap)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -232,8 +232,8 @@ object DataType {
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
       assertValidTypeForCollations(fieldPath, "map", collationsMap)
-      val keyType = parseDataType(k, fieldPath + ".key", collationsMap)
-      val valueType = parseDataType(v, fieldPath + ".value", collationsMap)
+      val keyType = parseDataType(k, appendFieldToPath(fieldPath, "key"), collationsMap)
+      val valueType = parseDataType(v, appendFieldToPath(fieldPath, "value"), collationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(
@@ -302,6 +302,13 @@ object DataType {
         errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
         messageParameters = Map("jsonType" -> fieldType))
     }
+  }
+
+  /**
+   * Appends a field name to a given path, using a dot separator if the path is not empty.
+   */
+  private def appendFieldToPath(basePath: String, fieldName: String): String = {
+    if (basePath.isEmpty) fieldName else s"$basePath.$fieldName"
   }
 
   /**

@@ -579,8 +579,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="UDTF_RETURN_TYPE_MISMATCH",
-            message_parameters={"name": "TestUDTF", "return_type": "IntegerType()"},
+            errorClass="UDTF_RETURN_TYPE_MISMATCH",
+            messageParameters={"name": "TestUDTF", "return_type": "IntegerType()"},
         )
 
         @udtf(returnType=MapType(StringType(), IntegerType()))
@@ -593,8 +593,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="UDTF_RETURN_TYPE_MISMATCH",
-            message_parameters={
+            errorClass="UDTF_RETURN_TYPE_MISMATCH",
+            messageParameters={
                 "name": "TestUDTF",
                 "return_type": "MapType(StringType(), IntegerType(), True)",
             },
@@ -935,10 +935,23 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_EVAL_TYPE",
-            message_parameters={
+            errorClass="CANNOT_REGISTER_UDTF",
+            messageParameters={
                 "name": "test_udf",
-                "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
+            },
+        )
+
+        class TestUDTF:
+            ...
+
+        with self.assertRaises(PySparkTypeError) as e:
+            self.spark.udtf.register("test_udtf", TestUDTF)
+
+        self.check_error(
+            exception=e.exception,
+            errorClass="CANNOT_REGISTER_UDTF",
+            messageParameters={
+                "name": "test_udtf",
             },
         )
 
@@ -978,8 +991,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_NO_EVAL",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_NO_EVAL",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_no_handler_class(self):
@@ -991,8 +1004,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_HANDLER_TYPE",
-            message_parameters={"type": "function"},
+            errorClass="INVALID_UDTF_HANDLER_TYPE",
+            messageParameters={"type": "function"},
         )
 
         with self.assertRaises(PySparkTypeError) as e:
@@ -1000,8 +1013,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_HANDLER_TYPE",
-            message_parameters={"type": "int"},
+            errorClass="INVALID_UDTF_HANDLER_TYPE",
+            messageParameters={"type": "int"},
         )
 
     def test_udtf_with_table_argument_query(self):
@@ -1528,8 +1541,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_neither_return_type_nor_analyze(self):
@@ -1542,8 +1555,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_RETURN_TYPE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_RETURN_TYPE",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_analyze_non_staticmethod(self):
@@ -1559,8 +1572,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_RETURN_TYPE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_RETURN_TYPE",
+            messageParameters={"name": "TestUDTF"},
         )
 
         with self.assertRaises(PySparkAttributeError) as e:
@@ -1568,8 +1581,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_analyze_returning_non_struct(self):

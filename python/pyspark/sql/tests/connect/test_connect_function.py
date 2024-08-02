@@ -180,8 +180,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATAFRAME",
-            message_parameters={"arg_name": "df", "arg_type": "Column"},
+            errorClass="NOT_DATAFRAME",
+            messageParameters={"arg_name": "df", "arg_type": "Column"},
         )
 
     def test_normal_functions(self):
@@ -375,8 +375,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "condition", "arg_type": "bool"},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "condition", "arg_type": "bool"},
         )
 
     def test_sorting_functions_with_column(self):
@@ -880,8 +880,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_BETWEEN",
-            message_parameters={"arg_name": "end", "min": "-2147483648", "max": "2147483647"},
+            errorClass="VALUE_NOT_BETWEEN",
+            messageParameters={"arg_name": "end", "min": "-2147483648", "max": "2147483647"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -889,8 +889,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_WINDOWSPEC",
-            message_parameters={"arg_name": "window", "arg_type": "Column"},
+            errorClass="NOT_WINDOWSPEC",
+            messageParameters={"arg_name": "window", "arg_type": "Column"},
         )
 
         # invalid window function
@@ -1217,8 +1217,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "start", "arg_type": "float"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "start", "arg_type": "float"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1226,8 +1226,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "length", "arg_type": "float"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "length", "arg_type": "float"},
         )
 
         # test sort_array
@@ -1843,8 +1843,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": "list"},
+            errorClass="NOT_COLUMN_OR_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": "list"},
         )
 
         # test get_json_object
@@ -1908,11 +1908,10 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         sdf = self.spark.sql(query)
 
         # test from_xml
-        # TODO(SPARK-45190): Address StructType schema parse error
         for schema in [
             "a INT",
-            # StructType([StructField("a", IntegerType())]),
-            # StructType([StructField("a", ArrayType(IntegerType()))]),
+            StructType([StructField("a", IntegerType())]),
+            StructType([StructField("a", ArrayType(IntegerType()))]),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_xml(cdf.a, schema)),
@@ -1933,7 +1932,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         for schema in [
             "STRUCT<a: ARRAY<INT>>",
-            # StructType([StructField("a", ArrayType(IntegerType()))]),
+            StructType([StructField("a", ArrayType(IntegerType()))]),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_xml(cdf.b, schema)),
@@ -1981,8 +1980,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "list"},
+            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "list"},
         )
 
         # test schema_of_xml
@@ -2374,8 +2373,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "slideDuration", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "slideDuration", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -2383,8 +2382,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "startTime", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "startTime", "arg_type": "int"},
         )
 
         # test session_window

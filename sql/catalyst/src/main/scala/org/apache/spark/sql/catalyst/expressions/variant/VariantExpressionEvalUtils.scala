@@ -75,6 +75,16 @@ object VariantExpressionEvalUtils {
     new VariantVal(v.getValue, v.getMetadata)
   }
 
+  /** Returns `true` if a data type is or has a child variant type. */
+  def typeContainsVariant(dt: DataType): Boolean = dt match {
+    case _: VariantType => true
+    case st: StructType => st.fields.exists(f => typeContainsVariant(f.dataType))
+    case at: ArrayType => typeContainsVariant(at.elementType)
+    // Variants cannot be map keys.
+    case mt: MapType => typeContainsVariant(mt.valueType)
+    case _ => false
+  }
+
   private def buildVariant(builder: VariantBuilder, input: Any, dataType: DataType): Unit = {
     if (input == null) {
       builder.appendNull()
@@ -94,6 +104,10 @@ object VariantExpressionEvalUtils {
       case DateType => builder.appendDate(input.asInstanceOf[Int])
       case TimestampType => builder.appendTimestamp(input.asInstanceOf[Long])
       case TimestampNTZType => builder.appendTimestampNtz(input.asInstanceOf[Long])
+      case ymi: YearMonthIntervalType =>
+        builder.appendYearMonthInterval(input.asInstanceOf[Int], ymi.startField, ymi.endField)
+      case dti: DayTimeIntervalType =>
+        builder.appendDayTimeInterval(input.asInstanceOf[Long], dti.startField, dti.endField)
       case VariantType =>
         val v = input.asInstanceOf[VariantVal]
         builder.appendVariant(new Variant(v.getValue, v.getMetadata))

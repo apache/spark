@@ -471,6 +471,20 @@
     ],
     "sqlState" : "0A000"
   },
+  "CLUSTERING_COLUMNS_MISMATCH" : {
+    "message" : [
+      "Specified clustering does not match that of the existing table <tableName>.",
+      "Specified clustering columns: [<specifiedClusteringString>].",
+      "Existing clustering columns: [<existingClusteringString>]."
+    ],
+    "sqlState" : "42P10"
+  },
+  "CLUSTERING_NOT_SUPPORTED" : {
+    "message" : [
+      "'<operation>' does not support clustering."
+    ],
+    "sqlState" : "42000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -514,7 +528,7 @@
     "subClass" : {
       "EXPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
+          "Error occurred due to the mismatch between explicit collations: [<explicitTypes>]. Decide on a single explicit collation and remove others."
         ]
       },
       "IMPLICIT" : {
@@ -954,6 +968,16 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
+      "UNSUPPORTED_UDF_INPUT_TYPE" : {
+        "message" : [
+          "UDFs do not support '<dataType>' as an input data type."
+        ]
+      },
+      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
+        "message" : [
+          "UDFs do not support '<dataType>' as an output data type."
+        ]
+      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1117,6 +1141,12 @@
       "Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ],
     "sqlState" : "42704"
+  },
+  "END_LABEL_WITHOUT_BEGIN_LABEL" : {
+    "message" : [
+      "End label <endLabel> can not exist without begin label."
+    ],
+    "sqlState" : "42K0L"
   },
   "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
     "message" : [
@@ -2473,6 +2503,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOCATION" : {
+    "message" : [
+      "The location name cannot be an invalid URI, but `<location>` was given."
+    ],
+    "sqlState" : "42K05"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -2582,6 +2618,11 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "BOOLEAN" : {
+        "message" : [
+          "expects a boolean literal, but got <invalidValue>."
+        ]
+      },
       "CHARSET" : {
         "message" : [
           "expects one of the <charsets>, but got <charset>."
@@ -2592,9 +2633,19 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "INTEGER" : {
+        "message" : [
+          "expects an integer literal, but got <invalidValue>."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Expects `length` greater than or equal to 0, but got <length>."
+        ]
+      },
+      "LONG" : {
+        "message" : [
+          "expects a long literal, but got <invalidValue>."
         ]
       },
       "NULL" : {
@@ -2925,6 +2976,24 @@
     ],
     "sqlState" : "22029"
   },
+  "INVALID_VARIABLE_DECLARATION" : {
+    "message" : [
+      "Invalid variable declaration."
+    ],
+    "subClass" : {
+      "NOT_ALLOWED_IN_SCOPE" : {
+        "message" : [
+          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+        ]
+      },
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+        ]
+      }
+    },
+    "sqlState" : "42K0M"
+  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."
@@ -2966,12 +3035,6 @@
       "A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
     ],
     "sqlState" : "22023"
-  },
-  "INVALID_VIEW_TEXT" : {
-    "message" : [
-      "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
-    ],
-    "sqlState" : "XX000"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
@@ -3026,6 +3089,12 @@
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
     ],
     "sqlState" : "54006"
+  },
+  "LABELS_MISMATCH" : {
+    "message" : [
+      "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
@@ -3131,6 +3200,12 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MISSING_WINDOW_SPECIFICATION" : {
+    "message" : [
+      "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
+    ],
+    "sqlState" : "42P20"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3571,7 +3646,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."
     ],
     "sqlState" : "42K0G"
   },
@@ -3755,6 +3830,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
+    "message" : [
+      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
+    ],
+    "sqlState" : "42802"
+  },
   "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
     "message" : [
       "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
@@ -3804,9 +3885,21 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INVALID_CONFIG_AFTER_RESTART" : {
+    "message" : [
+      "Cannot change <configName> from <oldConfig> to <newConfig> between restarts. Please set <configName> to <oldConfig>, or restart with a new checkpoint directory."
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_INVALID_PROVIDER" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
+  },
+  "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
+    "message" : [
+      "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
     ],
     "sqlState" : "42K06"
   },
@@ -4151,6 +4244,12 @@
       "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
+  },
+  "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
+    "message" : [
+      "Unknown primitive type with id <id> was found in a variant value."
+    ],
+    "sqlState" : "22023"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -5255,11 +5354,6 @@
     "message" : [
       "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
       "Try moving this class out of its parent class."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1004" : {
-    "message" : [
-      "Window specification <windowName> is not defined in the WINDOW clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_1005" : {
