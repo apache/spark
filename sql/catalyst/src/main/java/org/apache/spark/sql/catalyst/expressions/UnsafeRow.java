@@ -579,8 +579,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
     }
 
-    ArrayList<Expression> exp = new ArrayList<>(numFields);
-    for (int i = 0; i < numFields; ++i) {
+    ArrayList<Expression> exp = new ArrayList<>(columnsDataType.length);
+    for (int i = 0; i < columnsDataType.length; ++i) {
       exp.add(new Literal(get(i, columnsDataType[i]), columnsDataType[i]));
     }
 
