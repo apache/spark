@@ -78,6 +78,7 @@ trait TTLState {
  */
 abstract class SingleKeyTTLStateImpl(
     stateName: String,
+    colFamilyIds: Map[String, Short],
     store: StateStore,
     keyExprEnc: ExpressionEncoder[Any],
     ttlExpirationMs: Long)
@@ -93,7 +94,8 @@ abstract class SingleKeyTTLStateImpl(
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  store.createColFamilyIfAbsent(ttlColumnFamilyName, keySchema, TTL_VALUE_ROW_SCHEMA,
+  store.createColFamilyIfAbsent(ttlColumnFamilyName, colFamilyIds(ttlColumnFamilyName),
+    keySchema, TTL_VALUE_ROW_SCHEMA,
     RangeKeyScanStateEncoderSpec(keySchema, Seq(0)), isInternal = true)
 
   /**
@@ -197,6 +199,7 @@ abstract class SingleKeyTTLStateImpl(
  */
 abstract class CompositeKeyTTLStateImpl[K](
     stateName: String,
+    colFamilyIds: Map[String, Short],
     store: StateStore,
     keyExprEnc: ExpressionEncoder[Any],
     userKeyEncoder: Encoder[K],
@@ -217,7 +220,7 @@ abstract class CompositeKeyTTLStateImpl[K](
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  store.createColFamilyIfAbsent(ttlColumnFamilyName, keySchema,
+  store.createColFamilyIfAbsent(ttlColumnFamilyName, colFamilyIds(ttlColumnFamilyName), keySchema,
     TTL_VALUE_ROW_SCHEMA, RangeKeyScanStateEncoderSpec(keySchema,
       Seq(0)), isInternal = true)
 

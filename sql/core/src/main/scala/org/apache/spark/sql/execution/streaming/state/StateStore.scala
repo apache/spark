@@ -129,6 +129,7 @@ trait StateStore extends ReadStateStore {
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,
+      columnFamilyId: Short,
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,

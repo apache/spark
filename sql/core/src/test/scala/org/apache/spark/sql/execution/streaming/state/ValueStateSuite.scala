@@ -460,7 +460,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
-      useColumnFamilies, columnFamilyIds = Map.empty,
+      useColumnFamilies, columnFamilySchemas = Map.empty,
       new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey)
     provider
   }

@@ -46,7 +46,8 @@ object TimerStateUtils {
 class TimerStateImpl(
     store: StateStore,
     timeMode: TimeMode,
-    keyExprEnc: ExpressionEncoder[Any]) extends Logging {
+    keyExprEnc: ExpressionEncoder[Any],
+    colFamilyIds: Map[String, Short]) extends Logging {
 
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
@@ -64,7 +65,7 @@ class TimerStateImpl(
 
   private val schemaForKeyRow = rowEncoder.schemaForKeyRow
   private val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-  store.createColFamilyIfAbsent(keyToTsCFName, schemaForKeyRow,
+  store.createColFamilyIfAbsent(keyToTsCFName, colFamilyIds(keyToTsCFName), schemaForKeyRow,
     schemaForValueRow, PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1),
     useMultipleValuesPerKey = false, isInternal = true)
 
@@ -72,7 +73,7 @@ class TimerStateImpl(
   // and grouping key
   private val keySchemaForSecIndex = rowEncoder.keySchemaForSecIndex
   private val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
-  store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
+  store.createColFamilyIfAbsent(tsToKeyCFName, colFamilyIds(keyToTsCFName), keySchemaForSecIndex,
     schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, Seq(0)),
     useMultipleValuesPerKey = false, isInternal = true)
 

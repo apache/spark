@@ -58,16 +58,17 @@ private[sql] class RocksDBStateStoreProvider
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
+        colFamilyId: Short,
         keySchema: StructType,
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
-      val newColFamilyId = ColumnFamilyUtils.createColFamilyIfAbsent(colFamilyName, isInternal)
-
+      colFamilyNameToIdMap.put(colFamilyName, colFamilyId)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies, newColFamilyId),
-         RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
+          (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
+          Some(colFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
+          useMultipleValuesPerKey)))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -334,7 +335,7 @@ private[sql] class RocksDBStateStoreProvider
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, StateStoreColFamilySchema],
+      columnFamilySchemas: Map[String, StateStoreColFamilySchema],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
@@ -353,19 +354,9 @@ private[sql] class RocksDBStateStoreProvider
     var defaultColFamilyId: Option[Short] = None
     if (useColumnFamilies) {
       // put default column family only if useColumnFamilies are enabled
-      colFamilyNameToIdMap.putAll(columnFamilyIds.view.mapValues(_.colFamilyId).toMap.asJava)
+      colFamilySchemas.putAll(columnFamilySchemas.asJava)
       colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, colFamilyId.shortValue())
       defaultColFamilyId = Option(colFamilyId.shortValue())
-    }
-    columnFamilyIds.foreach { case (colFamilyName, colFamilySchema) =>
-      val keyEncoder = colFamilySchema.keyStateEncoderSpec match {
-        case Some(keyStateEncoder) => keyStateEncoder
-        case None => keyStateEncoderSpec
-      }
-      keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyEncoder, useColumnFamilies,
-          Some(colFamilySchema.colFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
-          useMultipleValuesPerKey)))
     }
 
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
@@ -461,6 +452,9 @@ private[sql] class RocksDBStateStoreProvider
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
   private val colFamilyNameToIdMap = new java.util.concurrent.ConcurrentHashMap[String, Short]
+
+  private val colFamilySchemas = new ConcurrentHashMap[String, StateStoreColFamilySchema]
+
   // TODO SPARK-48796 load column family id from state schema when restarting
   private val colFamilyId = new AtomicInteger(-1)
 
@@ -590,9 +584,11 @@ private[sql] class RocksDBStateStoreProvider
     /**
      * Create RocksDB column family, if not created already
      */
-    def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false):
+    def createColFamilyIfAbsent(
+        colFamilyName: String, colFamilyId: Short, isInternal: Boolean = false):
       Option[Short] = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
+
       Some(colFamilyNameToIdMap.get(colFamilyName))
     }
 

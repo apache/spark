@@ -40,8 +40,12 @@ class MapStateSuite extends StateVariableSuiteBase {
   test("Map state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
+      val columnFamilyIds = Map(
+        "testState" -> 1.toShort
+      )
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None(),
+        columnFamilyIds = columnFamilyIds)
 
       val testState: MapState[String, Double] =
         handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble)

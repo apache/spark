@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.StructType
 class MapStateImpl[K, V](
     store: StateStore,
     stateName: String,
+    colFamilyIds: Map[String, Short],
     keyExprEnc: ExpressionEncoder[Any],
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V]) extends MapState[K, V] with Logging {
@@ -39,8 +40,8 @@ class MapStateImpl[K, V](
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName)
 
-  store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, schemaForValueRow,
-    PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
+  store.createColFamilyIfAbsent(stateName, colFamilyIds(stateName), schemaForCompositeKeyRow,
+    schemaForValueRow, PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {

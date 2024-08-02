@@ -485,7 +485,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = useColumnFamilies, columnFamilyIds = Map.empty,
+      useColumnFamilies = useColumnFamilies, columnFamilySchemas = Map.empty,
       storeConf, new Configuration, useMultipleValuesPerKey = useMultipleValuesPerKey)
     provider
   }

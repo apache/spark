@@ -42,13 +42,14 @@ import org.apache.spark.util.NextIterator
 class MapStateImplWithTTL[K, V](
     store: StateStore,
     stateName: String,
+    colFamilyIds: Map[String, Short],
     keyExprEnc: ExpressionEncoder[Any],
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long)
-  extends CompositeKeyTTLStateImpl[K](stateName, store,
-    keyExprEnc, userKeyEnc, batchTimestampMs)
+  extends CompositeKeyTTLStateImpl[K](stateName, colFamilyIds,
+    store, keyExprEnc, userKeyEnc, batchTimestampMs)
   with MapState[K, V] with Logging {
 
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
@@ -62,8 +63,8 @@ class MapStateImplWithTTL[K, V](
   private def initialize(): Unit = {
     val schemaForCompositeKeyRow =
       getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
-    store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow,
-      getValueSchemaWithTTL(valEncoder.schema, true),
+    store.createColFamilyIfAbsent(stateName, colFamilyIds(stateName),
+      schemaForCompositeKeyRow, getValueSchemaWithTTL(valEncoder.schema, true),
       PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
   }
 
