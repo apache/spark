@@ -22,6 +22,7 @@ import javax.xml.stream.XMLOutputFactory
 
 import scala.collection.Map
 
+import com.sun.xml.txw2.output.IndentingXMLStreamWriter
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
 import org.apache.spark.SparkIllegalArgumentException
@@ -37,8 +38,7 @@ class StaxXmlGenerator(
     options: XmlOptions,
     validateStructure: Boolean = true) {
 
-  require(
-    options.attributePrefix.nonEmpty,
+  require(options.attributePrefix.nonEmpty,
     "'attributePrefix' option should not be empty string.")
   private val indentDisabled = options.indent == ""
 
@@ -122,7 +122,7 @@ class StaxXmlGenerator(
    * Transforms a single Row to XML
    *
    * @param row
-   *   The row to convert
+   * The row to convert
    */
   def write(row: InternalRow): Unit = {
     writeChildElement(options.rowTag, schema, row)
@@ -149,7 +149,7 @@ class StaxXmlGenerator(
     (dt, v) match {
       // If this is meant to be attribute, write an attribute
       case (_, null) | (NullType, _)
-          if name.startsWith(options.attributePrefix) && name != options.valueTag =>
+        if name.startsWith(options.attributePrefix) && name != options.valueTag =>
         Option(options.nullValue).foreach {
           gen.writeAttribute(name.substring(options.attributePrefix.length), _)
         }
@@ -222,8 +222,10 @@ class StaxXmlGenerator(
     case (_, _) =>
       throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3238",
-        messageParameters = scala.collection.immutable
-          .Map("v" -> v.toString, "class" -> v.getClass.toString, "dt" -> dt.toString))
+        messageParameters = scala.collection.immutable.Map(
+          "v" -> v.toString,
+          "class" -> v.getClass.toString,
+          "dt" -> dt.toString))
   }
 
   def writeMapData(mapType: MapType, map: MapData): Unit = {

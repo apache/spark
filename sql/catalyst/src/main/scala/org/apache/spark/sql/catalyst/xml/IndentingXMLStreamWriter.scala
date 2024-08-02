@@ -22,17 +22,17 @@ import javax.xml.stream.XMLStreamWriter
 import scala.collection.mutable.Stack
 
 class IndentingXMLStreamWriter(wr: XMLStreamWriter) extends XMLStreamWriter {
-  private sealed trait State
-  private case object NO_NEWLINE_ON_END extends State
-  private case object DO_NEWLINE_ON_END extends State
+  private sealed trait WriterState
+  private case object NO_NEWLINE_ON_END extends WriterState
+  private case object DO_NEWLINE_ON_END extends WriterState
 
   private val writer = wr
 
   private var indentStep = "  "
   private var depth = 0
 
-  private var state: State = NO_NEWLINE_ON_END
-  private val stateStack = Stack[State]()
+  private var state: WriterState = NO_NEWLINE_ON_END
+  private val stateStack = Stack[WriterState]()
 
   def setIndentStep(s: String): Unit = {
     indentStep = s
