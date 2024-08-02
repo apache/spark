@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, ScopedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -970,7 +970,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(vExprEnc, dataAttributes).named)
+      columns
+        // SPARK-42199: resolve these aggregate expressions only against dataAttributes
+        // this is to hide key column from expression resolution
+        .map(scopeTypedColumn(dataAttributes))
+        .map(_.withInputType(vExprEnc, dataAttributes).named)
     val keyColumn = TypedAggUtils.aggKeyColumn(kExprEnc, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)
@@ -1204,6 +1208,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
       thisSortExprs.toImmutableArraySeq: _*)(otherSortExprs.toImmutableArraySeq: _*)(
       (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
+
+  private def scopeTypedColumn(
+      scope: Seq[Attribute])(
+      typedCol: TypedColumn[_, _]): TypedColumn[_, _] =
+    new TypedColumn(ScopedExpression(typedCol.expr, scope), typedCol.encoder)
+
 
   override def toString: String = {
     val builder = new StringBuilder
