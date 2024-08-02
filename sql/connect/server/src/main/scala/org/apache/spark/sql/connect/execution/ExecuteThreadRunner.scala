@@ -269,19 +269,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    *   don't send a ResultComplete when the ExecuteThread returns.
    */
   private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
-    request.getPlan.getOpTypeCase match {
-      case proto.Plan.OpTypeCase.COMMAND =>
-        request.getPlan.getCommand.getCommandTypeCase match {
-          case proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND =>
-            request.getPlan.getCommand.getStreamingQueryListenerBusCommand.getCommandCase match {
-              case proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER =>
-                true
-              case _ => false
-            }
-          case _ => false
-        }
-      case _ => false
-    }
+    request.getPlan.getOpTypeCase == proto.Plan.OpTypeCase.COMMAND &&
+      request.getPlan.getCommand.getCommandTypeCase ==
+        proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
+      request.getPlan.getCommand.getStreamingQueryListenerBusCommand.getCommandCase ==
+        proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER
   }
 
   private def handlePlan(request: proto.ExecutePlanRequest): Unit = {
