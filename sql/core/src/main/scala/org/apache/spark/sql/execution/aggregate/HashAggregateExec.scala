@@ -666,7 +666,7 @@ case class HashAggregateExec(
          |// generate grouping key
          |${unsafeRowKeyCode.code}
          |UnsafeRow ur = ${unsafeRowKeys};
-         |ur.setColumnsDataType(groupingColumnsDataType);
+         |ur.setColumnsDataType(UnsafeRow.getGroupingColumnsDataType($idx));
          |int $unsafeRowKeyHash = ur.hashCode();
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
