@@ -16,35 +16,62 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.streaming.StateTTLSchema.TTL_VALUE_ROW_SCHEMA
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.streaming.TimeMode
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 
-object StateStoreColumnFamilySchemaUtils {
+object StateStoreColumnFamilySchemaUtils extends Logging {
 
   def getValueStateSchema[T](
       stateName: String,
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
-      hasTtl: Boolean): StateStoreColFamilySchema = {
-   StateStoreColFamilySchema(
+      hasTtl: Boolean): List[StateStoreColFamilySchema] = {
+   List(StateStoreColFamilySchema(
       stateName,
       keyEncoder.schema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))) ++
+        (if (hasTtl) {
+            val ttlKeyRowSchema = getSingleKeyTTLRowSchema(keyEncoder.schema)
+            List(
+              StateStoreColFamilySchema(
+                s"_ttl_$stateName",
+                ttlKeyRowSchema,
+                TTL_VALUE_ROW_SCHEMA,
+                Some(RangeKeyScanStateEncoderSpec(ttlKeyRowSchema, Seq(0)))))
+        } else {
+            Nil
+        })
   }
 
   def getListStateSchema[T](
       stateName: String,
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
-      hasTtl: Boolean): StateStoreColFamilySchema = {
-  StateStoreColFamilySchema(
-      stateName,
-      keyEncoder.schema,
-      getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+      hasTtl: Boolean): List[StateStoreColFamilySchema] = {
+    List(
+      StateStoreColFamilySchema(
+        stateName,
+        keyEncoder.schema,
+        getValueSchemaWithTTL(valEncoder.schema, hasTtl),
+        Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+    ) ++ (if (hasTtl) {
+      val ttlKeyRowSchema = getSingleKeyTTLRowSchema(keyEncoder.schema)
+      List(
+        StateStoreColFamilySchema(
+          s"_ttl_$stateName",
+          ttlKeyRowSchema,
+          TTL_VALUE_ROW_SCHEMA,
+          Some(RangeKeyScanStateEncoderSpec(ttlKeyRowSchema, Seq(0)))))
+    } else {
+      Nil
+    })
   }
 
   def getMapStateSchema[K, V](
@@ -52,13 +79,53 @@ object StateStoreColumnFamilySchemaUtils {
       keyEncoder: ExpressionEncoder[Any],
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
-      hasTtl: Boolean): StateStoreColFamilySchema = {
+      hasTtl: Boolean): List[StateStoreColFamilySchema] = {
     val compositeKeySchema = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
-    StateStoreColFamilySchema(
+    List(StateStoreColFamilySchema(
       stateName,
       compositeKeySchema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-      Some(userKeyEnc.schema))
+      Some(userKeyEnc.schema))) ++ (if (hasTtl) {
+      val ttlKeyRowSchema = getCompositeKeyTTLRowSchema(
+        keyEncoder.schema, userKeyEnc.schema)
+      List(
+        StateStoreColFamilySchema(
+          s"_ttl_$stateName",
+          ttlKeyRowSchema,
+          TTL_VALUE_ROW_SCHEMA,
+          Some(RangeKeyScanStateEncoderSpec(ttlKeyRowSchema, Seq(0)))))
+    } else {
+      Nil
+    })
+  }
+
+  def getTimerSchema(
+      keyEncoder: ExpressionEncoder[Any],
+      timeMode: TimeMode): List[StateStoreColFamilySchema] = {
+    val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
+      TimerStateUtils.PROC_TIMERS_STATE_NAME
+    } else {
+      TimerStateUtils.EVENT_TIMERS_STATE_NAME
+    }
+    val rowEncoder = new TimerKeyEncoder(keyEncoder)
+    val schemaForKeyRow = rowEncoder.schemaForKeyRow
+    val schemaForValueRow = StructType(Array(StructField("__dummy__", NullType)))
+    logError(s"### schemaForKeyRow: $schemaForKeyRow")
+    logError(s"### keySchemaForSecIndex: ${rowEncoder.keySchemaForSecIndex}")
+    List(
+      StateStoreColFamilySchema(
+        timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF,
+        schemaForKeyRow,
+        schemaForValueRow,
+        Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1))
+      ),
+      StateStoreColFamilySchema(
+        timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF,
+        rowEncoder.keySchemaForSecIndex,
+        schemaForValueRow,
+        Some(RangeKeyScanStateEncoderSpec(rowEncoder.keySchemaForSecIndex, Seq(0)))
+      )
+    )
   }
 }

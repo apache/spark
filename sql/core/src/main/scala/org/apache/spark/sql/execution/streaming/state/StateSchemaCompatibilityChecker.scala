@@ -177,7 +177,7 @@ class StateSchemaCompatibilityChecker(
         schema.copy(colFamilyId = index.toShort)
     }
     // assign colFamilyIds based on position in list
-    var maxId: Short = existingStateSchemaList.map(_.colFamilyId).maxOption.getOrElse(-1)
+    var maxId: Short = existingStateSchemaList.map(_.colFamilyId).maxOption.getOrElse(0)
 
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
@@ -190,6 +190,7 @@ class StateSchemaCompatibilityChecker(
           case Some(newSchema) =>
             if (check(existingSchema, newSchema, ignoreValueSchema)) {
               maxId = (maxId + 1).toShort
+              logError(s"### assigning $maxId to ${newSchema.colFamilyName}")
               newSchema.copy(colFamilyId = maxId)
             } else {
               existingSchema

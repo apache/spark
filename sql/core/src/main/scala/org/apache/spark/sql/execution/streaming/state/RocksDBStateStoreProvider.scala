@@ -357,7 +357,7 @@ private[sql] class RocksDBStateStoreProvider
       colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, colFamilyId.shortValue())
       defaultColFamilyId = Option(colFamilyId.shortValue())
     }
-    columnFamilyIds.map { case (colFamilyName, colFamilyId) =>
+    columnFamilyIds.foreach { case (colFamilyName, colFamilyId) =>
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
           Some(colFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
@@ -458,7 +458,7 @@ private[sql] class RocksDBStateStoreProvider
 
   private val colFamilyNameToIdMap = new java.util.concurrent.ConcurrentHashMap[String, Short]
   // TODO SPARK-48796 load column family id from state schema when restarting
-  private val colFamilyId = new AtomicInteger(0)
+  private val colFamilyId = new AtomicInteger(-1)
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
@@ -589,11 +589,7 @@ private[sql] class RocksDBStateStoreProvider
     def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false):
       Option[Short] = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      if (!checkColFamilyExists(colFamilyName)) {
-        val newColumnFamilyId = colFamilyId.incrementAndGet().toShort
-        colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
-        Some(newColumnFamilyId)
-      } else Some(colFamilyNameToIdMap.get(colFamilyName))
+      Some(colFamilyNameToIdMap.get(colFamilyName))
     }
 
     /**

@@ -116,7 +116,12 @@ case class TransformWithStateExec(
    * after init is called.
    */
   private def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    val driverProcessorHandle = getDriverProcessorHandle()
+    // this is just to add the timer column family schemas
+    if (timeMode != NoTime) {
+      driverProcessorHandle.registerTimer(0L)
+    }
+    val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
   }
@@ -555,6 +560,7 @@ case class TransformWithStateExec(
     (f: StateStore => CompletionIterator[InternalRow, Iterator[InternalRow]]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
 
+    logError(s"### columnFamilyIds: ${getStateInfo.columnFamilyIds}")
     val providerId = {
       val tempDirPath = Utils.createTempDir().getAbsolutePath
       new StateStoreProviderId(
@@ -576,7 +582,7 @@ case class TransformWithStateExec(
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey = true,
-      columnFamilyIds = Map.empty)
+      columnFamilyIds = getStateInfo.columnFamilyIds)
 
     val store = stateStoreProvider.getStore(0)
     val outputIterator = f(store)
