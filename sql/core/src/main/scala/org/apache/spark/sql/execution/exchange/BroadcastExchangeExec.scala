@@ -74,11 +74,14 @@ trait BroadcastExchangeLike extends Exchange {
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
 
   /**
-   * Cancels broadcast job.
+   * Cancels broadcast job with an optional reason.
    */
-  final def cancelBroadcastJob(): Unit = {
+  final def cancelBroadcastJob(reason: Option[String]): Unit = {
     if (isMaterializationStarted() && !this.relationFuture.isDone) {
-      sparkContext.cancelJobsWithTag(this.jobTag)
+      reason match {
+        case Some(r) => sparkContext.cancelJobsWithTag(this.jobTag, r)
+        case None => sparkContext.cancelJobsWithTag(this.jobTag)
+      }
       this.relationFuture.cancel(true)
     }
   }
@@ -227,7 +230,7 @@ case class BroadcastExchangeExec(
       case ex: TimeoutException =>
         logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobsWithTag(jobTag)
+          sparkContext.cancelJobsWithTag(jobTag, "The corresponding broadcast query has failed.")
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

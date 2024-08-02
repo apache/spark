@@ -333,6 +333,11 @@ object WindowExpression {
   def hasWindowExpression(e: Expression): Boolean = {
     e.find(_.isInstanceOf[WindowExpression]).isDefined
   }
+
+  def expressionToIngnoreNulls(e: Expression, source: String): Boolean = e match {
+    case BooleanLiteral(ignoreNulls) => ignoreNulls
+    case _ => throw QueryCompilationErrors.invalidIgnoreNullsParameter(source, e)
+  }
 }
 
 case class WindowExpression(
@@ -525,6 +530,9 @@ case class Lead(
   def this(input: Expression, offset: Expression, default: Expression) =
     this(input, offset, default, false)
 
+  def this(input: Expression, offset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, offset, default, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "lead"))
+
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
   def this(input: Expression) = this(input, Literal(1))
@@ -578,6 +586,9 @@ case class Lag(
 
   def this(input: Expression, inputOffset: Expression, default: Expression) =
     this(input, inputOffset, default, false)
+
+  def this(input: Expression, offset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, offset, default, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "lag"))
 
   def this(input: Expression, inputOffset: Expression) = this(input, inputOffset, Literal(null))
 
@@ -726,6 +737,8 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes
     with BinaryLike[Expression] with QueryErrorsBase {
 
+  def this(input: Expression, offset: Expression, ignoreNulls: Expression) =
+    this(input, offset, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "nth_value"))
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)

@@ -75,8 +75,8 @@ class ArrowCollectSerializer(Serializer):
         if num == -1:
             error_msg = UTF8Deserializer().loads(stream)
             raise PySparkRuntimeError(
-                error_class="ERROR_OCCURRED_WHILE_CALLING",
-                message_parameters={
+                errorClass="ERROR_OCCURRED_WHILE_CALLING",
+                messageParameters={
                     "func_name": "ArrowCollectSerializer.load_stream",
                     "error_msg": error_msg,
                 },
@@ -667,8 +667,8 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             # arrow's error message. This also works better with Spark Connect
             # where the exception messages are by default truncated.
             raise PySparkRuntimeError(
-                error_class="UDTF_ARROW_TYPE_CAST_ERROR",
-                message_parameters={
+                errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
+                messageParameters={
                     "col_name": series.name,
                     "col_type": str(series.dtype),
                     "arrow_type": arrow_type,
@@ -711,8 +711,8 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(
-                    error_class="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    message_parameters={"dataframes_in_group": str(dataframes_in_group)},
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
                 )
 
 
@@ -739,8 +739,8 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(
-                    error_class="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    message_parameters={"dataframes_in_group": str(dataframes_in_group)},
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
                 )
 
 

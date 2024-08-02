@@ -606,7 +606,7 @@ jobs:
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
       with:
-        input: connect/common/src/main
+        input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
     - name: Install Python 3.9
       uses: actions/setup-python@v5
@@ -693,6 +693,11 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
+    - name: Scala structured logging check
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.9 ./dev/structured_logging_style.py
+        fi
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check

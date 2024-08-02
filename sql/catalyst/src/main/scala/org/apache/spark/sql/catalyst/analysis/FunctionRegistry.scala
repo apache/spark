@@ -384,7 +384,7 @@ object FunctionRegistry {
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
-    expression[CaseWhen]("when"),
+    CaseWhen.registryEntry,
 
     // math functions
     expression[Acos]("acos"),
@@ -451,7 +451,7 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
-    expression[TryRemainder]("try_remainder"),
+    expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
