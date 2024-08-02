@@ -325,8 +325,9 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
+    // by default we use DoNotCleanup mode
     val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, DoNotCleanup)
+    val df = Dataset.ofRows(spark, plan)
     df.collect()
 
     val blockManager = spark.sparkContext.env.blockManager
@@ -336,25 +337,29 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - SkipMigration mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, SkipMigration)
-    df.collect()
+    withSQLConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED.key -> "true") {
+      val plan = spark.range(100).repartition(10).logicalPlan
+      val df = Dataset.ofRows(spark, plan)
+      df.collect()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-    cleanupShuffles()
+      val blockManager = spark.sparkContext.env.blockManager
+      assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+      assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+      cleanupShuffles()
+    }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - RemoveShuffleFiles mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
-    df.collect()
+    withSQLConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "true") {
+      val plan = spark.range(100).repartition(10).logicalPlan
+      val df = Dataset.ofRows(spark, plan)
+      df.collect()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
-    cleanupShuffles()
+      val blockManager = spark.sparkContext.env.blockManager
+      assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+      assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+      cleanupShuffles()
+    }
   }
 
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
