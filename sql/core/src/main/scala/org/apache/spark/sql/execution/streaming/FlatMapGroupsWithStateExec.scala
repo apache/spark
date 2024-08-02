@@ -415,8 +415,13 @@ case class FlatMapGroupsWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
-    copy(child = newLeft, initialState = newRight)
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec = {
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+  }
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store) {
