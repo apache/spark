@@ -4603,6 +4603,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIMIZE_BETWEEN =
+    buildConf("spark.sql.optimizeBetween")
+      .internal()
+      .doc("When true, we use optimized Between implementation. This is a flag that fixes a " +
+        "problem introduced by a between optimization, see ticket SPARK-49063.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
@@ -5985,6 +5994,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def optimizeBetween: Boolean =
+    getConf(SQLConf.OPTIMIZE_BETWEEN)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
