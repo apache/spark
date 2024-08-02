@@ -96,7 +96,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
-        null,
+        "UTC",
         true)
       .next()
 
