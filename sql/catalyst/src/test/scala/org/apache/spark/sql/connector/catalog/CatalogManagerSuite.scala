@@ -18,13 +18,12 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
-
 import scala.jdk.CollectionConverters._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog => V1InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, SessionCatalog, InMemoryCatalog => V1InMemoryCatalog}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -101,9 +100,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(catalogManager.currentNamespace.sameElements(Array("test")))
     assert(v1SessionCatalog.getCurrentDatabase == "test")
 
-    intercept[NoSuchNamespaceException] {
-      catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
-    }
+    catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
 
     // when switching current catalog, `SessionCatalog.currentDb` should be reset.
     withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName) {

@@ -94,7 +94,7 @@ class CatalogManager(
 
   def currentNamespace: Array[String] = {
     val defaultNamespace = if (currentCatalog.name() == SESSION_CATALOG_NAME) {
-      Array(v1SessionCatalog.getCurrentDatabase)
+      Array(v1SessionCatalog.getDefaultDatabase)
     } else {
       currentCatalog.defaultNamespace()
     }
@@ -108,15 +108,14 @@ class CatalogManager(
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
     currentCatalog match {
-      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
-        v1SessionCatalog.setCurrentDatabase(namespace.head)
-      case _ if isSessionCatalog(currentCatalog) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
         throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case _ =>
-        _currentNamespace = Some(namespace)
     }
+    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+      v1SessionCatalog.setCurrentDatabaseWithoutCheck(namespace.head)
+    }
+    _currentNamespace = Some(namespace)
   }
 
   private var _currentCatalogName: Option[String] = None
