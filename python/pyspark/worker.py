@@ -497,7 +497,7 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
         values = (pd.concat(x, axis=1) for x in value_series_gen)
         result_iter = f(stateful_processor_api_client, key, values)
 
-        # TODO: add verification that elements in result_iter are
+        # TODO(SPARK-49100): add verification that elements in result_iter are
         # indeed of type pd.DataFrame and confirm to assigned cols
 
         return result_iter

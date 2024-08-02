@@ -72,7 +72,7 @@ class TransformWithStateInPandasStateServer(
         }
       } catch {
         case _: EOFException =>
-          logWarning(s"No more data to read from the socket")
+          logWarning(log"No more data to read from the socket")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>
@@ -83,7 +83,7 @@ class TransformWithStateInPandasStateServer(
           return
       }
     }
-    logInfo(s"done from the state server thread")
+    logInfo(log"Done from the state server thread")
   }
 
   private def parseProtoMessage(): StateRequest = {
@@ -129,13 +129,13 @@ class TransformWithStateInPandasStateServer(
         val requestedState = message.getSetHandleState.getState
         requestedState match {
           case HandleState.CREATED =>
-            logInfo(s"set handle state to Created")
+            logInfo(log"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
           case HandleState.INITIALIZED =>
-            logInfo(s"set handle state to Initialized")
+            logInfo(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
           case HandleState.CLOSED =>
-            logInfo(s"set handle state to Closed")
+            logInfo(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           case _ =>
         }
@@ -224,12 +224,12 @@ class TransformWithStateInPandasStateServer(
 
   private def initializeValueState(stateName: String, schema: String): Unit = {
     if (!valueStates.contains(stateName)) {
-        val state = statefulProcessorHandle.getValueState[Row](stateName,
-          Encoders.row(StructType.fromString(schema)))
-        valueStates.put(stateName, state)
-        sendResponse(0)
-      } else {
-        sendResponse(1, s"state $stateName already exists")
-      }
+      val state = statefulProcessorHandle.getValueState[Row](stateName,
+        Encoders.row(StructType.fromString(schema)))
+      valueStates.put(stateName, state)
+      sendResponse(0)
+    } else {
+      sendResponse(1, s"state $stateName already exists")
+    }
   }
 }

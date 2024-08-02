@@ -372,9 +372,10 @@ class PandasGroupedOpsMixin:
         timeMode: str,
     ) -> DataFrame:
         """
-        Invokes methods defined in the stateful processor used in arbitrary state API v2.
-        We allow the user to act on per-group set of input rows along with keyed state and the
-        user can choose to output/return 0 or more rows.
+        Invokes methods defined in the stateful processor used in arbitrary state API v2. It
+        requires protobuf as a dependency to transmit state messages/data. We allow the user to act
+        on per-group set of input rows along with keyed state and the user can choose to
+        output/return 0 or more rows.
 
         For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
         in each trigger and the user's state/state variables will be stored persistently across
@@ -392,9 +393,6 @@ class PandasGroupedOpsMixin:
         The size of each `pandas.DataFrame` in both the input and output can be arbitrary. The
         number of `pandas.DataFrame` in both the input and output can also be arbitrary.
 
-        `transformWithStateInPandas` requires protobuf as a dependency to transmit state
-        messages/data.
-
         .. versionadded:: 4.0.0
 
         Parameters
@@ -411,13 +409,14 @@ class PandasGroupedOpsMixin:
 
         Examples
         --------
+        >>> from typing import Iterator
+        ...
         >>> import pandas as pd # doctest: +SKIP
+        ...
         >>> from pyspark.sql import Row
         >>> from pyspark.sql.functions import col, split
         >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
         >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
-        >>>
-        >>> from typing import Iterator
         >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
         ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         ... # Below is a simple example of a stateful processor that counts the number of violations
@@ -436,6 +435,7 @@ class PandasGroupedOpsMixin:
         >>> class SimpleStatefulProcessor(StatefulProcessor):
         ...     def init(self, handle: StatefulProcessorHandle):
         ...         self.num_violations_state = handle.getValueState("numViolations", state_schema)
+        ...
         ...     def handleInputRows(self, key, rows):
         ...         new_violations = 0
         ...         count = 0
@@ -453,6 +453,7 @@ class PandasGroupedOpsMixin:
         ...         updated_violations = new_violations + existing_violations
         ...         self.num_violations_state.update((updated_violations,))
         ...         yield pd.DataFrame({'id': key, 'count': count})
+        ...
         ...     def close(self) -> None:
         ...         pass
         ...

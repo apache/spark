@@ -94,7 +94,7 @@ class TransformWithStateInPandasPythonRunner(
         /* backlog = */1)
       stateSocketSocketPort = stateServerSocket.getLocalPort
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         failed = true
         throw e
     } finally {
@@ -111,7 +111,7 @@ class TransformWithStateInPandasPythonRunner(
         groupingKeySchema))
 
     context.addTaskCompletionListener[Unit] { _ =>
-      logInfo(s"completion listener called")
+      logInfo(log"completion listener called")
       executor.awaitTermination(10, TimeUnit.SECONDS)
       executor.shutdownNow()
       closeServerSocketChannelSilently(stateServerSocket)
@@ -122,11 +122,11 @@ class TransformWithStateInPandasPythonRunner(
 
   private def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
     try {
-      logInfo(s"closing the state server socket")
+      logInfo(log"closing the state server socket")
       stateServerSocket.close()
     } catch {
       case e: Exception =>
-        logError(s"failed to close state server socket", e)
+        logError(log"failed to close state server socket", e)
     }
   }
 
