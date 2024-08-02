@@ -18,16 +18,18 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Unit tests for execution nodes from SqlScriptingExecutionNode.scala.
  * Execution nodes are constructed manually and iterated through.
  * It is then checked if the leaf statements have been iterated in the expected order.
  */
-class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
+class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSession {
   // Helpers
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
@@ -38,33 +40,24 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
 
   case class TestBody(statements: Seq[CompoundStatementExec]) extends CompoundBodyExec(statements)
 
-  case class TestSingleStatement(testVal: String)
-    extends SingleStatementExec(
-      parsedPlan = Project(Seq(Alias(Literal(testVal), "condition")()), OneRowRelation()),
-      Origin(startIndex = Some(0), stopIndex = Some(testVal.length)),
-      isInternal = false)
-
   case class TestIfElse(
-      conditions: Seq[TestSingleStatement],
+      conditions: Seq[SingleStatementExec],
       conditionalBodies: Seq[TestBody],
       elseBody: Option[TestBody],
-      booleanEvaluator: StatementBooleanEvaluator)
+      session: SparkSession)
     extends IfElseStatementExec(
-      conditions, conditionalBodies, elseBody, booleanEvaluator)
+      conditions, conditionalBodies, elseBody, session)
 
-  // Repeat retValue reps times, then return !retValue once.
-  case class RepEval(retValue: Boolean, reps: Int) extends StatementBooleanEvaluator(null) {
-    private var callCount: Int = 0;
-    override def eval(statement: LeafStatementExec): Boolean = {
-      callCount += 1
-      if (callCount % (reps + 1) == 0) !retValue else retValue
-    }
-  }
+  case class TestIfElseCondition(condVal: Boolean, description: String)
+    extends SingleStatementExec(
+      parsedPlan = Project(Seq(Alias(Literal(condVal), "condition")()), OneRowRelation()),
+      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      isInternal = false)
 
   private def extractStatementValue(statement: CompoundStatementExec): String =
     statement match {
       case TestLeafStatement(testVal) => testVal
-      case TestSingleStatement(testVal) => testVal
+      case TestIfElseCondition(_, description) => description
       case _ => fail("Unexpected statement type")
     }
 
@@ -101,13 +94,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1")
+          TestIfElseCondition(condVal = true, description = "con1")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1")))
         ),
         elseBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
-        booleanEvaluator = RepEval(retValue = false, reps = 0)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -118,13 +111,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1")
+          TestIfElseCondition(condVal = false, description = "con1")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1")))
         ),
         elseBody = Some(TestBody(Seq(TestLeafStatement("body2")))),
-        booleanEvaluator = RepEval(retValue = false, reps = 1)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -135,15 +128,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1"),
-          TestSingleStatement("con2")
+          TestIfElseCondition(condVal = true, description = "con1"),
+          TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
-        booleanEvaluator = RepEval(retValue = false, reps = 0)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -154,15 +147,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1"),
-          TestSingleStatement("con2")
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = true, description = "con2")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
-        booleanEvaluator = RepEval(retValue = false, reps = 1)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -173,9 +166,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1"),
-          TestSingleStatement("con2"),
-          TestSingleStatement("con3")
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = false, description = "con2"),
+          TestIfElseCondition(condVal = true, description = "con3")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
@@ -183,7 +176,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
           TestBody(Seq(TestLeafStatement("body3")))
         ),
         elseBody = Some(TestBody(Seq(TestLeafStatement("body4")))),
-        booleanEvaluator = RepEval(retValue = false, reps = 2)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -194,15 +187,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1"),
-          TestSingleStatement("con2")
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = Some(TestBody(Seq(TestLeafStatement("body3")))),
-        booleanEvaluator = RepEval(retValue = false, reps = 2)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -213,15 +206,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1"),
-          TestSingleStatement("con2")
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = true, description = "con2")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = None,
-        booleanEvaluator = RepEval(retValue = false, reps = 1)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -232,15 +225,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     val iter = TestNestedStatementIterator(Seq(
       TestIfElse(
         conditions = Seq(
-          TestSingleStatement("con1"),
-          TestSingleStatement("con2")
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
           TestBody(Seq(TestLeafStatement("body1"))),
           TestBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = None,
-        booleanEvaluator = RepEval(retValue = false, reps = 2)
+        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq

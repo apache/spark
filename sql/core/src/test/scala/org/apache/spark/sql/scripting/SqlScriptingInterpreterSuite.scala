@@ -33,7 +33,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val interpreter = SqlScriptingInterpreter()
     val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
     val executionPlan = interpreter
-      .buildExecutionPlan(compoundBody, new StatementBooleanEvaluator(spark))
+      .buildExecutionPlan(compoundBody, spark)
     val result = executionPlan.flatMap {
       case statement: SingleStatementExec =>
         if (statement.isExecuted) {

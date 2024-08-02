@@ -57,6 +57,27 @@ trait NonLeafStatementExec extends CompoundStatementExec {
    *   Tree iterator.
    */
   def getTreeIterator: Iterator[CompoundStatementExec]
+
+  protected def evaluateBooleanCondition(
+      session: SparkSession,
+      statement: LeafStatementExec): Boolean = statement match {
+    case statement: SingleStatementExec =>
+      assert(!statement.isExecuted)
+      statement.isExecuted = true
+
+      // DataFrame evaluates to True if it is single row, single column
+      //  of boolean type with value True.
+      val df = Dataset.ofRows(session, statement.parsedPlan)
+      df.schema.fields match {
+        case Array(field) if field.dataType == BooleanType =>
+          df.limit(2).collect() match {
+            case Array(row) => row.getBoolean(0)
+            case _ => false
+          }
+        case _ => false
+      }
+    case _ => false
+  }
 }
 
 /**
@@ -162,17 +183,17 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec])
  * Executable node for IfElseStatement.
  * @param conditions Collection of executable conditions. First condition corresponds to IF clause,
  *                   while others (if any) correspond to following ELSE IF clauses.
- * @param conditionalBodies  Collection of executable bodies that have a corresponding condition,
+ * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
 *                 in IF or ELSE IF branches.
  * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
- * @param booleanEvaluator Evaluator for Boolean conditions.
+ * @param session Spark session that SQL script is executed within.
  */
 class IfElseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
-    booleanEvaluator: StatementBooleanEvaluator) extends NonLeafStatementExec {
+    session: SparkSession) extends NonLeafStatementExec {
   private object IfElseState extends Enumeration {
     val Condition, Body = Value
   }
@@ -192,7 +213,7 @@ class IfElseStatementExec(
         case IfElseState.Condition =>
           assert(curr.get.isInstanceOf[SingleStatementExec])
           val condition = curr.get.asInstanceOf[SingleStatementExec]
-          if (booleanEvaluator.eval(condition)) {
+          if (evaluateBooleanCondition(session, condition)) {
             state = IfElseState.Body
             curr = Some(conditionalBodies(clauseIdx))
           } else {
@@ -231,26 +252,5 @@ class IfElseStatementExec(
     conditions.foreach(c => c.reset())
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
-  }
-}
-
-class StatementBooleanEvaluator(session: SparkSession) {
-  def eval(statement: LeafStatementExec): Boolean = statement match {
-    case statement: SingleStatementExec =>
-      assert(!statement.isExecuted)
-      statement.isExecuted = true
-
-      // DataFrame evaluates to True if it is single row, single column
-      //  of boolean type with value True.
-      val df = Dataset.ofRows(session, statement.parsedPlan)
-      df.schema.fields match {
-        case Array(field) if field.dataType == BooleanType =>
-          df.limit(2).collect() match {
-            case Array(row) => row.getBoolean(0)
-            case _ => false
-          }
-        case _ => false
-      }
-    case _ => false
   }
 }
