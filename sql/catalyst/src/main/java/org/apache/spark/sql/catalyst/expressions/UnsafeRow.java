@@ -137,7 +137,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   private void assertIndexIsValid(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
-    assert (columnsDataType != null && index < numFields) : "index (" + index + ") should < " + numFields;
+    assert (columnsDataType != null || index < numFields) : "index (" + index + ") should < " + numFields;
   }
 
   //////////////////////////////////////////////////////////////////////////////
