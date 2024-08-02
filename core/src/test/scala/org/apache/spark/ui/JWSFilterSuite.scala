@@ -49,7 +49,6 @@ class JWSFilterSuite extends SparkFunSuite {
     val filter = new JWSFilter()
     val params = new JHashMap[String, String]
     params.put("key", TEST_KEY)
-    val conf = new DummyFilterConfig(params)
     filter.init(new DummyFilterConfig(params))
   }
 
