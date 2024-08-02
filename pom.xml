@@ -94,12 +94,12 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/connect/server</module>
+    <module>sql/connect/common</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>connect/server</module>
-    <module>connect/common</module>
     <module>connector/kafka-0-10-token-provider</module>
     <module>connector/kafka-0-10</module>
     <module>connector/kafka-0-10-assembly</module>

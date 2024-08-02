@@ -23,7 +23,7 @@
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-parent_2.13</artifactId>
         <version>4.0.0-SNAPSHOT</version>
-        <relativePath>../../pom.xml</relativePath>
+        <relativePath>../../../pom.xml</relativePath>
     </parent>
 
     <artifactId>spark-connect-common_2.13</artifactId>
