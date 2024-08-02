@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -222,8 +222,9 @@ class StateMetadataPartitionReader(
       // if the operator metadata is not present, catch the exception
       // and return an empty array
       case ex: Exception =>
-        logWarning(s"Failed to find operator metadata for " +
-          s"path=$checkpointLocation with exception=$ex")
+        logWarning(log"Failed to find operator metadata for " +
+          log"path=${MDC(LogKeys.CHECKPOINT_LOCATION, checkpointLocation)} " +
+          log"with exception=${MDC(LogKeys.EXCEPTION, ex)}")
         Array.empty
     }
   }
