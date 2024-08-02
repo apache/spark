@@ -2503,6 +2503,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOCATION" : {
+    "message" : [
+      "The location name cannot be an invalid URI, but `<location>` was given."
+    ],
+    "sqlState" : "42K05"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
