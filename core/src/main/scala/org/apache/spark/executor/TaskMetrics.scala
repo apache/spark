@@ -29,8 +29,6 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util._
-import org.apache.spark.util.ArrayImplicits._
-
 
 /**
  * :: DeveloperApi ::
@@ -272,8 +270,18 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums: ArrayBuffer[AccumulatorV2[_, _]] = withReadLock {
-    _externalAccums
+  private[spark] def withExternalAccums[T](op: ArrayBuffer[AccumulatorV2[_, _]] => T)
+    : T = withReadLock {
+    op(_externalAccums)
+  }
+
+  def foreachExternalAccums[T](op: AccumulatorV2[_, _] => Unit): Unit = withReadLock {
+    _externalAccums.foreach(op)
+  }
+
+  private[spark] def flatMapExternlAccums[T](op: AccumulatorV2[_, _] => Option[T])
+    : ArrayBuffer[T] = withReadLock {
+    _externalAccums.flatMap(op(_))
   }
 
   private def withReadLock[B](fn: => B): B = {
@@ -299,7 +307,7 @@ class TaskMetrics private[spark] () extends Serializable {
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = withReadLock {
-    internalAccums ++ externalAccums
+    internalAccums ++ _externalAccums
   }
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {

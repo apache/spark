@@ -215,7 +215,13 @@ private[spark] abstract class Task[T](
       context.taskMetrics().nonZeroInternalAccums() ++
         // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
         // filter them out.
-        context.taskMetrics().externalAccums.filter(a => !taskFailed || a.countFailedValues)
+        context.taskMetrics().flatMapExternlAccums[AccumulatorV2[_, _]] { a =>
+          if (!taskFailed || a.countFailedValues) {
+            Some(a)
+          } else {
+            None
+          }
+        }
     } else {
       Seq.empty
     }
