@@ -514,7 +514,6 @@ case class TransformWithStateExec(
 
             processDataWithInitialState(store, childDataIterator, initStateIterator)
           } else {
-            logError(s"### BATCH 1")
             initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
               processDataWithInitialState(store, childDataIterator, initStateIterator)
             }
@@ -536,7 +535,6 @@ case class TransformWithStateExec(
             processData(store, singleIterator)
         }
       } else {
-        logError(s"### BATCH 2")
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
         val hadoopConfBroadcast = sparkContext.broadcast(
@@ -677,12 +675,32 @@ object TransformWithStateExec {
       initialStateDeserializer: Expression,
       initialState: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
+
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    if (timeMode != NoTime) {
+      driverProcessorHandle.registerTimer(0L)
+    }
+    val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
+    // assign columnFamilyIds based on alphabetic name within map
+    val columnFamilySchemasWithIds = columnFamilySchemas.toList
+      .sortBy(_._2.colFamilyName)
+      .zipWithIndex
+      .map { case ((name, schema), index) =>
+        name -> schema.copy(colFamilyId = index.toShort)
+      }.toMap
+
+    statefulProcessor.close()
+
     val statefulOperatorStateInfo = StatefulOperatorStateInfo(
       checkpointLocation = "", // empty checkpointLocation will be populated in doExecute
       queryRunId = UUID.randomUUID(),
       operatorId = 0,
       storeVersion = 0,
-      numPartitions = shufflePartitions
+      numPartitions = shufflePartitions,
+      columnFamilyIds = columnFamilySchemasWithIds
     )
 
     new TransformWithStateExec(
