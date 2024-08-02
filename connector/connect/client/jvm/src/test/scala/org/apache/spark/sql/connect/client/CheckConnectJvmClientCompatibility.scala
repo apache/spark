@@ -441,6 +441,7 @@ object CheckConnectJvmClientCompatibility {
   }
 
   /**
+   * TODO (SPARK-49096):
    * MiMa takes a new jar and an old jar as inputs and then reports all incompatibilities found in
    * the new jar. The incompatibility result is then filtered using include and exclude rules.
    * Include rules are first applied to find all client classes that need to be checked. Then
