@@ -500,4 +500,3 @@ Data source options of Protobuf can be set via:
     <td>read</td>
   </tr>
 </table>
-Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.
