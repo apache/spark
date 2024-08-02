@@ -1474,13 +1474,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null))
 
     checkAnswer(sql("SHOW COLLATIONS '*zh_Hant_HKG*'"),
-      Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "zh", "HK",
+      Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "Chinese", "Hong Kong SAR China",
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "zh", "HK",
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "Chinese", "Hong Kong SAR China",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "zh", "HK",
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "zh", "HK",
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
 
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {

@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.jdk.CollectionConverters.CollectionHasAsScala
-
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -45,7 +42,7 @@ case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCo
     AttributeReference("ICU_VERSION", StringType)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    CollationFactory.listCollationMetas(pattern.getOrElse("*")).asScala.map(m => Row(
+    sparkSession.sessionState.catalog.listCollationMetas(pattern.getOrElse("*")).map(m => Row(
       m.catalog,
       m.schema,
       m.collationName,
@@ -55,6 +52,6 @@ case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCo
       if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE",
       m.padAttribute,
       m.icuVersion
-    )).toSeq
+    ))
   }
 }
