@@ -606,7 +606,7 @@ jobs:
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
       with:
-        input: connect/common/src/main
+        input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
     - name: Install Python 3.9
       uses: actions/setup-python@v5

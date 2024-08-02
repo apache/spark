@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -213,6 +213,27 @@ class IncrementalExecution(
         statefulOp match {
           case ssw: StateStoreWriter =>
             val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
+            // validate metadata
+            if (isFirstBatch && currentBatchId != 0) {
+              // If we are restarting from a different checkpoint directory
+              // there may be a mismatch between the stateful operators in the
+              // physical plan and the metadata.
+              val oldMetadata = try {
+                OperatorStateMetadataReader.createReader(
+                  new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+                  hadoopConf, ssw.operatorStateMetadataVersion).read()
+              } catch {
+                case e: Exception =>
+                  logWarning(log"Error reading metadata path for stateful operator. This " +
+                    log"may due to no prior committed batch, or previously run on lower " +
+                    log"versions: ${MDC(ERROR, e.getMessage)}")
+                None
+              }
+              oldMetadata match {
+                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+                case None =>
+              }
+            }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
                 new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
                 hadoopConf,

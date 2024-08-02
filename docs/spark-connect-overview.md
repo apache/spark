@@ -279,7 +279,7 @@ The customizations may also be passed in through CLI arguments as shown below:
 spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
 {% endhighlight %}
 
-The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connect/common/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
+The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala).
 
 #### Configure programmatically with a connection string
 
@@ -364,7 +364,7 @@ val spark = SparkSession.builder().remote("sc://localhost").build()
 
 
 **Note**: Operations that reference User Defined Code such as UDFs, filter, map, etc require a
-[ClassFinder](https://github.com/apache/spark/blob/bb41cd889efdd0602385e70b4c8f1c93740db332/connect/common/src/main/scala/org/apache/spark/sql/connect/client/ClassFinder.scala#L26)
+[ClassFinder](https://github.com/apache/spark/blob/master/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/ClassFinder.scala)
 to be registered to pickup and upload any required classfiles. Also, any JAR dependencies must be uploaded to the server using `SparkSession#AddArtifact`.
 
 Example:
