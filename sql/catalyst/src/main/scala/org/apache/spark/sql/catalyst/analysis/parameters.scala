@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_IDENTIFIER, UNRESOLVED_WITH}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.DataType
 
@@ -179,7 +179,7 @@ object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
   private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
     p match {
       case lp: PlanWithUnresolvedIdentifier =>
-        lp.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_IDENTIFIER))(
+        lp.resolveOperatorsWithPruning(_.containsPattern(PARAMETER))(
           _.resolveExpressionsWithPruning(_.containsPattern(PARAMETER))(f orElse {
             case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
           }))
