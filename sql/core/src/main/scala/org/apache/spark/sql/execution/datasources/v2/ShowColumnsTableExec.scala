@@ -23,6 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.unsafe.types.UTF8String
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Physical plan node for show columns from table.
  */
@@ -30,14 +32,10 @@ case class ShowColumnsTableExec(
      output: Seq[Attribute],
      resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val builder = new StringBuilder
-    showColumnsTable(resolvedTable, builder)
-    Seq(InternalRow(UTF8String.fromString(builder.toString)))
-  }
-
-  private def showColumnsTable(resolvedTable: ResolvedTable, builder: StringBuilder): Unit = {
     val table = resolvedTable.table;
-    table.columns().foreach(f => builder.append(f.name()).append("\n"))
+    val rows = new ArrayBuffer[InternalRow]()
+    table.columns().foreach(f => rows += toCatalystRow(f.name()))
+    rows.toSeq
   }
 
 }
