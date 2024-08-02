@@ -356,6 +356,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
+    checkEvaluation(SubstringIndex(
+      Literal("www.apache.org"), Literal("."), Literal.create(null, IntegerType)), null)
   }
 
   test("SPARK-40213: ascii for Latin-1 Supplement characters") {
@@ -520,6 +522,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "true") {
       checkEvaluation(Base64(Literal(longString.getBytes)), chunkEncoded)
     }
+
+    // check if unbase64 works well for chunked and non-chunked encoded strings
+    checkEvaluation(StringDecode(UnBase64(Literal(encoded)), Literal("utf-8")), longString)
+    checkEvaluation(StringDecode(UnBase64(Literal(chunkEncoded)), Literal("utf-8")), longString)
   }
 
   test("initcap unit test") {

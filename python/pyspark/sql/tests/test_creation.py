@@ -137,8 +137,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -146,8 +146,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
         )
 
     def test_partial_inference_failure(self):
@@ -156,8 +156,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_DETERMINE_TYPE",
-            message_parameters={},
+            errorClass="CANNOT_DETERMINE_TYPE",
+            messageParameters={},
         )
 
     @unittest.skipIf(
@@ -191,8 +191,8 @@ class DataFrameCreationTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                message_parameters={},
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
             )
 
             # Dict has different types of values should fail

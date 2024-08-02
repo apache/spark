@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
 import org.apache.spark.util.NextIterator
@@ -42,12 +43,11 @@ class ListStateImplWithTTL[S](
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long)
-  extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ListState[S] {
+  extends SingleKeyTTLStateImpl(
+    stateName, store, keyExprEnc, batchTimestampMs) with ListState[S] {
 
-  private lazy val keySerializer = keyExprEnc.createSerializer()
-
-  private lazy val stateTypesEncoder = StateTypesEncoder(
-    keySerializer, valEncoder, stateName, hasTtl = true)
+  private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
+    stateName, hasTtl = true)
 
   private lazy val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
@@ -55,8 +55,9 @@ class ListStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), useMultipleValuesPerKey = true)
+    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema,
+      getValueSchemaWithTTL(valEncoder.schema, true),
+      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
   }
 
   /** Whether state exists or not. */
@@ -96,8 +97,7 @@ class ListStateImplWithTTL[S](
   override def put(newState: Array[S]): Unit = {
     validateNewState(newState)
 
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    val encodedKey = stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey)
+    val encodedKey = stateTypesEncoder.encodeGroupingKey()
     var isFirst = true
 
     newState.foreach { v =>
@@ -109,29 +109,28 @@ class ListStateImplWithTTL[S](
         store.merge(encodedKey, encodedValue, stateName)
       }
     }
-    upsertTTLForStateKey(serializedGroupingKey)
+    upsertTTLForStateKey(encodedKey)
   }
 
   /** Append an entry to the list. */
   override def appendValue(newState: S): Unit = {
     StateStoreErrors.requireNonNullStateValue(newState, stateName)
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    store.merge(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+    val encodedKey = stateTypesEncoder.encodeGroupingKey()
+    store.merge(encodedKey,
       stateTypesEncoder.encodeValue(newState, ttlExpirationMs), stateName)
-    upsertTTLForStateKey(serializedGroupingKey)
+    upsertTTLForStateKey(encodedKey)
   }
 
   /** Append an entire list to the existing value. */
   override def appendList(newState: Array[S]): Unit = {
     validateNewState(newState)
 
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    val encodedKey = stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey)
+    val encodedKey = stateTypesEncoder.encodeGroupingKey()
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
       store.merge(encodedKey, encodedValue, stateName)
     }
-    upsertTTLForStateKey(serializedGroupingKey)
+    upsertTTLForStateKey(encodedKey)
   }
 
   /** Remove this state. */
@@ -154,20 +153,19 @@ class ListStateImplWithTTL[S](
    * the expired elements from the list.
    * @param groupingKey grouping key for which cleanup should be performed.
    */
-  override def clearIfExpired(groupingKey: Array[Byte]): Long = {
+  override def clearIfExpired(groupingKey: UnsafeRow): Long = {
     var numValuesExpired = 0L
-    val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
-    val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
+    val unsafeRowValuesIterator = store.valuesIterator(groupingKey, stateName)
     // We clear the list, and use the iterator to put back all of the non-expired values
-    store.remove(encodedGroupingKey, stateName)
+    store.remove(groupingKey, stateName)
     var isFirst = true
     unsafeRowValuesIterator.foreach { encodedValue =>
       if (!stateTypesEncoder.isExpired(encodedValue, batchTimestampMs)) {
         if (isFirst) {
-          store.put(encodedGroupingKey, encodedValue, stateName)
+          store.put(groupingKey, encodedValue, stateName)
           isFirst = false
         } else {
-          store.merge(encodedGroupingKey, encodedValue, stateName)
+          store.merge(groupingKey, encodedValue, stateName)
         }
       } else {
         numValuesExpired += 1
@@ -176,8 +174,8 @@ class ListStateImplWithTTL[S](
     numValuesExpired
   }
 
-  private def upsertTTLForStateKey(serializedGroupingKey: Array[Byte]): Unit = {
-    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
+  private def upsertTTLForStateKey(encodedGroupingKey: UnsafeRow): Unit = {
+    upsertTTLForStateKey(ttlExpirationMs, encodedGroupingKey)
   }
 
   /*
@@ -216,6 +214,6 @@ class ListStateImplWithTTL[S](
    * grouping key.
    */
   private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    getValuesInTTLState(stateTypesEncoder.serializeGroupingKey())
+    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey())
   }
 }

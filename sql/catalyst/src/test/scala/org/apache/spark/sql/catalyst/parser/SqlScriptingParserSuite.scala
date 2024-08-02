@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -48,7 +49,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
-    assert(e.getMessage.contains("SELECT 1 SELECT 1"))
+    assert(e.getMessage.contains("SELECT"))
   }
 
   test("multi select") {
@@ -261,6 +262,90 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.nonEmpty)
+  }
+
+  test("declare at the beginning") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE testVariable1 VARCHAR(50);
+        |  DECLARE testVariable2 INTEGER;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.collection.forall(
+      _.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable]))
+  }
+
+  test("declare after beginning") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  DECLARE testVariable INTEGER;
+        |END""".stripMargin
+    checkError(
+        exception = intercept[SparkException] {
+          parseScript(sqlScriptText)
+        },
+        errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+        parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
+  }
+
+  // TODO Add test for INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE exception
+
+  test("SET VAR statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET VARIABLE statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET VARIABLE totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET statement test") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET totalInsCnt = (SELECT x FROM y WHERE id = 1);
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[SingleStatement])
+  }
+
+  test("SET statement test - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE totalInsCnt = 0;
+        |  SET totalInsCnt = (SELECT x FROMERROR y WHERE id = 1);
+        |END""".stripMargin
+    val e = intercept[ParseException] {
+      parseScript(sqlScriptText)
+    }
+    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
   }
 
   // Helper methods

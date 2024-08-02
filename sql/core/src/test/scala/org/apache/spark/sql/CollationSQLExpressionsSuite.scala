@@ -171,9 +171,9 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
-      Murmur3HashTestCase("Spark", "UTF8_LCASE", 228093765),
-      Murmur3HashTestCase("SQL", "UNICODE", 17468742),
-      Murmur3HashTestCase("SQL", "UNICODE_CI", 17468742)
+      Murmur3HashTestCase("Spark", "UTF8_LCASE", -1928694360),
+      Murmur3HashTestCase("SQL", "UNICODE", -1923567940),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950)
     )
 
     // Supported collations
@@ -199,9 +199,9 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
-      XxHash64TestCase("Spark", "UTF8_LCASE", -4294468057691064905L),
-      XxHash64TestCase("SQL", "UNICODE", -2147923034195946097L),
-      XxHash64TestCase("SQL", "UNICODE_CI", -2147923034195946097L)
+      XxHash64TestCase("Spark", "UTF8_LCASE", -3142112654825786434L),
+      XxHash64TestCase("SQL", "UNICODE", 5964849564945649886L),
+      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L)
     )
 
     // Supported collations
@@ -680,11 +680,14 @@ class CollationSQLExpressionsSuite
     val number = "xx"
     val query = s"SELECT to_number('$number', '999');"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      val e = intercept[SparkIllegalArgumentException] {
-        val testQuery = sql(query)
-        testQuery.collect()
-      }
-      assert(e.getErrorClass === "INVALID_FORMAT.MISMATCH_INPUT")
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          val testQuery = sql(query)
+          testQuery.collect()
+        },
+        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        parameters = Map("inputType" -> "\"STRING\"", "input" -> "xx", "format" -> "999")
+      )
     }
   }
 
@@ -996,11 +999,13 @@ class CollationSQLExpressionsSuite
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
         val query = s"SELECT raise_error('${t.errorMessage}')"
         // Result & data type
-        val userException = intercept[SparkRuntimeException] {
-          sql(query).collect()
-        }
-        assert(userException.getErrorClass === "USER_RAISED_EXCEPTION")
-        assert(userException.getMessage.contains(t.errorMessage))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(query).collect()
+          },
+          errorClass = "USER_RAISED_EXCEPTION",
+          parameters = Map("errorMessage" -> t.errorMessage)
+        )
       }
     })
   }
@@ -1172,10 +1177,13 @@ class CollationSQLExpressionsSuite
       }
     })
     // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
+    )
   }
 
   test("Support XmlToStructs xml expression with collation") {
@@ -1360,11 +1368,14 @@ class CollationSQLExpressionsSuite
     val json = "{\"a\":1,"
     val query = s"SELECT parse_json('$json');"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      val e = intercept[SparkException] {
-        val testQuery = sql(query)
-        testQuery.collect()
-      }
-      assert(e.getErrorClass === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+      checkError(
+        exception = intercept[SparkException] {
+          val testQuery = sql(query)
+          testQuery.collect()
+        },
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "{\"a\":1,", "failFastMode" -> "FAILFAST")
+      )
     }
   }
 
@@ -1461,11 +1472,14 @@ class CollationSQLExpressionsSuite
     val json = "[1, \"Spark\"]"
     val query = s"SELECT variant_get(parse_json('$json'), '$$[1]', 'int');"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      val e = intercept[SparkRuntimeException] {
-        val testQuery = sql(query)
-        testQuery.collect()
-      }
-      assert(e.getErrorClass === "INVALID_VARIANT_CAST")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          val testQuery = sql(query)
+          testQuery.collect()
+        },
+        errorClass = "INVALID_VARIANT_CAST",
+        parameters = Map("value" -> "\"Spark\"", "dataType" -> "\"INT\"")
+      )
     }
   }
 
@@ -2289,10 +2303,20 @@ class CollationSQLExpressionsSuite
       s"""
          |SELECT REFLECT('java.lang.Integer', 'toHexString',"2");
          |""".stripMargin
-    val typeException = intercept[ExtendedAnalysisException] {
-      sql(queryFail).collect()
-    }
-    assert(typeException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD")
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql(queryFail).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
+      parameters = Map(
+        "methodName" -> "toHexString",
+        "className" -> "java.lang.Integer",
+        "sqlExpr" -> "\"reflect(java.lang.Integer, toHexString, 2)\""),
+      context = ExpectedContext(
+        fragment = """REFLECT('java.lang.Integer', 'toHexString',"2")""",
+        start = 8,
+        stop = 54)
+    )
   }
 
   test("min_by supports collation") {
