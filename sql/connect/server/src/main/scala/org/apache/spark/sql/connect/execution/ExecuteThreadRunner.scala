@@ -270,10 +270,10 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    */
   private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase == proto.Plan.OpTypeCase.COMMAND &&
-      request.getPlan.getCommand.getCommandTypeCase ==
-        proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
+    request.getPlan.getCommand.getCommandTypeCase ==
+      proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
       request.getPlan.getCommand.getStreamingQueryListenerBusCommand.getCommandCase ==
-        proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER
+      proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER
   }
 
   private def handlePlan(request: proto.ExecutePlanRequest): Unit = {
