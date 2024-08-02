@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, CollationMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CollationFactory.Collation
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -41,7 +42,6 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
-
 
 /**
  * Internal implementation of the user-facing `Catalog`.
@@ -939,6 +939,24 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     new CatalogMetadata(
       name = name,
       description = null)
+  }
+
+  override def listCollations(pattern: String): Dataset[CollationMetadata] = {
+    val metas = sparkSession.sessionState.catalog.listCollationMetas(pattern)
+    CatalogImpl.makeDataset(metas.map(m => makeCollation(m)), sparkSession)
+  }
+
+  private def makeCollation(m: Collation.Meta): CollationMetadata = {
+    new CollationMetadata(
+      m.catalog,
+      m.schema,
+      m.collationName,
+      m.language,
+      m.country,
+      m.icuVersion,
+      m.padAttribute,
+      if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE",
+      if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE")
   }
 }
 

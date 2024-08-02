@@ -519,8 +519,8 @@ public final class CollationFactory {
           try {
             int collationId = CollationSpecUTF8.collationNameToId(
               collationName, collationName.toUpperCase());
-            Meta meta = CollationSpecUTF8.fromCollationId(collationId).
-              setCatalog(catalog).setSchema(schema).buildMeta();
+            Meta meta = CollationSpecUTF8.fromCollationId(collationId)
+              .setCatalog(catalog).setSchema(schema).buildMeta();
             metas.add(meta);
           } catch (SparkException ignored) {
             // ignore
@@ -841,8 +841,8 @@ public final class CollationFactory {
           try {
             int collationId = CollationSpecICU.collationNameToId(
               collationName, collationName.toUpperCase());
-            Meta meta = CollationSpecICU.fromCollationId(collationId).
-              setCatalog(catalog).setSchema(schema).buildMeta();
+            Meta meta = CollationSpecICU.fromCollationId(collationId)
+              .setCatalog(catalog).setSchema(schema).buildMeta();
             metas.add(meta);
           } catch (SparkException ignored) {
             // ignore
