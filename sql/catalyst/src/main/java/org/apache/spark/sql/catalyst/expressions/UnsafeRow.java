@@ -581,7 +581,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
     ArrayList<Expression> exp = new ArrayList<>(columnsDataType.length);
     for (int i = 0; i < columnsDataType.length; ++i) {
-      System.out.println(i + " " + columnsDataType[i]);
       exp.add(new Literal(get(i, columnsDataType[i]), columnsDataType[i]));
     }
 
