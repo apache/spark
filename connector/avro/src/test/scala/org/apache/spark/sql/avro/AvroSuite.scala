@@ -921,6 +921,34 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-49082: Widening type promotions in AvroDeserializer") {
+    withTempPath { tempPath =>
+      // Int -> Long
+      val intPath = s"$tempPath/int_data"
+      val intDf = Seq(1, Int.MinValue, Int.MaxValue).toDF("col")
+      intDf.write.format("avro").save(intPath)
+      checkAnswer(
+        spark.read.schema("col Long").format("avro").load(intPath),
+        Seq(Row(1L), Row(-2147483648L), Row(2147483647L))
+      )
+
+      // Int -> Double
+      checkAnswer(
+        spark.read.schema("col Double").format("avro").load(intPath),
+        Seq(Row(1D), Row(-2147483648D), Row(2147483647D))
+      )
+
+      // Float -> Double
+      val floatPath = s"$tempPath/float_data1"
+      val floatDf = Seq(1, -1f, 2f).toDF("col")
+      floatDf.write.format("avro").save(floatPath)
+      checkAnswer(
+        spark.read.schema("col Double").format("avro").load(floatPath),
+        Seq(Row(1D), Row(-1D), Row(2D))
+      )
+    }
+  }
+
   test("SPARK-43380: Fix Avro data type conversion" +
     " of DayTimeIntervalType to avoid producing incorrect results") {
     withTempPath { path =>
