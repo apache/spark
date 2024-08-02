@@ -587,8 +587,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     return (int) new Murmur3Hash(scala.jdk.CollectionConverters.ListHasAsScala(exp).asScala().toSeq(), 42).eval(this);
   }
 
-  public static ThreadLocal<DataType[]> groupingColumnsDataType = ThreadLocal.withInitial(() -> null);
+  public static ArrayList<DataType[]> groupingColumnsDataType = new ArrayList<>();
   private DataType[] columnsDataType;
+
+  public static synchronized int setGroupingColumnsDataType(DataType[] dataTypes) {
+    groupingColumnsDataType.add(dataTypes);
+    return groupingColumnsDataType.size() - 1;
+  }
+
+  public static synchronized DataType[] getGroupingColumnsDataType(int idx) {
+    return groupingColumnsDataType.get(idx);
+  }
 
   public void setColumnsDataType(DataType[] _columnsDataType) {
     columnsDataType = (_columnsDataType != null && _columnsDataType.length > 0) ? _columnsDataType : null;

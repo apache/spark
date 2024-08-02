@@ -62,7 +62,7 @@ public abstract class BufferedRowIterator {
   /**
    * Initializes from array of iterators of InternalRow.
    */
-  public abstract void init(int index, Iterator<InternalRow>[] iters, DataType[] groupingColumnsDataType);
+  public abstract void init(int index, Iterator<InternalRow>[] iters);
 
   /*
    * Attributes of the following four methods are public. Thus, they can be also accessed from
