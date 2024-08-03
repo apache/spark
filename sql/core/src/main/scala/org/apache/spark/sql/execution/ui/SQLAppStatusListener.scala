@@ -180,14 +180,13 @@ class SQLAppStatusListener(
     // when reading event logs in the SHS, so we have to rely on the accumulator in that case.
     val accums = if (live && event.taskMetrics != null) {
       event.taskMetrics.withExternalAccums(_.flatMap { a =>
-          // This call may fail if the accumulator is gc'ed, so account for that.
-          try {
-            Some(a.toInfo(Some(a.value), None))
-          } catch {
-            case _: IllegalAccessError => None
-          }
+        // This call may fail if the accumulator is gc'ed, so account for that.
+        try {
+          Some(a.toInfo(Some(a.value), None))
+        } catch {
+          case _: IllegalAccessError => None
         }
-      )
+      })
     } else {
       info.accumulables
     }
