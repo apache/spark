@@ -333,8 +333,6 @@ class SessionCatalog(
 
   def getCurrentDatabase: String = synchronized { currentDb }
 
-  def getDefaultDatabase: String = defaultDatabase
-
   def setCurrentDatabase(db: String): Unit = {
     val dbName = format(db)
     if (dbName == globalTempDatabase) {
