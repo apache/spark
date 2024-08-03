@@ -94,7 +94,7 @@ class CatalogManager(
 
   def currentNamespace: Array[String] = {
     val defaultNamespace = if (currentCatalog.name() == SESSION_CATALOG_NAME) {
-      Array(v1SessionCatalog.getDefaultDatabase)
+      Array(v1SessionCatalog.getCurrentDatabase)
     } else {
       currentCatalog.defaultNamespace()
     }
