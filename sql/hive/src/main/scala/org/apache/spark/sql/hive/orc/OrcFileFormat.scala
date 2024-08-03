@@ -71,11 +71,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
-      val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
         Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
-        ignoreCorruptFiles
+        orcOptions.ignoreCorruptFiles
       )
     }
   }
@@ -146,7 +145,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val ignoreCorruptFiles =
+      new OrcOptions(options, sparkSession.sessionState.conf).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
