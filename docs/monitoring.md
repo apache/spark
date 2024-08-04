@@ -1087,10 +1087,14 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servlet</code> and the REST API, but in a time-series format. The following are the equivalent Prometheus Servlet endpoints.   
 
 <table>
-  <thead><tr><th></th></th>
-<th>Port</th>
-<th>JSON End Point</th>
-<th>Prometheus End Point</th></tr></thead>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Port</th>
+      <th>JSON End Point</th>
+      <th>Prometheus End Point</th>
+    </tr>
+  </thead>
   <tr>
     <td>Master</td>
     <td>8080</td>
