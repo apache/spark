@@ -327,7 +327,7 @@
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.0.jre11</mssql.jdbc.version>
-    <ojdbc11.version>23.4.0.24.05</ojdbc11.version>
+    <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
   </properties>
   <repositories>
     <repository>
