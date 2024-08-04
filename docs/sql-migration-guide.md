@@ -60,6 +60,7 @@ license: |
 - Since Spark 4.0, By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.legacy.viewSchemaCompensation` to `false`.
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable this feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
 - Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
+- Since Spark 4.0, `BinaryType` is re-supported in CSV datasource. Users can control the output style of `BinaryType` fields in CSV by setting `spark.sql.binaryOutputStyle`, and users can be able to read/write `BinaryType` roundtrip in CSV datasource with the same configuration value.
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
