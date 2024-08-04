@@ -1080,6 +1080,9 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
 * `PrometheusServlet`: (Experimental) Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
+* `GraphiteSink`: Sends metrics to a Graphite node.
+* `Slf4jSink`: Sends metrics to slf4j as log entries.
+* `StatsdSink`: Sends metrics to a StatsD node.
 
 The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servlet</code> and the REST API, but in a time-series format. The following are the equivalent Prometheus Servlet endpoints.   
 
@@ -1119,10 +1122,6 @@ The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servle
     <td><code>/metrics/executors/prometheus/</code></td>
   </tr>
 </table>
-
-* `GraphiteSink`: Sends metrics to a Graphite node.
-* `Slf4jSink`: Sends metrics to slf4j as log entries.
-* `StatsdSink`: Sends metrics to a StatsD node.
 
 Spark also supports a Ganglia sink which is not included in the default build due to
 licensing restrictions:
