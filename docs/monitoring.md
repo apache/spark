@@ -1079,8 +1079,6 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
- 
-
 * `PrometheusServlet`: (Experimental) Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
 
 The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servlet</code> and the REST API, but in a time-series format. The following are the equivalent Prometheus Servlet endpoints.   
