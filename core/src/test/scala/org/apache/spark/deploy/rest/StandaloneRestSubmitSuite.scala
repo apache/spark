@@ -509,7 +509,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
     val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
     conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
-    conf.set("spark.org.apache.spark.ui.JWSFilter.param.key", TEST_KEY)
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
     server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
     server.get.start()
   }
@@ -521,7 +521,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
     val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
     conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
-    conf.set("spark.org.apache.spark.ui.JWSFilter.param.key", TEST_KEY)
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
     server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
     val port = server.get.start()
     val masterUrl = s"spark://$localhost:$port"
