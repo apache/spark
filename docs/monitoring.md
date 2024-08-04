@@ -1118,7 +1118,7 @@ The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servle
   <tr>
     <td>Driver</td>
     <td>4040</td>
-    <td><code>/api/v1/applications/{id}/executors/	</code></td>
+    <td><code>/api/v1/applications/{id}/executors/</code></td>
     <td><code>/metrics/executors/prometheus/</code></td>
   </tr>
 </table>
