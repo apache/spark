@@ -1730,11 +1730,13 @@ Apart from these, the following properties are also available, and may be useful
     of the form <code>spark.&lt;class name of filter&gt;.param.&lt;param name&gt;=&lt;value&gt;</code>
 
     <br />For example:
-    <br /><code>spark.ui.filters=org.apache.spark.ui.JWSFilter</code>
-    <br /><code>spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY</code>
+    <br /><code>spark.ui.filters=com.test.filter1</code>
+    <br /><code>spark.com.test.filter1.param.name1=foo</code>
+    <br /><code>spark.com.test.filter1.param.name2=bar</code>
     <br />
     <br />Note that some filter requires additional dependencies. For example,
-    <code>JWSFilter</code> requires <code>jjwt-impl</code> and <code>jjwt-jackson</code> jar files.
+    the built-in <code>org.apache.spark.ui.JWSFilter</code> requires
+    <code>jjwt-impl</code> and <code>jjwt-jackson</code> jar files.
   </td>
   <td>1.0.0</td>
 </tr>

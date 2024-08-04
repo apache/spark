@@ -355,8 +355,8 @@ The following options control the authentication of Web UIs:
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
-    Spark support HTTP <code>Authorization</code> header with a cryptographically signed
-    JSON Web Token via `org.apache.spark.ui.JWSFilter`. <br />
+    Spark supports HTTP <code>Authorization</code> header with a cryptographically signed
+    JSON Web Token via <code>org.apache.spark.ui.JWSFilter</code>. <br />
     See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
     filters.
   </td>
