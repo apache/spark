@@ -109,7 +109,7 @@ class CatalogManager(
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
     currentCatalog match {
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: namespace)
       case _ =>
     }
     if (isSessionCatalog(currentCatalog) && namespace.length == 1) {

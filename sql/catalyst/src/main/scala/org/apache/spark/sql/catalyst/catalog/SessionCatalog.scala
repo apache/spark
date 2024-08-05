@@ -349,9 +349,7 @@ class SessionCatalog(
       throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
         globalTempDatabase)
     }
-    synchronized {
-      currentDb = dbName
-    }
+    synchronized { currentDb = dbName }
   }
 
   /**

@@ -101,7 +101,9 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(catalogManager.currentNamespace.sameElements(Array("test")))
     assert(v1SessionCatalog.getCurrentDatabase == "test")
 
-    catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
+    intercept[NoSuchNamespaceException] {
+      catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
+    }
 
     // when switching current catalog, `SessionCatalog.currentDb` should be reset.
     withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName) {

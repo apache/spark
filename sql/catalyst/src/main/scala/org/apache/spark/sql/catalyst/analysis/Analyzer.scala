@@ -95,14 +95,18 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
   override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = { }
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = CatalogManager.SESSION_CATALOG_NAME
   override def listFunctions(namespace: Array[String]): Array[Identifier] = fail()
   override def loadFunction(ident: Identifier): UnboundFunction = fail()
   override def listNamespaces(): Array[Array[String]] = fail()
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = fail()
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
-    mutable.HashMap[String, String]().asJava
+    if (namespace.length == 1) {
+      mutable.HashMap[String, String]().asJava
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
   }
   override def createNamespace(
     namespace: Array[String], metadata: util.Map[String, String]): Unit = fail()
