@@ -665,7 +665,7 @@ class SparkSession private(
       plan match {
         case compoundBody: CompoundBody =>
           // execute the SQL script
-          val result = sessionState.sqlScriptingInterpreter.execute(compoundBody, self)
+          val result = sessionState.sqlScriptingInterpreter.execute(compoundBody)
           if (result.isEmpty) {
             emptyDataFrame
           } else {
@@ -736,7 +736,7 @@ class SparkSession private(
       plan match {
         case compoundBody: CompoundBody =>
           // execute the SQL script
-          val result = sessionState.sqlScriptingInterpreter.execute(compoundBody, self)
+          val result = sessionState.sqlScriptingInterpreter.execute(compoundBody)
           if (result.isEmpty) {
             emptyDataFrame
           } else {

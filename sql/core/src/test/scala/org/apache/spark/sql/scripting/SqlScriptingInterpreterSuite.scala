@@ -34,7 +34,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Array[Row]]): Unit = {
     val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val result = interpreter.executeInternal(compoundBody, spark).toSeq
+    val result = interpreter.executeInternal(compoundBody).toSeq
     assert(result.length == expected.length)
     result.zip(expected).foreach {
       case (actualAnswer, expectedAnswer) =>

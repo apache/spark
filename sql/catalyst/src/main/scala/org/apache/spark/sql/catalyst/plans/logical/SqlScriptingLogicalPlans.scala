@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  * Trait for all SQL Scripting logical operators that are product of parsing phase.
  * These operators will be used by the SQL Scripting interpreter to generate execution nodes.
  */
-trait CompoundPlanStatement extends LogicalPlan
+sealed trait CompoundPlanStatement extends LogicalPlan
 
 /**
  * Logical operator representing result of parsing a single SQL statement
@@ -70,7 +70,7 @@ case class CompoundBody(
   }
 }
 
-  /**
+/**
  * Logical operator for IF ELSE statement.
  * @param conditions Collection of conditions. First condition corresponds to IF clause,
  *                   while others (if any) correspond to following ELSE IF clauses.
