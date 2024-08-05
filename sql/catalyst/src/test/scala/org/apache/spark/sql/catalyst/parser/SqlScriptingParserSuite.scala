@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.exceptions.SqlScriptingException
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -206,7 +207,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END lbl_end""".stripMargin
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
       errorClass = "LABELS_MISMATCH",
@@ -225,7 +226,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END lbl""".stripMargin
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
@@ -286,7 +287,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE testVariable INTEGER;
         |END""".stripMargin
     checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SqlScriptingException] {
           parseScript(sqlScriptText)
         },
         errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
