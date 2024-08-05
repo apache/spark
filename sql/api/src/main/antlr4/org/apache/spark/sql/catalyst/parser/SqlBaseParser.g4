@@ -65,12 +65,19 @@ compoundStatement
     | beginEndCompoundBlock
     | declareCondition
     | declareHandler
+    | ifElseStatement
     ;
 
 setStatementWithOptionalVarKeyword
     : SET variable? assignmentList                              #setVariableWithOptionalKeyword
     | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+ifElseStatement
+    : IF booleanExpression THEN conditionalBodies+=compoundBody
+        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSE elseBody=compoundBody)? END IF
     ;
 
 singleStatement

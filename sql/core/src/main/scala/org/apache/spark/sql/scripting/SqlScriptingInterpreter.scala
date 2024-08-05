@@ -22,7 +22,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, IfElseStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 
@@ -37,11 +37,15 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *
    * @param compound
    *   CompoundBody for which to build the plan.
+   * @param session
+   *   Spark session that SQL script is executed within.
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
+  def buildExecutionPlan(
+      compound: CompoundBody,
+      session: SparkSession): Iterator[CompoundStatementExec] = {
+    transformTreeIntoExecutable(compound, session).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
@@ -108,16 +112,29 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
    * Transform the parsed tree to the executable node.
+   *
    * @param node
    *   Root node of the parsed tree.
+   * @param session
+   *   Spark session that SQL script is executed within.
    * @return
    *   Executable statement.
    */
-  private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
+  private def transformTreeIntoExecutable(
+      node: CompoundPlanStatement, session: SparkSession): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
         transformBodyIntoExec(body)
+      case IfElseStatement(conditions, conditionalBodies, elseBody) =>
+        val conditionsExec = conditions.map(condition =>
+          new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
+        val conditionalBodiesExec = conditionalBodies.map(body =>
+          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+        val unconditionalBodiesExec = elseBody.map(body =>
+          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+        new IfElseStatementExec(
+          conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
