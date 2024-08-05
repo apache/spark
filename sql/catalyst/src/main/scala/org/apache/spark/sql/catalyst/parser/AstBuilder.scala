@@ -159,10 +159,12 @@ class AstBuilder extends DataTypeAstBuilder
       case Some(c: CreateVariable) =>
         if (allowVarDeclare) {
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+            c.origin,
             toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
             c.origin.line.get.toString)
         } else {
           throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+            c.origin,
             toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
             c.origin.line.get.toString)
         }
@@ -181,10 +183,15 @@ class AstBuilder extends DataTypeAstBuilder
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
               el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        throw SqlScriptingErrors.labelsMismatch(
-          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        withOrigin(bl) {
+          throw SqlScriptingErrors.labelsMismatch(
+            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        }
       case (None, Some(el: EndLabelContext)) =>
-        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
+        withOrigin(el) {
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
+            CurrentOrigin.get, el.multipartIdentifier().getText)
+        }
       case _ =>
     }
 
@@ -205,9 +212,22 @@ class AstBuilder extends DataTypeAstBuilder
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
-          visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+          visitChildren(ctx).asInstanceOf[CompoundPlanStatement]
         }
     }
+
+  override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement = {
+    IfElseStatement(
+      conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+        SingleStatement(
+          Project(
+            Seq(Alias(expression(boolExpr), "condition")()),
+            OneRowRelation()))
+      }),
+      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
+    )
+  }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
@@ -2174,8 +2194,14 @@ class AstBuilder extends DataTypeAstBuilder
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
-        invertIfNotDefined(UnresolvedFunction(
-          "between", Seq(e, expression(ctx.lower), expression(ctx.upper)), isDistinct = false))
+        if (!SQLConf.get.legacyDuplicateBetweenInput) {
+          invertIfNotDefined(UnresolvedFunction(
+            "between", Seq(e, expression(ctx.lower), expression(ctx.upper)), isDistinct = false))
+        } else {
+          invertIfNotDefined(And(
+            GreaterThanOrEqual(e, expression(ctx.lower)),
+            LessThanOrEqual(e, expression(ctx.upper))))
+        }
       case SqlBaseParser.IN if ctx.query != null =>
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>

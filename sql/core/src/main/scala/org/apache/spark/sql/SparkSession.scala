@@ -229,7 +229,7 @@ class SparkSession private(
    */
   def udf: UDFRegistration = sessionState.udfRegistration
 
-  def udtf: UDTFRegistration = sessionState.udtfRegistration
+  private[sql] def udtf: UDTFRegistration = sessionState.udtfRegistration
 
   /**
    * A collection of methods for registering user-defined data sources.
