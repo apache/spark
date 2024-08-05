@@ -274,7 +274,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None,
-          3
+          4
         )
         val schema1 = StateStoreColFamilySchema(
           "valueState",
@@ -282,7 +282,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           new StructType().add("value", IntegerType, false),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None,
-          2
+          3
         )
         val schema2 = StateStoreColFamilySchema(
           "listState",
@@ -294,7 +294,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None,
-          0
+          1
         )
 
         val userKeySchema = new StructType()
@@ -312,7 +312,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
             .add("ttlExpirationMs", LongType),
           Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
           Option(userKeySchema),
-          1
+          2
         )
 
         val ttlKey = "k1"

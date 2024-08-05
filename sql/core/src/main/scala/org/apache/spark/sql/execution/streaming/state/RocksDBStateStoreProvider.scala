@@ -69,7 +69,7 @@ private[sql] class RocksDBStateStoreProvider
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       ColumnFamilyUtils.
-        verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName)
+        verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       colFamilyNameToIdMap.put(colFamilyName, colFamilyId)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
           (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
