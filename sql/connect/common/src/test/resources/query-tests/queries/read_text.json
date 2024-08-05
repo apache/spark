@@ -5,7 +5,7 @@
   "read": {
     "dataSource": {
       "format": "text",
-      "paths": ["../sql/connect/common/src/test/resources/query-tests/test-data/people.txt"]
+      "paths": ["../common/src/test/resources/query-tests/test-data/people.txt"]
     }
   }
 }

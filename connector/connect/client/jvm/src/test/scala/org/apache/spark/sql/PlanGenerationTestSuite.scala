@@ -92,8 +92,6 @@ class PlanGenerationTestSuite
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
-    "sql",
-    "connect",
     "common",
     "src",
     "test",

@@ -5,7 +5,7 @@
   "read": {
     "dataSource": {
       "format": "parquet",
-      "paths": ["../sql/connect/common/src/test/resources/query-tests/test-data/users.parquet"]
+      "paths": ["../common/src/test/resources/query-tests/test-data/users.parquet"]
     }
   }
 }
