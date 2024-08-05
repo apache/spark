@@ -611,7 +611,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
     val keyValues = ctx.freshName("kvs")
 
-    nullSafeCodeGen(ctx, ev, (text, pd, kvd) => // kvEntry.split($kvd, 2);
+    nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
          |UTF8String[] $keyValues = $text.split($pd, -1);
          |for(UTF8String kvEntry: $keyValues) {
