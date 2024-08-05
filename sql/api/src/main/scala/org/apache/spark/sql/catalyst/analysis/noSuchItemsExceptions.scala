@@ -171,6 +171,31 @@ class NoSuchFunctionException private(
   }
 }
 
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchProcedureException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = None,
+      Some(errorClass),
+      messageParameters)
+  }
+
+  def this(identifier: Identifier) = {
+    this(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> quoted(identifier)))
+  }
+}
+
 class NoSuchTempFunctionException(func: String)
   extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
 
