@@ -261,6 +261,23 @@ class AstBuilder extends DataTypeAstBuilder
     WhileStatement(condition, body, Some(labelText))
   }
 
+//  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
+//  : SearchedCaseStatement = {
+//    SearchedCaseStatement(
+//      whenExpressions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+//        SingleStatement(
+//          Project(
+//            Seq(Alias(expression(boolExpr), "condition")()),
+//            OneRowRelation()))
+//      }),
+//
+//    )
+//  }
+//
+//  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): AnyRef = {
+//
+//  }
+
   override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
@@ -292,7 +309,7 @@ class AstBuilder extends DataTypeAstBuilder
       case c: RepeatStatementContext
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-      => true
+        => true
       case _ => false
     }
   }

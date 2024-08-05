@@ -1111,6 +1111,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
   }
 
+  test("caseStatement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN 1;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[IfElseStatement])
+    val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
+    assert(ifStmt.conditions.length == 1)
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1=1")
+  }
+
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {
     statementStr

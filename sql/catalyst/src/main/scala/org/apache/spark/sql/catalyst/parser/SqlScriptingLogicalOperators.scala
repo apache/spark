@@ -124,3 +124,19 @@ case class LeaveStatement(label: String) extends CompoundPlanStatement
  * @param label Label of the loop to iterate.
  */
 case class IterateStatement(label: String) extends CompoundPlanStatement
+
+// maybe have simple and search inherit from a base case
+case class simpleCaseStatement(
+    value: SingleStatement,
+    whenExpressions: Seq[SingleStatement],
+    conditionalBodies: Seq[CompoundBody],
+    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+  assert(whenExpressions.length == conditionalBodies.length)
+}
+
+case class searchedCaseStatement(
+    whenExpressions: Seq[SingleStatement],
+    conditionalBodies: Seq[CompoundBody],
+    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+  assert(whenExpressions.length == conditionalBodies.length)
+}
