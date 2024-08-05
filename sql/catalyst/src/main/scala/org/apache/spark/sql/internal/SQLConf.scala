@@ -1635,6 +1635,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_PARTITION_FILTER_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
+      .doc(s"Whether to filter partitions when running storage-partition join. " +
+        s"When enabled, partitions without matches on the other side can be omitted for " +
+        s"scanning, if allowed by the join type. This config requires both " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
+        s"enabled.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
