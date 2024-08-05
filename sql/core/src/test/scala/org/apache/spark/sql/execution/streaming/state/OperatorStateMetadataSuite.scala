@@ -162,13 +162,29 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
           Some(invalidBatchId))
       }
-      assert(ex.getMessage.contains("Failed to read the operator metadata"))
+
+      checkError(
+        ex.asInstanceOf[SparkRuntimeException],
+        "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+        Some("42K03"),
+        Map(
+          "checkpointLocation" -> ".*",
+          "batchId" -> ".*"),
+        matchPVals = true)
 
       val ex1 = intercept[Exception] {
         checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
           Some(-1))
       }
-      assert(ex1.getMessage.contains("Failed to read the operator metadata"))
+
+      checkError(
+        ex1.asInstanceOf[SparkRuntimeException],
+        "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+        Some("42K03"),
+        Map(
+          "checkpointLocation" -> ".*",
+          "batchId" -> ".*"),
+        matchPVals = true)
     }
   }
 
