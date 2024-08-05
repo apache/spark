@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
  */
-case class SqlScriptingInterpreter() {
+case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
    * Build execution plan and return statements that need to be executed,
@@ -36,7 +37,7 @@ case class SqlScriptingInterpreter() {
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+  private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
@@ -73,11 +74,19 @@ case class SqlScriptingInterpreter() {
           .map(new SingleStatementExec(_, Origin(), isInternal = true))
           .reverse
         new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables)
+          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
-          isInternal = false)
+          shouldCollectResult = true)
     }
+
+  def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val executionPlan = buildExecutionPlan(compoundBody)
+    executionPlan.flatMap {
+      case statement: SingleStatementExec if statement.shouldCollectResult => statement.result
+      case _ => None
+    }
+  }
 }

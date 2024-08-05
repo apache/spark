@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -355,5 +356,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .replace("BEGIN", "")
       .replace("END", "")
       .trim
+  }
+
+  test("SQL Scripting not enabled") {
+    withSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key -> "false") {
+      val sqlScriptText =
+        """
+          |BEGIN
+          |  SELECT 1;
+          |END""".stripMargin
+      checkError(
+        exception = intercept[SparkException] {
+          parseScript(sqlScriptText)
+        },
+        errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+        parameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
+    }
   }
 }
