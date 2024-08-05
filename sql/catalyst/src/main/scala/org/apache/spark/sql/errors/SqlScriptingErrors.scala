@@ -28,7 +28,7 @@ private[sql] object SqlScriptingErrors {
 
   def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
     new SqlScriptingException(
-      origin = Option(origin),
+      origin = origin,
       errorClass = "LABELS_MISMATCH",
       cause = null,
       messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
@@ -36,7 +36,7 @@ private[sql] object SqlScriptingErrors {
 
   def endLabelWithoutBeginLabel(origin: Origin, endLabel: String): Throwable = {
     new SqlScriptingException(
-      origin = Option(origin),
+      origin = origin,
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
       messageParameters = Map("endLabel" -> endLabel))
@@ -47,7 +47,7 @@ private[sql] object SqlScriptingErrors {
       varName: String,
       lineNumber: String): Throwable = {
     new SqlScriptingException(
-      origin = Option(origin),
+      origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
@@ -58,7 +58,7 @@ private[sql] object SqlScriptingErrors {
       varName: String,
       lineNumber: String): Throwable = {
     new SqlScriptingException(
-      origin = Option(origin),
+      origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
