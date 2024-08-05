@@ -1583,6 +1583,24 @@
     ],
     "sqlState" : "42601"
   },
+  "IDENTITY_COLUMNS_DUPLICATED_SEQUENCE_GENERATOR_OPTION" : {
+    "message" : [
+      "Duplicated IDENTITY column sequence generator option: <sequenceGeneratorOption>."
+    ],
+    "sqlState" : "42601"
+  },
+  "IDENTITY_COLUMNS_ILLEGAL_STEP" : {
+    "message" : [
+      "IDENTITY column step cannot be 0."
+    ],
+    "sqlState" : "42611"
+  },
+  "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "DataType <dataType> is not supported for IDENTITY columns."
+    ],
+    "sqlState" : "428H2"
+  },
   "ILLEGAL_DAY_OF_WEEK" : {
     "message" : [
       "Illegal input for day of week: <string>."

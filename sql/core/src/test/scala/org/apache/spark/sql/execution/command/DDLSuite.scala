@@ -2288,6 +2288,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
   }
 
+  test("SPARK-48824: No identity columns with V1") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"create table t(a int, b bigint generated always as identity()) using parquet")
+      },
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+        "operation" -> "identity columns")
+    )
+  }
+
   test("SPARK-44837: Error when altering partition column in non-delta table") {
     withTable("t") {
       sql("CREATE TABLE t(i INT, j INT, k INT) USING parquet PARTITIONED BY (i, j)")

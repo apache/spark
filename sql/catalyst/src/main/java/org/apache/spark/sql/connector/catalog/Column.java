@@ -21,6 +21,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.IdentityColumnSpec;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;
@@ -53,7 +54,7 @@ public interface Column {
       boolean nullable,
       String comment,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null, null, metadataInJSON);
+    return new ColumnImpl(name, dataType, nullable, comment, null, null, null, metadataInJSON);
   }
 
   static Column create(
@@ -63,7 +64,8 @@ public interface Column {
       String comment,
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, defaultValue, null, metadataInJSON);
+    return new ColumnImpl(name, dataType, nullable, comment, defaultValue,
+            null, null, metadataInJSON);
   }
 
   static Column create(
@@ -74,7 +76,18 @@ public interface Column {
       String generationExpression,
       String metadataInJSON) {
     return new ColumnImpl(name, dataType, nullable, comment, null,
-            generationExpression, metadataInJSON);
+            generationExpression, null, metadataInJSON);
+  }
+
+  static Column create(
+          String name,
+          DataType dataType,
+          boolean nullable,
+          String comment,
+          IdentityColumnSpec identityColumnSpec,
+          String metadataInJSON) {
+    return new ColumnImpl(name, dataType, nullable, comment, null,
+            null, identityColumnSpec, metadataInJSON);
   }
 
   /**
@@ -112,6 +125,12 @@ public interface Column {
    */
   @Nullable
   String generationExpression();
+
+  /**
+   * Returns the identity column specification of this table column. Null means no identity column.
+   */
+  @Nullable
+  IdentityColumnSpec identityColumnSpec();
 
   /**
    * Returns the column metadata in JSON format.
