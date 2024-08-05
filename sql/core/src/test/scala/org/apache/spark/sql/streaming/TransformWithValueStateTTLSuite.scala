@@ -265,54 +265,129 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
         val keySchema = new StructType().add("value", StringType)
+        val expirationSchema = new StructType().add("expirationMs", LongType)
+        val compositeKeySchema = new StructType()
+          .add("key", new StructType().add("value", StringType))
+          .add("userKey", new StructType()
+            .add("id", IntegerType, false)
+            .add("name", StringType))
+
+        // Define all 9 expected schemas
         val schema0 = StateStoreColFamilySchema(
-          "valueStateTTL",
-          keySchema,
-          new StructType().add("value",
+          "_procTimers_keyToTimestamp",
+          new StructType()
+            .add("key", new StructType().add("value", StringType))
+            .add("expiryTimestampMs", LongType, false),
+          new StructType().add("__dummy__", NullType),
+          Some(PrefixKeyScanStateEncoderSpec(
             new StructType()
-              .add("value", IntegerType, false))
-          .add("ttlExpirationMs", LongType),
-          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              .add("key", new StructType().add("value", StringType))
+              .add("expiryTimestampMs", LongType, false),
+            1)),
           None,
-          4
+          1
         )
+
         val schema1 = StateStoreColFamilySchema(
-          "valueState",
-          keySchema,
-          new StructType().add("value", IntegerType, false),
-          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          "_procTimers_timestampToKey",
+          new StructType()
+            .add("expiryTimestampMs", LongType, false)
+            .add("key", new StructType().add("value", StringType)),
+          new StructType().add("__dummy__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            new StructType()
+              .add("expiryTimestampMs", LongType, false)
+              .add("key", new StructType().add("value", StringType)),
+            List(0))),
+          None,
+          2
+        )
+
+        val schema2 = StateStoreColFamilySchema(
+          "_ttl_listState",
+          expirationSchema.add("groupingKey", keySchema),
+          new StructType().add("__dummy__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            expirationSchema.add("groupingKey", keySchema),
+            List(0))),
           None,
           3
         )
-        val schema2 = StateStoreColFamilySchema(
+
+        val schema3 = StateStoreColFamilySchema(
+          "_ttl_mapState",
+          expirationSchema
+            .add("groupingKey", keySchema)
+            .add("userKey", new StructType()
+              .add("id", IntegerType, false)
+              .add("name", StringType)),
+          new StructType().add("__dummy__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            expirationSchema
+              .add("groupingKey", keySchema)
+              .add("userKey", new StructType()
+                .add("id", IntegerType, false)
+                .add("name", StringType)),
+            List(0))),
+          None,
+          4
+        )
+
+        val schema4 = StateStoreColFamilySchema(
+          "_ttl_valueStateTTL",
+          expirationSchema.add("groupingKey", keySchema),
+          new StructType().add("__dummy__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            expirationSchema.add("groupingKey", keySchema),
+            List(0))),
+          None,
+          5
+        )
+
+        val schema5 = StateStoreColFamilySchema(
           "listState",
           keySchema,
-          new StructType().add("value",
-            new StructType()
+          new StructType()
+            .add("value", new StructType()
               .add("id", LongType, false)
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None,
-          1
+          6
         )
 
-        val userKeySchema = new StructType()
-          .add("id", IntegerType, false)
-          .add("name", StringType)
-        val compositeKeySchema = new StructType()
-          .add("key", new StructType().add("value", StringType))
-          .add("userKey", userKeySchema)
-        val schema3 = StateStoreColFamilySchema(
+        val schema6 = StateStoreColFamilySchema(
           "mapState",
           compositeKeySchema,
-          new StructType().add("value",
-            new StructType()
-              .add("value", StringType))
+          new StructType()
+            .add("value", new StructType().add("value", StringType))
             .add("ttlExpirationMs", LongType),
           Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-          Option(userKeySchema),
-          2
+          Some(new StructType()
+            .add("id", IntegerType, false)
+            .add("name", StringType)),
+          7
+        )
+
+        val schema7 = StateStoreColFamilySchema(
+          "valueState",
+          keySchema,
+          new StructType().add("value", IntegerType, false),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None,
+          8
+        )
+
+        val schema8 = StateStoreColFamilySchema(
+          "valueStateTTL",
+          keySchema,
+          new StructType()
+            .add("value", new StructType().add("value", IntegerType, false))
+            .add("ttlExpirationMs", LongType),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None,
+          9
         )
 
         val ttlKey = "k1"
@@ -355,9 +430,9 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               q.lastProgress.stateOperators.head.customMetrics
                 .get("numMapStateWithTTLVars").toInt)
 
-            assert(colFamilySeq.length == 4)
+            assert(colFamilySeq.length == 9)
             assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2, schema3
+              schema0, schema1, schema2, schema3, schema4, schema5, schema6, schema7, schema8
             ).map(_.toString))
           },
           StopStream

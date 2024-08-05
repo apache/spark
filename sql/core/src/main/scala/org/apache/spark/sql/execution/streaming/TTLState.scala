@@ -94,6 +94,7 @@ abstract class SingleKeyTTLStateImpl(
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
+
   store.createColFamilyIfAbsent(ttlColumnFamilyName, colFamilyIds(ttlColumnFamilyName),
     keySchema, TTL_VALUE_ROW_SCHEMA,
     RangeKeyScanStateEncoderSpec(keySchema, Seq(0)), isInternal = true)
