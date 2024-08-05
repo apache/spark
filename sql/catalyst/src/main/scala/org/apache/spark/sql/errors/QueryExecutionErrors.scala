@@ -2633,11 +2633,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     stateStoreType: String,
     e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_LOAD_STATE_STORE.OUT_OF_MEMORY",
-      messageParameters = Map(
-        "stateStoreType" -> stateStoreType,
-        "stateStoreId" -> stateStoreId
-        ),
+      errorClass = s"CANNOT_LOAD_STATE_STORE.${stateStoreType.toUpperCase()}_OUT_OF_MEMORY",
+      messageParameters = Map("stateStoreId" -> stateStoreId),
       cause = e
     )
   }
