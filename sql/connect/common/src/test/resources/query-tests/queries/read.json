@@ -10,7 +10,7 @@
         "header": "true",
         "delimiter": ";"
       },
-      "paths": ["../common/src/test/resources/query-tests/test-data/people.csv"]
+      "paths": ["../sql/connect/common/src/test/resources/query-tests/test-data/people.csv"]
     }
   }
 }
