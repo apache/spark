@@ -68,6 +68,8 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
+      ColumnFamilyUtils.
+        verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName)
       colFamilyNameToIdMap.put(colFamilyName, colFamilyId)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
           (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
@@ -559,7 +561,7 @@ private[sql] class RocksDBStateStoreProvider
      * @param operationName - name of the store operation
      * @param colFamilyName - name of the column family
      */
-    private def verifyColFamilyCreationOrDeletion(
+    def verifyColFamilyCreationOrDeletion(
         operationName: String,
         colFamilyName: String,
         isInternal: Boolean = false): Unit = {
@@ -590,17 +592,6 @@ private[sql] class RocksDBStateStoreProvider
      * @return - true if the column family is for internal use, false otherwise
      */
     def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
-
-    /**
-     * Create RocksDB column family, if not created already
-     */
-    def createColFamilyIfAbsent(
-        colFamilyName: String, colFamilyId: Short, isInternal: Boolean = false):
-      Option[Short] = {
-      verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-
-      Some(colFamilyNameToIdMap.get(colFamilyName))
-    }
 
     /**
      * Remove RocksDB column family, if exists
