@@ -468,7 +468,7 @@ private[sql] class RocksDBStateStoreProvider
   private val colFamilySchemas = new ConcurrentHashMap[String, StateStoreColFamilySchema]
 
   // TODO SPARK-48796 load column family id from state schema when restarting
-  private val colFamilyId = new AtomicInteger(-1)
+  private val colFamilyId = new AtomicInteger(0)
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
