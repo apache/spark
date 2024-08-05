@@ -37,12 +37,12 @@ case object StringTypeBinary extends AbstractStringType {
 }
 
 /**
- * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
+ * Use StringTypeUTF8Lcase for expressions supporting only binary and lowercase collation.
  */
-case object StringTypeBinaryLcase extends AbstractStringType {
+case object StringTypeUTF8Lcase extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
-      other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
+      other.asInstanceOf[StringType].isUTF8LcaseCollation)
 }
 
 /**
