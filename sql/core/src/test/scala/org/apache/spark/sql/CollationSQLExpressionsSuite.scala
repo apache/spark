@@ -2319,6 +2319,45 @@ class CollationSQLExpressionsSuite
     )
   }
 
+  test("Support HyperLogLogPlusPlus expression with collation") {
+    case class HyperLogLogPlusPlusTestCase(
+      collation: String,
+      input: Seq[String],
+      output: Seq[Row]
+    )
+
+    val testCases = Seq(
+      HyperLogLogPlusPlusTestCase("utf8_binary", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("utf8_lcase", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(5))),
+      HyperLogLogPlusPlusTestCase("UNICODE", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("UNICODE_CI", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(5)))
+    )
+
+    testCases.foreach( t => {
+      // Using explicit collate clause
+      val query =
+        s"""
+           |SELECT approx_count_distinct(col) FROM VALUES
+           |${t.input.map(s => s"('${s}' collate ${t.collation})").mkString(", ") } tab(col)
+           |""".stripMargin
+      checkAnswer(sql(query), t.output)
+
+      // Using default collation
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collation) {
+        val query =
+          s"""
+             |SELECT approx_count_distinct(col) FROM VALUES
+             |${t.input.map(s => s"('${s}')").mkString(", ") } tab(col)
+             |""".stripMargin
+        checkAnswer(sql(query), t.output)
+      }
+    })
+  }
+
   // TODO: Add more tests for other SQL expressions
 
 }
