@@ -177,7 +177,7 @@ object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
   }
 
   private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
-    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER))(f orElse {
+    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
       case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
     })
   }
