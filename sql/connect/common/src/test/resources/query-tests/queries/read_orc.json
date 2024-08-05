@@ -5,7 +5,7 @@
   "read": {
     "dataSource": {
       "format": "orc",
-      "paths": ["../common/src/test/resources/query-tests/test-data/users.orc"]
+      "paths": ["../sql/connect/common/src/test/resources/query-tests/test-data/users.orc"]
     }
   }
 }
