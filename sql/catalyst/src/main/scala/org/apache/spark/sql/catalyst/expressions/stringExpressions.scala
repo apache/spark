@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, CollationAwareUTF8String, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
@@ -2438,6 +2438,8 @@ case class Levenshtein(
   with ImplicitCastInputTypes
   with NullIntolerant{
 
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+
   def this(left: Expression, right: Expression, threshold: Expression) =
     this(left, right, Option(threshold))
 
@@ -2485,10 +2487,23 @@ case class Levenshtein(
     val thresholdEval = threshold.map(_.eval(input))
     thresholdEval match {
       case Some(v) =>
-        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
-          v.asInstanceOf[Int])
+        collationId match {
+          case 1 =>
+            CollationAwareUTF8String.levenshteinDistanceLowerCase(leftEval.asInstanceOf[UTF8String],
+              rightEval.asInstanceOf[UTF8String], v.asInstanceOf[Int])
+          case _ =>
+            leftEval.asInstanceOf[UTF8String].levenshteinDistance(
+              rightEval.asInstanceOf[UTF8String], v.asInstanceOf[Int])
+        }
       case _ =>
-        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
+        collationId match {
+          case 1 =>
+            CollationAwareUTF8String.levenshteinDistanceLowerCase(leftEval.asInstanceOf[UTF8String],
+              rightEval.asInstanceOf[UTF8String])
+          case _ =>
+            leftEval.asInstanceOf[UTF8String].levenshteinDistance(
+              rightEval.asInstanceOf[UTF8String])
+        }
     }
   }
 

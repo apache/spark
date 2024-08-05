@@ -20,12 +20,14 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
-import scala.collection.immutable.Seq
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
+import org.apache.spark.sql.catalyst.util.CollationAwareUTF8String
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -3189,6 +3191,102 @@ class CollationSQLExpressionsSuite
   }
 
   // TODO: Add more tests for other SQL expressions
+
+  test("LevenshteinDistanceLowerCase brute force testing") {
+
+    val MAX_LENGTH = 11;
+    val ALPHABET_SIZE = 3;
+    val random = new Random()
+
+    def testStrings(stLeft: String, stRight: String): Unit = {
+      val stLeftUTF8: UTF8String = UTF8String.fromString(stLeft)
+      val stRightUTF8: UTF8String = UTF8String.fromString(stRight)
+      val stLeftUTF8LowerCase: UTF8String = UTF8String.fromString(stLeft.toLowerCase())
+      val stRightUTF8LowerCase: UTF8String = UTF8String.fromString(stRight.toLowerCase())
+      val result: Int = CollationAwareUTF8String.
+        levenshteinDistanceLowerCase(stLeftUTF8, stRightUTF8)
+      assert(result == stLeftUTF8LowerCase.levenshteinDistance(stRightUTF8LowerCase))
+      assert(CollationAwareUTF8String.levenshteinDistanceLowerCase(stLeftUTF8, stRightUTF8, result)
+        == result)
+      assert(CollationAwareUTF8String.levenshteinDistanceLowerCase(stLeftUTF8, stRightUTF8,
+        result-1) == -1)
+    }
+
+    def generateAllSplits(strings: ArrayBuffer[Int]): Unit = {
+      val sbLeft: StringBuilder = new StringBuilder()
+      val sbRight: StringBuilder = new StringBuilder()
+      for (i <- 0 until strings.size + 1) {
+        sbLeft.clear()
+        sbRight.clear()
+        for(j <- 0 until i) {
+          sbLeft.append(('a' + strings.apply(j)).toChar)
+        }
+        for(j <- i until strings.size) {
+          sbRight.append(('a' + strings.apply(j)).toChar)
+        }
+        testStrings(sbLeft.toString(), sbRight.toString())
+      }
+    }
+
+    def generateStringPairs(currentStrings: ArrayBuffer[Int]): Unit = {
+      if (currentStrings.size > MAX_LENGTH) return
+      generateAllSplits(currentStrings)
+      for(i <- 0 until ALPHABET_SIZE) {
+        var coefficient = 0
+        if (random.nextBoolean()) {
+          coefficient = -32 // randomly uppercasing a character
+        }
+        currentStrings += i + coefficient
+        generateStringPairs(currentStrings)
+        currentStrings.remove(currentStrings.size-1)
+      }
+    }
+
+    val currentStrings = new ArrayBuffer[Int]()
+    generateStringPairs(currentStrings)
+
+  }
+
+  test("LevenshteinDistanceLowerCase handmade tests") {
+    val turkishCapitalI = '\u0130'
+    val smallFinalSigma = '\u03C2'
+    val smallNonFinalSigma = '\u03C3'
+    val capitalSigma = '\u03A3'
+    val smallDot = '\u0307'
+
+    case class TestCase(
+      inputLeft: String,
+      inputRight: String,
+      output: Int
+    )
+
+    val testCases = Seq(
+      TestCase(s"i${smallDot}", "", 1),
+      TestCase(s"I${smallDot}", "", 1),
+      TestCase(s"iA4sd2FwqfAF${smallDot}", s"${turkishCapitalI}", 11),
+      TestCase(s"iaA${smallDot}${smallFinalSigma}",
+        s"${turkishCapitalI}${capitalSigma}${smallFinalSigma}", 3),
+      TestCase(s"iaA${smallDot}${smallFinalSigma}",
+        s"${turkishCapitalI}${smallNonFinalSigma}", 2),
+      TestCase(s"i", s"${turkishCapitalI}", 1),
+      TestCase("iiiuyuuUuUuiiiuYuuuUuuiIIuyuuuuuuiiiuyuuuuuuiiiuyuuUUuuiiiuyuuuuuuiiiuyuuuuuu" +
+        "iiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuu", "iiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuu" +
+        "iiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuuiiiuyuuuuuu",
+        0),
+      TestCase(s"iiii${smallDot}${smallDot}${smallDot}${smallDot}", s"${turkishCapitalI}", 6),
+      TestCase(s"i${smallFinalSigma}${smallNonFinalSigma}${capitalSigma}${capitalSigma}${smallDot}",
+        s"${turkishCapitalI}${smallNonFinalSigma}${smallFinalSigma}${smallFinalSigma}" +
+        s"${smallNonFinalSigma}", 2)
+    )
+
+    testCases.foreach(t => {
+      val inputLeftUTF8: UTF8String = UTF8String.fromString(t.inputLeft)
+      val inputRightUTF8: UTF8String = UTF8String.fromString(t.inputRight)
+      assert(CollationAwareUTF8String.levenshteinDistanceLowerCase(inputLeftUTF8, inputRightUTF8)
+      == t.output)
+    })
+
+  }
 
 }
 // scalastyle:on nonascii

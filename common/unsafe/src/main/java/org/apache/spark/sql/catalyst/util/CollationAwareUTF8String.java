@@ -39,6 +39,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.Arrays;
+
 
 /**
  * Utility class for collation-aware UTF8String operations.
@@ -1284,5 +1286,238 @@ public class CollationAwareUTF8String {
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
+
+  /// Lowercase levenshtein distance
+  private static class Transformation {
+    public int left, rightFirst, rightSecond;
+    public Transformation(int left, int rightFirst, int rightSecond) {
+      this.left = left;
+      this.rightFirst = rightFirst;
+      this.rightSecond = rightSecond;
+    }
+    public int rightDiff(int otherRightFirst, int otherRightSecond) {
+      int diff = 0;
+      if (otherRightFirst != rightFirst) diff++;
+      if (otherRightSecond != rightSecond) diff++;
+      return diff;
+    }
+    public static int getMinRightDiff(int otherRightFirst, int otherRightSecond,
+                                      ArrayList<Transformation> transformations) {
+      int minDiff = 1000000000;
+      for (Transformation t:transformations) {
+        minDiff = Math.min(minDiff, t.rightDiff(otherRightFirst,otherRightSecond));
+      }
+      return minDiff;
+    }
+    public int fullDiff(int otherLeft, int otherRightFirst, int otherRightSecond) {
+      int diff = 0;
+      if (otherLeft != left) diff++;
+      diff += rightDiff(otherRightFirst, otherRightSecond);
+      return diff;
+    }
+    public static int getMinDiff(int otherLeft, int otherRightFirst, int otherRightSecond,
+                                 ArrayList<Transformation> transformations) {
+      int minDiff = 1000000000;
+      for (Transformation t:transformations) {
+        minDiff=Math.min(minDiff, t.fullDiff(otherLeft, otherRightFirst, otherRightSecond));
+      }
+      return minDiff;
+    }
+  }
+
+  /**
+   * transformations ArrayList denotes all the
+   * "1 codepoint <=> ordered pair of codepoints" relations
+   * Example: İ <=> i̇̇ ('turkish capital i' <=> 'latin i' with 'combining dot above')
+   */
+  private static ArrayList<Transformation> transformations = new ArrayList<>(
+          Arrays.asList(
+                  new Transformation(304,105,775),
+                  new Transformation(304,73,775)
+          )
+  );
+  private static class DP {
+    int n,m;
+    public int[][] dp;
+    public int[] rowMinimum;
+    public ArrayList<Transformation> transformations;
+    public ArrayList<Integer> codepointsLeft, codepointsRight;
+    public ArrayList<Integer> codepointsLeftLowerCase, codepointsRightLowerCase;
+
+    public DP(UTF8String stLeft, UTF8String stRight, ArrayList<Transformation> transformations) {
+      this.codepointsLeft = UTF8ToCodepoints(stLeft);
+      this.codepointsRight = UTF8ToCodepoints(stRight);
+
+      if (codepointsLeft.size() > codepointsRight.size()) {
+        ArrayList<Integer> swap = codepointsLeft;
+        codepointsLeft = codepointsRight;
+        codepointsRight = swap;
+      }
+
+      this.codepointsLeftLowerCase = codepointsToLowerCase(codepointsLeft);
+      this.codepointsRightLowerCase = codepointsToLowerCase(codepointsRight);
+
+      final int INF = 1000000000;
+      n = codepointsLeft.size();
+      m = codepointsRight.size();
+      dp = new int[n+1][m+1];
+      rowMinimum = new int[n+1];
+      for (int i = 0; i <= n; i++) {
+        rowMinimum[i] = INF;
+        for (int j = 0; j <= m; j++)
+          dp[i][j] = INF;
+      }
+      dp[0][0] = 0;
+      rowMinimum[0] = 0;
+
+      this.transformations = transformations;
+    }
+
+    public void updateState(int i, int j, int a, int b, int cost) {
+      if (a<0 || a>n || b<0 || b>m) return;
+      dp[a][b] = Math.min(dp[a][b], dp[i][j] + cost);
+      rowMinimum[a] = Math.min(rowMinimum[a], dp[a][b]);
+    }
+
+  }
+  private static ArrayList<Integer> UTF8ToCodepoints(UTF8String st) {
+    Iterator<Integer> targetIter = st.codePointIterator(
+            CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    ArrayList<Integer> codepoints = new ArrayList<>();
+    while (targetIter.hasNext()) {
+      codepoints.add(targetIter.next());
+    }
+    return codepoints;
+  }
+  private static ArrayList<Integer> codepointsToLowerCase(ArrayList<Integer> codepoints) {
+    ArrayList<Integer> codepointsLowerCase = new ArrayList<>();
+      for (Integer codepoint : codepoints) {
+          codepointsLowerCase.add(getLowercaseCodePoint(codepoint));
+      }
+    return codepointsLowerCase;
+  }
+
+  /**
+   * Next matching pair will include i+1/j+1 and an empty string, and the minimum number of
+   * operations to make i+1/j+1 equal to an empty string is always 1.
+   *
+   * @param i position in the left string from where we push
+   * @param j position in the right string from where we push
+   * @param dp DP array passed by reference
+   */
+  private static void pushType1(int i, int j, DP dp) {
+    dp.updateState(i,j,i+1,j,1);
+    dp.updateState(i,j,i,j+1,1);
+  }
+
+  /**
+   * Next matching pair will include i+1 and j+1, so either they are equal and cost 0,
+   * or they are different, and we can replace one of them with a cost of 1, to make them equal.
+   */
+  private static void pushType2(int i, int j, DP dp) {
+    if(i+1 <= dp.n && j+1 <= dp.m)dp.updateState(i,j,i+1,j+1,
+            dp.codepointsLeftLowerCase.get(i).equals(dp.codepointsRightLowerCase.get(j))?0:1);
+  }
+
+  /**
+   * Next matching pair will include d>=2 next elements of one string, and 0 next elements of another
+   * string. This guarantees that we will delete all the d-2 elements from the middle of the
+   * substring (i+1,i+d), and that we need the remaining two characters (i+1 and i+d) to
+   * match the transformation.rightFirst and transformation.rightSecond, and we have to add
+   * transformation.left to the empty string, and make them equal like that.
+   */
+  private static void pushType3(int i, int j, DP dp) {
+    for (int d = 2; i + d <= dp.n; d++) {
+      int cost = d - 2 + 1;
+      if (dp.dp[i][j] + cost >= dp.dp[i + d][j]) break;
+      cost += Transformation.getMinRightDiff(dp.codepointsLeft.get(i),
+              dp.codepointsLeft.get(i + d - 1), dp.transformations);
+      dp.updateState(i, j, i + d, j, cost);
+    }
+
+    for (int d = 2; j + d <= dp.m; d++) {
+      int cost = d - 2 + 1;
+      if (dp.dp[i][j] + cost >= dp.dp[i][j + d]) break;
+      cost += Transformation.getMinRightDiff(dp.codepointsRight.get(j),
+              dp.codepointsRight.get(j + d - 1), dp.transformations);
+      dp.updateState(i, j, i, j+d, cost);
+    }
+  }
+
+  /**
+   * Next matching pair will include d>=2 next elements of one string, and 1 next element of another
+   * string. This guarantees that we will delete all the d-2 elements from the middle of the
+   * substring (i+1,i+d), and that we need the remaining two characters (i+1 and i+d) to
+   * match the transformation.rightFirst and transformation.rightSecond, and we have to match
+   * transformation.left to the 1 element of the other string, and make them equal like that.
+   */
+  private static void pushType4(int i, int j, DP dp) {
+    if(j + 1 <= dp.m) {
+      for (int d = 2; i + d <= dp.n; d++) {
+        int cost = d - 2;
+        if (dp.dp[i][j] + cost >= dp.dp[i + d][j + 1]) break;
+        cost += Transformation.getMinDiff(dp.codepointsRight.get(j),dp.codepointsLeft.get(i),
+                dp.codepointsLeft.get(i + d - 1), dp.transformations);
+        dp.updateState(i, j, i + d, j+1, cost);
+      }
+    }
+
+    if(i + 1 <= dp.n) {
+      for (int d = 2; j + d <= dp.m; d++) {
+        int cost = d - 2;
+        if (dp.dp[i][j] + cost >= dp.dp[i + 1][j + d]) break;
+        cost += Transformation.getMinDiff(dp.codepointsLeft.get(i),dp.codepointsRight.get(j),
+                dp.codepointsRight.get(j + d - 1), dp.transformations);
+        dp.updateState(i, j, i + 1, j+d, cost);
+      }
+    }
+  }
+  public static int levenshteinDistanceLowerCase(UTF8String stLeft, UTF8String stRight) {
+
+    DP dp = new DP(stLeft, stRight, transformations);
+    int n = dp.n;
+    int m = dp.m;
+
+    for (int i = 0;i <= n; i++) {
+      for (int j = 0;j <= m; j++) {
+
+        pushType1(i, j, dp);
+        pushType2(i, j, dp);
+        pushType3(i, j, dp);
+        pushType4(i, j, dp);
+
+      }
+    }
+
+    return dp.dp[n][m];
+  }
+  public static int levenshteinDistanceLowerCase(UTF8String stLeft, UTF8String stRight,
+                                                 int threshold) {
+
+    DP dp = new DP(stLeft, stRight, transformations);
+    int n = dp.n;
+    int m = dp.m;
+
+    for(int i = 0;i <= n; i++) {
+      for(int j = 0;j <= m; j++) {
+
+        pushType1(i, j, dp);
+        pushType2(i, j, dp);
+        pushType3(i, j, dp);
+        pushType4(i, j, dp);
+
+      }
+
+      if (i < n) {
+        int minVal = 1000000000;
+        for (int j = i + 1;j <= n; j++)
+          minVal = Math.min(minVal, dp.rowMinimum[j]);
+        if (minVal > threshold) return -1;
+      }
+    }
+
+    if (dp.dp[n][m] <= threshold) return dp.dp[n][m];
+    else return -1;
+  }
 
 }
