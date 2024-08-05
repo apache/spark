@@ -2343,14 +2343,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         name: Seq[String],
         arguments: Seq[Expression],
         u: UnresolvedFunction): Option[Expression] = {
-      if (name.size == 1  && u.isInternal) {
+      val expression = if (name.size == 1  && u.isInternal) {
         Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
       } else if (name.size == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
-          validateFunction(func, arguments.length, u)
-        }
+        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
       } else {
         None
+      }
+      expression.map { func =>
+        validateFunction(func, arguments.length, u)
       }
     }
 
