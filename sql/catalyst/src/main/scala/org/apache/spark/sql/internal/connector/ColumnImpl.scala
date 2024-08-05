@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.sql.catalyst.util.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
 import org.apache.spark.sql.types.DataType
 
@@ -28,4 +29,5 @@ case class ColumnImpl(
     comment: String,
     defaultValue: ColumnDefaultValue,
     generationExpression: String,
+    identityColumnSpec: IdentityColumnSpec,
     metadataInJSON: String) extends Column

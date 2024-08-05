@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
@@ -2854,8 +2856,137 @@ class DDLParserSuite extends AnalysisTest {
       exception = parseException(
         "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS a + 1) USING PARQUET"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'a'", "hint" -> ": missing '('")
+      parameters = Map("error" -> "'a'", "hint" -> "")
     )
+  }
+
+  test("SPARK-48824: implement parser support for GENERATED ALWAYS AS IDENTITY columns in tables") {
+    for {
+      identityColumnDefStr <- Seq("BY DEFAULT", "ALWAYS")
+      identityColumnSpecStr <- Seq(
+        "START WITH 1 INCREMENT BY 1",
+        "INCREMENT BY 1 START WITH 1",
+        "START WITH 1",
+        "INCREMENT BY 1",
+        "")
+    } {
+      val columnsWithIdentitySpec = Seq(
+        ColumnDefinition(
+          "id",
+          LongType,
+          nullable = true,
+          identityColumnSpec = Some(
+            IdentityColumnSpec(
+              start = 1,
+              step = 1,
+              allowExplicitInsert = identityColumnDefStr == "BY DEFAULT"
+            )
+          )
+        ),
+        ColumnDefinition("val", IntegerType)
+      )
+      comparePlans(
+        parsePlan(
+          s"CREATE TABLE my_tab(id BIGINT GENERATED $identityColumnDefStr" +
+            s" AS IDENTITY($identityColumnSpecStr), val INT) USING parquet"
+        ),
+        CreateTable(
+          UnresolvedIdentifier(Seq("my_tab")),
+          columnsWithIdentitySpec,
+          Seq.empty[Transform],
+          UnresolvedTableSpec(
+            Map.empty[String, String],
+            Some("parquet"),
+            OptionList(Seq.empty),
+            None,
+            None,
+            None,
+            false
+          ),
+          false
+        )
+      )
+      comparePlans(
+        parsePlan(
+          s"REPLACE TABLE my_tab(id BIGINT GENERATED $identityColumnDefStr" +
+            s" AS IDENTITY($identityColumnSpecStr), val INT) USING parquet"
+        ),
+        ReplaceTable(
+          UnresolvedIdentifier(Seq("my_tab")),
+          columnsWithIdentitySpec,
+          Seq.empty[Transform],
+          UnresolvedTableSpec(
+            Map.empty[String, String],
+            Some("parquet"),
+            OptionList(Seq.empty),
+            None,
+            None,
+            None,
+            false
+          ),
+          false
+        )
+      )
+    }
+  }
+
+  test("SPARK-48824: Column cannot have both a generation expression and an identity column spec") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parsePlan(s"CREATE TABLE testcat.my_tab(id BIGINT GENERATED ALWAYS AS 1" +
+          s" GENERATED ALWAYS AS IDENTITY(), val INT) USING foo")
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'1'", "hint" -> "")
+    )
+  }
+
+  test("SPARK-48824: Identity column step must not be zero") {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab" +
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY(INCREMENT BY 0), val INT) USING foo"
+        )
+      },
+      errorClass = "IDENTITY_COLUMNS_ILLEGAL_STEP",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "(INCREMENT BY 0)", start = 66, stop = 81)
+    )
+  }
+
+  test("SPARK-48824: Identity column datatype must be long") {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab(id INT GENERATED ALWAYS AS IDENTITY(), val INT) USING foo"
+        )
+      },
+      errorClass = "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE",
+      parameters = Map("dataType" -> "IntegerType"),
+      context =
+        ExpectedContext(fragment = "id INT GENERATED ALWAYS AS IDENTITY()", start = 28, stop = 64)
+    )
+  }
+
+  test("SPARK-48824: Identity column spec descriptor cannot be duplicated") {
+    val identityColumnSpecStrs = Seq(
+      "START WITH 0 START WITH 1",
+      "INCREMENT BY 1 INCREMENT BY 2",
+      "START WITH 0 INCREMENT BY 1 START WITH 1",
+      "INCREMENT BY 1 START WITH 0 INCREMENT BY 2"
+    )
+    for {
+      identitySpecStr <- identityColumnSpecStrs
+    } {
+      val exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab" +
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY($identitySpecStr), val INT) USING foo"
+        )
+      }
+      assert(exception.getErrorClass === "IDENTITY_COLUMNS_DUPLICATED_DESCRIPTOR")
+    }
   }
 
   test("SPARK-42681: Relax ordering constraint for ALTER TABLE ADD COLUMN options") {
