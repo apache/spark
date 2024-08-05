@@ -298,10 +298,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.util.ArtifactUtils$"),
 
       // Datasource V2 partition transforms
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.PartitionTransform"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.PartitionTransform$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform$"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.PartitionTransform$ExtractTransform")) ++
       mergeIntoWriterExcludeRules
