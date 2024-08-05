@@ -136,7 +136,6 @@ case class FunctionIdentifier(funcName: String, database: Option[String], catalo
 
 object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
-
   def apply(funcName: String, database: Option[String]): FunctionIdentifier =
     new FunctionIdentifier(funcName, database)
 }
