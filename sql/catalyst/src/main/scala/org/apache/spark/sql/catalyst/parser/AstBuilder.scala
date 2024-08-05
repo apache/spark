@@ -229,6 +229,23 @@ class AstBuilder extends DataTypeAstBuilder
     )
   }
 
+//  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
+//  : SearchedCaseStatement = {
+//    SearchedCaseStatement(
+//      whenExpressions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+//        SingleStatement(
+//          Project(
+//            Seq(Alias(expression(boolExpr), "condition")()),
+//            OneRowRelation()))
+//      }),
+//
+//    )
+//  }
+//
+//  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): AnyRef = {
+//
+//  }
+
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
       .orElse(Option(ctx.setResetStatement().asInstanceOf[ParserRuleContext]))
