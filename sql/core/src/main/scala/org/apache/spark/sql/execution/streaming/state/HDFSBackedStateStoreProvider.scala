@@ -287,7 +287,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
-          "HDFS",
+          "HDFS_STORE_PROVIDER",
           e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
@@ -957,7 +957,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
-          "HDFS",
+          "HDFS_STORE_PROVIDER",
           e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }

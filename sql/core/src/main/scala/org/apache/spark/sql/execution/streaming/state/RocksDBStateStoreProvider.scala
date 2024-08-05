@@ -379,7 +379,7 @@ private[sql] class RocksDBStateStoreProvider
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
-          "RocksDB",
+          "ROCKSDB_STORE_PROVIDER",
           e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
@@ -399,7 +399,7 @@ private[sql] class RocksDBStateStoreProvider
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
-          "RocksDB",
+          "ROCKSDB_STORE_PROVIDER",
           e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
@@ -478,7 +478,7 @@ private[sql] class RocksDBStateStoreProvider
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
-          "RocksDB",
+          "ROCKSDB_STORE_PROVIDER",
           e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }

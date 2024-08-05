@@ -2630,10 +2630,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def notEnoughMemoryToLoadStore(
     stateStoreId: String,
-    stateStoreType: String,
+    stateStoreProviderName: String,
     e: Throwable): Throwable = {
     new SparkException(
-      errorClass = s"CANNOT_LOAD_STATE_STORE.${stateStoreType.toUpperCase()}_OUT_OF_MEMORY",
+      errorClass = s"CANNOT_LOAD_STATE_STORE.${stateStoreProviderName}_OUT_OF_MEMORY",
       messageParameters = Map("stateStoreId" -> stateStoreId),
       cause = e
     )
