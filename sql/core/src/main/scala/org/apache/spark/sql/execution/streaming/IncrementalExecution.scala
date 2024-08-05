@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateStoreColFamilySchema}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -90,6 +90,13 @@ class IncrementalExecution(
    * for all operators other than TransformWithState.
    */
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
+
+  /**
+   * This map is used within the StatefulProcessorHandle for the TransformWithState operator.
+   * It is populated upon the first batch of each run, and passed into stateInfo of each
+   * subsequent batch.
+   */
+  private var columnFamilySchemas: Map[String, StateStoreColFamilySchema] = Map.empty
 
   /**
    * See [SPARK-18339]
@@ -245,12 +252,13 @@ class IncrementalExecution(
         statefulOp match {
           case tws: TransformWithStateExec =>
             // create map of columnFamilyName -> columnFamilyId
-            val columnFamilySchemas = schemaValidationResult.head.newSchemas
-            val columnFamilyIds = columnFamilySchemas.map { case schema =>
+            val newSchemas = schemaValidationResult.head.newSchemas
+            columnFamilySchemas = newSchemas.map { case schema =>
               schema.colFamilyName -> schema
             }.toMap
             val stateInfo = tws.getStateInfo
-            tws.copy(stateInfo = Some(stateInfo.copy(columnFamilyIds = columnFamilyIds)))
+            tws.copy(stateInfo = Some(
+              stateInfo.copy(colFamilySchemas = columnFamilySchemas)))
           case _ => statefulOp
         }
     }
@@ -531,9 +539,11 @@ class IncrementalExecution(
       if (isFirstBatch && currentBatchId != 0) {
         checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
-
+      logError(s"### BEFORE: currentBatchId: $currentBatchId," +
+        s" columnFamilySchemas: ${columnFamilySchemas}")
       val planWithVCF = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
-
+      logError(s"### AFTER: currentBatchId: $currentBatchId," +
+        s" columnFamilySchemas: ${columnFamilySchemas}")
       simulateWatermarkPropagation(planWithVCF)
       planWithVCF transform WatermarkPropagationRule.rule
     }

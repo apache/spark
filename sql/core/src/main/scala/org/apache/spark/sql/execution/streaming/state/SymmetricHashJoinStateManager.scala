@@ -485,13 +485,13 @@ class SymmetricHashJoinStateManager(
           "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, useColumnFamilies = false, columnFamilyIds = Map.empty,
+          stateInfo.get.storeVersion, useColumnFamilies = false,
           storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          useColumnFamilies = false, columnFamilyIds = Map.empty, storeConf, hadoopConf,
+          useColumnFamilies = false, storeConf, hadoopConf,
           useMultipleValuesPerKey = false)
         if (snapshotStartVersion.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {

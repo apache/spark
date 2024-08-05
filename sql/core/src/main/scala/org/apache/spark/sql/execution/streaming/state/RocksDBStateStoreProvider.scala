@@ -56,10 +56,6 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    override def columnFamilyIds: Map[String, Short] = colFamilySchemas.asScala.map {
-      case (name, schema) => name -> schema.colFamilyId
-    }.toMap
-
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         colFamilyId: Short,
@@ -335,19 +331,12 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  def colFamilyIds: Map[String, Short] = {
-    colFamilySchemas.asScala.map { case (name, schema) =>
-      name -> schema.colFamilyId
-    }.toMap
-  }
-
   override def init(
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilySchemas: Map[String, StateStoreColFamilySchema],
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
@@ -366,7 +355,6 @@ private[sql] class RocksDBStateStoreProvider
     var defaultColFamilyId: Option[Short] = None
     if (useColumnFamilies) {
       // put default column family only if useColumnFamilies are enabled
-      colFamilySchemas.putAll(columnFamilySchemas.asJava)
       colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, colFamilyId.shortValue())
       defaultColFamilyId = Option(colFamilyId.shortValue())
     }
@@ -464,8 +452,6 @@ private[sql] class RocksDBStateStoreProvider
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
   private val colFamilyNameToIdMap = new java.util.concurrent.ConcurrentHashMap[String, Short]
-
-  private val colFamilySchemas = new ConcurrentHashMap[String, StateStoreColFamilySchema]
 
   // TODO SPARK-48796 load column family id from state schema when restarting
   private val colFamilyId = new AtomicInteger(0)

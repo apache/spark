@@ -63,7 +63,6 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
@@ -72,7 +71,7 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
     super.init(
       stateStoreId,
       keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies,
-      columnFamilyIds, storeConfs, hadoopConf,
+      storeConfs, hadoopConf,
       useMultipleValuesPerKey)
   }
 
@@ -100,7 +99,6 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      columnFamilyIds: Map[String, StateStoreColFamilySchema],
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
@@ -486,7 +484,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       for (i <- 1 to 20) {
         val store = StateStore.get(storeProviderId1, keySchema, valueSchema,
           NoPrefixKeyStateEncoderSpec(keySchema),
-          latestStoreVersion, useColumnFamilies = false, columnFamilyIds = Map.empty,
+          latestStoreVersion, useColumnFamilies = false,
           storeConf, hadoopConf)
         put(store, "a", 0, i)
         store.commit()
@@ -542,7 +540,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           // Reload the store and verify
           StateStore.get(storeProviderId1, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
-            latestStoreVersion, useColumnFamilies = false, columnFamilyIds = Map.empty,
+            latestStoreVersion, useColumnFamilies = false,
             storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeProviderId1))
 
@@ -556,7 +554,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           // Reload the store and verify
           StateStore.get(storeProviderId1, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
-            latestStoreVersion, useColumnFamilies = false, columnFamilyIds = Map.empty,
+            latestStoreVersion, useColumnFamilies = false,
             storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeProviderId1))
 
@@ -566,7 +564,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
             .reportActiveInstance(storeProviderId1, "other-host", "other-exec", Seq.empty)
           StateStore.get(storeProviderId2, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
-            0, useColumnFamilies = false, columnFamilyIds = Map.empty,
+            0, useColumnFamilies = false,
             storeConf, hadoopConf)
           assert(!StateStore.isLoaded(storeProviderId1))
           assert(StateStore.isLoaded(storeProviderId2))
@@ -604,7 +602,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       for (i <- 1 to 20) {
         val store = StateStore.get(storeProviderId1, keySchema, valueSchema,
           NoPrefixKeyStateEncoderSpec(keySchema),
-          latestStoreVersion, useColumnFamilies = false, columnFamilyIds = Map.empty,
+          latestStoreVersion, useColumnFamilies = false,
           storeConf, hadoopConf)
         put(store, "a", 0, i)
         store.commit()
@@ -739,7 +737,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       StateStore.get(
         storeId, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema),
-        version = 0, useColumnFamilies = false, columnFamilyIds = Map.empty,
+        version = 0, useColumnFamilies = false,
         storeConf, hadoopConf)
     }
 
@@ -758,7 +756,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       StateStore.get(
         storeId, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema),
-        version = 1, useColumnFamilies = false, columnFamilyIds = Map.empty,
+        version = 1, useColumnFamilies = false,
         storeConf, hadoopConf)
     }
     remove(store1, _._1 == "a")
@@ -775,7 +773,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       StateStore.get(
         storeId, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema),
-        version = 2, useColumnFamilies = false, columnFamilyIds = Map.empty,
+        version = 2, useColumnFamilies = false,
         storeConf, hadoopConf)
     }
     store2.commit()
@@ -1037,7 +1035,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       valueSchema,
       keyStateEncoderSpec,
       useColumnFamilies = false,
-      columnFamilyIds = Map.empty,
+
       new StateStoreConf(sqlConf),
       hadoopConf)
     provider
@@ -1486,7 +1484,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             StateStore.get(
               storeId, keySchema, valueSchema,
                 NoPrefixKeyStateEncoderSpec(keySchema), -1, useColumnFamilies = false,
-                columnFamilyIds = Map.empty, storeConf, hadoopConf)
+                 storeConf, hadoopConf)
           }
           checkError(
             e,
@@ -1501,7 +1499,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
               storeId, keySchema, valueSchema,
               NoPrefixKeyStateEncoderSpec(keySchema),
               1, useColumnFamilies = false,
-              columnFamilyIds = Map.empty,
+
               storeConf, hadoopConf)
           }
           checkError(
@@ -1519,7 +1517,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             storeId, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
             0, useColumnFamilies = false,
-            columnFamilyIds = Map.empty,
+
             storeConf, hadoopConf)
           assert(store0.version === 0)
           put(store0, "a", 0, 1)
@@ -1529,7 +1527,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             storeId, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
             1, useColumnFamilies = false,
-            columnFamilyIds = Map.empty,
+
             storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
           assert(store1.version === 1)
@@ -1540,7 +1538,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             storeId, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
             0, useColumnFamilies = false,
-            columnFamilyIds = Map.empty,
+
             storeConf, hadoopConf)
           assert(store0reloaded.version === 0)
           assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
@@ -1553,7 +1551,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             storeId, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
             1, useColumnFamilies = false,
-            columnFamilyIds = Map.empty,
+
             storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
           assert(store1reloaded.version === 1)
@@ -1656,7 +1654,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         StateStore.get(
           provider1Id,
           keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, useColumnFamilies = false, columnFamilyIds = Map.empty,
+          0, useColumnFamilies = false,
           new StateStoreConf(sqlConf), new Configuration()
         )
 
@@ -1664,14 +1662,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         StateStore.get(
           provider1Id,
           keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, useColumnFamilies = false, columnFamilyIds = Map.empty,
+          0, useColumnFamilies = false,
           new StateStoreConf(sqlConf), new Configuration()
         )
 
         StateStore.get(
           provider1Id,
           keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, useColumnFamilies = false, columnFamilyIds = Map.empty,
+          0, useColumnFamilies = false,
           new StateStoreConf(sqlConf), new Configuration()
         )
 

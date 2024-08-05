@@ -468,7 +468,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeConf = new StateStoreConf(new SQLConf())
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = false, columnFamilyIds = Map.empty, storeConf, new Configuration)
+      useColumnFamilies = false, storeConf, new Configuration)
     provider
   }
 
@@ -485,7 +485,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = useColumnFamilies, columnFamilySchemas = Map.empty,
+      useColumnFamilies = useColumnFamilies,
       storeConf, new Configuration, useMultipleValuesPerKey = useMultipleValuesPerKey)
     provider
   }

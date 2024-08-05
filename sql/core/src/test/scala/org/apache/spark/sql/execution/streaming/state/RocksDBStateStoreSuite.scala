@@ -1292,7 +1292,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       sqlConf: Option[SQLConf] = None,
       conf: Configuration = new Configuration,
       useColumnFamilies: Boolean = false,
-      columnFamilyIds: Map[String, StateStoreColFamilySchema] = Map.empty,
       useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
@@ -1301,7 +1300,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       valueSchema,
       keyStateEncoderSpec,
       useColumnFamilies,
-      columnFamilyIds,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
       conf,
       useMultipleValuesPerKey)

@@ -507,7 +507,6 @@ case class TransformWithStateExec(
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
-              columnFamilyIds = getStateInfo.columnFamilyIds,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
             )
@@ -528,8 +527,7 @@ case class TransformWithStateExec(
           NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
-          useColumnFamilies = true,
-          columnFamilyIds = getStateInfo.columnFamilyIds
+          useColumnFamilies = true
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
             processData(store, singleIterator)
@@ -580,8 +578,7 @@ case class TransformWithStateExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true,
-      columnFamilyIds = getStateInfo.columnFamilyIds)
+      useMultipleValuesPerKey = true)
 
     val store = stateStoreProvider.getStore(0)
     val outputIterator = f(store)
@@ -599,9 +596,12 @@ case class TransformWithStateExec(
    */
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val columnFamilyIds = getStateInfo.colFamilySchemas.map { case (name, schema) =>
+      name -> schema.colFamilyId
+    }
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, store.columnFamilyIds)
+      isStreaming, batchTimestampMs, metrics, columnFamilyIds)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -614,8 +614,12 @@ case class TransformWithStateExec(
       childDataIterator: Iterator[InternalRow],
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
-    val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics, store.columnFamilyIds)
+    val columnFamilyIds = getStateInfo.colFamilySchemas.map { case (name, schema) =>
+      name -> schema.colFamilyId
+    }
+    val processorHandle = new StatefulProcessorHandleImpl(
+      store, getStateInfo.queryRunId, keyEncoder, timeMode,
+      isStreaming, batchTimestampMs, metrics, columnFamilyIds)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -700,7 +704,7 @@ object TransformWithStateExec {
       operatorId = 0,
       storeVersion = 0,
       numPartitions = shufflePartitions,
-      columnFamilyIds = columnFamilySchemasWithIds
+      colFamilySchemas = columnFamilySchemasWithIds
     )
 
     new TransformWithStateExec(

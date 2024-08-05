@@ -91,7 +91,7 @@ abstract class StatePartitionReaderBase(
 
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
-      useColumnFamilies = false, columnFamilyIds = Map.empty, storeConf,
+      useColumnFamilies = false, storeConf,
       hadoopConf.value, useMultipleValuesPerKey = false)
   }
 
