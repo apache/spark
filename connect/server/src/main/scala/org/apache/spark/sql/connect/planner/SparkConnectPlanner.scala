@@ -47,7 +47,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, Task
 import org.apache.spark.sql.{withOrigin, Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -65,7 +65,6 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -1619,26 +1618,19 @@ class SparkConnectPlanner(
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     } else {
-      // In order to retain backwards compatibility we allow functions registered in the
-      // `system`.`internal` namespace to looked by their name (instead of their FQN).
-      val builtInName = FunctionIdentifier(fun.getFunctionName)
-      val functionRegistry = session.sessionState.functionRegistry
-      val internalName = builtInName.copy(
-        database = Option(CatalogManager.INTERNAL_NAMESPACE),
-        catalog = Option(CatalogManager.SYSTEM_CATALOG_NAME))
-      // We need to drop the global built-ins because we can't parse symbolic names
-      // (e.g. `+`, `-`, ...).
-      val names = if (functionRegistry.functionExists(builtInName)) {
-        builtInName.nameParts
-      } else if (functionRegistry.functionExists(internalName)) {
-        internalName.nameParts
-      } else {
-        parser.parseMultipartIdentifier(fun.getFunctionName)
-      }
+      // Spark Connect historically used the global namespace to lookup a couple of internal
+      // functions (e.g. product, collect_top_k, unwrap_udt, ...). In Spark 4 we moved these
+      // functions to a dedicated namespace, however in order to stay backwards compatible we still
+      // need to allow connect to use the global namespace. Here we check if a function is
+      // registered in the internal function registry, and we reroute the lookup to the internal
+      // registry.
+      val name = fun.getFunctionName
+      val internal = FunctionRegistry.internal.functionExists(FunctionIdentifier(name))
       UnresolvedFunction(
-        names,
+        name :: Nil,
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = fun.getIsDistinct)
+        isDistinct = fun.getIsDistinct,
+        isInternal = internal)
     }
   }
 
@@ -2049,7 +2041,7 @@ class SparkConnectPlanner(
   @scala.annotation.tailrec
   private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
     case map: CreateMap => ExprUtils.convertToMapData(map)
-    case UnresolvedFunction(Seq("map"), args, _, _, _, _) =>
+    case UnresolvedFunction(Seq("map"), args, _, _, _, _, _) =>
       extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
   }

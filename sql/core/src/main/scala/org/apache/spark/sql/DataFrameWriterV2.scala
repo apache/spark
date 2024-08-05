@@ -21,8 +21,8 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedIdentifier, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -89,13 +89,13 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
 
     val asTransforms = (column +: columns).map(_.expr).map {
-      case Years(attr: Attribute) =>
+      case PartitionTransform.YEARS(Seq(attr: Attribute)) =>
         LogicalExpressions.years(ref(attr.name))
-      case Months(attr: Attribute) =>
+      case PartitionTransform.MONTHS(Seq(attr: Attribute)) =>
         LogicalExpressions.months(ref(attr.name))
-      case Days(attr: Attribute) =>
+      case PartitionTransform.DAYS(Seq(attr: Attribute)) =>
         LogicalExpressions.days(ref(attr.name))
-      case Hours(attr: Attribute) =>
+      case PartitionTransform.HOURS(Seq(attr: Attribute)) =>
         LogicalExpressions.hours(ref(attr.name))
       case Bucket(Literal(numBuckets: Int, IntegerType), attr: Attribute) =>
         LogicalExpressions.bucket(numBuckets, Array(ref(attr.name)))
@@ -233,6 +233,22 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       writeOptions = options.toMap,
       orCreate = orCreate))
   }
+}
+
+private object PartitionTransform {
+  class ExtractTransform(name: String) {
+    private val NAMES = Seq(name)
+
+    def unapply(e: Expression): Option[Seq[Expression]] = e match {
+      case UnresolvedFunction(NAMES, children, false, None, false, Nil, true) => Option(children)
+      case _ => None
+    }
+  }
+
+  val HOURS = new ExtractTransform("hours")
+  val DAYS = new ExtractTransform("days")
+  val MONTHS = new ExtractTransform("months")
+  val YEARS = new ExtractTransform("years")
 }
 
 /**
