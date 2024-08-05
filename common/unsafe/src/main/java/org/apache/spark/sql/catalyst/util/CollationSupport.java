@@ -469,15 +469,15 @@ public final class CollationSupport {
       }
     }
     public static String genCode(final String string, final String delimiter,
-        final int count, final int collationId) {
+        final String count, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.SubstringIndex.exec";
       if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s, %d)", string, delimiter, count);
+        return String.format(expr + "Binary(%s, %s, %s)", string, delimiter, count);
       } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s, %d)", string, delimiter, count);
+        return String.format(expr + "Lowercase(%s, %s, %s)", string, delimiter, count);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d, %d)", string, delimiter, count, collationId);
+        return String.format(expr + "ICU(%s, %s, %s, %d)", string, delimiter, count, collationId);
       }
     }
     public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter,
@@ -490,8 +490,7 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
-      return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
-        collationId);
+      return CollationAwareUTF8String.subStringIndex(string, delimiter, count, collationId);
     }
   }
 
