@@ -578,7 +578,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         }
         else {
           assert(utf8BinaryResult.getOrElse(new Exception()).getClass
-            == utf8BinaryResult.getOrElse(new Exception()).getClass)
+            == utf8LcaseResult.getOrElse(new Exception()).getClass)
         }
       }
     }
