@@ -1635,6 +1635,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_PARTITION_FILTER_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
+      .doc(s"Whether to filter partitions when running storage-partition join. " +
+        s"When enabled, partitions without matches on the other side can be omitted for " +
+        s"scanning, if allowed by the join type. This config requires both " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
+        s"enabled.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -4603,6 +4614,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_DUPLICATE_BETWEEN_INPUT =
+    buildConf("spark.sql.legacy.duplicateBetweenInput")
+      .internal()
+      .doc("When true, we use legacy between implementation. This is a flag that fixes a " +
+        "problem introduced by a between optimization, see ticket SPARK-49063.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
@@ -5985,6 +6005,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def legacyDuplicateBetweenInput: Boolean =
+    getConf(SQLConf.LEGACY_DUPLICATE_BETWEEN_INPUT)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
