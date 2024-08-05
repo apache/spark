@@ -172,22 +172,22 @@ class StateSchemaCompatibilityChecker(
       ignoreValueSchema: Boolean,
       stateSchemaVersion: Int): (Boolean, List[StateStoreColFamilySchema]) = {
     val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
-    val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName).zipWithIndex.map {
-      case (schema, index) =>
-        schema.copy(colFamilyId = (index + 1).toShort)
-    }
     // assign colFamilyIds based on position in list
     var maxId: Short = existingStateSchemaList.map(_.colFamilyId).maxOption.getOrElse(0)
 
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
+      val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName).zipWithIndex.map {
+        case (schema, index) =>
+          schema.copy(colFamilyId = (index + 1).toShort)
+      }
       createSchemaFile(newStateSchemaList, stateSchemaVersion)
       (true, newStateSchemaList)
     } else {
       // validate if the new schema is compatible with the existing schema
-      val newList = existingStateSchemaList.map { existingSchema =>
-        newStateSchemaList.find(_.colFamilyName == existingSchema.colFamilyName) match {
-          case Some(newSchema) =>
+      val newList = newStateSchema.map { newSchema =>
+        existingStateSchemaList.find(_.colFamilyName == newSchema.colFamilyName) match {
+          case Some(existingSchema) =>
             if (check(existingSchema, newSchema, ignoreValueSchema)) {
               maxId = (maxId + 1).toShort
               newSchema.copy(colFamilyId = maxId)
@@ -195,7 +195,8 @@ class StateSchemaCompatibilityChecker(
               existingSchema
             }
           case None =>
-            existingSchema
+            maxId = (maxId + 1).toShort
+            newSchema.copy(colFamilyId = maxId)
         }
       }
 
