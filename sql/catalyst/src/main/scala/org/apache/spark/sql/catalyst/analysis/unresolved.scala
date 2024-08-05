@@ -60,19 +60,13 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
-    otherPlans: Seq[LogicalPlan],
+    children: Seq[LogicalPlan],
     planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
   extends UnresolvedNode {
 
   def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
   }
-
-  def updateOtherPlans(plans: Seq[LogicalPlan]): PlanWithUnresolvedIdentifier = {
-    PlanWithUnresolvedIdentifier(identifierExpr, plans, planBuilder)
-  }
-
-  override def children: Seq[LogicalPlan] = otherPlans
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
 
