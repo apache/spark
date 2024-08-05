@@ -3688,8 +3688,8 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the routine <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
+      "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
+      "Choose a different name, drop or replace the existing <existingRoutineType>, or add the IF NOT EXISTS clause to tolerate a pre-existing <newRoutineType>."
     ],
     "sqlState" : "42723"
   },
