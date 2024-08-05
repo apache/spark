@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Murmur3HashFunction, RowOrdering}
-import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.NonFateSharingCache
@@ -85,22 +84,25 @@ object InternalRowComparableWrapper {
   }
 
   def mergePartitions(
-      leftPartitioning: KeyGroupedPartitioning,
-      rightPartitioning: KeyGroupedPartitioning,
-      partitionExpression: Seq[Expression]): Seq[InternalRow] = {
+      leftPartitioning: Seq[InternalRow],
+      rightPartitioning: Seq[InternalRow],
+      partitionExpression: Seq[Expression],
+      intersect: Boolean = false): Seq[InternalRowComparableWrapper] = {
     val partitionDataTypes = partitionExpression.map(_.dataType)
-    val partitionsSet = new mutable.HashSet[InternalRowComparableWrapper]
-    leftPartitioning.partitionValues
+    val leftPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
+    leftPartitioning
       .map(new InternalRowComparableWrapper(_, partitionDataTypes))
-      .foreach(partition => partitionsSet.add(partition))
-    rightPartitioning.partitionValues
+      .foreach(partition => leftPartitionSet.add(partition))
+    val rightPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
+    rightPartitioning
       .map(new InternalRowComparableWrapper(_, partitionDataTypes))
-      .foreach(partition => partitionsSet.add(partition))
-    // SPARK-41471: We keep to order of partitions to make sure the order of
-    // partitions is deterministic in different case.
-    val partitionOrdering: Ordering[InternalRow] = {
-      RowOrdering.createNaturalAscendingOrdering(partitionDataTypes)
+      .foreach(partition => rightPartitionSet.add(partition))
+
+    val result = if (intersect) {
+      leftPartitionSet.intersect(rightPartitionSet)
+    } else {
+      leftPartitionSet.union(rightPartitionSet)
     }
-    partitionsSet.map(_.row).toSeq.sorted(partitionOrdering)
+    result.toSeq
   }
 }
