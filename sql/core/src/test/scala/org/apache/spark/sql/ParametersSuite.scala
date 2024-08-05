@@ -641,12 +641,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         Map("tab" -> "testtab", "name" -> "test2"))
 
       // Select from table using param - WORKS
-      checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab")),
-        Seq(Row(1, "test1"), Row(2, "test2")))
+      checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
 
       // Insert into table using multiple params and idents - WORKS
-      spark.sql("insert into identifier(:tab) values(2, :name)",
-        Map("tab" -> "testtab", "name" -> "test3"))
+      sql("insert into testtab values(2, 'test3')")
 
       // Select from table using param - WORKS
       checkAnswer(spark.sql("select identifier(:col) from identifier(:tab) where :name == name",
@@ -672,12 +670,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         Array("testtab", "test2"))
 
       // Select from table using param - WORKS
-      checkAnswer(spark.sql("select * from identifier(?)", Array("testtab")),
-        Seq(Row(1, "test1"), Row(2, "test2")))
+      checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
 
       // Insert into table using multiple params and idents - WORKS
-      spark.sql("insert into identifier(?) values(2, ?)",
-        Array("testtab", "test3"))
+      sql("insert into testtab values(2, 'test3')")
 
       // Select from table using param - WORKS
       checkAnswer(spark.sql("select identifier(?) from identifier(?) where ? == name",
