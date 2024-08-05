@@ -29,8 +29,6 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util._
-import org.apache.spark.util.ArrayImplicits._
-
 
 /**
  * :: DeveloperApi ::
@@ -272,8 +270,17 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums: Seq[AccumulatorV2[_, _]] = withReadLock {
-    _externalAccums.toArray.toImmutableArraySeq
+  /**
+   * Perform an `op` conversion on the `_externalAccums` within the read lock.
+   *
+   * Note `op` is expected to not modify the `_externalAccums` and not being
+   * lazy evaluation for safe concern since `ArrayBuffer` is lazily evaluated.
+   * And we intentionally keeps `_externalAccums` as mutable instead of converting
+   * it to immutable for the performance concern.
+   */
+  private[spark] def withExternalAccums[T](op: ArrayBuffer[AccumulatorV2[_, _]] => T)
+    : T = withReadLock {
+    op(_externalAccums)
   }
 
   private def withReadLock[B](fn: => B): B = {
@@ -298,7 +305,9 @@ class TaskMetrics private[spark] () extends Serializable {
     _externalAccums += a
   }
 
-  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
+  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = withReadLock {
+    internalAccums ++ _externalAccums
+  }
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
     // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
