@@ -270,6 +270,14 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
+  /**
+   * Perform an `op` conversion on the `_externalAccums` within the read lock.
+   *
+   * Note `op` is expected to not modify the `_externalAccums` and not being
+   * lazy evaluation for safe concern since `ArrayBuffer` is lazily evaluated.
+   * And we intentionally keeps `_externalAccums` as mutable instead of converting
+   * it to immutable for the performance concern.
+   */
   private[spark] def withExternalAccums[T](op: ArrayBuffer[AccumulatorV2[_, _]] => T)
     : T = withReadLock {
     op(_externalAccums)
