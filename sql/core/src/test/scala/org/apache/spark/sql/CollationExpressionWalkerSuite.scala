@@ -291,7 +291,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def hasStringType(inputType: AbstractDataType): Boolean = {
     inputType match {
-      case _: StringType | StringTypeAnyCollation | StringTypeUTF8Lcase | AnyDataType =>
+      case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
         true
       case ArrayType => true
       case MapType => true
