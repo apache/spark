@@ -801,7 +801,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
         }
-        if (SQLConf.get.optimizeBetween && currentChild.output.contains(origOutput)) {
+        if (!SQLConf.get.legacyDuplicateBetweenInput && currentChild.output.contains(origOutput)) {
           // If we had multiple of the same scalar subqueries they will resolve to the same aliases.
           currentChild
         } else if (resultWithZeroTups.isEmpty) {

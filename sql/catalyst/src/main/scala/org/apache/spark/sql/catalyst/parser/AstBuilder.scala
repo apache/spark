@@ -2174,7 +2174,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
-        if (SQLConf.get.optimizeBetween) {
+        if (!SQLConf.get.legacyDuplicateBetweenInput) {
           invertIfNotDefined(UnresolvedFunction(
             "between", Seq(e, expression(ctx.lower), expression(ctx.upper)), isDistinct = false))
         } else {
