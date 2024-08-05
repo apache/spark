@@ -203,12 +203,18 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       Seq(sqlQuery, dfQuery).foreach { query =>
         checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
       }
+    }
+  }
 
-      assertThrows[AnalysisException] {
-        sql(s"SELECT $sbq.index FROM (SELECT id FROM $tbl) $sbq")
-      }
-      assertThrows[AnalysisException] {
-        spark.table(tbl).select($"id").as(sbq).select(s"$sbq.index")
+  test("SPARK-49110: propagate metadata columns through SubqueryAlias if child is project node") {
+    val sbq = "sbq"
+    withTable(tbl) {
+      prepareTable()
+      val sqlQuery = sql(s"SELECT id, $sbq.index FROM (SELECT id FROM $tbl) $sbq")
+      val dfQuery = spark.table(tbl).select($"id").as(sbq).select("id", s"$sbq.index")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, 0), Row(2, 0), Row(3, 0)))
       }
     }
   }
