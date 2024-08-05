@@ -507,17 +507,6 @@ public final class CollationSupport {
         return execICU(source, dict, collationId);
       }
     }
-    public static String genCode(final String source, final String dict, final int collationId) {
-      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      String expr = "CollationSupport.EndsWith.exec";
-      if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s)", source, dict);
-      } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s)", source, dict);
-      } else {
-        return String.format(expr + "ICU(%s, %s, %d)", source, dict, collationId);
-      }
-    }
     public static UTF8String execBinary(final UTF8String source, Map<String, String> dict) {
       return source.translate(dict);
     }
