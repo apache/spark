@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
@@ -39,7 +40,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Expre
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, StringUtils}
+import org.apache.spark.sql.catalyst.util.CollationFactory.Collation
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -51,6 +53,8 @@ import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
+  val DEFAULT_COLLATION_CATALOG = "SYSTEM"
+  val DEFAULT_COLLATION_SCHEMA = "BUILTIN"
 }
 
 /**
@@ -1890,6 +1894,14 @@ class SessionCatalog(
   def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
     (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(isTemporaryFunction)
+  }
+
+  /**
+   * List all built-in collation's meta with the given pattern.
+   */
+  def listCollationMetas(pattern: String): Seq[Collation.Meta] = {
+    CollationFactory.listCollationMetas(
+      DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA, pattern).asScala.toSeq
   }
 
   // -----------------

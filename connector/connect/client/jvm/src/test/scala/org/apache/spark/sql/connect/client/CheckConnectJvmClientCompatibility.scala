@@ -307,6 +307,12 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
 
+      // New public APIs added in the Catalog
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.catalog.Catalog.listCollations"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.catalog.CollationMetadata"),
+
       // Artifact Manager
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager"),
@@ -345,6 +351,10 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
       ),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.SessionCleaner"),
+
+      // New public APIs added in the Catalog
+      ProblemFilters.exclude[ReversedMissingMethodProblem](
+        "org.apache.spark.sql.catalog.Catalog.listCollations"),
 
       // private
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.CleanupTask"),
