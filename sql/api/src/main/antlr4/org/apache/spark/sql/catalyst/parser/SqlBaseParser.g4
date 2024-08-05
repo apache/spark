@@ -99,6 +99,13 @@ iterateStatement
     : ITERATE multipartIdentifier
     ;
 
+caseStatement
+    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodes+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                     #searchedCaseStatement
+    | CASE value=expression (WHEN whenValue=expression THEN conditionalBodes+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                 #simpleCaseStatement
+    ;
+
 singleStatement
     : (statement|setResetStatement) SEMICOLON* EOF
     ;
