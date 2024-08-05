@@ -106,13 +106,13 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
       }
 
       val checkpointLocation = options.get("path")
-      var batchId = Option(options.get("batchId")).map(_.toLong)
+      val batchIdOpt = Option(options.get("batchId")).map(_.toLong)
       // if a batchId is provided, use it. Otherwise, use the last committed batch. If there is no
       // committed batch, use batchId 0.
-      batchId = Some(batchId.getOrElse(OperatorStateMetadataUtils
-        .getLastCommittedBatch(SparkSession.active, checkpointLocation).getOrElse(0L)))
+      val batchId = batchIdOpt.getOrElse(OperatorStateMetadataUtils
+        .getLastCommittedBatch(SparkSession.active, checkpointLocation).getOrElse(0L))
 
-      new StateMetadataScan(options.get("path"), batchId.get)
+      new StateMetadataScan(options.get("path"), batchId)
     }
   }
 
@@ -219,6 +219,7 @@ class StateMetadataPartitionReader(
       }
       val reader = OperatorStateMetadataReader.createReader(
         operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId)
+      require(reader.read().isDefined)
       reader.read().get
     }
   }

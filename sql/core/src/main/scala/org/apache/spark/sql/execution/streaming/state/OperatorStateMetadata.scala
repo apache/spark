@@ -173,18 +173,13 @@ object OperatorStateMetadataUtils extends Logging {
   def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
     val offsetLog = new OffsetSeqLog(session,
       new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
-    offsetLog.getLatest() match {
-      case Some((lastId, _)) => lastId
-      case None => throw StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation)
-    }
+    offsetLog.getLatest().map(_._1).getOrElse(throw
+      StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
   }
 
   def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
     val commitLog = new CommitLog(session, new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
-    commitLog.getLatest() match {
-      case Some((lastId, _)) => Some(lastId)
-      case None => None
-    }
+    commitLog.getLatest().map(_._1)
   }
 }
 
@@ -331,7 +326,7 @@ class OperatorStateMetadataV2Reader(
 
   // List the available offsets in the offset directory
   private def listOffsets(baseCheckpointDir: Path): Array[Long] = {
-    val offsetLog = new Path(baseCheckpointDir, "offsets")
+    val offsetLog = new Path(baseCheckpointDir, DIR_NAME_OFFSETS)
     val fm = CheckpointFileManager.create(offsetLog, hadoopConf)
     if (!fm.exists(offsetLog)) {
       return Array.empty

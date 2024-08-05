@@ -64,8 +64,8 @@ object StateDataSourceErrors {
   }
 
   def failedToReadOperatorMetadata(
-    checkpointLocation: String,
-    batchId: Long): StateDataSourceException = {
+      checkpointLocation: String,
+      batchId: Long): StateDataSourceException = {
     new StateDataSourceReadOperatorMetadataFailure(checkpointLocation, batchId)
   }
 
