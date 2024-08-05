@@ -40,8 +40,8 @@ object ExprUtils extends QueryErrorsBase {
         case s: UTF8String if s != null =>
           val dataType = DataType.parseTypeWithFallback(
             s.toString,
-            DataType.fromJson,
-            DataType.fromDDL)
+            DataType.fromDDL,
+            DataType.fromJson)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 

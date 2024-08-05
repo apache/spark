@@ -148,7 +148,8 @@ object DataType {
         try {
           fallbackParser(schema)
         } catch {
-          case NonFatal(_) =>
+          case NonFatal(suppressed) =>
+            e.addSuppressed(suppressed)
             if (e.isInstanceOf[SparkThrowable]) {
               throw e
             }
