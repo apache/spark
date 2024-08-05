@@ -1583,7 +1583,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }
       checkError(e,
         errorClass = "ROUTINE_ALREADY_EXISTS",
-        parameters = Map("routineName" -> "`temp1`"))
+        parameters = Map("routineName" -> "`temp1`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"))
       // Temporary function is overridden
       catalog.registerFunction(
         newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))
