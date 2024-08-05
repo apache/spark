@@ -393,9 +393,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
             overwrite = false,
             ifPartitionNotExists,
             byName)
-          val optimizeInsertIntoValues = conf.getConf(
-            SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER)
-          if (optimizeInsertIntoValues) {
+          if (conf.getConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER)) {
             EvaluateUnresolvedInlineTable.evaluate(insertIntoStatement)
           } else {
             insertIntoStatement

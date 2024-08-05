@@ -977,14 +977,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-    val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
+  val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
     buildConf("spark.sql.parser.optimizeInsertIntoValuesParser")
       .internal()
-      .doc(
-        """
-          | Controls whether we optimize the ASTree that gets generated when parsing
-          | insert into ... values DML statements.
-          |""")
+      .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
+        "`insert into ... values` DML statements.")
       .booleanConf
       .createWithDefault(true)
 

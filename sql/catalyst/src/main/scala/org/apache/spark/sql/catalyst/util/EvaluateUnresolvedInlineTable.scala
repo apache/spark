@@ -42,8 +42,7 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
         validateInputDimension(table)
         validateInputEvaluable(table)
         val resolvedTable = findCommonTypesAndCast(table)
-        val nestedRes = earlyEvalIfPossible(resolvedTable)
-        nestedRes
+        earlyEvalIfPossible(resolvedTable)
     }
   }
 

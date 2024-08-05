@@ -23,12 +23,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
-
-  /**
-   * SQL parser.
-   */
-  private lazy val parser = spark.sessionState.sqlParser
+class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSession {
 
   /**
    * Generate a random table name.
@@ -37,25 +32,25 @@ class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
     s"test_${UUID.randomUUID()}".replaceAll("-", "_")
 
   /**
-   * Create a table with the given data and format. Return the randomly generated table name.
+   * Create a table using a randomly generated name and return that name.
    */
   private def createTable: String = {
     val tableName = getRandomTableName()
     spark.sql(s"""
       CREATE TABLE $tableName (
         id INT,
-        first_name VARCHAR(50),
-        last_name VARCHAR(50),
-        age INT,
-        gender CHAR(1),
-        email VARCHAR(100),
-        phone_number VARCHAR(20),
-        address VARCHAR(200),
-        city VARCHAR(50),
-        state VARCHAR(50),
-        zip_code VARCHAR(10),
-        country VARCHAR(50),
-        registration_date String)
+        first_name VARCHAR(50) DEFAULT 'John',
+        last_name VARCHAR(50) DEFAULT 'Doe',
+        age INT DEFAULT 25,
+        gender CHAR(1) DEFAULT 'M',
+        email VARCHAR(100) DEFAULT 'john.doe@databricks.com',
+        phone_number VARCHAR(20) DEFAULT '555-555-5555',
+        address VARCHAR(200) DEFAULT '123 John Doe St',
+        city VARCHAR(50) DEFAULT 'John Doe City',
+        state VARCHAR(50) DEFAULT 'CA',
+        zip_code VARCHAR(10) DEFAULT '12345',
+        country VARCHAR(50) DEFAULT 'USA',
+        registration_date String DEFAULT '2021-01-01')
     """)
     tableName
   }
@@ -176,6 +171,67 @@ class ParsingImprovementsSuite extends QueryTest with SharedSparkSession {
             val df1 = spark.table(firstTableName.get)
             val df2 = spark.table(tableName)
             assert(areTablesEqual(df1, df2), "The tables should be equal.")
+        }
+      }
+    }
+  }
+
+  test("Insert Into Values with defaults.") {
+    var firstTableName: Option[String] = None
+    Seq(true, false).foreach { insertIntoValueImprovementEnabled =>
+      // Create a table with default values specified.
+      val tableName = createTable
+
+      // Set the feature flag for the InsertIntoValues improvement.
+      withSQLConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
+        insertIntoValueImprovementEnabled.toString) {
+
+        // Generate an INSERT INTO VALUES statement that omits all columns
+        // containing a DEFAULT value.
+        spark.sql(s"INSERT INTO $tableName (id) VALUES (1);")
+
+        // Verify that the default values are applied correctly.
+        val resultRow = spark.sql(
+          s"""
+        SELECT
+          first_name,
+          last_name,
+          gender,
+          email,
+          phone_number,
+          address,
+          city,
+          state,
+          zip_code,
+          country,
+          registration_date
+        FROM $tableName WHERE id = 1""").collect()
+
+        // Checking that the default values are applied correctly.
+        assert(resultRow.head.getString(0) == "John", "Default name should be 'John'")
+        assert(resultRow.head.getString(1) == "Doe", "Default last name should be 'Doe'")
+        assert(resultRow.head.getString(2) == "M", "Default gender should be 'M'")
+        assert(resultRow.head.getString(3) == "john.doe@databricks.com",
+          "Default email should be 'john.doe@databricks.com'")
+        assert(resultRow.head.getString(4) == "555-555-5555",
+          "Default phone number should be '555-555-5555'")
+        assert(resultRow.head.getString(5) == "123 John Doe St",
+          "Default address should be '123 John Doe St'")
+        assert(resultRow.head.getString(6) == "John Doe City",
+          "Default city should be 'John Doe City'")
+        assert(resultRow.head.getString(7) == "CA", "Default state should be 'CA'")
+        assert(resultRow.head.getString(8) == "12345", "Default zip code should be '12345'")
+        assert(resultRow.head.getString(9) == "USA", "Default country should be 'USA'")
+        assert(resultRow.head.getString(10) == "2021-01-01",
+          "Default registration date should be '2021-01-01'")
+
+        // Check that both insertions will produce equivalent tables.
+        if (firstTableName.isEmpty) {
+          firstTableName = Some(tableName)
+        } else {
+          val df1 = spark.table(firstTableName.get)
+          val df2 = spark.table(tableName)
+          assert(areTablesEqual(df1, df2), "The tables should be equal.")
         }
       }
     }
