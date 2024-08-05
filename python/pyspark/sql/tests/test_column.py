@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+from enum import Enum
 from itertools import chain
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
@@ -53,8 +54,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": "int"},
         )
 
         class A:
@@ -68,8 +69,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": "NoneType"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": "NoneType"},
         )
         self.assertRaises(TypeError, lambda: to_json(1))
 
@@ -94,6 +95,14 @@ class ColumnTestsMixin:
             cs.startswith("a"),
             cs.endswith("a"),
             ci.eqNullSafe(cs),
+            sf.col("b") & sf.lit(True),
+            sf.col("b") & True,
+            sf.lit(True) & sf.col("b"),
+            True & sf.col("b"),
+            sf.col("b") | sf.lit(True),
+            sf.col("b") | True,
+            sf.lit(True) | sf.col("b"),
+            True | sf.col("b"),
         )
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
@@ -177,8 +186,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -186,8 +195,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
         )
 
     def test_drop_fields(self):
@@ -224,8 +233,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
-            message_parameters={"arg_name": "metadata"},
+            errorClass="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+            messageParameters={"arg_name": "metadata"},
         )
 
     def test_cast_str_representation(self):
@@ -245,8 +254,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "dataType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "dataType", "arg_type": "int"},
         )
 
     def test_over_negative(self):
@@ -255,8 +264,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_WINDOWSPEC",
-            message_parameters={"arg_name": "window", "arg_type": "int"},
+            errorClass="NOT_WINDOWSPEC",
+            messageParameters={"arg_name": "window", "arg_type": "int"},
         )
 
     def test_eqnullsafe_classmethod_usage(self):
@@ -270,6 +279,70 @@ class ColumnTestsMixin:
         expression = sf.expr("foo")
         when_cond = sf.when(expression, sf.lit(None))
         self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
+
+    def test_enum_literals(self):
+        class IntEnum(Enum):
+            X = 1
+            Y = 2
+            Z = 3
+
+        class BoolEnum(Enum):
+            T = True
+
+        class StrEnum(Enum):
+            X = "x"
+
+        id = sf.col("id")
+        s = sf.col("s")
+        b = sf.col("b")
+
+        cols, expected = list(
+            zip(
+                (id + IntEnum.X, 2),
+                (id - IntEnum.X, 0),
+                (id * IntEnum.X, 1),
+                (id / IntEnum.X, 1.0),
+                (id % IntEnum.X, 0),
+                (IntEnum.X + id, 2),
+                (IntEnum.X - id, 0),
+                (IntEnum.X * id, 1),
+                (IntEnum.X / id, 1.0),
+                (IntEnum.X % id, 0),
+                (id**IntEnum.X, 1.0),
+                (IntEnum.X**id, 1, 0),
+                (id == IntEnum.X, True),
+                (IntEnum.X == id, True),
+                (id < IntEnum.X, False),
+                (id <= IntEnum.X, True),
+                (id >= IntEnum.X, True),
+                (id > IntEnum.X, False),
+                (id.eqNullSafe(IntEnum.X), True),
+                (b & BoolEnum.T, True),
+                (b | BoolEnum.T, True),
+                (BoolEnum.T & b, True),
+                (BoolEnum.T | b, True),
+                (id.bitwiseOR(IntEnum.X), 1),
+                (id.bitwiseAND(IntEnum.X), 1),
+                (id.bitwiseXOR(IntEnum.X), 0),
+                (id.contains(IntEnum.X), True),
+                (s.startswith(StrEnum.X), False),
+                (s.endswith(StrEnum.X), False),
+                (s.like(StrEnum.X), False),
+                (s.rlike(StrEnum.X), False),
+                (s.ilike(StrEnum.X), False),
+                (s.substr(IntEnum.X, IntEnum.Y), "1"),
+                (sf.when(b, IntEnum.X).when(~b, IntEnum.Y).otherwise(IntEnum.Z), 1),
+            )
+        )
+        result = (
+            self.spark.range(1, 2)
+            .select(id, id.astype("string").alias("s"), id.astype("boolean").alias("b"))
+            .select(*cols)
+            .first()
+        )
+
+        for r, c, e in zip(result, cols, expected):
+            self.assertEqual(r, e, str(c))
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

@@ -75,7 +75,7 @@ def check_connect_protos():
         else:
             fail(
                 "Generated files for pyspark-connect are out of sync! "
-                "If you have touched files under connect/common/src/main/protobuf/, "
+                "If you have touched files under sql/connect/common/src/main/protobuf/, "
                 "please run ./dev/connect-gen-protos.sh. "
                 "If you haven't touched any file above, please rebase your PR against main branch."
             )

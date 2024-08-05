@@ -42,6 +42,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   private val testDataPath = Paths
     .get(
       IntegrationTestUtils.sparkHome,
+      "sql",
       "connect",
       "common",
       "src",
@@ -264,6 +265,42 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       q.stop()
       eventually(timeout(1.minute)) {
         q.awaitTermination()
+      }
+    }
+  }
+
+  test("clusterBy") {
+    withSQLConf(
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
+      spark.sql("DROP TABLE IF EXISTS my_table").collect()
+
+      withTempPath { ckpt =>
+        val q1 = spark.readStream
+          .format("rate")
+          .load()
+          .writeStream
+          .clusterBy("value")
+          .option("checkpointLocation", ckpt.getCanonicalPath)
+          .toTable("my_table")
+
+        try {
+          q1.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkAnswer(
+              spark.sql("DESCRIBE my_table"),
+              Seq(
+                Row("timestamp", "timestamp", null),
+                Row("value", "bigint", null),
+                Row("# Clustering Information", "", ""),
+                Row("# col_name", "data_type", "comment"),
+                Row("value", "bigint", null)))
+            assert(spark.table("my_sink").count() > 0)
+          }
+        } finally {
+          q1.stop()
+          spark.sql("DROP TABLE my_table")
+        }
       }
     }
   }

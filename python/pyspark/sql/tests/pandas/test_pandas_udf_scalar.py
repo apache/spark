@@ -765,8 +765,8 @@ class ScalarPandasUDFTestsMixin:
 
             self.check_error(
                 exception=ae.exception,
-                error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-                message_parameters={
+                errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+                messageParameters={
                     "sqlExpr": '"<lambda>(v)"',
                     "dataType": "VARIANT",
                 },
@@ -786,8 +786,8 @@ class ScalarPandasUDFTestsMixin:
 
             self.check_error(
                 exception=ae.exception,
-                error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-                message_parameters={
+                errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+                messageParameters={
                     "sqlExpr": '"<lambda>()"',
                     "dataType": "VARIANT",
                 },
