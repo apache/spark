@@ -19,8 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.traits.CompoundPlanStatement
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, IfElseStatement, LogicalPlan, SingleStatement}
 import org.apache.spark.sql.catalyst.trees.Origin
 
 /**

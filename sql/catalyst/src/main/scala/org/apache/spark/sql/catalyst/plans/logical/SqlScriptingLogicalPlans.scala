@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.scripting
+package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.traits.CompoundPlanStatement
+
+/**
+ * Trait for all SQL Scripting logical operators that are product of parsing phase.
+ * These operators will be used by the SQL Scripting interpreter to generate execution nodes.
+ */
+trait CompoundPlanStatement extends LogicalPlan
 
 /**
  * Logical operator representing result of parsing a single SQL statement

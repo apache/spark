@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 

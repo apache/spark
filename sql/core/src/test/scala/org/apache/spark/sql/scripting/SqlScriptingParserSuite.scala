@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CreateVariable, IfElseStatement, SingleStatement}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.internal.SQLConf
