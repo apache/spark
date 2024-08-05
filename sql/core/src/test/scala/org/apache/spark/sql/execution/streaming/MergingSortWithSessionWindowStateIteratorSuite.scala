@@ -221,8 +221,7 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
       val store = StateStore.get(
         storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
         PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
-        stateInfo.storeVersion, useColumnFamilies = false,
-        storeConf, new Configuration)
+        stateInfo.storeVersion, useColumnFamilies = false, storeConf, new Configuration)
 
       try {
         f(manager, store)

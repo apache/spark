@@ -502,7 +502,6 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       valueSchema,
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = false,
-
       StateStoreConf(spark.sessionState.conf),
       new Configuration)
     provider
