@@ -43,6 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLi
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
+import org.apache.spark.sql.execution.streaming.state.StateStoreColFamilySchema
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
@@ -702,6 +703,30 @@ object StreamExecution {
   val PROXY_ERROR = (
     "py4j.protocol.Py4JJavaError: An error occurred while calling" +
       s"((.|\\r\\n|\\r|\\n)*)(${IO_EXCEPTION_NAMES.mkString("|")})").r
+
+  private var columnFamilySchemas:
+    Map[UUID, Map[UUID, Map[String, StateStoreColFamilySchema]]] = Map.empty
+
+  def updateColumnFamilySchemas(
+      queryId: UUID,
+      runId: UUID,
+      newSchemas: Map[String, StateStoreColFamilySchema]): Unit = {
+    columnFamilySchemas = columnFamilySchemas.updated(
+      queryId,
+      columnFamilySchemas.getOrElse(queryId, Map.empty).updated(
+        runId,
+        newSchemas
+      )
+    )
+  }
+
+  def getColumnFamilySchemas(
+      queryId: UUID,
+      runId: UUID): Map[String, StateStoreColFamilySchema] = {
+    columnFamilySchemas.get(queryId)
+      .flatMap(_.get(runId))
+      .getOrElse(Map.empty)
+  }
 
   @scala.annotation.tailrec
   def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = {
