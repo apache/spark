@@ -2612,6 +2612,30 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def invalidChangeLogReaderVersion(version: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",
+      messageParameters = Map("version" -> version.toString),
+      cause = null
+    )
+  }
+
+  def invalidChangeLogWriterVersion(version: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_WRITER_VERSION",
+      messageParameters = Map("version" -> version.toString),
+      cause = null
+    )
+  }
+
+  def outOfMemory(stateStoreId: String, e: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.OUT_OF_MEMORY",
+      messageParameters = Map("stateStoreId" -> stateStoreId),
+      cause = e
+    )
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
