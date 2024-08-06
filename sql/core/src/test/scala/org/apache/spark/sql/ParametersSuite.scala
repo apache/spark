@@ -636,8 +636,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
   }
 
   test("SPARK-48843: Prevent infinite loop with BindParameters") {
-    val df = sql("EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;")
-    val analyzedPlan = Limit(Literal.create(100), df.queryExecution.initialParsedPlan)
+    val df =
+      sql("EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;")
+    val analyzedPlan = Limit(Literal.create(100), df.queryExecution.logical)
     spark.sessionState.analyzer.executeAndCheck(analyzedPlan, df.queryExecution.tracker)
     checkAnswer(df, Row(11))
   }
