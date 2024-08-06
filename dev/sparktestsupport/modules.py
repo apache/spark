@@ -324,7 +324,7 @@ connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf],
     source_file_regexes=[
-        "connect",
+        "sql/connect",
         "connector/connect",
     ],
     sbt_test_goals=[

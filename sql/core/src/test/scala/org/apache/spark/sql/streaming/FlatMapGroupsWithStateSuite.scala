@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -896,6 +897,63 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
             inputData.addData(new Timestamp(i * 1000))
             query.processAllAvailable()
           }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  test("SPARK-49070: flatMapGroupsWithStateExec - valid initial state plan") {
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false"),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName)) {
+
+        val inputData = MemoryStream[Timestamp]
+        val stateFunc = (key: Int, values: Iterator[Timestamp], state: GroupState[Int]) => {
+          // Should never timeout. All batches should have data and even if a timeout is set,
+          // it should get cleared when the key receives data per contract.
+          require(!state.hasTimedOut, "The state should not have timed out!")
+          // Set state and timeout once, only on the first call. The timeout should get cleared
+          // in the subsequent batch which has data for the key.
+          if (!state.exists) {
+            state.update(0)
+            state.setTimeoutTimestamp(500)  // Timeout at 500 milliseconds.
+          }
+          0
+        }
+
+        val query = inputData.toDS()
+          .withWatermark("value", "0 seconds")
+          .groupByKey(_ => 0)  // Always the same key: 0.
+          .mapGroupsWithState(GroupStateTimeout.EventTimeTimeout())(stateFunc)
+          .writeStream
+          .format("console")
+          .outputMode("update")
+          .start()
+
+        try {
+          (1 to 2).foreach {i =>
+            inputData.addData(new Timestamp(i * 1000))
+            query.processAllAvailable()
+          }
+
+          val sparkPlan =
+            query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+          val flatMapGroupsWithStateExec = sparkPlan.collect {
+            case p: FlatMapGroupsWithStateExec => p
+          }.head
+
+          assert(!flatMapGroupsWithStateExec.hasInitialState)
+
+          // EnsureRequirements should not apply on the initial state plan
+          val exchange = flatMapGroupsWithStateExec.initialState.collect {
+            case s: ShuffleExchangeExec => s
+          }
+
+          assert(exchange.isEmpty)
         } finally {
           query.stop()
         }

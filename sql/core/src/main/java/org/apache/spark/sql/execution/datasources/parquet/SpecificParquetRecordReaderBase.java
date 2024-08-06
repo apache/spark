@@ -139,12 +139,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     // in test case.
     TaskContext taskContext = TaskContext$.MODULE$.get();
     if (taskContext != null) {
-      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics().externalAccums().lastOption();
-      if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
-        @SuppressWarnings("unchecked")
-        AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
-        intAccum.add(fileReader.getRowGroups().size());
-      }
+      taskContext.taskMetrics().withExternalAccums((accums) -> {
+        Option<AccumulatorV2<?, ?>> accu = accums.lastOption();
+        if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
+          @SuppressWarnings("unchecked")
+          AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
+          intAccum.add(fileReader.getRowGroups().size());
+        }
+        return null;
+      });
     }
   }
 
