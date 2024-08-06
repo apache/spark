@@ -108,7 +108,7 @@ Users are encouraged to query about the schema via df.schema() / df.printSchema(
 The following options must be set for the source.
 
 <table>
-<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
+<thead><tr><th>Option</th><th>Value</th><th>Meaning</th></tr></thead>
 <tr>
   <td>path</td>
   <td>string</td>
@@ -119,7 +119,7 @@ The following options must be set for the source.
 The following configurations are optional:
 
 <table>
-<thead><tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr></thead>
+<thead><tr><th>Option</th><th>Value</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td>batchId</td>
   <td>numeric value</td>
@@ -264,7 +264,7 @@ The output schema will also be different from the normal output.
 </tr>
 </table>
 
-## State metadata source
+## State Metadata Source
 
 Before querying the state from existing checkpoint via state data source, users would like to understand the information for the checkpoint, especially about state operator. This includes which operators and state store instances are available in the checkpoint, available range of batch IDs, etc.
 
@@ -314,7 +314,7 @@ Dataset<Row> df = spark
 The following options must be set for the source:
 
 <table>
-<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
+<thead><tr><th>Option</th><th>Value</th><th>Meaning</th></tr></thead>
 <tr>
   <td>path</td>
   <td>string</td>
@@ -325,10 +325,11 @@ The following options must be set for the source:
 The following configurations are optional:
 
 <table>
-<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
+<thead><tr><th>Option</th><th>Value</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td>batchId</td>
   <td>numeric value</td>
+  <td>Last committed batch if available, else 0</td>
   <td>Optional batchId used to retrieve operator metadata at that batch. Only applicable for operators using schema format version 2.</td>
 </tr>
 </table>
