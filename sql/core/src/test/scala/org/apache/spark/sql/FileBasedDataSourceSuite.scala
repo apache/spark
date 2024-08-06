@@ -589,8 +589,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
             checkError(
               exception = intercept[AnalysisException] {
-                // Mark the UDF as non-deterministic to prevent constant folding removing the UDT
-                spark.udf.register("testType", udf(() => new NullData()).asNondeterministic())
+                spark.udf.register("testType", () => new NullData())
                 sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
               },
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
