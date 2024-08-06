@@ -360,7 +360,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
         _myValueState = getHandle.getValueState[Int](
-          "eagerValueState",
+          "myValueState",
           Encoders.scalaInt
         )
       }
