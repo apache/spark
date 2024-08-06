@@ -432,7 +432,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         inputArrays.map(_.numElements()).max
       }
 
-      val result = new Array[Any](biggestCardinality)
+      val result = new Array[AnyRef](biggestCardinality)
       val zippedArrs: Seq[(ArrayData, Int)] = inputArrays.zipWithIndex
 
       for (i <- 0 until biggestCardinality) {
