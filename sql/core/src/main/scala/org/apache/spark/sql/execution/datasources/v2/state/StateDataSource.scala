@@ -105,7 +105,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     Array[StateMetadataTableEntry] = {
     val allStateStoreMetadata = new StateMetadataPartitionReader(
       stateSourceOptions.stateCheckpointLocation.getParent.toString,
-      serializedHadoopConf).stateMetadata.toArray
+      serializedHadoopConf, stateSourceOptions.batchId).stateMetadata.toArray
     val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
       entry.operatorId == stateSourceOptions.operatorId &&
         entry.stateStoreName == stateSourceOptions.storeName
