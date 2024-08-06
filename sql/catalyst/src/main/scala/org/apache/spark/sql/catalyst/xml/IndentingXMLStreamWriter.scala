@@ -19,46 +19,31 @@ package org.apache.spark.sql.catalyst.xml
 import javax.xml.namespace.NamespaceContext
 import javax.xml.stream.XMLStreamWriter
 
-import scala.collection.mutable.Stack
-
 class IndentingXMLStreamWriter(wr: XMLStreamWriter) extends XMLStreamWriter {
-  private sealed trait WriterState
-  private case object NO_NEWLINE_ON_END extends WriterState
-  private case object DO_NEWLINE_ON_END extends WriterState
-
   private val writer = wr
 
   private var indentStep = "  "
   private var depth = 0
 
-  private var state: WriterState = NO_NEWLINE_ON_END
-  private val stateStack = Stack[WriterState]()
+  private var atBeginningOfDocument = true
+  private var insideElementWithChild = false
 
   def setIndentStep(s: String): Unit = {
     indentStep = s
   }
 
   private def onStartElement(): Unit = {
-    stateStack.push(DO_NEWLINE_ON_END)
-    state = NO_NEWLINE_ON_END
-    if (depth > 0) {
+    if (!atBeginningOfDocument) {
       writer.writeCharacters("\n")
     }
+    atBeginningOfDocument = false
+    insideElementWithChild = false
     writeIndent()
     depth += 1
   }
 
-  private def onEndElement(): Unit = {
-    depth -= 1
-    if (state == DO_NEWLINE_ON_END) {
-      writer.writeCharacters("\n")
-      writeIndent()
-    }
-    state = stateStack.pop()
-  }
-
   private def writeIndent(): Unit = {
-    writer.writeCharacters(indentStep*depth)
+    writer.writeCharacters(indentStep * depth)
   }
 
   override def writeStartElement(localName: String): Unit = {
@@ -95,7 +80,12 @@ class IndentingXMLStreamWriter(wr: XMLStreamWriter) extends XMLStreamWriter {
   }
 
   override def writeEndElement(): Unit = {
-    onEndElement()
+    depth -= 1
+    if (insideElementWithChild) {
+      writer.writeCharacters("\n")
+      writeIndent()
+    }
+    insideElementWithChild = true
     writer.writeEndElement()
   }
 
@@ -172,12 +162,10 @@ class IndentingXMLStreamWriter(wr: XMLStreamWriter) extends XMLStreamWriter {
   }
 
   override def writeCharacters(text: String): Unit = {
-    state = NO_NEWLINE_ON_END
     writer.writeCharacters(text)
   }
 
   override def writeCharacters(text: Array[Char], start: Int, len: Int): Unit = {
-    state = NO_NEWLINE_ON_END
     writer.writeCharacters(text, start, len)
   }
 
