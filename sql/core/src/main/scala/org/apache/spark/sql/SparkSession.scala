@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.net.URI
+import java.nio.file.{Files, Paths}
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -55,7 +57,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -794,6 +796,83 @@ class SparkSession private(
   }
 
   /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(path: String): Unit = addArtifact(SparkFileUtils.resolveURI(path))
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(uri: URI): Unit = {
+    addArtifactsInternal(Artifact.parseArtifacts(uri))
+  }
+
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.InMemory(bytes))
+    addArtifactsInternal(artifact :: Nil)
+  }
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(source: String, target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(source)))
+    addArtifactsInternal(artifact :: Nil)
+  }
+
+  /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
    * `DataFrame`.
    * {{{
@@ -898,6 +977,29 @@ class SparkSession private(
       iter.map(r => fromJava(r).asInstanceOf[InternalRow])
     }
     internalCreateDataFrame(rowRdd, schema)
+  }
+
+  private def addArtifactsInternal(artifacts: Seq[Artifact]): Unit = artifacts.foreach { artifact =>
+    artifact.storage match {
+      case d: Artifact.LocalFile =>
+        artifactManager.addArtifact(
+          artifact.path,
+          d.path,
+          fragment = None,
+          deleteStagedFile = false)
+      case d: Artifact.InMemory =>
+        val tempDir = Utils.createTempDir().toPath
+        val tempFile = tempDir.resolve(artifact.path.getFileName)
+        val outStream = Files.newOutputStream(tempFile)
+        Utils.tryWithSafeFinallyAndFailureCallbacks {
+          d.stream.transferTo(outStream)
+          artifactManager.addArtifact(artifact.path, tempFile, fragment = None)
+        }(finallyBlock = {
+          outStream.close()
+        })
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported artifact storage: ${artifact.storage}")
+    }
   }
 
   /**
