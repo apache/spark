@@ -25,9 +25,9 @@ import org.apache.spark.sql.types._
 
 // scalastyle:off nonascii
 class CollationStringExpressionsSuite
-  extends QueryTest
-  with SharedSparkSession
-  with ExpressionEvalHelper {
+    extends QueryTest
+    with SharedSparkSession
+    with ExpressionEvalHelper {
 
   test("Support `ConcatWs` string expression with collation") {
     case class ConcatWsTestCase[R](
@@ -60,11 +60,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Elt` string expression with collation") {
-    case class EltTestCase[R](
-        index: Integer,
-        inputs: Array[String],
-        collation: String,
-        result: R)
+    case class EltTestCase[R](index: Integer, inputs: Array[String], collation: String, result: R)
     val testCases = Seq(
       EltTestCase(1, Array("Spark", "SQL"), "UTF8_BINARY", "Spark"),
       EltTestCase(1, Array("Spark", "SQL"), "UTF8_LCASE", "Spark"),
@@ -117,11 +113,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Contains` string expression with collation") {
-    case class ContainsTestCase[R](
-        left: String,
-        right: String,
-        collation: String,
-        result: R)
+    case class ContainsTestCase[R](left: String, right: String, collation: String, result: R)
     val testCases = Seq(
       ContainsTestCase("", "", "UTF8_BINARY", true),
       ContainsTestCase("abcde", "C", "UNICODE", false),
@@ -172,11 +164,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `StringInStr` string expression with collation") {
-    case class StringInStrTestCase[R](
-        str: String,
-        substr: String,
-        collation: String,
-        result: R)
+    case class StringInStrTestCase[R](str: String, substr: String, collation: String, result: R)
     val testCases = Seq(
       StringInStrTestCase("test大千世界X大千世界", "大千", "UTF8_BINARY", 5),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_LCASE", 8),
@@ -200,11 +188,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `FindInSet` string expression with collation") {
-    case class FindInSetTestCase[R](
-        left: String,
-        right: String,
-        collation: String,
-        result: R)
+    case class FindInSetTestCase[R](left: String, right: String, collation: String, result: R)
     val testCases = Seq(
       FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
       FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_LCASE", 4),
@@ -227,11 +211,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `StartsWith` string expression with collation") {
-    case class StartsWithTestCase[R](
-        left: String,
-        right: String,
-        collation: String,
-        result: R)
+    case class StartsWithTestCase[R](left: String, right: String, collation: String, result: R)
     val testCases = Seq(
       StartsWithTestCase("", "", "UTF8_BINARY", true),
       StartsWithTestCase("abcde", "A", "UNICODE", false),
@@ -311,11 +291,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `EndsWith` string expression with collation") {
-    case class EndsWithTestCase[R](
-        left: String,
-        right: String,
-        collation: String,
-        result: R)
+    case class EndsWithTestCase[R](left: String, right: String, collation: String, result: R)
     val testCases = Seq(
       EndsWithTestCase("", "", "UTF8_BINARY", true),
       EndsWithTestCase("abcde", "E", "UNICODE", false),
@@ -337,11 +313,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `StringRepeat` string expression with collation") {
-    case class StringRepeatTestCase[R](
-        str: String,
-        times: Integer,
-        collation: String,
-        result: R)
+    case class StringRepeatTestCase[R](str: String, times: Integer, collation: String, result: R)
     val testCases = Seq(
       StringRepeatTestCase("", 1, "UTF8_BINARY", ""),
       StringRepeatTestCase("a", 0, "UNICODE", ""),
@@ -363,10 +335,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Ascii` string expression with collation") {
-    case class AsciiTestCase[R](
-                                 input: String,
-        collation: String,
-        result: R)
+    case class AsciiTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       AsciiTestCase("a", "UTF8_BINARY", 97),
       AsciiTestCase("B", "UTF8_LCASE", 66),
@@ -386,10 +355,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Chr` string expression with collation") {
-    case class ChrTestCase[R](
-        input: Long,
-        collation: String,
-        result: R)
+    case class ChrTestCase[R](input: Long, collation: String, result: R)
     val testCases = Seq(
       ChrTestCase(65, "UTF8_BINARY", "A"),
       ChrTestCase(66, "UTF8_LCASE", "B"),
@@ -409,10 +375,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `UnBase64` string expression with collation") {
-    case class UnBase64TestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class UnBase64TestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       UnBase64TestCase("QUJD", "UTF8_BINARY", Array(65, 66, 67)),
       UnBase64TestCase("eHl6", "UTF8_LCASE", Array(120, 121, 122)),
@@ -432,10 +395,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Base64` string expression with collation") {
-    case class Base64TestCase[R](
-        input: Array[Byte],
-        collation: String,
-        result: R)
+    case class Base64TestCase[R](input: Array[Byte], collation: String, result: R)
     val testCases = Seq(
       Base64TestCase(Array(65, 66, 67), "UTF8_BINARY", "QUJD"),
       Base64TestCase(Array(120, 121, 122), "UTF8_LCASE", "eHl6"),
@@ -456,11 +416,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `FormatNumber` string expression with collation") {
-    case class FormatNumberTestCase[R](
-        x: Double,
-        d: String,
-        collation: String,
-        r: R)
+    case class FormatNumberTestCase[R](x: Double, d: String, collation: String, r: R)
     val testCases = Seq(
       FormatNumberTestCase(123.123, "###.###", "UTF8_BINARY", "123.123"),
       FormatNumberTestCase(99.99, "##.##", "UTF8_LCASE", "99.99"),
@@ -482,10 +438,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Decode` string expression with collation") {
-    case class DecodeTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class DecodeTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       DecodeTestCase("a", "UTF8_BINARY", "a"),
       DecodeTestCase("A", "UTF8_LCASE", "A"),
@@ -514,10 +467,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Encode` string expression with collation") {
-    case class EncodeTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class EncodeTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       EncodeTestCase("a", "UTF8_BINARY", Array(97)),
       EncodeTestCase("A", "UTF8_LCASE", Array(65)),
@@ -539,11 +489,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `ToBinary` string expression with collation") {
-    case class ToBinaryTestCase[R](
-        expr: String,
-        format: String,
-        collation: String,
-        result: R)
+    case class ToBinaryTestCase[R](expr: String, format: String, collation: String, result: R)
     val testCases = Seq(
       ToBinaryTestCase("a", "utf-8", "UTF8_BINARY", Array(97)),
       ToBinaryTestCase("A", "utf-8", "UTF8_LCASE", Array(65)),
@@ -565,19 +511,28 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Sentences` string expression with collation") {
-    case class SentencesTestCase[R](
-        str: String,
-        collation: String,
-        result: R)
+    case class SentencesTestCase[R](str: String, collation: String, result: R)
     val testCases = Seq(
-      SentencesTestCase("Hello, world! Nice day.", "UTF8_BINARY",
-        Seq(Seq("Hello", "world"), Seq("Nice", "day"))),
-      SentencesTestCase("Something else. Nothing here.", "UTF8_LCASE",
-        Seq(Seq("Something", "else"), Seq("Nothing", "here"))),
-      SentencesTestCase("Hello, world! Nice day.", "UNICODE",
-        Seq(Seq("Hello", "world"), Seq("Nice", "day"))),
-      SentencesTestCase("Something else. Nothing here.", "UNICODE_CI",
-        Seq(Seq("Something", "else"), Seq("Nothing", "here")))
+      SentencesTestCase(
+        "Hello, world! Nice day.",
+        "UTF8_BINARY",
+        Seq(Seq("Hello", "world"), Seq("Nice", "day"))
+      ),
+      SentencesTestCase(
+        "Something else. Nothing here.",
+        "UTF8_LCASE",
+        Seq(Seq("Something", "else"), Seq("Nothing", "here"))
+      ),
+      SentencesTestCase(
+        "Hello, world! Nice day.",
+        "UNICODE",
+        Seq(Seq("Hello", "world"), Seq("Nice", "day"))
+      ),
+      SentencesTestCase(
+        "Something else. Nothing here.",
+        "UNICODE_CI",
+        Seq(Seq("Something", "else"), Seq("Nothing", "here"))
+      )
     )
     testCases.foreach(t => {
       // Unit test.
@@ -593,10 +548,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Upper` string expression with collation") {
-    case class UpperTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class UpperTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       UpperTestCase("aBc", "UTF8_BINARY", "ABC"),
       UpperTestCase("aBc", "UTF8_LCASE", "ABC"),
@@ -616,10 +568,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Lower` string expression with collation") {
-    case class LowerTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class LowerTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       LowerTestCase("aBc", "UTF8_BINARY", "abc"),
       LowerTestCase("aBc", "UTF8_LCASE", "abc"),
@@ -639,10 +588,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `InitCap` string expression with collation") {
-    case class InitCapTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class InitCapTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       InitCapTestCase("aBc ABc", "UTF8_BINARY", "Abc Abc"),
       InitCapTestCase("aBc ABc", "UTF8_LCASE", "Abc Abc"),
@@ -713,10 +659,12 @@ class CollationStringExpressionsSuite
       checkEvaluation(FormatString(format +: arguments: _*), t.result)
       // E2E SQL test.
       withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
-        val args = t.input.map {
-          case s: String => s"'$s'"
-          case other => other.toString
-        }.mkString(", ")
+        val args = t.input
+          .map {
+            case s: String => s"'$s'"
+            case other => other.toString
+          }
+          .mkString(", ")
         val query = s"select format_string('${t.format}', $args)"
         checkAnswer(sql(query), Row(t.result))
         assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collation)))
@@ -725,10 +673,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `SoundEx` string expression with collation") {
-    case class SoundExTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class SoundExTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       SoundExTestCase("A", "UTF8_BINARY", "A000"),
       SoundExTestCase("!", "UTF8_LCASE", "!"),
@@ -748,10 +693,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Length` string expression with collation") {
-    case class LengthTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class LengthTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       LengthTestCase("", "UTF8_BINARY", 0),
       LengthTestCase("abc", "UTF8_LCASE", 3),
@@ -771,10 +713,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `BitLength` string expression with collation") {
-    case class BitLengthTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class BitLengthTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       BitLengthTestCase("", "UTF8_BINARY", 0),
       BitLengthTestCase("abc", "UTF8_LCASE", 24),
@@ -794,10 +733,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `OctetLength` string expression with collation") {
-    case class OctetLengthTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class OctetLengthTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       OctetLengthTestCase("", "UTF8_BINARY", 0),
       OctetLengthTestCase("abc", "UTF8_LCASE", 3),
@@ -817,10 +753,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Luhncheck` string expression with collation") {
-    case class LuhncheckTestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class LuhncheckTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       LuhncheckTestCase("123", "UTF8_BINARY", false),
       LuhncheckTestCase("000", "UTF8_LCASE", true),
@@ -869,10 +802,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `IsValidUTF8` string expression with collation") {
-    case class IsValidUTF8TestCase[R](
-        input: Any,
-        collation: String,
-        result: R)
+    case class IsValidUTF8TestCase[R](input: Any, collation: String, result: R)
     val testCases = Seq(
       IsValidUTF8TestCase(null, "UTF8_BINARY", null),
       IsValidUTF8TestCase("", "UTF8_LCASE", true),
@@ -893,10 +823,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `MakeValidUTF8` string expression with collation") {
-    case class MakeValidUTF8TestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class MakeValidUTF8TestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       MakeValidUTF8TestCase(null, "UTF8_BINARY", null),
       MakeValidUTF8TestCase("", "UTF8_LCASE", ""),
@@ -917,10 +844,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `ValidateUTF8` string expression with collation") {
-    case class ValidateUTF8TestCase[R](
-        input: String,
-        collation: String,
-        result: R)
+    case class ValidateUTF8TestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       ValidateUTF8TestCase(null, "UTF8_BINARY", null),
       ValidateUTF8TestCase("", "UTF8_LCASE", ""),
@@ -941,10 +865,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `TryValidateUTF8` string expression with collation") {
-    case class ValidateUTF8TestCase(
-        input: String,
-        collation: String,
-        result: Any)
+    case class ValidateUTF8TestCase(input: String, collation: String, result: Any)
     val testCases = Seq(
       ValidateUTF8TestCase(null, "UTF8_BINARY", null),
       ValidateUTF8TestCase("", "UTF8_LCASE", ""),
@@ -1004,16 +925,12 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Left` string expression with collation") {
-    case class LeftTestCase[R](
-        str: String,
-        len: Integer,
-        collation: String,
-        result: R)
+    case class LeftTestCase[R](str: String, len: Integer, collation: String, result: R)
     val testCases = Seq(
       LeftTestCase(null, null, "UTF8_BINARY", null),
       LeftTestCase(" a世a ", 3, "UTF8_LCASE", " a世"),
       LeftTestCase("", 1, "UNICODE", ""),
-      LeftTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", 3, "UNICODE", "ÀÃÂ"),
+      LeftTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", 3, "UNICODE", "ÀÃÂ")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1031,16 +948,12 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `Right` string expression with collation") {
-    case class RightTestCase[R](
-        str: String,
-        len: Integer,
-        collation: String,
-        result: R)
+    case class RightTestCase[R](str: String, len: Integer, collation: String, result: R)
     val testCases = Seq(
       RightTestCase(null, null, "UTF8_BINARY", null),
       RightTestCase(" a世a ", 3, "UTF8_LCASE", "世a "),
       RightTestCase("", 1, "UNICODE", ""),
-      RightTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", 3, "UNICODE", "ǢǼÆ"),
+      RightTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", 3, "UNICODE", "ǢǼÆ")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1155,10 +1068,10 @@ class CollationStringExpressionsSuite
 
   test("Support `StringTrimLeft` string expression with collation") {
     case class StringTrimLeftTestCase[R](
-      srcStr: String,
-      trimStr: Option[String],
-      collation: String,
-      result: R)
+        srcStr: String,
+        trimStr: Option[String],
+        collation: String,
+        result: R)
     val testCases = Seq(
       StringTrimLeftTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "asdxx"),
       StringTrimLeftTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "asdxx"),
@@ -1182,10 +1095,10 @@ class CollationStringExpressionsSuite
 
   test("Support `StringTrimRight` string expression with collation") {
     case class StringTrimRightTestCase[R](
-      srcStr: String,
-      trimStr: Option[String],
-      collation: String,
-      result: R)
+        srcStr: String,
+        trimStr: Option[String],
+        collation: String,
+        result: R)
     val testCases = Seq(
       StringTrimRightTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "xxasd"),
       StringTrimRightTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "xxasd"),
@@ -1209,10 +1122,10 @@ class CollationStringExpressionsSuite
 
   test("Support `StringTrim` string expression with collation") {
     case class StringTrimTestCase[R](
-      srcStr: String,
-      trimStr: Option[String],
-      collation: String,
-      result: R)
+        srcStr: String,
+        trimStr: Option[String],
+        collation: String,
+        result: R)
     val testCases = Seq(
       StringTrimTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "asd"),
       StringTrimTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "asd"),
@@ -1236,10 +1149,10 @@ class CollationStringExpressionsSuite
 
   test("Support `StringTrimBoth` string expression with collation") {
     case class StringTrimBothTestCase[R](
-      srcStr: String,
-      trimStr: Option[String],
-      collation: String,
-      result: R)
+        srcStr: String,
+        trimStr: Option[String],
+        collation: String,
+        result: R)
     val testCases = Seq(
       StringTrimBothTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "asd"),
       StringTrimBothTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "asd"),
