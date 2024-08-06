@@ -122,10 +122,7 @@ class StatefulProcessorHandleImpl(
     metrics.get(metricName).foreach(_.add(1))
   }
 
-
-  override def getValueState[T](
-      stateName: String,
-      valEncoder: Encoder[T]): ValueState[T] = {
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
     incrementMetric("numValueStateVars")
     assert(columnFamilyIds.contains(stateName))

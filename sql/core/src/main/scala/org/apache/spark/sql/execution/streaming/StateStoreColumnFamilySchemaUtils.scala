@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.StateTTLSchema.TTL_VALUE_ROW_SCHEMA
@@ -25,7 +24,7 @@ import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSp
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.{NullType, StructField, StructType}
 
-object StateStoreColumnFamilySchemaUtils extends Logging {
+object StateStoreColumnFamilySchemaUtils {
 
   def getValueStateSchema[T](
       stateName: String,
