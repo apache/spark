@@ -42,10 +42,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(
-      compound: CompoundBody,
-      session: SparkSession): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound, session).asInstanceOf[CompoundBodyExec].getTreeIterator
+  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
@@ -115,13 +113,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *
    * @param node
    *   Root node of the parsed tree.
-   * @param session
-   *   Spark session that SQL script is executed within.
    * @return
    *   Executable statement.
    */
-  private def transformTreeIntoExecutable(
-      node: CompoundPlanStatement, session: SparkSession): CompoundStatementExec =
+  private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
@@ -130,9 +125,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
         val conditionalBodiesExec = conditionalBodies.map(body =>
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
       case sparkStatement: SingleStatement =>

@@ -97,9 +97,6 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       session: SparkSession,
       statement: LeafStatementExec): Boolean = statement match {
     case statement: SingleStatementExec =>
-      assert(!statement.isExecuted)
-      statement.isExecuted = true
-
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
       val df = Dataset.ofRows(session, statement.parsedPlan)
@@ -190,7 +187,7 @@ class SingleStatementExec(
  *   Spark session.
  */
 class CompoundBodyExec(
-      label: Option[String],
+      label: Option[String] = None,
       statements: Seq[CompoundStatementExec],
       conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
       session: SparkSession)

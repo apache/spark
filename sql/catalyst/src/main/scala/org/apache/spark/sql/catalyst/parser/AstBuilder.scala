@@ -223,7 +223,9 @@ class AstBuilder extends DataTypeAstBuilder
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
           val stmt = Option(ctx.beginEndCompoundBlock()).
-            getOrElse(Option(ctx.declareHandler()).getOrElse(ctx.declareCondition()))
+            getOrElse(Option(ctx.declareHandler()).
+              getOrElse(Option(ctx.declareCondition()).
+                getOrElse(ctx.ifElseStatement())))
           visit(stmt).asInstanceOf[CompoundPlanStatement]
         }
     }
@@ -242,6 +244,7 @@ class AstBuilder extends DataTypeAstBuilder
         buff.toSeq
       }
     }
+  }
 
   override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement = {
     IfElseStatement(
@@ -254,7 +257,6 @@ class AstBuilder extends DataTypeAstBuilder
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
       elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
     )
-  }
   }
 
   override def visitDeclareCondition(ctx: DeclareConditionContext): ErrorCondition = {

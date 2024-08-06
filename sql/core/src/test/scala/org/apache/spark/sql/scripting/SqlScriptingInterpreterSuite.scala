@@ -445,7 +445,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         | END IF;
         |END
         |""".stripMargin
-    val expected = Seq(Seq(Row(42)))
+    val expected = Seq(Array(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
 
@@ -462,7 +462,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         | END IF;
         |END
         |""".stripMargin
-    val expected = Seq(Seq(Row(42)))
+    val expected = Seq(Array(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
 
@@ -536,7 +536,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |END
         |""".stripMargin
 
-    val expected = Seq(Seq(Row(44)))
+    val expected = Seq(Array(Row(44)))
     verifySqlScriptResult(commands, expected)
   }
 
