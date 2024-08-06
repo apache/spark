@@ -264,6 +264,14 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.master.rest.filters</code></td>
+  <td>(None)</td>
+  <td>
+    Comma separated list of filter class names to apply to the Master REST API.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.master.useAppNameAsAppId.enabled</code></td>
   <td><code>false</code></td>
   <td>
@@ -676,6 +684,17 @@ The following is the response from the REST API for the above <code>create</code
 }
 ```
 
+When Spark master requires HTTP <code>Authorization</code> header via
+<code>spark.master.rest.filters=org.apache.spark.ui.JWSFilter</code> and
+<code>spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY</code>
+configurations, <code>curl</code> CLI command can provide the required header like the following.
+
+```bash
+$ curl -XPOST http://IP:PORT/v1/submissions/create \
+--header "Authorization: Bearer USER-PROVIDED-WEB-TOEN-SIGNED-BY-THE-SAME-SHARED-KEY"
+...
+```
+
 For <code>sparkProperties</code> and <code>environmentVariables</code>, users can use place
 holders for server-side environment variables like the following.
 
@@ -820,7 +839,7 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.
-      Note that the directory should be clearly manualy if <code>spark.deploy.recoveryMode</code>
+      Note that the directory should be clearly manually if <code>spark.deploy.recoveryMode</code>
       or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
     </td>
     <td>0.8.1</td>

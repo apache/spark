@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.MapSort
+import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
-import org.apache.spark.sql.types.MapType
+import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
  * Adds MapSort to group expressions containing map columns, as the key/value paris need to be
@@ -34,12 +35,56 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     _.containsPattern(AGGREGATE), ruleId) {
     case a @ Aggregate(groupingExpr, _, _) =>
       val newGrouping = groupingExpr.map { expr =>
-        if (!expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]) {
-          MapSort(expr)
+        if (!expr.exists(_.isInstanceOf[MapSort])
+          && expr.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+          insertMapSortRecursively(expr)
         } else {
           expr
         }
       }
       a.copy(groupingExpressions = newGrouping)
   }
+
+  /*
+  Inserts MapSort recursively taking into account when
+  it is nested inside a struct or array.
+   */
+  private def insertMapSortRecursively(e: Expression): Expression = {
+    e.dataType match {
+      case m: MapType =>
+        // Check if value type of MapType contains MapType (possibly nested)
+        // and special handle this case.
+        val mapSortExpr = if (m.valueType.existsRecursively(_.isInstanceOf[MapType])) {
+          MapFromArrays(MapKeys(e), insertMapSortRecursively(MapValues(e)))
+        } else {
+          e
+        }
+
+        MapSort(mapSortExpr)
+
+      case StructType(fields)
+        if fields.exists(_.dataType.existsRecursively(_.isInstanceOf[MapType])) =>
+        val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
+          Seq(Literal(f.name), insertMapSortRecursively(
+            GetStructField(e, i, Some(f.name))))
+        }.toImmutableArraySeq)
+        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+          // No field needs MapSort processing, just return the original expression.
+          e
+        } else if (e.nullable) {
+          If(IsNull(e), Literal(null, struct.dataType), struct)
+        } else {
+          struct
+        }
+
+      case ArrayType(et, containsNull) if et.existsRecursively(_.isInstanceOf[MapType]) =>
+        val param = NamedLambdaVariable("x", et, containsNull)
+        val funcBody = insertMapSortRecursively(param)
+
+        ArrayTransform(e, LambdaFunction(funcBody, Seq(param)))
+
+      case _ => e
+    }
+  }
+
 }

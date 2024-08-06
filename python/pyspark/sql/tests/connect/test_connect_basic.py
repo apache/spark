@@ -1405,6 +1405,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
 
+    def test_truncate_message(self):
+        cdf1 = self.connect.createDataFrame(
+            [
+                ("a B c"),
+                ("X y Z"),
+            ],
+            ["a" * 4096],
+        )
+        plan1 = cdf1._plan.to_proto(self.connect._client)
+
+        proto_string_1 = self.connect._client._proto_to_string(plan1, False)
+        self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
+        proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
+        self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
+
+        cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
+        plan2 = cdf2._plan.to_proto(self.connect._client)
+
+        proto_string_2 = self.connect._client._proto_to_string(plan2, False)
+        self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
+        proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
+        self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
+
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod
