@@ -883,6 +883,26 @@ object FunctionRegistry {
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
+  /** Registry for internal functions used by Connect and the Column API. */
+  private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
+
+  private def registerInternalExpression[T <: Expression : ClassTag](name: String): Unit = {
+    val (info, builder) = FunctionRegistryBase.build(name, None)
+    internal.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+  }
+
+  registerInternalExpression[Product]("product")
+  registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
+  registerInternalExpression[Years]("years")
+  registerInternalExpression[Months]("months")
+  registerInternalExpression[Days]("days")
+  registerInternalExpression[Hours]("hours")
+  registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
+  registerInternalExpression[PandasSkewness]("pandas_skew")
+  registerInternalExpression[PandasKurtosis]("pandas_kurt")
+  registerInternalExpression[NullIndex]("null_index")
+
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(
       null,
