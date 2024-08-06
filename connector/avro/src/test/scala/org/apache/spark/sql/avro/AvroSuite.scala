@@ -940,15 +940,15 @@ abstract class AvroSuite
 
       // Float -> Double
       val floatPath = s"$tempPath/float_data"
-      val floatDf = Seq(1.34F,
+      val floatDf = Seq(1F,
         Float.MinValue, Float.MinPositiveValue, Float.MaxValue,
         Float.NaN, Float.NegativeInfinity, Float.PositiveInfinity
       ).toDF("col")
       floatDf.write.format("avro").save(floatPath)
       checkAnswer(
         spark.read.schema("col Double").format("avro").load(floatPath),
-        Seq(Row(1.34D),
-          Row(-3.4028235E38D), Row(1.4E-45D), Row(3.4028235E38D),
+        Seq(Row(1D),
+          Row(-3.4028234663852886E38D), Row(1.401298464324817E-45D), Row(3.4028234663852886E38D),
           Row(Double.NaN), Row(Double.NegativeInfinity), Row(Double.PositiveInfinity))
       )
     }

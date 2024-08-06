@@ -201,7 +201,7 @@ private[sql] class AvroDeserializer(
         updater.setFloat(ordinal, value.asInstanceOf[Float])
 
       case (FLOAT, DoubleType) => (updater, ordinal, value) =>
-        updater.setDouble(ordinal, value.asInstanceOf[Float].toString.toDouble)
+        updater.setDouble(ordinal, value.asInstanceOf[Float])
 
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])
