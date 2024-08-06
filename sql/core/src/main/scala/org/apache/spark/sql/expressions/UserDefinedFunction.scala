@@ -57,6 +57,14 @@ sealed abstract class UserDefinedFunction {
   def deterministic: Boolean
 
   /**
+   * Returns true iff the UDF is foldable, i.e. the UDF can be evaludated during constant folding
+   * if all arguments are also foldable.
+   *
+   * @since 4.0.0
+   */
+  def foldable: Boolean
+
+  /**
    * Returns an expression that invokes the UDF, using the given arguments.
    *
    * @since 1.3.0
@@ -84,6 +92,14 @@ sealed abstract class UserDefinedFunction {
    * @since 2.3.0
    */
   def asNondeterministic(): UserDefinedFunction
+
+
+  /**
+   * Updates UserDefinedFunction to be foldable.
+   *
+   * @since 4.0.0
+   */
+  def asFoldable(): UserDefinedFunction
 }
 
 private[spark] case class SparkUserDefinedFunction(
@@ -93,7 +109,8 @@ private[spark] case class SparkUserDefinedFunction(
     outputEncoder: Option[ExpressionEncoder[_]] = None,
     name: Option[String] = None,
     nullable: Boolean = true,
-    deterministic: Boolean = true) extends UserDefinedFunction {
+    deterministic: Boolean = true,
+    foldable: Boolean = false) extends UserDefinedFunction {
 
   @scala.annotation.varargs
   override def apply(exprs: Column*): Column = {
@@ -131,6 +148,14 @@ private[spark] case class SparkUserDefinedFunction(
       copy(deterministic = false)
     }
   }
+
+  override def asFoldable(): SparkUserDefinedFunction = {
+    if (foldable) {
+      this
+    } else {
+      copy(foldable = true)
+    }
+  }
 }
 
 private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
@@ -138,7 +163,8 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     inputEncoder: Encoder[IN],
     name: Option[String] = None,
     nullable: Boolean = true,
-    deterministic: Boolean = true) extends UserDefinedFunction {
+    deterministic: Boolean = true,
+    foldable: Boolean = false) extends UserDefinedFunction {
 
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
@@ -170,6 +196,14 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
       this
     } else {
       copy(deterministic = false)
+    }
+  }
+
+  override def asFoldable(): UserDefinedAggregator[IN, BUF, OUT] = {
+    if (foldable) {
+      this
+    } else {
+      copy(foldable = true)
     }
   }
 }

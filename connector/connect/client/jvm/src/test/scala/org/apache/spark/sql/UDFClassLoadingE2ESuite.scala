@@ -46,6 +46,7 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       name = Some("dummyUdf"),
       nullable = true,
       deterministic = true,
+      foldable = false,
       aggregate = false)
     session.registerUdf(udf.toProto)
   }

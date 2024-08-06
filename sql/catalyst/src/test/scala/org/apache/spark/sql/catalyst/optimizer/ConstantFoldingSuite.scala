@@ -445,7 +445,8 @@ class ConstantFoldingSuite extends PlanTest {
       dataType = IntegerType,
       children = Nil,
       nullable = false,
-      inputEncoders = Seq()
+      inputEncoders = Seq(),
+      udfFoldable = true
     )
     val myAdd = ScalaUDF(
       function = (a: Int, b: Int) => a + b,
@@ -454,14 +455,16 @@ class ConstantFoldingSuite extends PlanTest {
       nullable = false,
       inputEncoders = Seq(
         Some(ExpressionEncoder[Int]().resolveAndBind()),
-        Some(ExpressionEncoder[Int]().resolveAndBind()))
+        Some(ExpressionEncoder[Int]().resolveAndBind())),
+      udfFoldable = true
     )
     val arrayConstant = ScalaUDF(
       function = () => List(1, 2, 3),
       dataType = ArrayType(IntegerType),
       children = Nil,
       nullable = false,
-      inputEncoders = Seq()
+      inputEncoders = Seq(),
+      udfFoldable = true
     )
     val originalQuery =
       testRelation.select(
