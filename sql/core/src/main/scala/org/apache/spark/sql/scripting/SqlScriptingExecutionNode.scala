@@ -273,12 +273,12 @@ class IfElseStatementExec(
  * Executable node for WhileStatement.
  * @param condition Executable node for the condition.
  * @param body Executable node for the body.
- * @param booleanEvaluator Evaluator for Boolean condition.
+ * @param session Spark session that SQL script is executed within.
  */
 class WhileStatementExec(
-                          condition: SingleStatementExec,
-                          body: CompoundBodyExec,
-                          booleanEvaluator: StatementBooleanEvaluator) extends NonLeafStatementExec {
+    condition: SingleStatementExec,
+    body: CompoundBodyExec,
+    session: SparkSession) extends NonLeafStatementExec {
 
   private object WhileState extends Enumeration {
     val Condition, Body = Value
@@ -295,7 +295,7 @@ class WhileStatementExec(
           case WhileState.Condition =>
             assert(curr.get.isInstanceOf[SingleStatementExec])
             val condition = curr.get.asInstanceOf[SingleStatementExec]
-            if (booleanEvaluator.eval(condition)) {
+            if (evaluateBooleanCondition(session, condition)) {
               state = WhileState.Body
               curr = Some(body)
               body.reset()
