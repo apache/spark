@@ -116,7 +116,7 @@ class CatalogManager(
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
     if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
-      v1SessionCatalog.validateGlobalTempView(namespace.head)
+      v1SessionCatalog.validateDBIsNotGlobalTempView(namespace.head)
       assertNamespaceExist(namespace)
       v1SessionCatalog.setCurrentDatabaseWithoutCheck(namespace.head)
     } else {
