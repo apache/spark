@@ -109,6 +109,12 @@ private[spark] object History {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10g")
 
+  val HISTORY_SERVER_UI_TITLE = ConfigBuilder("spark.history.ui.title")
+    .version("4.0.0")
+    .doc("Specifies the title of the History Server UI page.")
+    .stringConf
+    .createWithDefault("History Server")
+
   val HISTORY_SERVER_UI_PORT = ConfigBuilder("spark.history.ui.port")
     .doc("Web UI port to bind Spark History Server")
     .version("1.0.0")

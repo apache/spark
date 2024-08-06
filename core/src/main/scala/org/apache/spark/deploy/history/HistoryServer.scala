@@ -61,6 +61,8 @@ class HistoryServer(
     poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
+  val title = conf.get(History.HISTORY_SERVER_UI_TITLE)
+
   // How many applications to retain
   private val retainedApplications = conf.get(History.RETAINED_APPLICATIONS)
 
