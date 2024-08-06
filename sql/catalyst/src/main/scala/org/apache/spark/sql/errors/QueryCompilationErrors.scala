@@ -191,6 +191,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     invalidParameter("Boolean", functionName, "ignoreNulls", invalidValue)
   }
 
+  def invalidStringParameter(
+      functionName: String,
+      parameter: String,
+      invalidValue: Expression): Throwable = {
+    invalidParameter("STRING", functionName, parameter, invalidValue)
+  }
+
   def invalidParameter(
       subClass: String,
       functionName: String,

@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
-private[sql] object Column {
+private[spark] object Column {
 
   def apply(colName: String): Column = new Column(colName)
 
@@ -60,15 +60,15 @@ private[sql] object Column {
     a.withMetadata(metadataWithoutId)
   }
 
-  private[sql] def fn(name: String, inputs: Column*): Column = {
+  private[spark] def fn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, inputs: _*)
   }
 
-  private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
+  private[spark] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
     fn(name, isDistinct = isDistinct, isInternal = false, inputs)
   }
 
-  private[sql] def internalFn(name: String, inputs: Column*): Column = {
+  private[spark] def internalFn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, isInternal = true, inputs)
   }
 
