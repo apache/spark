@@ -49,8 +49,8 @@ object FileStreamSink extends Logging {
 
     path match {
       case Seq(singlePath) =>
-        val hdfsPath = new Path(singlePath)
         try {
+          val hdfsPath = new Path(singlePath)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           if (fs.getFileStatus(hdfsPath).isDirectory) {
             val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)

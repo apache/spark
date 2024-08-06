@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupported
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -1427,12 +1427,12 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {
-    val exception = intercept[NoSuchDatabaseException] {
+    val exception = intercept[AnalysisException] {
       sql("USE ns1")
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`ns1`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`ns1`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
@@ -1443,7 +1443,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`ns1`.`ns2`"))
+      parameters = Map("schemaName" -> "`testcat`.`ns1`.`ns2`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
@@ -2377,10 +2377,7 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
-      testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
-      testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
+      checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
     }
   }
 
@@ -2497,7 +2494,6 @@ class DataSourceV2SQLSuiteV1Filter
         verify(s"CACHE TABLE $t")
         verify(s"UNCACHE TABLE $t")
         verify(s"TRUNCATE TABLE $t")
-        verify(s"SHOW COLUMNS FROM $t")
       }
     }
 
@@ -2588,7 +2584,7 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = intercept[AnalysisException](sql("COMMENT ON NAMESPACE abc IS NULL")),
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`abc`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`abc`"))
 
     // V2 non-session catalog is used.
     sql("CREATE NAMESPACE testcat.ns1")
@@ -2598,7 +2594,7 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = intercept[AnalysisException](sql("COMMENT ON NAMESPACE testcat.abc IS NULL")),
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`abc`"))
+      parameters = Map("schemaName" -> "`testcat`.`abc`"))
   }
 
   private def checkNamespaceComment(namespace: String, comment: String): Unit = {
@@ -3515,6 +3511,43 @@ class DataSourceV2SQLSuiteV1Filter
           spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT $expr")
         }
       })
+    }
+  }
+
+  test("SPARK-49099: Switch current schema with custom spark_catalog") {
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE DATABASE test_db")
+      sql("USE test_db")
+    }
+  }
+
+
+  test("SPARK-36680: Supports Dynamic Table Options for Spark SQL") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      var df = sql(s"SELECT * FROM $t1")
+      var collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.isEmpty)
+      }
+      assert (collected.size == 1)
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+
+      df = sql(s"SELECT * FROM $t1 WITH (`split-size` = 5)")
+      collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.get("split-size") == "5")
+      }
+      assert (collected.size == 1)
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+
+      val noValues = intercept[AnalysisException](
+        sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
+      assert(noValues.message.contains(
+        "Operation not allowed: Values must be specified for key(s): [split-size]"))
     }
   }
 

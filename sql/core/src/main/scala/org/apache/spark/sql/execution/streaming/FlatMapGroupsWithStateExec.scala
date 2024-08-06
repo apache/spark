@@ -189,9 +189,14 @@ trait FlatMapGroupsWithStateExecBase
     })
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      groupingAttributes.toStructType, stateManager.stateSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion))
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -215,14 +220,14 @@ trait FlatMapGroupsWithStateExecBase
     if (hasInitialState) {
       // If the user provided initial state we need to have the initial state and the
       // data in the same partition so that we can still have just one commit at the end.
-      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val storeConf = new StateStoreConf(session.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+        new SerializableConfiguration(session.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -246,8 +251,8 @@ trait FlatMapGroupsWithStateExecBase
         groupingAttributes.toStructType,
         stateManager.stateSchema,
         NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
-        session.sqlContext.sessionState,
-        Some(session.sqlContext.streams.stateStoreCoordinator)
+        session.sessionState,
+        Some(session.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         val processor = createInputProcessor(store)
         processDataWithPartition(singleIterator, store, processor)
@@ -410,8 +415,13 @@ case class FlatMapGroupsWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
-    copy(child = newLeft, initialState = newRight)
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec = {
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+  }
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store) {

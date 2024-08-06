@@ -157,8 +157,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.5.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
@@ -186,8 +184,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.5.0
    */
   def flatMapSortedGroups[U](
@@ -429,8 +425,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.5.0
    */
   def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
@@ -450,8 +444,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.5.0
    */
   def cogroupSorted[U, R](
@@ -832,7 +824,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * @param outputMode
    *   The output mode of the stateful processor.
    */
-  def transformWithState[U: Encoder](
+  private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] = {
@@ -858,7 +850,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * @param outputEncoder
    *   Encoder for the output type.
    */
-  def transformWithState[U: Encoder](
+  private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -887,7 +879,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    */
-  def transformWithState[U: Encoder, S: Encoder](
+  private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,

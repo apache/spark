@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -238,7 +238,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       invalidStatement("EXPLAIN LOGICAL", ctx)
     }
 
-    val statement = plan(ctx.statement)
+    val statement = plan(Option(ctx.statement()).getOrElse(ctx.setResetStatement()))
     if (statement == null) {
       null  // This is enough since ParseException will raise later.
     } else {
@@ -399,19 +399,18 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Fail an unsupported Hive native command.
+   * Fail an unsupported Hive native command (SET ROLE is handled separately).
    */
   override def visitFailNativeCommand(
-    ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    val keywords = if (ctx.unsupportedHiveNativeCommands != null) {
-      ctx.unsupportedHiveNativeCommands.children.asScala.collect {
-        case n: TerminalNode => n.getText
-      }.mkString(" ")
-    } else {
-      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
-      "SET ROLE"
-    }
+      ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
+    val keywords = ctx.unsupportedHiveNativeCommands.children.asScala.collect {
+      case n: TerminalNode => n.getText
+    }.mkString(" ")
     invalidStatement(keywords, ctx)
+  }
+
+  override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
+    invalidStatement("SET ROLE", ctx);
   }
 
   /**
@@ -1097,5 +1096,23 @@ class SparkSqlAstBuilder extends AstBuilder {
       serde = storage.serde.orElse(default.serde))
 
     (ctx.LOCAL != null, finalStorage, Some(DDLUtils.HIVE_PROVIDER))
+  }
+
+  /**
+   * Create a [[UnsetNamespacePropertiesCommand]] command.
+   *
+   * Expected format:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) database
+   *   UNSET (DBPROPERTIES | PROPERTIES) ('key1', 'key2');
+   * }}}
+   */
+  override def visitUnsetNamespaceProperties(
+      ctx: UnsetNamespacePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    val properties = visitPropertyKeys(ctx.propertyList)
+    val cleanedProperties = cleanNamespaceProperties(properties.map(_ -> "").toMap, ctx).keys.toSeq
+    UnsetNamespacePropertiesCommand(
+      withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
+      cleanedProperties)
   }
 }

@@ -92,6 +92,10 @@ case class Collate(child: Expression, collationName: String)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, (in) => in)
+
+  override def sql: String = s"$prettyName(${child.sql}, $collationName)"
+
+  override def toString: String = s"$prettyName($child, $collationName)"
 }
 
 // scalastyle:off line.contains.tab
@@ -116,7 +120,7 @@ case class Collate(child: Expression, collationName: String)
 case class Collation(child: Expression)
   extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, SQLConf.get.defaultStringType)

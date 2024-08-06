@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -80,7 +81,7 @@ object SimpleAnalyzer extends Analyzer(
   override def resolver: Resolver = caseSensitiveResolution
 }
 
-object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
+object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with SupportsNamespaces {
   private def fail() = throw SparkUnsupportedOperationException()
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
@@ -94,10 +95,23 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = CatalogManager.SESSION_CATALOG_NAME
   override def listFunctions(namespace: Array[String]): Array[Identifier] = fail()
   override def loadFunction(ident: Identifier): UnboundFunction = fail()
+  override def listNamespaces(): Array[Array[String]] = fail()
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = fail()
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    if (namespace.length == 1) {
+      mutable.HashMap[String, String]().asJava
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
+  override def createNamespace(
+    namespace: Array[String], metadata: util.Map[String, String]): Unit = fail()
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = fail()
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = fail()
 }
 
 /**
@@ -325,9 +339,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
-      RewriteDeleteFromTable ::
-      RewriteUpdateTable ::
-      RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
@@ -354,6 +365,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       UpdateAttributeNullability),
     Batch("UDF", Once,
       ResolveEncodersInUDF),
+    // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
+    // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
+    // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
+    // rewrite rules.
+    Batch("DML rewrite", fixedPoint,
+      RewriteDeleteFromTable,
+      RewriteUpdateTable,
+      RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -1795,6 +1814,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
+
+      case u: UnresolvedWithCTERelations =>
+        UnresolvedWithCTERelations(this.apply(u.unresolvedPlan), u.cteRelations)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
