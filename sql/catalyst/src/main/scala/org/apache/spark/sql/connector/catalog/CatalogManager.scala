@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -103,17 +104,29 @@ class CatalogManager(
     }
   }
 
-  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+  private def assertNamespaceExist(namespace: Array[String]): Unit = {
     currentCatalog match {
-      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
-        v1SessionCatalog.setCurrentDatabase(namespace.head)
-      case _ if isSessionCatalog(currentCatalog) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: namespace)
       case _ =>
-        _currentNamespace = Some(namespace)
     }
+  }
+
+  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+      v1SessionCatalog.setCurrentDatabaseWithNameCheck(
+        namespace.head,
+        name => {
+          currentCatalog match {
+            case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
+              throw new NoSuchDatabaseException(name)
+            case _ =>
+          }
+        })
+    } else {
+      assertNamespaceExist(namespace)
+    }
+    _currentNamespace = Some(namespace)
   }
 
   private var _currentCatalogName: Option[String] = None
