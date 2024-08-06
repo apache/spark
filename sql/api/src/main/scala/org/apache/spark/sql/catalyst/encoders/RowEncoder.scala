@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.collection.mutable
+import scala.collection.immutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -106,7 +106,7 @@ object RowEncoder extends DataTypeErrorsBase {
       UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
     case ArrayType(elementType, containsNull) =>
       IterableEncoder(
-        classTag[mutable.ArraySeq[_]],
+        classTag[immutable.ArraySeq[_]],
         encoderForDataType(elementType, lenient),
         containsNull,
         lenientSerialization = true)
