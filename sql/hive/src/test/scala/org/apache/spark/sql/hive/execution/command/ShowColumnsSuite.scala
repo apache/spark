@@ -15,20 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvedTable
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.command.v1
 
 /**
- * Physical plan node for show columns from table.
+ * The class contains tests for the `SHOW COLUMNS ...` command to check V1 Hive external
+ * table catalog.
  */
-case class ShowColumnsExec(
-     output: Seq[Attribute],
-     resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
-  override protected def run(): Seq[InternalRow] = {
-    resolvedTable.table.columns().map(f => toCatalystRow(f.name())).toSeq
-  }
-}
+class ShowColumnsSuite extends v1.ShowColumnsSuiteBase with CommandSuiteBase

@@ -3760,6 +3760,11 @@
     ],
     "sqlState" : "42K08"
   },
+  "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
+    "message" : [
+      "SHOW COLUMNS with conflicting namespace: <namespaceA> != <namespaceB>."
+    ]
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -5503,11 +5508,6 @@
   "_LEGACY_ERROR_TEMP_1054" : {
     "message" : [
       "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1057" : {
-    "message" : [
-      "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1058" : {
