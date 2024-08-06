@@ -32,6 +32,9 @@ case class CSVWrite(
     formatName: String,
     supportsDataType: DataType => Boolean,
     info: LogicalWriteInfo) extends FileWrite {
+
+  override def allowDuplicatedColumnNames: Boolean = true
+
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
