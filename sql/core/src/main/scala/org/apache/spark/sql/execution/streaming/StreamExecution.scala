@@ -690,6 +690,9 @@ abstract class StreamExecution(
     offsetLog.purge(threshold)
     commitLog.purge(threshold)
   }
+
+  // This is to fulfill the interface of AsyncLogPurge
+  protected def purgeOldest(statefulOp: StatefulOperator): Unit = {}
 }
 
 object StreamExecution {
