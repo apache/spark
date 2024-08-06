@@ -23,7 +23,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -1204,42 +1204,32 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq("""{"a":1}""").toDF("json")
     val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
+      exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
-      parameters = Map("invalidType" -> """{"a":123}"""))
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'{'", "hint" -> ""),
+      ExpectedContext("from_json", getCurrentClassCallSitePattern)
+    )
 
     val invalidDataType = "MAP<INT, cow>"
-    val invalidDataTypeReason = "Unrecognized token 'MAP': " +
-      "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
-      "at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); " +
-      "line: 1, column: 4]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
-      parameters = Map(
-        "inputSchema" -> "\"MAP<INT, cow>\"",
-        "reason" -> invalidDataTypeReason
-      )
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"COW\""),
+      ExpectedContext("from_json", getCurrentClassCallSitePattern)
     )
 
     val invalidTableSchema = "x INT, a cow"
-    val invalidTableSchemaReason = "Unrecognized token 'x': " +
-      "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
-      " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); " +
-      "line: 1, column: 2]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
-      parameters = Map(
-        "inputSchema" -> "\"x INT, a cow\"",
-        "reason" -> invalidTableSchemaReason
-      )
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'INT'", "hint" -> ""),
+      ExpectedContext("from_json", getCurrentClassCallSitePattern)
     )
   }
 

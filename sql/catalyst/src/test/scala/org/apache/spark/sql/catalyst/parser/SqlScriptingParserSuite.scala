@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
@@ -207,7 +208,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END lbl_end""".stripMargin
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
       errorClass = "LABELS_MISMATCH",
@@ -226,7 +227,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END lbl""".stripMargin
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
@@ -287,7 +288,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE testVariable INTEGER;
         |END""".stripMargin
     checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SqlScriptingException] {
           parseScript(sqlScriptText)
         },
         errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
@@ -403,7 +404,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
           |  SELECT 1;
           |END""".stripMargin
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SqlScriptingException] {
           parseScript(sqlScriptText)
         },
         errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
