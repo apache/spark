@@ -171,9 +171,9 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
-      Murmur3HashTestCase("Spark", "UTF8_LCASE", 228093765),
-      Murmur3HashTestCase("SQL", "UNICODE", 17468742),
-      Murmur3HashTestCase("SQL", "UNICODE_CI", 17468742)
+      Murmur3HashTestCase("Spark", "UTF8_LCASE", -1928694360),
+      Murmur3HashTestCase("SQL", "UNICODE", -1923567940),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950)
     )
 
     // Supported collations
@@ -199,9 +199,9 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
-      XxHash64TestCase("Spark", "UTF8_LCASE", -4294468057691064905L),
-      XxHash64TestCase("SQL", "UNICODE", -2147923034195946097L),
-      XxHash64TestCase("SQL", "UNICODE_CI", -2147923034195946097L)
+      XxHash64TestCase("Spark", "UTF8_LCASE", -3142112654825786434L),
+      XxHash64TestCase("SQL", "UNICODE", 5964849564945649886L),
+      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L)
     )
 
     // Supported collations
@@ -2317,6 +2317,45 @@ class CollationSQLExpressionsSuite
         start = 8,
         stop = 54)
     )
+  }
+
+  test("Support HyperLogLogPlusPlus expression with collation") {
+    case class HyperLogLogPlusPlusTestCase(
+      collation: String,
+      input: Seq[String],
+      output: Seq[Row]
+    )
+
+    val testCases = Seq(
+      HyperLogLogPlusPlusTestCase("utf8_binary", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("utf8_lcase", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(5))),
+      HyperLogLogPlusPlusTestCase("UNICODE", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("UNICODE_CI", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(5)))
+    )
+
+    testCases.foreach( t => {
+      // Using explicit collate clause
+      val query =
+        s"""
+           |SELECT approx_count_distinct(col) FROM VALUES
+           |${t.input.map(s => s"('${s}' collate ${t.collation})").mkString(", ") } tab(col)
+           |""".stripMargin
+      checkAnswer(sql(query), t.output)
+
+      // Using default collation
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collation) {
+        val query =
+          s"""
+             |SELECT approx_count_distinct(col) FROM VALUES
+             |${t.input.map(s => s"('${s}')").mkString(", ") } tab(col)
+             |""".stripMargin
+        checkAnswer(sql(query), t.output)
+      }
+    })
   }
 
   // TODO: Add more tests for other SQL expressions

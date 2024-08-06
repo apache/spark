@@ -643,6 +643,23 @@ class DataFrameWriter(OptionUtils):
 
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
 
+    @overload
+    def clusterBy(self, *cols: str) -> "DataFrameWriter":
+        ...
+
+    @overload
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
+        ...
+
+    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]  # type: ignore[assignment]
+        assert len(cols) > 0, "clusterBy needs one or more clustering columns."
+        self._write.clustering_cols = cast(List[str], cols)
+        return self
+
+    clusterBy.__doc__ = PySparkDataFrameWriter.clusterBy.__doc__
+
     def save(
         self,
         path: Optional[str] = None,
@@ -899,6 +916,13 @@ class DataFrameWriterV2(OptionUtils):
         return self
 
     partitionedBy.__doc__ = PySparkDataFrameWriterV2.partitionedBy.__doc__
+
+    def clusterBy(self, col: str, *cols: str) -> "DataFrameWriterV2":
+        self._write.clustering_columns = [col]
+        self._write.clustering_columns.extend(cols)
+        return self
+
+    clusterBy.__doc__ = PySparkDataFrameWriterV2.clusterBy.__doc__
 
     def create(self) -> None:
         self._write.mode = "create"

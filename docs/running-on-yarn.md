@@ -489,7 +489,7 @@ To use a custom metrics.properties for the application master and executors, upd
     and send to RM, which uses them when renewing delegation tokens. A typical use case of this feature is to support delegation
     tokens in an environment where a YARN cluster needs to talk to multiple downstream HDFS clusters, where the YARN RM may not have configs
     (e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*) to connect to these clusters.
-    In this scenario, Spark users can specify the config value to be <code>^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$</code> to parse
+    In this scenario, Spark users can specify the config value to be <code>^dfs.nameservices\$|^dfs.namenode.rpc-address.*\$|^dfs.ha.namenodes.*\$</code> to parse
     these HDFS configs from the job's local configuration files. This config is very similar to <code>mapreduce.job.send-token-conf</code>. Please check YARN-5910 for more details.
   </td>
   <td>3.3.0</td>

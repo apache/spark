@@ -101,6 +101,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("complex variant input to pandas grouped agg UDF") {
+    assume(shouldTestPandasUDFs)
     val df = spark.range(0, 10).selectExpr(
       """array(parse_json(format_string('{"%s": "test"}', id))) as arr_v""")
 

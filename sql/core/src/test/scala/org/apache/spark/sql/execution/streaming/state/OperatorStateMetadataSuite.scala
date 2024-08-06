@@ -22,7 +22,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, LongOffset, MemoryStream, OffsetSeq, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StreamTest, TimeMode}
@@ -40,10 +41,12 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       checkpointDir: String,
       operatorId: Int,
       expectedMetadata: OperatorStateMetadata,
-      expectedVersion: Int = 1): Unit = {
+      expectedVersion: Int = 1,
+      batchId: Option[Long] = None): Unit = {
     val statePath = new Path(checkpointDir, s"state/$operatorId")
     val operatorMetadata = OperatorStateMetadataReader.createReader(statePath,
-      hadoopConf, expectedVersion).read()
+      hadoopConf, expectedVersion, batchId.getOrElse(
+        OperatorStateMetadataUtils.getLastOffsetBatch(spark, checkpointDir))).read()
     assert(operatorMetadata.isDefined)
     assert(operatorMetadata.get.version == expectedVersion)
 
@@ -67,6 +70,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
   test("Serialize and deserialize stateful operator metadata") {
     withTempDir { checkpointDir =>
+      val offsetLog = new OffsetSeqLog(spark,
+        new Path(checkpointDir.toString, DIR_NAME_OFFSETS).toString)
+      val batch0 = OffsetSeq.fill(LongOffset(0), LongOffset(1), LongOffset(2))
+      offsetLog.add(0, batch0)
       val statePath = new Path(checkpointDir.toString, "state/0")
       val stateStoreInfo = (1 to 4).map(i => StateStoreMetadataV1(s"store$i", 1, 200))
       val operatorInfo = OperatorInfoV1(1, "Join")
@@ -81,6 +88,20 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           Row(1, "Join", "store4", 200, -1L, -1L, null)
         ))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
+        Seq(Row(1), Row(1), Row(1), Row(1)))
+
+      // verify that explicitly passing batchId has no effect if the operator is written with
+      // schema version v1
+      val testBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(spark,
+        checkpointDir.toString) + 1
+      val testDf = spark.read.format("state-metadata")
+        .option("batchId", testBatchId).load(checkpointDir.toString)
+      checkAnswer(testDf, Seq(Row(1, "Join", "store1", 200, -1L, -1L, null),
+          Row(1, "Join", "store2", 200, -1L, -1L, null),
+          Row(1, "Join", "store3", 200, -1L, -1L, null),
+          Row(1, "Join", "store4", 200, -1L, -1L, null)
+        ))
+      checkAnswer(testDf.select(testDf.metadataColumn("_numColsPrefixKey")),
         Seq(Row(1), Row(1), Row(1), Row(1)))
     }
   }
@@ -133,6 +154,37 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         Array(StateStoreMetadataV2("default", 0, numShufflePartitions, checkpointDir.toString)),
         "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
+
+      // Verify that the state store metadata is not available for invalid batches.
+      val ex = intercept[Exception] {
+        val invalidBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(spark,
+          checkpointDir.toString) + 1
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
+          Some(invalidBatchId))
+      }
+
+      checkError(
+        ex.asInstanceOf[SparkRuntimeException],
+        "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+        Some("42K03"),
+        Map(
+          "checkpointLocation" -> ".*",
+          "batchId" -> ".*"),
+        matchPVals = true)
+
+      val ex1 = intercept[Exception] {
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
+          Some(-1))
+      }
+
+      checkError(
+        ex1.asInstanceOf[SparkRuntimeException],
+        "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+        Some("42K03"),
+        Map(
+          "checkpointLocation" -> ".*",
+          "batchId" -> ".*"),
+        matchPVals = true)
     }
   }
 
