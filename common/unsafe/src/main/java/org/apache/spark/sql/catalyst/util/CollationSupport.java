@@ -66,7 +66,7 @@ public final class CollationSupport {
     }
     public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
         final int collationId) {
-      return CollationAwareUTF8String.ICUsplitSQL(string, delimiter, -1, collationId);
+      return CollationAwareUTF8String.icuSplitSQL(string, delimiter, -1, collationId);
     }
   }
 

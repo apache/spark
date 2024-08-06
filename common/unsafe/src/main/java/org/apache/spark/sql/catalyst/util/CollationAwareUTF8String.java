@@ -1171,7 +1171,7 @@ public class CollationAwareUTF8String {
     } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
       return lowercaseSplitSQL(input, delim, limit);
     } else {
-      return ICUsplitSQL(input, delim, limit, collationId);
+      return icuSplitSQL(input, delim, limit, collationId);
     }
   }
 
@@ -1189,7 +1189,7 @@ public class CollationAwareUTF8String {
       return res;
   }
 
-  public static UTF8String[] ICUsplitSQL(final UTF8String string, final UTF8String delimiter,
+  public static UTF8String[] icuSplitSQL(final UTF8String string, final UTF8String delimiter,
       final int limit, final int collationId) {
     if (delimiter.numBytes() == 0) return new UTF8String[] { string };
     if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
