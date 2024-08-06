@@ -197,6 +197,7 @@
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
+    <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.7</joda.version>
@@ -571,6 +572,18 @@
       </dependency>
 
       <!-- End of shaded deps -->
+
+      <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>${gson.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
 
       <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
       <dependency>

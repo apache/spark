@@ -29,15 +29,13 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, CollectTopK}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
@@ -1027,8 +1025,7 @@ object functions {
    * @group agg_funcs
    * @since 3.2.0
    */
-  def product(e: Column): Column =
-    withAggregateFunction { new Product(e.expr) }
+  def product(e: Column): Column = Column.internalFn("product", e)
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
@@ -6531,7 +6528,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
-    from_json(e, CharVarcharUtils.failIfHasCharVarchar(schema), options.asScala.toMap)
+    from_json(e, schema, options.asScala.toMap)
   }
 
   /**
@@ -6604,11 +6601,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = parseTypeWithFallback(
-      schema,
-      DataType.fromJson,
-      fallbackParser = DataType.fromDDL)
-    from_json(e, dataType, options)
+    from_json(e, lit(schema), options.asJava)
   }
 
   /**
@@ -7301,7 +7294,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(CharVarcharUtils.failIfHasCharVarchar(schema).sql), options.asScala.iterator)
+    from_xml(e, lit(schema.sql), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -7322,13 +7315,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    val dataType =
-      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
-    val structType = dataType match {
-      case t: StructType => t
-      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
-    }
-    from_xml(e, structType, options)
+    from_xml(e, lit(schema), options)
   }
 
   // scalastyle:off line.size.limit
@@ -8465,9 +8452,7 @@ object functions {
    * @group udf_funcs
    * @since 3.4.0
    */
-  def unwrap_udt(column: Column): Column = withExpr {
-    UnwrapUDT(column.expr)
-  }
+  def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those
@@ -8481,7 +8466,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def years(e: Column): Column = withExpr { Years(e.expr) }
+    def years(e: Column): Column = Column.internalFn("years", e)
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into months.
@@ -8489,7 +8474,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def months(e: Column): Column = withExpr { Months(e.expr) }
+    def months(e: Column): Column = Column.internalFn("months", e)
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into days.
@@ -8497,7 +8482,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def days(e: Column): Column = withExpr { Days(e.expr) }
+    def days(e: Column): Column = Column.internalFn("days", e)
 
     /**
      * (Scala-specific) A transform for timestamps to partition data into hours.
@@ -8505,7 +8490,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def hours(e: Column): Column = withExpr { Hours(e.expr) }
+    def hours(e: Column): Column = Column.internalFn("hours", e)
 
     /**
      * (Scala-specific) A transform for any type that partitions by a hash of the input column.
