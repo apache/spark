@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.collection.immutable
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.util.Random
 
 import org.apache.spark.SparkRuntimeException
