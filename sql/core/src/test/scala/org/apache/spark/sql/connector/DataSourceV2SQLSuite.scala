@@ -2377,10 +2377,7 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
-      testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
-      testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
+      checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
     }
   }
 
@@ -2497,7 +2494,6 @@ class DataSourceV2SQLSuiteV1Filter
         verify(s"CACHE TABLE $t")
         verify(s"UNCACHE TABLE $t")
         verify(s"TRUNCATE TABLE $t")
-        verify(s"SHOW COLUMNS FROM $t")
       }
     }
 

@@ -27,6 +27,7 @@ import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationExcepti
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -1228,6 +1229,46 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             )
           }
         )
+      }
+    }
+  }
+
+  test("SPARK-49070: transformWithState - valid initial state plan") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+        val df = createFileStream(srcDir)
+
+        var index = 0
+
+        val q = df.writeStream
+          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            index += 1
+          })
+          .trigger(Trigger.AvailableNow)
+          .start()
+
+        try {
+          assert(q.awaitTermination(streamingTimeout.toMillis))
+
+          val sparkPlan =
+            q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+          val transformWithStateExec = sparkPlan.collect {
+            case p: TransformWithStateExec => p
+          }.head
+
+          assert(!transformWithStateExec.hasInitialState)
+
+          // EnsureRequirements should not apply on the initial state plan
+          val exchange = transformWithStateExec.initialState.collect {
+            case s: ShuffleExchangeExec => s
+          }
+
+          assert(exchange.isEmpty)
+        } finally {
+          q.stop()
+        }
       }
     }
   }

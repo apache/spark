@@ -2503,6 +2503,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOCATION" : {
+    "message" : [
+      "The location name cannot be an invalid URI, but `<location>` was given."
+    ],
+    "sqlState" : "42K05"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3640,7 +3646,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."
     ],
     "sqlState" : "42K0G"
   },
@@ -3682,8 +3688,8 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the routine <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
+      "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
+      "Choose a different name, drop or replace the existing <existingRoutineType>, or add the IF NOT EXISTS clause to tolerate a pre-existing <newRoutineType>."
     ],
     "sqlState" : "42723"
   },
