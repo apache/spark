@@ -20,14 +20,12 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
-
 import scala.collection.mutable.{Map => MutableMap}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
-
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.CloseableThreadContext
@@ -39,7 +37,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SparkDataStream, Offset => OffsetV2}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
@@ -704,28 +702,22 @@ object StreamExecution {
     "py4j.protocol.Py4JJavaError: An error occurred while calling" +
       s"((.|\\r\\n|\\r|\\n)*)(${IO_EXCEPTION_NAMES.mkString("|")})").r
 
-  private var columnFamilySchemas:
-    Map[UUID, Map[UUID, Map[String, StateStoreColFamilySchema]]] = Map.empty
+  private val columnFamilySchemas:
+    ConcurrentHashMap[UUID, Map[String, StateStoreColFamilySchema]] = new ConcurrentHashMap
 
   def updateColumnFamilySchemas(
       queryId: UUID,
-      runId: UUID,
       newSchemas: Map[String, StateStoreColFamilySchema]): Unit = {
-    columnFamilySchemas = columnFamilySchemas.updated(
-      queryId,
-      columnFamilySchemas.getOrElse(queryId, Map.empty).updated(
-        runId,
-        newSchemas
-      )
-    )
+    columnFamilySchemas.put(queryId, newSchemas)
   }
 
   def getColumnFamilySchemas(
-      queryId: UUID,
-      runId: UUID): Map[String, StateStoreColFamilySchema] = {
+      queryId: UUID): Map[String, StateStoreColFamilySchema] = {
     columnFamilySchemas.get(queryId)
-      .flatMap(_.get(runId))
-      .getOrElse(Map.empty)
+  }
+
+  def removeColumnFamilySchemas(queryId: UUID): Unit = {
+    columnFamilySchemas.remove(queryId)
   }
 
   @scala.annotation.tailrec

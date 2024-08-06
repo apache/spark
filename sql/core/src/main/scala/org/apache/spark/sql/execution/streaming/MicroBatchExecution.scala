@@ -280,6 +280,7 @@ class MicroBatchExecution(
     // intentionally
     state.set(TERMINATED)
     if (queryExecutionThread.isAlive) {
+      StreamExecution.removeColumnFamilySchemas(id)
       sparkSession.sparkContext.cancelJobGroup(runId.toString,
         s"Query $prettyIdString was stopped")
       interruptAndAwaitExecutionThreadTermination()

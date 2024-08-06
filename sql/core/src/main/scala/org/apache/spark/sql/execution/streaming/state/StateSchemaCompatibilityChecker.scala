@@ -184,9 +184,15 @@ class StateSchemaCompatibilityChecker(
       createSchemaFile(newStateSchemaList, stateSchemaVersion)
       (true, newStateSchemaList)
     } else {
-      // validate if the new schema is compatible with the existing schema
+      // create a hashmap of name to schema from existing state schema list
+      val existingSchemas = existingStateSchemaList.map { schema =>
+        schema.colFamilyName -> schema
+      }.toMap
+      // For each column family we are creating, check if it existed in the
+      // previous run, and assign its ID to the old ID if the schema hasn't changed.
+      // If the schema has evolved, assign it a new ID.
       val newList = newStateSchema.map { newSchema =>
-        existingStateSchemaList.find(_.colFamilyName == newSchema.colFamilyName) match {
+        existingSchemas.get(newSchema.colFamilyName) match {
           case Some(existingSchema) =>
             if (check(existingSchema, newSchema, ignoreValueSchema)) {
               maxId = (maxId + 1).toShort

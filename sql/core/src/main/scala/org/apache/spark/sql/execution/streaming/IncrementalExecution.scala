@@ -250,7 +250,7 @@ class IncrementalExecution(
               schema.colFamilyName -> schema
             }.toMap
             StreamExecution.updateColumnFamilySchemas(
-              queryId, runId, columnFamilySchemas)
+              queryId, columnFamilySchemas)
             val stateInfo = tws.getStateInfo
             tws.copy(stateInfo = Some(
               stateInfo.copy(colFamilySchemas = columnFamilySchemas)))
@@ -258,7 +258,7 @@ class IncrementalExecution(
         }
       case tws: TransformWithStateExec =>
         val columnFamilySchemas = StreamExecution.getColumnFamilySchemas(
-          queryId, runId)
+          queryId)
         val stateInfo = tws.getStateInfo
         tws.copy(stateInfo = Some(
           stateInfo.copy(colFamilySchemas = columnFamilySchemas)))

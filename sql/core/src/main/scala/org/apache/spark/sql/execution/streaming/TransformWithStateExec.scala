@@ -588,6 +588,11 @@ case class TransformWithStateExec(
     })
   }
 
+  private def getColFamilyIds: Map[String, Short] =
+    getStateInfo.colFamilySchemas.map { case (name, schema) =>
+      name -> schema.colFamilyId
+    }
+
   /**
    * Process the data in the partition using the state store and the stateful processor.
    * @param store The state store to use
@@ -596,12 +601,9 @@ case class TransformWithStateExec(
    */
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
-    val columnFamilyIds = getStateInfo.colFamilySchemas.map { case (name, schema) =>
-      name -> schema.colFamilyId
-    }
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, columnFamilyIds)
+      isStreaming, batchTimestampMs, metrics, getColFamilyIds)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -614,12 +616,9 @@ case class TransformWithStateExec(
       childDataIterator: Iterator[InternalRow],
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
-    val columnFamilyIds = getStateInfo.colFamilySchemas.map { case (name, schema) =>
-      name -> schema.colFamilyId
-    }
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, columnFamilyIds)
+      isStreaming, batchTimestampMs, metrics, getColFamilyIds)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -680,6 +679,9 @@ object TransformWithStateExec {
       initialState: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
 
+    // We are assigning the columnFamilyIds based on their alphabetic order
+    // in the batch world since there is no notion of restarts, and we don't need
+    // the columnFamilyIds here to be consistent between runs
     val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
