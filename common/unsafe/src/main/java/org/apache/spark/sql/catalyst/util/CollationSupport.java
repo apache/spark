@@ -477,7 +477,7 @@ public final class CollationSupport {
       } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s, %s, %s)", string, delimiter, count);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d, %s)", string, delimiter, count, collationId);
+        return String.format(expr + "ICU(%s, %s, %s, %d)", string, delimiter, count, collationId);
       }
     }
     public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter,
@@ -490,8 +490,7 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
-      return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
-        collationId);
+      return CollationAwareUTF8String.subStringIndex(string, delimiter, count, collationId);
     }
   }
 
