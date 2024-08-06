@@ -353,10 +353,6 @@ class SessionCatalog(
 
   def setCurrentDatabaseWithoutCheck(db: String): Unit = {
     val dbName = format(db)
-    if (dbName == globalTempDatabase) {
-      throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
-        globalTempDatabase)
-    }
     synchronized { currentDb = dbName }
   }
 
