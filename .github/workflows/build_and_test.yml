@@ -343,7 +343,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./dev/infra/
           push: true
@@ -870,8 +870,8 @@ jobs:
         bundle install
     - name: Run documentation build
       run: |
-        # We need this link because the jekyll build calls `python`.
-        ln -s "$(which python3.9)" "/usr/local/bin/python"
+        # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
+        ln -s "$(which python3.9)" "/usr/local/bin/python3"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_API=1 bundle exec jekyll build; cd ..

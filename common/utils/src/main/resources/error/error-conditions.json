@@ -3688,8 +3688,8 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the routine <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
+      "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
+      "Choose a different name, drop or replace the existing <existingRoutineType>, or add the IF NOT EXISTS clause to tolerate a pre-existing <newRoutineType>."
     ],
     "sqlState" : "42723"
   },
@@ -4001,6 +4001,14 @@
       "The options <options> cannot be specified together. Please specify the one."
     ],
     "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_OPERATOR_METADATA" : {
+    "message" : [
+      "Failed to read the operator metadata for checkpointLocation=<checkpointLocation> and batchId=<batchId>.",
+      "Either the file does not exist, or the file is corrupted.",
+      "Rerun the streaming query to construct the operator metadata, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
   },
   "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
     "message" : [
