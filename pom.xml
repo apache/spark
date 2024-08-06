@@ -153,7 +153,7 @@
     -->
     <codahale.metrics.version>4.2.26</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <avro.version>1.11.3</avro.version>
+    <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
@@ -197,6 +197,7 @@
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
+    <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.7</joda.version>
@@ -571,6 +572,18 @@
       </dependency>
 
       <!-- End of shaded deps -->
+
+      <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>${gson.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
 
       <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
       <dependency>

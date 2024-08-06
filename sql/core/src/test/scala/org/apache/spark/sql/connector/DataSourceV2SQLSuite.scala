@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, ColumnStat, CommandResult, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
@@ -41,6 +41,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -1443,7 +1444,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`ns1`.`ns2`"))
+      parameters = Map("schemaName" -> "`testcat`.`ns1`.`ns2`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
@@ -3514,6 +3515,14 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49099: Switch current schema with custom spark_catalog") {
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE DATABASE test_db")
+      sql("USE test_db")
+    }
+  }
+
+
   test("SPARK-36680: Supports Dynamic Table Options for Spark SQL") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
@@ -3540,6 +3549,66 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
       assert(noValues.message.contains(
         "Operation not allowed: Values must be specified for key(s): [split-size]"))
+    }
+  }
+
+  test("SPARK-36680: Supports Dynamic Table Options for Insert") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) VALUES (1, 'a'), (2, 'b')")
+
+      val collected = df.queryExecution.optimizedPlan.collect {
+        case CommandResult(_, AppendData(relation: DataSourceV2Relation, _, _, _, _, _), _, _) =>
+          assert(relation.options.get("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      val insertResult = sql(s"SELECT * FROM $t1")
+      checkAnswer(insertResult, Seq(Row(1, "a"), Row(2, "b")))
+    }
+  }
+
+  test("SPARK-36680: Supports Dynamic Table Options for Insert Overwrite") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) VALUES (1, 'a'), (2, 'b')")
+
+      val df = sql(s"INSERT OVERWRITE $t1 WITH (`write.split-size` = 10) " +
+        s"VALUES (3, 'c'), (4, 'd')")
+      val collected = df.queryExecution.optimizedPlan.collect {
+        case CommandResult(_,
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _),
+          _, _) =>
+          assert(relation.options.get("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      val insertResult = sql(s"SELECT * FROM $t1")
+      checkAnswer(insertResult, Seq(Row(3, "c"), Row(4, "d")))
+    }
+  }
+
+  test("SPARK-36680: Supports Dynamic Table Options for Insert Replace") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) VALUES (1, 'a'), (2, 'b')")
+
+      val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) " +
+        s"REPLACE WHERE TRUE " +
+        s"VALUES (3, 'c'), (4, 'd')")
+      val collected = df.queryExecution.optimizedPlan.collect {
+        case CommandResult(_,
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _),
+          _, _) =>
+          assert(relation.options.get("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      val insertResult = sql(s"SELECT * FROM $t1")
+      checkAnswer(insertResult, Seq(Row(3, "c"), Row(4, "d")))
     }
   }
 

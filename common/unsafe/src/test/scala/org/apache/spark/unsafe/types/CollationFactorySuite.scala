@@ -41,9 +41,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(utf8Binary.supportsBinaryEquality)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
-    val utf8BinaryLcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
-    assert(utf8BinaryLcase.collationName == "UTF8_LCASE")
-    assert(!utf8BinaryLcase.supportsBinaryEquality)
+    val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
+    assert(utf8Lcase.collationName == "UTF8_LCASE")
+    assert(!utf8Lcase.supportsBinaryEquality)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)

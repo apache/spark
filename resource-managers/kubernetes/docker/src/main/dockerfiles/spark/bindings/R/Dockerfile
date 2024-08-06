@@ -17,7 +17,7 @@
 
 ARG base_img
 
-FROM $base_img
+FROM ${base_img:-spark}
 WORKDIR /
 
 # Reset to root to run installation tasks
