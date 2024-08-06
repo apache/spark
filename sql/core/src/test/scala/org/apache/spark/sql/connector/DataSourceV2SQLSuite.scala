@@ -3518,6 +3518,14 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49099: Switch current schema with custom spark_catalog") {
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE DATABASE test_db")
+      sql("USE test_db")
+    }
+  }
+
+
   test("SPARK-36680: Supports Dynamic Table Options for Spark SQL") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
