@@ -188,8 +188,14 @@ case class TransformWithStateExec(
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     val keyObj = getKeyObj(keyRow)  // convert key to objects
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
+
+    // The statefulProcessor's handleInputRows method may create an eager iterator,
+    // and in that case, the implicit key needs to be set now. However, it could return
+    // a lazy iterator, in which case the implicit key should be set when the actual
+    // methods on the iterator are invoked. This is done with the wrapper class
+    // at the end of this method.
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val mappedIterator = statefulProcessor.handleInputRows(
       keyObj,
       valueObjIter,
@@ -198,7 +204,29 @@ case class TransformWithStateExec(
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    // Wrapper to ensure that the implicit key is set when the methods on the iterator
+    // are called. Inside of processNewData, we use a GroupedIterator, so handleInputRows
+    // is only called once per key. As such, we don't strictly need to set/unset the
+    // implicit key on every call to next(); we just need to set it on the first call
+    // to hasNext and unset it after the last call to next. However, such an optimization
+    // relies on knowing this implementation detail of processNewData, so we set/unset the
+    // implicit key on every call to a mappedIterator's public methods to be safe.
+    new Iterator[InternalRow] {
+      override def hasNext: Boolean = {
+        ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+        val hasNext = mappedIterator.hasNext
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+        hasNext
+      }
+
+      override def next(): InternalRow = {
+        ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+        val next = mappedIterator.next()
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+        next
+      }
+    }
   }
 
   private def processInitialStateRows(

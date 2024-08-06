@@ -353,6 +353,57 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - lazy iterators can properly get/set keyed state") {
+    class ProcessorWithLazyIterator
+      extends StatefulProcessor[Int, Int, Int] {
+      @transient protected var _myValueState: ValueState[Int] = _
+
+      override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+        _myValueState = getHandle.getValueState[Int](
+          "eagerValueState",
+          Encoders.scalaInt
+        )
+      }
+
+      override def handleInputRows(
+          key: Int,
+          inputRows: Iterator[Int],
+          timerValues: TimerValues,
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Int] = {
+        // Eagerly get/set a state variable
+        _myValueState.get()
+        _myValueState.update(1)
+
+        inputRows.map { r =>
+          // In the lazy iterator, make some more updates
+          _myValueState.get()
+          _myValueState.update(r)
+          r
+        }
+      }
+    }
+
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
+    ) {
+      val inputData = MemoryStream[Int]
+      val result = inputData
+        .toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new ProcessorWithLazyIterator(), TimeMode.None(), OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(),
+        AddData(inputData, 3),
+        CheckNewAnswer(3)
+      )
+    }
+  }
+
   test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
