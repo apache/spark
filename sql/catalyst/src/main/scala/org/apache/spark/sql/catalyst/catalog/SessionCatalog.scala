@@ -323,14 +323,6 @@ class SessionCatalog(
     externalCatalog.databaseExists(dbName)
   }
 
-  def validateDBIsNotGlobalTempView(db: String): Unit = {
-    val dbName = format(db)
-    if (dbName == globalTempDatabase) {
-      throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
-        globalTempDatabase)
-    }
-  }
-
   def listDatabases(): Seq[String] = {
     externalCatalog.listDatabases()
   }
@@ -342,17 +334,16 @@ class SessionCatalog(
   def getCurrentDatabase: String = synchronized { currentDb }
 
   def setCurrentDatabase(db: String): Unit = {
+    setCurrentDatabaseWithNameCheck(db, requireDbExists)
+  }
+
+  def setCurrentDatabaseWithNameCheck(db: String, nameCheck: String => Unit): Unit = {
     val dbName = format(db)
     if (dbName == globalTempDatabase) {
       throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
         globalTempDatabase)
     }
-    requireDbExists(dbName)
-    synchronized { currentDb = dbName }
-  }
-
-  def setCurrentDatabaseWithoutCheck(db: String): Unit = {
-    val dbName = format(db)
+    nameCheck(dbName)
     synchronized { currentDb = dbName }
   }
 
