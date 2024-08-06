@@ -31,13 +31,11 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, CollectTopK}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
@@ -6530,7 +6528,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
-    from_json(e, CharVarcharUtils.failIfHasCharVarchar(schema), options.asScala.toMap)
+    from_json(e, schema, options.asScala.toMap)
   }
 
   /**
@@ -6603,11 +6601,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = parseTypeWithFallback(
-      schema,
-      DataType.fromJson,
-      fallbackParser = DataType.fromDDL)
-    from_json(e, dataType, options)
+    from_json(e, lit(schema), options.asJava)
   }
 
   /**
@@ -7300,7 +7294,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(CharVarcharUtils.failIfHasCharVarchar(schema).sql), options.asScala.iterator)
+    from_xml(e, lit(schema.sql), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -7321,13 +7315,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    val dataType =
-      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
-    val structType = dataType match {
-      case t: StructType => t
-      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
-    }
-    from_xml(e, structType, options)
+    from_xml(e, lit(schema), options)
   }
 
   // scalastyle:off line.size.limit

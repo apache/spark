@@ -38,7 +38,10 @@ object ExprUtils extends QueryErrorsBase {
     if (exp.foldable) {
       exp.eval() match {
         case s: UTF8String if s != null =>
-          val dataType = DataType.fromDDL(s.toString)
+          val dataType = DataType.parseTypeWithFallback(
+            s.toString,
+            DataType.fromDDL,
+            DataType.fromJson)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 

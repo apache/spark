@@ -65,7 +65,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -1859,36 +1859,6 @@ class SparkConnectPlanner(
             Some(Bucket(numBuckets, child))
           case (other, _) =>
             throw InvalidPlanInput(s"numBuckets should be a literal integer, but got $other")
-        }
-
-      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        // JsonToStructs constructor doesn't accept JSON-formatted schema.
-        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
-          val children = fun.getArgumentsList.asScala.map(transformExpression)
-          val schema = CharVarcharUtils.failIfHasCharVarchar(dataType)
-          var options = Map.empty[String, String]
-          if (children.length == 3) {
-            options = extractMapData(children(2), "Options")
-          }
-          JsonToStructs(schema = schema, options = options, child = children.head)
-        }
-
-      case "from_xml" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        // XmlToStructs constructor doesn't accept JSON-formatted schema.
-        extractDataTypeFromJSON(fun.getArguments(1)).map { dataType =>
-          val children = fun.getArgumentsList.asScala.map(transformExpression)
-          val schema = dataType match {
-            case t: StructType =>
-              CharVarcharUtils
-                .failIfHasCharVarchar(t)
-                .asInstanceOf[StructType]
-            case _ => throw DataTypeErrors.failedParsingStructTypeError(dataType.sql)
-          }
-          var options = Map.empty[String, String]
-          if (children.length == 3) {
-            options = extractMapData(children(2), "Options")
-          }
-          XmlToStructs(schema = schema, options = options, child = children.head)
         }
 
       // Avro-specific functions
