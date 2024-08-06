@@ -201,6 +201,14 @@ private[spark] object History {
     .toSequence
     .createWithDefault(Nil)
 
+  val HISTORY_UI_MAX_APPS = ConfigBuilder("spark.history.ui.maxApplications")
+    .version("2.0.1")
+    .doc("The number of applications to display on the history summary page. Application UIs " +
+      "are still available by accessing their URLs directly even if they are not displayed on " +
+      "the history summary page.")
+    .intConf
+    .createWithDefault(Integer.MAX_VALUE)
+
   val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
     .version("2.0.0")
     .doc("Number of threads that will be used by history server to process event logs.")

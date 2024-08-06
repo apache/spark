@@ -30,7 +30,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.Utils.addRenderLogHandler
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
@@ -65,7 +64,7 @@ class HistoryServer(
   private val retainedApplications = conf.get(History.RETAINED_APPLICATIONS)
 
   // How many applications the summary ui displays
-  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
+  private[history] val maxApplications = conf.get(History.HISTORY_UI_MAX_APPS);
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
