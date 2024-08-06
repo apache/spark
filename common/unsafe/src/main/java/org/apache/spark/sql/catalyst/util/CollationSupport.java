@@ -118,7 +118,7 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return CollationAwareUTF8String.lowercaseIndexOf(l, r, 0) >= 0;
+      return CollationAwareUTF8String.lowercaseContains(l, r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -156,7 +156,7 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return CollationAwareUTF8String.lowercaseMatchFrom(l, r.toLowerCase(), 0);
+      return CollationAwareUTF8String.lowercaseStartsWith(l, r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -193,7 +193,7 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return CollationAwareUTF8String.lowercaseMatchUntil(l, r.toLowerCase(), l.numChars());
+      return CollationAwareUTF8String.lowercaseEndsWith(l, r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -491,7 +491,7 @@ public final class CollationSupport {
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
       return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
-              collationId);
+        collationId);
     }
   }
 
