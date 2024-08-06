@@ -382,10 +382,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.execute"),
       // Experimental
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession.addArtifact"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession.addArtifacts"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.registerClassFinder"),
       // public
       ProblemFilters.exclude[DirectMissingMethodProblem](

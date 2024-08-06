@@ -813,9 +813,7 @@ class SparkSession private(
    * @since 4.0.0
    */
   @Experimental
-  def addArtifact(uri: URI): Unit = {
-    addArtifactsInternal(Artifact.parseArtifacts(uri))
-  }
+  def addArtifact(uri: URI): Unit = addArtifactsInternal(Artifact.parseArtifacts(uri))
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
@@ -871,6 +869,17 @@ class SparkSession private(
       new Artifact.LocalFile(Paths.get(source)))
     addArtifactsInternal(artifact :: Nil)
   }
+
+  /**
+   * Add one or more artifacts to the session.
+   *
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  @scala.annotation.varargs
+  def addArtifacts(uri: URI*): Unit = addArtifactsInternal(uri.flatMap(Artifact.parseArtifacts))
 
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
