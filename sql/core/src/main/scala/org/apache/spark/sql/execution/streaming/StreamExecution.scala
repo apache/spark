@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
+
 import scala.collection.mutable.{Map => MutableMap}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.CloseableThreadContext
@@ -37,7 +39,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SparkDataStream, Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
@@ -399,6 +401,8 @@ abstract class StreamExecution(
       try {
         stopSources()
         cleanup()
+        // Evict column family schemas from StreamExecution map
+        StreamExecution.removeColumnFamilySchemas(id)
         state.set(TERMINATED)
         getLatestExecutionContext().currentStatus =
           status.copy(isTriggerActive = false, isDataAvailable = false)

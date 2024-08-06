@@ -130,7 +130,8 @@ class IncrementalExecution(
       runId,
       statefulOperatorId.getAndIncrement(),
       currentBatchId,
-      numStateStores)
+      numStateStores,
+      colFamilySchemas = StreamExecution.getColumnFamilySchemas(queryId))
   }
 
   sealed trait SparkPlanPartialRule {
@@ -256,12 +257,6 @@ class IncrementalExecution(
               stateInfo.copy(colFamilySchemas = columnFamilySchemas)))
           case _ => statefulOp
         }
-      case tws: TransformWithStateExec =>
-        val columnFamilySchemas = StreamExecution.getColumnFamilySchemas(
-          queryId)
-        val stateInfo = tws.getStateInfo
-        tws.copy(stateInfo = Some(
-          stateInfo.copy(colFamilySchemas = columnFamilySchemas)))
     }
   }
 
