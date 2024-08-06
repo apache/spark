@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedCo
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
@@ -52,6 +53,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianPro
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
@@ -4874,6 +4876,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
       assert(relations.size == 1)
       assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))
+    }
+  }
+
+  test("override spark_catalog by InMemoryCatalog") {
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE DATABASE test_db")
+      sql("USE test_db")
     }
   }
 }

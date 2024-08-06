@@ -1443,7 +1443,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`ns1`.`ns2`"))
+      parameters = Map("schemaName" -> "`testcat`.`ns1`.`ns2`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +

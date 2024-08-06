@@ -107,6 +107,10 @@ class CatalogManager(
   }
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+      v1SessionCatalog.validateGlobalTempView(namespace.head)
+    }
+
     currentCatalog match {
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
         throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: namespace)
