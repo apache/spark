@@ -1259,8 +1259,10 @@ FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
     "windowName" : "w"
   }
 }
@@ -1274,8 +1276,10 @@ FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
     "windowName" : "w"
   }
 }

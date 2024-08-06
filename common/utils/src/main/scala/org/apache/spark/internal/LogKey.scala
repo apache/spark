@@ -396,6 +396,7 @@ private[spark] object LogKeys {
   case object MAX_NUM_PARTITIONS extends LogKey
   case object MAX_NUM_POSSIBLE_BINS extends LogKey
   case object MAX_NUM_ROWS_IN_MEMORY_BUFFER extends LogKey
+  case object MAX_SEEN_VERSION extends LogKey
   case object MAX_SERVICE_NAME_LENGTH extends LogKey
   case object MAX_SIZE extends LogKey
   case object MAX_SLOTS extends LogKey
@@ -420,9 +421,11 @@ private[spark] object LogKeys {
   case object MIN_NUM_FREQUENT_PATTERN extends LogKey
   case object MIN_POINT_PER_CLUSTER extends LogKey
   case object MIN_RATE extends LogKey
+  case object MIN_SEEN_VERSION extends LogKey
   case object MIN_SHARE extends LogKey
   case object MIN_SIZE extends LogKey
   case object MIN_TIME extends LogKey
+  case object MIN_VERSIONS_TO_DELETE extends LogKey
   case object MIN_VERSION_NUM extends LogKey
   case object MISSING_PARENT_STAGES extends LogKey
   case object MODEL_WEIGHTS extends LogKey
@@ -850,6 +853,7 @@ private[spark] object LogKeys {
   case object USER_NAME extends LogKey
   case object UUID extends LogKey
   case object VALUE extends LogKey
+  case object VERSIONS_TO_DELETE extends LogKey
   case object VERSION_NUM extends LogKey
   case object VIEW_ACLS extends LogKey
   case object VIEW_ACLS_GROUPS extends LogKey

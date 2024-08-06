@@ -146,6 +146,9 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
+  private var maxSeenVersion: Option[Long] = None
+  private var minSeenVersion = 1L
+
   @volatile private var rootDirChecked: Boolean = false
   @volatile private var fileMappings = RocksDBFileMappings(
     new ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]],
@@ -197,8 +200,7 @@ class RocksDBFileManager(
       case 2 =>
         new StateStoreChangelogWriterV2(fm, changelogFile, codec)
       case _ =>
-        throw new IllegalArgumentException(s"Failed to find changelog writer for " +
-          s"version=$changelogVersion")
+        throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
     }
     changelogWriter
   }
@@ -221,8 +223,7 @@ class RocksDBFileManager(
       case 2 =>
         new StateStoreChangelogReaderV2(fm, changelogFile, codec)
       case _ =>
-        throw new IllegalArgumentException(s"Failed to find changelog reader for " +
-          s"version=$changelogVersion")
+        throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
     }
     changelogReader
   }
@@ -399,14 +400,62 @@ class RocksDBFileManager(
   }
 
   /**
+   *  Set maxSeenVersion to max of itself and version we are uploading.
+   *  This is to ensure accuracy in the case the query has restarted from a particular version.
+   */
+  def setMaxSeenVersion(version: Long): Unit = {
+    if (maxSeenVersion.isDefined) {
+      maxSeenVersion = Some(Math.max(maxSeenVersion.get, version))
+    } else {
+      maxSeenVersion = Some(version)
+    }
+  }
+
+  /**
+   * Determines whether batch deletion of stale version files should be skipped
+   * based on the following parameters and estimates of maximum and minimum
+   * versions present in the checkpoint directory.
+   *
+   * @param numVersionsToRetain Number of versions to retain for rollbacks.
+   * @param minVersionsToDelete Minimum number of stale versions required to trigger deletion.
+   * @return `true` if insufficient stale versions present, otherwise `false`.
+   */
+  private def shouldSkipDeletion(numVersionsToRetain: Int, minVersionsToDelete: Long): Boolean = {
+    // If minVersionsToDelete <= 0, we call list every time maintenance is invoked
+    // This is the original behaviour without list api call optimization
+    if (minVersionsToDelete > 0) {
+      // When maxSeenVersion is defined, we check the if number of stale version files
+      // are at least the value of minVersionsToDelete for batch deletion of files
+      // We still proceed with deletion if maxSeenVersion isn't set to ensure the fallback
+      // is to clean up files if maxSeenVersion fails to be initialized
+      if (maxSeenVersion.isDefined) {
+        logInfo(log"Estimated maximum version is " +
+          log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
+          log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
+        val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
+        if (versionsToDelete < minVersionsToDelete) {
+          logInfo(log"Skipping deleting files." +
+            log" Need at least ${MDC(LogKeys.MIN_VERSIONS_TO_DELETE, minVersionsToDelete)}" +
+            log" stale versions for batch deletion but found only" +
+            log" ${MDC(LogKeys.VERSIONS_TO_DELETE, versionsToDelete)}.")
+          return true
+        }
+      }
+    }
+    false
+  }
+
+  /**
    * Delete old versions by deleting the associated version and SST files.
-   * At a high-level, this method finds which versions to delete, and which SST files that were
+   * At a high-level, when enough stale version files are present for batch deletion,
+   * this method finds which versions to delete, and which SST files that were
    * last used in those versions. It's safe to delete these SST files because a SST file can
    * be reused only in successive versions. Therefore, if a SST file F was last used in version
    * V, then it won't be used in version V+1 or later, and if version V can be deleted, then
    * F can safely be deleted as well.
    *
-   * To find old files, it does the following.
+   * First, it checks whether enough stale version files are present for batch deletion.
+   * If true, it does the following to find old files.
    * - List all the existing [version].zip files
    * - Find the min version that needs to be retained based on the given `numVersionsToRetain`.
    * - Accordingly decide which versions should be deleted.
@@ -426,7 +475,10 @@ class RocksDBFileManager(
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
    */
-  def deleteOldVersions(numVersionsToRetain: Int): Unit = {
+  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Long = 0): Unit = {
+    // Check if enough stale version files present
+    if (shouldSkipDeletion(numVersionsToRetain, minVersionsToDelete)) return
+
     val path = new Path(dfsRootDir)
     val allFiles = fm.list(path).map(_.getPath)
     val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file))
@@ -526,6 +578,10 @@ class RocksDBFileManager(
       .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
       .filter(_ < minVersionToRetain)
     deleteChangelogFiles(changelogVersionsToDelete)
+
+    // Always set minSeenVersion for regular deletion frequency even if deletion fails.
+    // This is safe because subsequent calls retry deleting old version files
+    minSeenVersion = minVersionToRetain
   }
 
   /** Save immutable files to DFS directory */

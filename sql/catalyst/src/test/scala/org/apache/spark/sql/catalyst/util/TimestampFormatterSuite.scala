@@ -299,6 +299,40 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     }
   }
 
+  test("SPARK-49065: rebasing in legacy formatters/parsers with non-default time zone") {
+    val defaultTimeZone = LA
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
+      outstandingZoneIds.foreach { zoneId =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> defaultTimeZone.getId) {
+          withDefaultTimeZone(defaultTimeZone) {
+            withClue(s"zoneId = ${zoneId.getId}") {
+              val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
+                TimestampFormatter(
+                  TimestampFormatter.defaultPattern(),
+                  zoneId,
+                  TimestampFormatter.defaultLocale,
+                  legacyFormat,
+                  isParsing = false)
+              } :+ TimestampFormatter.getFractionFormatter(zoneId)
+              formatters.foreach { formatter =>
+                assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
+                  .atZone(zoneId)
+                  .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
+
+                assert(formatter.format(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
+                  "1000-01-01 01:02:03")
+                assert(formatter.format(instantToMicros(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3)
+                    .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("parsing hour with various patterns") {
     def createFormatter(pattern: String): TimestampFormatter = {
       // Use `SIMPLE_DATE_FORMAT`, so that the legacy parser also fails with invalid value range.

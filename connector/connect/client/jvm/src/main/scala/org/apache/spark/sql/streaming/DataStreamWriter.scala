@@ -160,6 +160,23 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
   }
 
   /**
+   * Clusters the output by the given columns. If specified, the output is laid out such that
+   * records with similar values on the clustering column are grouped together in the same file.
+   *
+   * Clustering improves query efficiency by allowing queries with predicates on the clustering
+   * columns to skip unnecessary data. Unlike partitioning, clustering can be used on very high
+   * cardinality columns.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colNames: String*): DataStreamWriter[T] = {
+    sinkBuilder.clearClusteringColumnNames()
+    sinkBuilder.addAllClusteringColumnNames(colNames.asJava)
+    this
+  }
+
+  /**
    * Adds an output option for the underlying data source.
    *
    * @since 3.5.0

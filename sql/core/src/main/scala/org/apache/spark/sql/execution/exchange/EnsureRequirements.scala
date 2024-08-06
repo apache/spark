@@ -429,8 +429,19 @@ case class EnsureRequirements(
         // expressions
         val partitionExprs = leftSpec.partitioning.expressions
 
-        var mergedPartValues = InternalRowComparableWrapper
-            .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
+        // in case of compatible but not identical partition expressions, we apply 'reduce'
+        // transforms to group one side's partitions as well as the common partition values
+        val leftReducers = leftSpec.reducers(rightSpec)
+        val leftParts = reducePartValues(leftSpec.partitioning.partitionValues,
+          partitionExprs,
+          leftReducers)
+        val rightReducers = rightSpec.reducers(leftSpec)
+        val rightParts = reducePartValues(rightSpec.partitioning.partitionValues,
+          partitionExprs,
+          rightReducers)
+
+        // merge values on both sides
+        var mergedPartValues = mergePartitions(leftParts, rightParts, partitionExprs, joinType)
             .map(v => (v, 1))
 
         logInfo(log"After merging, there are " +
@@ -525,23 +536,6 @@ case class EnsureRequirements(
           }
         }
 
-        // in case of compatible but not identical partition expressions, we apply 'reduce'
-        // transforms to group one side's partitions as well as the common partition values
-        val leftReducers = leftSpec.reducers(rightSpec)
-        val rightReducers = rightSpec.reducers(leftSpec)
-
-        if (leftReducers.isDefined || rightReducers.isDefined) {
-          mergedPartValues = reduceCommonPartValues(mergedPartValues,
-            leftSpec.partitioning.expressions,
-            leftReducers)
-          mergedPartValues = reduceCommonPartValues(mergedPartValues,
-            rightSpec.partitioning.expressions,
-            rightReducers)
-          val rowOrdering = RowOrdering
-            .createNaturalAscendingOrdering(partitionExprs.map(_.dataType))
-          mergedPartValues = mergedPartValues.sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
-        }
-
         // Now we need to push-down the common partition information to the scan in each child
         newLeft = populateCommonPartitionInfo(left, mergedPartValues, leftSpec.joinKeyPositions,
           leftReducers, applyPartialClustering, replicateLeftSide)
@@ -602,15 +596,15 @@ case class EnsureRequirements(
         child, joinKeyPositions))
   }
 
-  private def reduceCommonPartValues(
-      commonPartValues: Seq[(InternalRow, Int)],
+  private def reducePartValues(
+      partValues: Seq[InternalRow],
       expressions: Seq[Expression],
       reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
     reducers match {
-      case Some(reducers) => commonPartValues.groupBy { case (row, _) =>
+      case Some(reducers) => partValues.map { row =>
         KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)
-      }.map{ case(wrapper, splits) => (wrapper.row, splits.map(_._2).sum) }.toSeq
-      case _ => commonPartValues
+      }.distinct.map(_.row)
+      case _ => partValues
     }
   }
 
@@ -649,6 +643,46 @@ case class EnsureRequirements(
         specs.head
       case _ => None
     }
+  }
+
+  /**
+   * Merge and sort partitions values for SPJ and optionally enable partition filtering.
+   * Both sides must have
+   * matching partition expressions.
+   * @param leftPartitioning left side partition values
+   * @param rightPartitioning right side partition values
+   * @param partitionExpression partition expressions
+   * @param joinType join type for optional partition filtering
+   * @return merged and sorted partition values
+   */
+  private def mergePartitions(
+      leftPartitioning: Seq[InternalRow],
+      rightPartitioning: Seq[InternalRow],
+      partitionExpression: Seq[Expression],
+      joinType: JoinType): Seq[InternalRow] = {
+
+    val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
+      joinType match {
+        case Inner => InternalRowComparableWrapper.mergePartitions(
+          leftPartitioning, rightPartitioning, partitionExpression, intersect = true)
+        case LeftOuter => leftPartitioning.map(
+          InternalRowComparableWrapper(_, partitionExpression))
+        case RightOuter => rightPartitioning.map(
+          InternalRowComparableWrapper(_, partitionExpression))
+        case _ => InternalRowComparableWrapper.mergePartitions(leftPartitioning,
+          rightPartitioning, partitionExpression)
+      }
+    } else {
+      InternalRowComparableWrapper.mergePartitions(leftPartitioning, rightPartitioning,
+        partitionExpression)
+    }
+
+    // SPARK-41471: We keep to order of partitions to make sure the order of
+    // partitions is deterministic in different case.
+    val partitionOrdering: Ordering[InternalRow] = {
+      RowOrdering.createNaturalAscendingOrdering(partitionExpression.map(_.dataType))
+    }
+    merged.map(_.row).sorted(partitionOrdering)
   }
 
   def apply(plan: SparkPlan): SparkPlan = {

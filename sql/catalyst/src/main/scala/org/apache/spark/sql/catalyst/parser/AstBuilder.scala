@@ -48,8 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
@@ -62,7 +61,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
+class AstBuilder extends DataTypeAstBuilder
+  with SQLConfHelper with Logging with DataTypeErrorsBase {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -133,11 +133,43 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
-      label: Option[String]): CompoundBody = {
+      label: Option[String],
+      allowVarDeclare: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
     })
+
+    val compoundStatements = buff.toList
+
+    val candidates = if (allowVarDeclare) {
+      compoundStatements.dropWhile {
+        case SingleStatement(_: CreateVariable) => true
+        case _ => false
+      }
+    } else {
+      compoundStatements
+    }
+
+    val declareVarStatement = candidates.collectFirst {
+      case SingleStatement(c: CreateVariable) => c
+    }
+
+    declareVarStatement match {
+      case Some(c: CreateVariable) =>
+        if (allowVarDeclare) {
+          throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+            c.origin,
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
+            c.origin.line.get.toString)
+        } else {
+          throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+            c.origin,
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
+            c.origin.line.get.toString)
+        }
+      case _ =>
+    }
 
     CompoundBody(buff.toSeq, label)
   }
@@ -151,21 +183,26 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
               el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        throw SqlScriptingErrors.labelsMismatch(
-          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        withOrigin(bl) {
+          throw SqlScriptingErrors.labelsMismatch(
+            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        }
       case (None, Some(el: EndLabelContext)) =>
-        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
+        withOrigin(el) {
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
+            CurrentOrigin.get, el.multipartIdentifier().getText)
+        }
       case _ =>
     }
 
     val labelText = beginLabelCtx.
       map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
       toLowerCase(Locale.ROOT)
-    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText))
+    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx, None)
+    visitCompoundBodyImpl(ctx, None, allowVarDeclare = false)
   }
 
   override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
@@ -175,9 +212,22 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
-          visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+          visitChildren(ctx).asInstanceOf[CompoundPlanStatement]
         }
     }
+
+  override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement = {
+    IfElseStatement(
+      conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+        SingleStatement(
+          Project(
+            Seq(Alias(expression(boolExpr), "condition")()),
+            OneRowRelation()))
+      }),
+      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
+    )
+  }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
@@ -2149,8 +2199,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
-        invertIfNotDefined(UnresolvedFunction(
-          "between", Seq(e, expression(ctx.lower), expression(ctx.upper)), isDistinct = false))
+        if (!SQLConf.get.legacyDuplicateBetweenInput) {
+          invertIfNotDefined(UnresolvedFunction(
+            "between", Seq(e, expression(ctx.lower), expression(ctx.upper)), isDistinct = false))
+        } else {
+          invertIfNotDefined(And(
+            GreaterThanOrEqual(e, expression(ctx.lower)),
+            LessThanOrEqual(e, expression(ctx.upper))))
+        }
       case SqlBaseParser.IN if ctx.query != null =>
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
@@ -4427,7 +4483,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Parse a [[AlterTableAddColumns]] command.
+   * Parse a [[AddColumns]] command.
    *
    * For example:
    * {{{
@@ -4444,7 +4500,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Parse a [[AlterTableRenameColumn]] command.
+   * Parse a [[RenameColumn]] command.
    *
    * For example:
    * {{{
@@ -4460,7 +4516,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Parse a [[AlterTableAlterColumn]] command to alter a column's property.
+   * Parse a [[AlterColumn]] command to alter a column's property.
    *
    * For example:
    * {{{
@@ -4530,7 +4586,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Parse a [[AlterTableAlterColumn]] command. This is Hive SQL syntax.
+   * Parse a [[AlterColumn]] command. This is Hive SQL syntax.
    *
    * For example:
    * {{{
@@ -4614,7 +4670,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Parse a [[AlterTableDropColumns]] command.
+   * Parse a [[DropColumns]] command.
    *
    * For example:
    * {{{
@@ -4954,7 +5010,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * A command for users to list the partition names of a table. If partition spec is specified,
    * partitions that match the spec are returned. Otherwise an empty result set is returned.
    *
-   * This function creates a [[ShowPartitionsStatement]] logical plan
+   * This function creates a [[ShowPartitions]] logical plan
    *
    * The syntax of using this command in SQL is:
    * {{{

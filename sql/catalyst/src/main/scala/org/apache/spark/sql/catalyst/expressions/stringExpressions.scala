@@ -1657,7 +1657,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, delim, count) =>
-      CollationSupport.SubstringIndex.genCode(str, delim, Integer.parseInt(count, 10), collationId))
+      CollationSupport.SubstringIndex.genCode(str, delim, count, collationId))
   }
 
   override protected def withNewChildrenInternal(

@@ -63,12 +63,19 @@ compoundStatement
     : statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
+    | ifElseStatement
     ;
 
 setStatementWithOptionalVarKeyword
-    : SET (VARIABLE | VAR)? assignmentList                      #setVariableWithOptionalKeyword
-    | SET (VARIABLE | VAR)? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
+    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+ifElseStatement
+    : IF booleanExpression THEN conditionalBodies+=compoundBody
+        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSE elseBody=compoundBody)? END IF
     ;
 
 singleStatement
@@ -215,9 +222,9 @@ statement
         routineCharacteristics
         RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
-    | DECLARE (OR REPLACE)? VARIABLE?
+    | DECLARE (OR REPLACE)? variable?
         identifierReference dataType? variableDefaultExpression?       #createVariable
-    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
+    | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -272,8 +279,8 @@ setResetStatement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
-    | SET (VARIABLE | VAR) assignmentList                              #setVariable
-    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+    | SET variable assignmentList                                      #setVariable
+    | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
@@ -436,6 +443,11 @@ namespaces
     : NAMESPACES
     | DATABASES
     | SCHEMAS
+    ;
+
+variable
+    : VARIABLE
+    | VAR
     ;
 
 describeFuncName

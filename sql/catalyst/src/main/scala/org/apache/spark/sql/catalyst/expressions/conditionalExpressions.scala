@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -391,6 +392,7 @@ case class CaseWhen(
 
 /** Factory methods for CaseWhen. */
 object CaseWhen {
+
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))
   }
@@ -407,6 +409,10 @@ object CaseWhen {
     }.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
+  }
+
+  val registryEntry: (String, (ExpressionInfo, FunctionBuilder)) = {
+    ("when", (FunctionRegistryBase.expressionInfo[CaseWhen]("when", None), createFromParser))
   }
 }
 

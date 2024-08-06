@@ -146,7 +146,9 @@ class FunctionAlreadyExistsException(errorClass: String, messageParameters: Map[
 
   def this(function: Seq[String]) = {
     this (errorClass = "ROUTINE_ALREADY_EXISTS",
-      Map("routineName" -> quoteNameParts(function)))
+      Map("routineName" -> quoteNameParts(function),
+        "newRoutineType" -> "routine",
+        "existingRoutineType" -> "routine"))
   }
 
   def this(db: String, func: String) = {

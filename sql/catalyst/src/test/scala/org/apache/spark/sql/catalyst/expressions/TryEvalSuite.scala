@@ -46,7 +46,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("try_remainder") {
+  test("try_mod") {
     Seq(
       (3.0, 2.0, 1.0),
       (1.0, 0.0, null),
