@@ -1423,7 +1423,7 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Next matching pair will include d>=2 next elements of one string, and 0 next elements of another
+   * Next matching pair will include d>=2 next elements of one string,and 0 next elements of another
    * string. This guarantees that we will delete all the d-2 elements from the middle of the
    * substring (i+1,i+d), and that we need the remaining two characters (i+1 and i+d) to
    * match the transformation.rightFirst and transformation.rightSecond, and we have to add
@@ -1448,7 +1448,7 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Next matching pair will include d>=2 next elements of one string, and 1 next element of another
+   * Next matching pair will include d>=2 next elements of one string,and 1 next element of another
    * string. This guarantees that we will delete all the d-2 elements from the middle of the
    * substring (i+1,i+d), and that we need the remaining two characters (i+1 and i+d) to
    * match the transformation.rightFirst and transformation.rightSecond, and we have to match
