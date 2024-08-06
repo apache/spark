@@ -124,6 +124,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+  "sqlState" : "42K05",
   "messageParameters" : {
     "namespaceA" : "`baddb`",
     "namespaceB" : "`showdb`"
