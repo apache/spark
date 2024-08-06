@@ -310,6 +310,17 @@ Dataset<Row> df = spark
 
 </div>
 
+The following options must be set for the source.
+
+<table>
+<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
+<tr>
+  <td>batchId</td>
+  <td>numeric value</td>
+  <td>Optional batchId used to retrieve operator metadata at that batch. Only applicable for operators using schema format version 2.</td>
+</tr>
+</table>
+
 Each row in the source has the following schema:
 
 <table>
@@ -343,6 +354,11 @@ Each row in the source has the following schema:
   <td>maxBatchId</td>
   <td>int</td>
   <td>The maximum batch ID available for querying state. The value could be invalid if the streaming query taking the checkpoint is running, as the query will commit further batches.</td>
+</tr>
+<tr>
+  <td>operatorProperties</td>
+  <td>string</td>
+  <td>List of properties used by the operator encoded as JSON. Available only for operators using schema format version 2.</td>
 </tr>
 <tr>
   <td>_numColsPrefixKey</td>
