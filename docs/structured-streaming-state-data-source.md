@@ -271,6 +271,7 @@ Before querying the state from existing checkpoint via state data source, users 
 Structured Streaming provides a data source named "State metadata source" to provide the state-related metadata information from the checkpoint.
 
 Note: The metadata is constructed when the streaming query is running with Spark 4.0+. The existing checkpoint which has been running with lower Spark version does not have the metadata and will be unable to query/use with this metadata source. It is required to run the streaming query pointing the existing checkpoint in Spark 4.0+ to construct the metadata before querying.
+For operators using the operator metadata format version 1, the metadata is written once and does not change. For operators using metadata format version 2, this metadata can change and can be queried by providing the relevant batchId.
 
 ### Creating a State metadata store for Batch Queries
 
