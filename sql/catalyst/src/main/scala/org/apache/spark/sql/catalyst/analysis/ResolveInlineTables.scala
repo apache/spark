@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, UnresolvedInlineTableUtils}
+import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.catalyst.expressions.EvalHelper
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[ResolvedInlineTable]].
  */
-object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper
-  with UnresolvedInlineTableUtils {
+object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
      EvaluateUnresolvedInlineTable.evaluate(plan)
   }

@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.UUID
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -84,15 +83,6 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
   }
 
   /**
-   * Checks if two tables are equal.
-   */
-  private def areTablesEqual(df1: DataFrame, df2: DataFrame): Boolean = {
-    val df1ExceptDf2 = df1.except(df2).cache()
-    val df2ExceptDf1 = df2.except(df1).cache()
-    df1ExceptDf2.count() == 0 && df2ExceptDf1.count() == 0
-  }
-
-  /**
    * Generate an INSERT INTO VALUES statement with both literals and expressions.
    */
   private def generateInsertStatementsWithComplexExpressions(
@@ -144,7 +134,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         } else {
             val df1 = spark.table(firstTableName.get)
             val df2 = spark.table(tableName)
-            assert(areTablesEqual(df1, df2), "The tables should be equal.")
+            checkAnswer(df1, df2)
         }
       }
     }
@@ -170,7 +160,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         } else {
             val df1 = spark.table(firstTableName.get)
             val df2 = spark.table(tableName)
-            assert(areTablesEqual(df1, df2), "The tables should be equal.")
+            checkAnswer(df1, df2)
         }
       }
     }
@@ -231,7 +221,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         } else {
           val df1 = spark.table(firstTableName.get)
           val df2 = spark.table(tableName)
-          assert(areTablesEqual(df1, df2), "The tables should be equal.")
+          checkAnswer(df1, df2)
         }
       }
     }

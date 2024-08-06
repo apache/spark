@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * transformation.
  */
 object EvaluateUnresolvedInlineTable extends SQLConfHelper
-  with AliasHelper with EvalHelper with CastSupport with UnresolvedInlineTableUtils {
+  with AliasHelper with EvalHelper with CastSupport {
 
   def evaluate(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(AlwaysProcess.fn) {
@@ -56,10 +56,7 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
     val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
     if (earlyEvalPossible) EvalInlineTables(table) else table
   }
-}
 
-trait UnresolvedInlineTableUtils extends SQLConfHelper
-  with AliasHelper with EvalHelper with CastSupport {
   /**
    * Validates the input data dimension:
    * 1. All rows have the same cardinality.
@@ -109,8 +106,7 @@ trait UnresolvedInlineTableUtils extends SQLConfHelper
    *
    * This is package visible for unit testing.
    */
-  def findCommonTypesAndCast(table: UnresolvedInlineTable):
-  ResolvedInlineTable = {
+  def findCommonTypesAndCast(table: UnresolvedInlineTable): ResolvedInlineTable = {
     // For each column, traverse all the values and find a common data type and nullability.
     val (fields, columns) = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
