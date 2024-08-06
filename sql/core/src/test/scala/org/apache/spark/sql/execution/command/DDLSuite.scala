@@ -1385,8 +1385,10 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
             exception = intercept[AnalysisException] {
               sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1057",
-            parameters = Map("dbA" -> db.toUpperCase(Locale.ROOT), "dbB" -> db)
+            errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+            parameters = Map(
+              "namespaceA" -> s"`${db.toUpperCase(Locale.ROOT)}`",
+              "namespaceB" -> s"`$db`")
           )
         }
       }
