@@ -545,6 +545,7 @@ private[hive] class TestHiveSparkSession(
       sharedState.cacheManager.clearCache()
       sharedState.loadedTables.clear()
       sessionState.catalog.reset()
+      sessionState.catalogManager.reset()
       metadataHive.reset()
 
       // HDFS root scratch dir requires the write all (733) permission. For each connecting user,

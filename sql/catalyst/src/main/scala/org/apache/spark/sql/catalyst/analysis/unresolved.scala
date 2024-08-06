@@ -342,7 +342,8 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false,
-    orderingWithinGroup: Seq[SortOrder] = Seq.empty)
+    orderingWithinGroup: Seq[SortOrder] = Seq.empty,
+    isInternal: Boolean = false)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

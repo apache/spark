@@ -295,7 +295,13 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.util.ArtifactUtils"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.artifact.util.ArtifactUtils$")) ++
+        "org.apache.spark.sql.artifact.util.ArtifactUtils$"),
+
+      // Datasource V2 partition transforms
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.PartitionTransform$ExtractTransform")) ++
       mergeIntoWriterExcludeRules
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
