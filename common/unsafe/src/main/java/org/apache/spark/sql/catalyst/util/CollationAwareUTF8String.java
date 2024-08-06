@@ -1290,7 +1290,7 @@ public class CollationAwareUTF8String {
   /// Lowercase levenshtein distance
   private static class Transformation {
     public int left, rightFirst, rightSecond;
-    public Transformation(int left, int rightFirst, int rightSecond) {
+    Transformation(int left, int rightFirst, int rightSecond) {
       this.left = left;
       this.rightFirst = rightFirst;
       this.rightSecond = rightSecond;
@@ -1344,9 +1344,9 @@ public class CollationAwareUTF8String {
     public ArrayList<Integer> codepointsLeft, codepointsRight;
     public ArrayList<Integer> codepointsLeftLowerCase, codepointsRightLowerCase;
 
-    public DP(UTF8String stLeft, UTF8String stRight, ArrayList<Transformation> transformations) {
-      this.codepointsLeft = UTF8ToCodepoints(stLeft);
-      this.codepointsRight = UTF8ToCodepoints(stRight);
+    DP(UTF8String stLeft, UTF8String stRight, ArrayList<Transformation> transformations) {
+      this.codepointsLeft = convertUTF8ToCodepoints(stLeft);
+      this.codepointsRight = convertUTF8ToCodepoints(stRight);
 
       if (codepointsLeft.size() > codepointsRight.size()) {
         ArrayList<Integer> swap = codepointsLeft;
@@ -1364,8 +1364,9 @@ public class CollationAwareUTF8String {
       rowMinimum = new int[n+1];
       for (int i = 0; i <= n; i++) {
         rowMinimum[i] = INF;
-        for (int j = 0; j <= m; j++)
+        for (int j = 0; j <= m; j++) {
           dp[i][j] = INF;
+        }
       }
       dp[0][0] = 0;
       rowMinimum[0] = 0;
@@ -1380,7 +1381,7 @@ public class CollationAwareUTF8String {
     }
 
   }
-  private static ArrayList<Integer> UTF8ToCodepoints(UTF8String st) {
+  private static ArrayList<Integer> convertUTF8ToCodepoints(UTF8String st) {
     Iterator<Integer> targetIter = st.codePointIterator(
             CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     ArrayList<Integer> codepoints = new ArrayList<>();
@@ -1415,8 +1416,10 @@ public class CollationAwareUTF8String {
    * or they are different, and we can replace one of them with a cost of 1, to make them equal.
    */
   private static void pushType2(int i, int j, DP dp) {
-    if(i+1 <= dp.n && j+1 <= dp.m)dp.updateState(i,j,i+1,j+1,
-            dp.codepointsLeftLowerCase.get(i).equals(dp.codepointsRightLowerCase.get(j))?0:1);
+    if (i+1 <= dp.n && j+1 <= dp.m) {
+      dp.updateState(i, j, i + 1, j + 1,
+              dp.codepointsLeftLowerCase.get(i).equals(dp.codepointsRightLowerCase.get(j)) ? 0 : 1);
+    }
   }
 
   /**
@@ -1510,8 +1513,9 @@ public class CollationAwareUTF8String {
 
       if (i < n) {
         int minVal = 1000000000;
-        for (int j = i + 1;j <= n; j++)
+        for (int j = i + 1;j <= n; j++) {
           minVal = Math.min(minVal, dp.rowMinimum[j]);
+        }
         if (minVal > threshold) return -1;
       }
     }
