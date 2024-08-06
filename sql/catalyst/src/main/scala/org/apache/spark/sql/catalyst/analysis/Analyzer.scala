@@ -2095,8 +2095,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _, _) =>
-          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
+          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
             f
           } else {
             val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
@@ -2141,7 +2141,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
-        lookupBuiltinOrTempFunction(nameParts)
+        lookupBuiltinOrTempFunction(nameParts, None)
           .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
             throw QueryCompilationErrors.expectPersistentFuncError(
@@ -2263,9 +2263,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _)
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
               if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
+            resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
@@ -2292,8 +2292,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           }
 
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _) => withPosition(u) {
-            resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).getOrElse {
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _) => withPosition(u) {
+            resolveBuiltinOrTempFunction(nameParts, arguments, u).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 resolveV1Function(ident.asFunctionIdentifier, arguments, u)
@@ -2333,8 +2333,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       lambdas.nonEmpty && others.forall(_.resolved)
     }
 
-    def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
+    def lookupBuiltinOrTempFunction(
+        name: Seq[String],
+        u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
+      if (name.size == 1 && u.exists(_.isInternal)) {
+        FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
+      } else if (name.size == 1) {
         v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
       } else {
         None
@@ -2352,13 +2356,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def resolveBuiltinOrTempFunction(
         name: Seq[String],
         arguments: Seq[Expression],
-        u: Option[UnresolvedFunction]): Option[Expression] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
-          if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
-        }
+        u: UnresolvedFunction): Option[Expression] = {
+      val expression = if (name.size == 1  && u.isInternal) {
+        Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
+      } else if (name.size == 1) {
+        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
       } else {
         None
+      }
+      expression.map { func =>
+        validateFunction(func, arguments.length, u)
       }
     }
 
