@@ -304,7 +304,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         | END IF;
         |END""".stripMargin
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",

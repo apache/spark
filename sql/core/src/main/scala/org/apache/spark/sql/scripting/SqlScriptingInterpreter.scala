@@ -96,8 +96,8 @@ case class SqlScriptingInterpreter() {
         val conditionExec =
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false)
         val bodyExec =
-          transformTreeIntoExecutable(body, evaluator).asInstanceOf[CompoundBodyExec]
-        new WhileStatementExec(conditionExec, bodyExec, evaluator)
+          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
+        new WhileStatementExec(conditionExec, bodyExec, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
