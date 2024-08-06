@@ -215,6 +215,7 @@ com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.crypto.tink:tink
+com.google.errorprone:error_prone_annotations
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.jamesmurty.utils:java-xmlbuilder
