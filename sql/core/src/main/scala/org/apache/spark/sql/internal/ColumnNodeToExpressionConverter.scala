@@ -154,10 +154,12 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
           elseValue = otherwise.map(apply))
 
       case InvokeInlineUserDefinedFunction(f, arguments, _) =>
-        // This code is a bit clunky, it will stay this way until we have moved everything.
+        // This code is a bit clunky, it will stay this way until we have moved everything to
+        // sql/api and we can actually use the SparkUserDefinedFunction and
+        // UserDefinedAggregator classes.
         (f.function, arguments.map(apply)) match {
           case (a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil) =>
-            TypedAggregateExpression(a)(a.bufferEncoder, a.outputEncoder)
+            TypedAggregateExpression(a)(a.bufferEncoder, a.outputEncoder).toAggregateExpression()
 
           case (a: Aggregator[Any @unchecked, Any  @unchecked, Any  @unchecked], children) =>
             ScalaAggregator(
@@ -167,7 +169,7 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
               bufferEncoder = ExpressionEncoder(f.resultEncoder),
               aggregatorName = f.name,
               nullable = !f.nonNullable && f.resultEncoder.nullable,
-              isDeterministic = f.deterministic)
+              isDeterministic = f.deterministic).toAggregateExpression()
 
           case (function, children) =>
             ScalaUDF(
