@@ -1072,7 +1072,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
       // skip all the children of inner object or array
       parser.skipChildren()
     }
-    new GenericArrayData(arrayBufferOfKeys.toArray)
+    new GenericArrayData(arrayBufferOfKeys.toArray[Any])
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =

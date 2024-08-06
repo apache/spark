@@ -170,7 +170,7 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray
+        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
