@@ -208,13 +208,13 @@ case class TransformWithStateExec(
     // Wrapper to ensure that the implicit key is set when the methods on the iterator
     // are called. Inside of processNewData, we use a GroupedIterator, so handleInputRows
     // is only called once per key. As such, we only have to set the implicit key when
-    // the first call to hasNext is made, and we have to remove it when the last call to
-    // next() is made.
+    // the first call to hasNext is made, and we have to remove it when hasNext returns
+    // false.
     //
     // Note: if we ever start to interleave the processing of the iterators we get back
     // from handleInputRows (i.e. we don't process each iterator all at once), then this
     // iterator will need to set/unset the implicit key every time hasNext/next is called,
-    // not just at the first call to hasNext and last call to next.
+    // not just at the first and last calls to hasNext.
     new Iterator[InternalRow] {
       var hasStarted = false
 
@@ -224,15 +224,15 @@ case class TransformWithStateExec(
           ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
         }
 
-        mappedIterator.hasNext
+        val hasNext = mappedIterator.hasNext
+        if (!hasNext) {
+          ImplicitGroupingKeyTracker.removeImplicitKey()
+        }
+        hasNext
       }
 
       override def next(): InternalRow = {
-        val next = mappedIterator.next()
-        if (!mappedIterator.hasNext) {
-          ImplicitGroupingKeyTracker.removeImplicitKey()
-        }
-        next
+        mappedIterator.next()
       }
     }
   }
