@@ -76,7 +76,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       val df = Dataset.ofRows(session, statement.parsedPlan)
       df.schema.fields match {
         case Array(field) if field.dataType == BooleanType =>
-          df.limit(2).collect() match {
+          df.limit(1).collect() match {
             case Array(row) => row.getBoolean(0)
             case _ => false
           }
