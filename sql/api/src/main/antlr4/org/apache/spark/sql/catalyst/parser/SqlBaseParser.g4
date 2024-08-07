@@ -1534,6 +1534,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ESCAPED
@@ -1735,6 +1736,7 @@ ansiNonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WINDOW
     | YEAR
     | YEARS
@@ -1865,6 +1867,7 @@ nonReserved
     | DISTINCT
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ELSE
@@ -2104,6 +2107,7 @@ nonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WHEN
     | WHERE
     | WINDOW
