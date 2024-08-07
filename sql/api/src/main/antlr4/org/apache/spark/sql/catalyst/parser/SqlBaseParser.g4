@@ -80,9 +80,9 @@ ifElseStatement
     ;
 
 caseStatement
-    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodes+=compoundBody)+
+    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
         (ELSE elseBody=compoundBody)? END CASE                     #searchedCaseStatement
-    | CASE value=expression (WHEN whenExpressions=expression THEN conditionalBodes+=compoundBody)+
+    | CASE value=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
         (ELSE elseBody=compoundBody)? END CASE                 #simpleCaseStatement
     ;
 

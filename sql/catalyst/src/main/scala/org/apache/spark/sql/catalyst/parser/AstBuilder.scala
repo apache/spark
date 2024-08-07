@@ -229,22 +229,30 @@ class AstBuilder extends DataTypeAstBuilder
     )
   }
 
-//  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
-//  : SearchedCaseStatement = {
-//    SearchedCaseStatement(
-//      whenExpressions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
-//        SingleStatement(
-//          Project(
-//            Seq(Alias(expression(boolExpr), "condition")()),
-//            OneRowRelation()))
-//      }),
-//
-//    )
-//  }
-//
-//  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): AnyRef = {
-//
-//  }
+  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
+  : SearchedCaseStatement = {
+    SearchedCaseStatement(
+      conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+        SingleStatement(
+          Project(
+            Seq(Alias(expression(boolExpr), "condition")()),
+            OneRowRelation()))
+      }),
+      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+  }
+
+  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): SearchedCaseStatement = {
+    SearchedCaseStatement(
+      conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
+          SingleStatement(
+            Project(
+              Seq(Alias(EqualTo(expression(ctx.value), expression(expr)), "condition")()),
+              OneRowRelation()))
+      }),
+      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+  }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
