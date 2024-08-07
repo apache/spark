@@ -634,7 +634,15 @@ private[sql] object DataSourceV2Strategy extends Logging {
       None
   }
 
-  private def withProjectAndFilter(
+  /**
+   * Creates new spark plan that should apply given filters and projections to given scan node
+   * @param project Projection list that should be output of returned spark plan
+   * @param filters Filter list that should be applied to scan node
+   * @param scan Scan node
+   * @param needsUnsafeConversion Value that indicates whether unsafe conversion is needed
+   * @return SparkPlan tree composed of scan node and eventually filter/project nodes
+   */
+  protected[sql] def withProjectAndFilter(
       project: Seq[NamedExpression],
       filters: Seq[Expression],
       scan: LeafExecNode,
