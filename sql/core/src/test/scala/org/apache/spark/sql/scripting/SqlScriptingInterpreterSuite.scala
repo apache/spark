@@ -368,6 +368,122 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("cif") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 1 THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("cif nested") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 2 THEN
+        |     SELECT 42;
+        |   WHEN 1 IN (1,2,3) THEN
+        |     SELECT 43;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        |   ELSE
+        |     SELECT 3;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("cif else going in if") {
+    val commands =
+      """
+        |BEGIN
+        | CASE (SELECT 2)
+        |   WHEN 1 THEN
+        |     SELECT 1;
+        |   WHEN 2 THEN
+        |     SELECT 42;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("cif else if going in else if") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 2 THEN
+        |     SELECT 1;
+        |   WHEN 3 THEN
+        |     SELECT 2;
+        |   ELSE
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("cif with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |CASE
+          | WHEN (SELECT COUNT(*) > 2 FROM t) THEN
+          |   SELECT 42;
+          | ELSE
+          |   SELECT 43;
+          | END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("cif else if with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  CASE
+          |  WHEN (SELECT COUNT(*) > 2 FROM t) THEN
+          |   SELECT 42;
+          |  WHEN (SELECT COUNT(*) > 1 FROM t) THEN
+          |   SELECT 43;
+          |  ELSE
+          |    SELECT 44;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
   test("if's condition must be a boolean statement") {
     withTable("t") {
       val commands =

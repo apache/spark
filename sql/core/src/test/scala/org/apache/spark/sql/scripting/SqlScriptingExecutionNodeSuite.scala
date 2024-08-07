@@ -576,4 +576,38 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "body1", "lbl", "con1",
       "body1", "lbl", "con1"))
   }
+
+  test("searched case - enter first body") {
+    val iter = new CompoundBodyExec(Seq(
+      new SearchedCaseStatementExec(
+        conditions = Seq(
+          TestIfElseCondition(condVal = true, description = "con1")
+        ),
+        conditionalBodies = Seq(
+          new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+        ),
+        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body2")))),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1"))
+  }
+
+  test("searched case - enter body of the ELSE clause") {
+    val iter = new CompoundBodyExec(Seq(
+      new SearchedCaseStatementExec(
+        conditions = Seq(
+          TestIfElseCondition(condVal = false, description = "con1")
+        ),
+        conditionalBodies = Seq(
+          new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+        ),
+        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body2")))),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body2"))
+  }
 }

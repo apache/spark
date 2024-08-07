@@ -127,13 +127,13 @@ case class IterateStatement(label: String) extends CompoundPlanStatement
 
 // maybe have simple and search inherit from a base case
 // or maybe transform simple into search by creating equality comparison exec nodes
-case class SimpleCaseStatement(
-    value: SingleStatement,
-    conditionExpressions: Seq[SingleStatement],
-    conditionalBodies: Seq[CompoundBody],
-    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
-  assert(conditionExpressions.length == conditionalBodies.length)
-}
+//  case class SimpleCaseStatement(
+//      value: SingleStatement,
+//      conditionExpressions: Seq[SingleStatement],
+//      conditionalBodies: Seq[CompoundBody],
+//      elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+//    assert(conditionExpressions.length == conditionalBodies.length)
+//  }
 
 case class SearchedCaseStatement(
     conditions: Seq[SingleStatement],
