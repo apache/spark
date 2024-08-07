@@ -107,7 +107,6 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
       val checkpointLocation = options.get("path")
 
-      // TODO: SPARK-49115 - add docs for new options for state metadata source
       val batchIdOpt = Option(options.get("batchId")).map(_.toLong)
       // if a batchId is provided, use it. Otherwise, use the last committed batch. If there is no
       // committed batch, use batchId 0.
