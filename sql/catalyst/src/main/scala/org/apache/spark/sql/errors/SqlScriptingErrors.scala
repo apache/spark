@@ -51,6 +51,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
   }
 
+  def duplicateHandlerForSameSqlState(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_HANDLER_FOR_SAME_SQL_STATE",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
       varName: String,

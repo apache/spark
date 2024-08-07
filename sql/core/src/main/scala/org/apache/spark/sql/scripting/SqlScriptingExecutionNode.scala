@@ -144,8 +144,13 @@ class SingleStatementExec(
    *   SQL query text.
    */
   def getText: String = {
-    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
-    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+//    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    try {
+      origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+    } catch {
+      case e: Exception =>
+        "DROP VARIABLE"
+    }
   }
 
   override def reset(): Unit = {
@@ -211,6 +216,7 @@ class CompoundBodyExec(
       getHandler(statement.errorState.get).foreach { handler =>
         statement.reset() // Clear all flags and result
         handler.reset()
+        returnHere = curr
         curr = Some(handler.getHandlerBody)
       }
     }
@@ -242,6 +248,7 @@ class CompoundBodyExec(
   private var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
   private var stopIteration: Boolean = false  // hard stop iteration flag
+  private var returnHere: Option[CompoundStatementExec] = None
 
   def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
@@ -261,7 +268,7 @@ class CompoundBodyExec(
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        (localIterator.hasNext || childHasNext) && !stopIteration
+        (localIterator.hasNext || childHasNext || returnHere.isDefined) && !stopIteration
       }
 
       @scala.annotation.tailrec
@@ -273,9 +280,7 @@ class CompoundBodyExec(
             handleLeave(leave)
           case Some(statement: LeafStatementExec) =>
             statement.execute(session)  // Execute the leaf statement
-            if (!statement.raisedError) {
-              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-            }
+            curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             handleError(statement)  // Handle error if raised
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
@@ -290,7 +295,12 @@ class CompoundBodyExec(
                 case nonLeafStatement: NonLeafStatementExec => nonLeafStatement
               }
             } else {
-              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+              if (returnHere.isDefined) {
+                curr = returnHere
+                returnHere = None
+              } else {
+                curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+              }
               next()
             }
           case _ => throw SparkException.internalError(
@@ -319,6 +329,18 @@ class LeaveStatementExec(val label: String) extends LeafStatementExec {
   var used: Boolean = false
 
   def getLabel: String = label
+
+  override def execute(session: SparkSession): Unit = ()
+
+  override def reset(): Unit = used = false
+}
+
+/**
+ * Executable node for Continue statement.
+ */
+class ContinueStatementExec() extends LeafStatementExec {
+
+  var used: Boolean = false
 
   override def execute(session: SparkSession): Unit = ()
 

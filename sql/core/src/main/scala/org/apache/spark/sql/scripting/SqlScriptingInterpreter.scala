@@ -24,7 +24,8 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, IfElseStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
@@ -83,7 +84,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       handler.conditions.foreach(condition => {
         val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
-        conditionHandlerMap.put(conditionValue, handlerExec)
+        conditionHandlerMap.get(conditionValue) match {
+          case Some(_) =>
+            throw SqlScriptingErrors.duplicateHandlerForSameSqlState(
+              CurrentOrigin.get, conditionValue)
+          case None => conditionHandlerMap.put(conditionValue, handlerExec)
+        }
       })
 
       handlers += handlerExec

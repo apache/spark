@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -226,6 +227,32 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array.empty[Row], // drop var - explicit
     )
     verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("duplicate handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SET VAR flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      errorClass = "DUPLICATE_HANDLER_FOR_SAME_SQL_STATE",
+      parameters = Map("sqlState" -> "22012"))
   }
 
   test("handler - continue resolve in the same block") {

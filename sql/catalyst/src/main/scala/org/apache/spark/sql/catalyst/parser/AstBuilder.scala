@@ -121,7 +121,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
       if (!SQLConf.get.sqlScriptingEnabled) {
-        throw SqlScriptingErrors.sqlScriptingNotEnabled()
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
       }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
