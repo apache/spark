@@ -512,7 +512,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(42)), // select
         Seq.empty[Row], // insert
         Seq(Row(42)), // select
-        Seq.empty[Row], // insert
+        Seq.empty[Row] // insert
       )
       verifySqlScriptResult(commands, expected)
     }
