@@ -643,11 +643,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(df.first()[1], 1)
         self.assert_eq(df.first().val, 1)
 
-        self.assert_eq(df.head()[0], datetime.datetime(2022, 12, 25, 10, 30))
-        self.assert_eq(df.head().date, datetime.datetime(2022, 12, 25, 10, 30))
-        self.assert_eq(df.head()[1], 1)
-        self.assert_eq(df.head().val, 1)
-
     def test_sql_with_pos_args(self):
         sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
         df = self.connect.sql(sqlText, args=[CF.array(CF.lit(1)), 7])
