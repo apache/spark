@@ -53,7 +53,8 @@ public class JavaHigherOrderFunctionsSuite {
                 Object expectedValue = expectedRow.get(j);
                 Object actualValue = actualRow.get(j);
                 if (expectedValue != null && expectedValue.getClass().isArray()) {
-                    actualValue = actualValue.getClass().getMethod("unsafeArray").invoke(actualValue);
+                    actualValue = actualValue.getClass().getMethod("unsafeArray")
+                        .invoke(actualValue);
                     Assertions.assertArrayEquals((Object[]) expectedValue, (Object[]) actualValue);
                 } else {
                     Assertions.assertEquals(expectedValue, actualValue);
