@@ -961,7 +961,7 @@ abstract class AvroSuite
       val intDf = Seq(1, Int.MinValue, Int.MaxValue).toDF("col")
       intDf.write.format("avro").save(intPath)
 
-      Seq((10, 0), (10, 2)).foreach { case (precision, scale) =>
+      Seq((10, 0), (12, 0)).foreach { case (precision, scale) =>
         checkAnswer(
           spark.read.schema(s"col Decimal($precision, $scale)").format("avro").load(intPath),
           Seq(Row(java.math.BigDecimal.valueOf(1, scale)),
@@ -974,7 +974,7 @@ abstract class AvroSuite
       val longPath = s"$tempPath/long_data"
       val longDf = Seq(1L, Long.MinValue, Long.MaxValue).toDF("col")
       longDf.write.format("avro").save(longPath)
-      Seq((20, 0), (20, 2)).foreach { case (precision, scale) =>
+      Seq((20, 0), (22, 0)).foreach { case (precision, scale) =>
         checkAnswer(
           spark.read.schema(s"col Decimal($precision, $scale)").format("avro").load(longPath),
           Seq(Row(java.math.BigDecimal.valueOf(1L, scale)),

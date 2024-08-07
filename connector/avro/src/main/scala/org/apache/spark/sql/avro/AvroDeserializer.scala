@@ -387,9 +387,12 @@ private[sql] class AvroDeserializer(
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case (INT, dt: DecimalType) => avroType.getLogicalType match {
-        case null => (updater, ordinal, value) =>
-          updater.setDecimal(ordinal,
-            Decimal(value.asInstanceOf[Int], dt.precision, dt.scale))
+        case null =>
+          if (!isDecimalTypeMatched(INT, dt)) {
+            throw new IncompatibleSchemaException(incompatibleMsg)
+          }
+          (updater, ordinal, value) =>
+            updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Int], dt.precision, dt.scale))
         case _: CustomDecimal => (updater, ordinal, value) =>
           val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
           updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Int], d.precision, d.scale))
@@ -398,9 +401,12 @@ private[sql] class AvroDeserializer(
       }
 
       case (LONG, dt: DecimalType) => avroType.getLogicalType match {
-        case null => (updater, ordinal, value) =>
-          updater.setDecimal(ordinal,
-            Decimal(value.asInstanceOf[Long], dt.precision, dt.scale))
+        case null =>
+          if (!isDecimalTypeMatched(LONG, dt)) {
+            throw new IncompatibleSchemaException(incompatibleMsg)
+          }
+          (updater, ordinal, value) =>
+            updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], dt.precision, dt.scale))
         case _: CustomDecimal => (updater, ordinal, value) =>
           val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
           updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
@@ -409,6 +415,14 @@ private[sql] class AvroDeserializer(
       }
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
+    }
+  }
+
+  private def isDecimalTypeMatched(avroType: Schema.Type, dt: DecimalType): Boolean = {
+    avroType match {
+      case INT => dt.precision >= DecimalType.IntDecimal.precision && dt.scale == 0
+      case LONG => dt.precision >= DecimalType.LongDecimal.precision && dt.scale == 0
+      case _ => false
     }
   }
 
