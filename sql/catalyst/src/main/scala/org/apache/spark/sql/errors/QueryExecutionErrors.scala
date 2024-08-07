@@ -2837,4 +2837,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("unit"),
         "invalidValue" -> s"'$invalidValue'"))
   }
+
+  def invalidBooleanStatementError(stmt: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      messageParameters = Map(
+        "invalidStatement" -> toSQLStmt(stmt)
+      )
+    )
+  }
 }

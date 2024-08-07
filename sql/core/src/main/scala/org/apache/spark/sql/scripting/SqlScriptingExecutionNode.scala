@@ -22,7 +22,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.{BooleanType, StructField}
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -75,14 +76,17 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       //  of boolean type with value True.
       val df = Dataset.ofRows(session, statement.parsedPlan)
       df.schema.fields match {
-        case Array(field) if field.dataType == BooleanType =>
+        case Array(StructField(_, BooleanType, _, _)) =>
           df.limit(2).collect() match {
             case Array(row) => row.getBoolean(0)
-            case _ => false
+            case _ =>
+              throw QueryExecutionErrors.invalidBooleanStatementError(statement.getText)
           }
-        case _ => false
+        case _ =>
+          throw QueryExecutionErrors.invalidBooleanStatementError(statement.getText)
       }
-    case _ => false
+    case _ =>
+      throw SparkException.internalError("Boolean condition must be SingleStatementExec")
   }
 }
 

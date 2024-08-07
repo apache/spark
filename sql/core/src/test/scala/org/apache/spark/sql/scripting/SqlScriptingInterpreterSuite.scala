@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, Row}
+import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -29,11 +30,11 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   // Helpers
-  private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
+  private def runSqlScript(sqlText: String): Array[DataFrame] = {
     val interpreter = SqlScriptingInterpreter()
     val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, spark)
-    val result = executionPlan.flatMap {
+    executionPlan.flatMap {
       case statement: SingleStatementExec =>
         if (statement.isExecuted) {
           None
@@ -42,7 +43,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         }
       case _ => None
     }.toArray
+  }
 
+  private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
+    val result = runSqlScript(sqlText)
     assert(result.length == expected.length)
     result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
   }
@@ -360,6 +364,26 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
       val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("if's condition must be a boolean statement") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  IF 1 THEN
+          |    SELECT 45;
+          |  END IF;
+          |END
+          |""".stripMargin
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "INVALID_BOOLEAN_STATEMENT",
+        parameters = Map("invalidStatement" -> "1")
+      )
     }
   }
 }
