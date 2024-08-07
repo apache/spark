@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -41,16 +41,20 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       isInternal = false)
 
-  case class TestWhileCondition(description: String)
+  case class DummyLogicalPlan() extends LeafNode {
+    override def output: Seq[Nothing] = Seq.empty
+  }
+
+  case class TestWhileCondition(
+      condVal: Boolean, reps: Int, description: String)
     extends SingleStatementExec(
-      parsedPlan = Project(Seq(Alias(Literal(true), description)()), OneRowRelation()),
+      parsedPlan = DummyLogicalPlan(),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       isInternal = false)
 
   case class TestWhile(
-      condition: SingleStatementExec,
-      body: CompoundBodyExec,
-      reps: Int)
+      condition: TestWhileCondition,
+      body: CompoundBodyExec)
     extends WhileStatementExec(condition, body, spark) {
 
     private var callCount: Int = 0
@@ -58,12 +62,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     override def evaluateBooleanCondition(
         session: SparkSession,
         statement: LeafStatementExec): Boolean = {
-      if (callCount < reps) {
+      if (callCount < condition.reps) {
         callCount += 1
-        true
+        condition.condVal
       } else {
         callCount = 0
-        false
+        !condition.condVal
       }
     }
   }
@@ -72,7 +76,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     statement match {
       case TestLeafStatement(testVal) => testVal
       case TestIfElseCondition(_, description) => description
-      case TestWhileCondition(description) => description
+      case TestWhileCondition(_, _, description) => description
       case _ => fail("Unexpected statement type")
     }
 
@@ -258,9 +262,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("while - doesn't enter body") {
     val iter = new CompoundBodyExec(Seq(
       TestWhile(
-        condition = TestWhileCondition("con1"),
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-        reps = 0
+        condition = TestWhileCondition(condVal = true, reps = 0, description = "con1"),
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -270,9 +273,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("while - enters body once") {
     val iter = new CompoundBodyExec(Seq(
       TestWhile(
-        condition = TestWhileCondition("con1"),
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-        reps = 1
+        condition = TestWhileCondition(condVal = true, reps = 1, description = "con1"),
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -282,11 +284,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("while - enters body with multiple statements multiple times") {
     val iter = new CompoundBodyExec(Seq(
       TestWhile(
-        condition = TestWhileCondition("con1"),
+        condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
-          TestLeafStatement("statement2"))),
-        reps = 2
+          TestLeafStatement("statement2")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -297,15 +298,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("nested while - 2 times outer 2 times inner") {
     val iter = new CompoundBodyExec(Seq(
       TestWhile(
-        condition = TestWhileCondition("con1"),
+        condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
         body = new CompoundBodyExec(Seq(
           TestWhile(
-            condition = TestWhileCondition("con2"),
-            body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-            reps = 2
-          )
-        )),
-        reps = 2
+            condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
+            body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+          ))
+        )
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
