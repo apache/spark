@@ -173,7 +173,50 @@ object StateStoreErrors {
     StateStoreProviderDoesNotSupportFineGrainedReplay = {
     new StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass)
   }
+
+  def invalidConfigChangedAfterRestart(configName: String, oldConfig: String, newConfig: String):
+    StateStoreInvalidConfigAfterRestart = {
+    new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
+  }
+
+  def duplicateStateVariableDefined(stateName: String):
+    StateStoreDuplicateStateVariableDefined = {
+    new StateStoreDuplicateStateVariableDefined(stateName)
+  }
+
+  def invalidVariableTypeChange(stateName: String, oldType: String, newType: String):
+    StateStoreInvalidVariableTypeChange = {
+    new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
+  }
 }
+
+class StateStoreDuplicateStateVariableDefined(stateVarName: String)
+  extends SparkRuntimeException(
+    errorClass = "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED",
+    messageParameters = Map(
+      "stateVarName" -> stateVarName
+    )
+  )
+
+class StateStoreInvalidConfigAfterRestart(configName: String, oldConfig: String, newConfig: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+    messageParameters = Map(
+      "configName" -> configName,
+      "oldConfig" -> oldConfig,
+      "newConfig" -> newConfig
+    )
+  )
+
+class StateStoreInvalidVariableTypeChange(stateVarName: String, oldType: String, newType: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+    messageParameters = Map(
+      "stateVarName" -> stateVarName,
+      "oldType" -> oldType,
+      "newType" -> newType
+    )
+  )
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(

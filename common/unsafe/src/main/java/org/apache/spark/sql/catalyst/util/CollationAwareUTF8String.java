@@ -51,16 +51,15 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
    * specified position (0-based index referring to character position in UTF8String), with respect
-   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased
-   * prior to method call to avoid the overhead of calling .toLowerCase() multiple times on the
-   * same prefix string.
+   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased prior
+   * to method call to avoid the overhead of lowercasing the same prefix string multiple times.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param startPos the start position for searching (in the target string)
    * @return whether the target string starts with the specified prefix in UTF8_LCASE
    */
-  public static boolean lowercaseMatchFrom(
+  private static boolean lowercaseMatchFrom(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int startPos) {
@@ -86,12 +85,44 @@ public class CollationAwareUTF8String {
       final UTF8String lowercasePattern,
       int startPos) {
     assert startPos >= 0;
-    for (int len = 0; len <= target.numChars() - startPos; ++len) {
-      if (target.substring(startPos, startPos + len).toLowerCase().equals(lowercasePattern)) {
-        return len;
+    // Use code point iterators for efficient string search.
+    Iterator<Integer> targetIterator = target.codePointIterator();
+    Iterator<Integer> patternIterator = lowercasePattern.codePointIterator();
+    // Skip to startPos in the target string.
+    for (int i = 0; i < startPos; ++i) {
+      if (targetIterator.hasNext()) {
+        targetIterator.next();
+      } else {
+        return MATCH_NOT_FOUND;
       }
     }
-    return MATCH_NOT_FOUND;
+    // Compare the characters in the target and pattern strings.
+    int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
+    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+      if (codePointBuffer != -1) {
+        targetCodePoint = codePointBuffer;
+        codePointBuffer = -1;
+      } else {
+        // Use buffered lowercase code point iteration to handle one-to-many case mappings.
+        targetCodePoint = getLowercaseCodePoint(targetIterator.next());
+        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
+          targetCodePoint = CODE_POINT_LOWERCASE_I;
+          codePointBuffer = CODE_POINT_COMBINING_DOT;
+        }
+        ++matchLength;
+      }
+      patternCodePoint = patternIterator.next();
+      if (targetCodePoint != patternCodePoint) {
+        return MATCH_NOT_FOUND;
+      }
+    }
+    // If the pattern string has more characters, or the match is found at the middle of a
+    // character that maps to multiple characters in lowercase, then match is not found.
+    if (patternIterator.hasNext() || codePointBuffer != -1) {
+      return MATCH_NOT_FOUND;
+    }
+    // If all characters are equal, return the length of the match in the target string.
+    return matchLength;
   }
 
   /**
@@ -123,15 +154,14 @@ public class CollationAwareUTF8String {
    * Returns whether the target string ends with the specified suffix, ending at the specified
    * position (0-based index referring to character position in UTF8String), with respect to the
    * UTF8_LCASE collation. The method assumes that the suffix is already lowercased prior
-   * to method call to avoid the overhead of calling .toLowerCase() multiple times on the same
-   * suffix string.
+   * to method call to avoid the overhead of lowercasing the same suffix string multiple times.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param endPos the end position for searching (in the target string)
    * @return whether the target string ends with the specified suffix in lowercase
    */
-  public static boolean lowercaseMatchUntil(
+  private static boolean lowercaseMatchUntil(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int endPos) {
@@ -156,13 +186,45 @@ public class CollationAwareUTF8String {
       final UTF8String target,
       final UTF8String lowercasePattern,
       int endPos) {
-    assert endPos <= target.numChars();
-    for (int len = 0; len <= endPos; ++len) {
-      if (target.substring(endPos - len, endPos).toLowerCase().equals(lowercasePattern)) {
-        return len;
+    assert endPos >= 0;
+    // Use code point iterators for efficient string search.
+    Iterator<Integer> targetIterator = target.reverseCodePointIterator();
+    Iterator<Integer> patternIterator = lowercasePattern.reverseCodePointIterator();
+    // Skip to startPos in the target string.
+    for (int i = endPos; i < target.numChars(); ++i) {
+      if (targetIterator.hasNext()) {
+        targetIterator.next();
+      } else {
+        return MATCH_NOT_FOUND;
       }
     }
-    return MATCH_NOT_FOUND;
+    // Compare the characters in the target and pattern strings.
+    int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
+    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+      if (codePointBuffer != -1) {
+        targetCodePoint = codePointBuffer;
+        codePointBuffer = -1;
+      } else {
+        // Use buffered lowercase code point iteration to handle one-to-many case mappings.
+        targetCodePoint = getLowercaseCodePoint(targetIterator.next());
+        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
+          targetCodePoint = CODE_POINT_COMBINING_DOT;
+          codePointBuffer = CODE_POINT_LOWERCASE_I;
+        }
+        ++matchLength;
+      }
+      patternCodePoint = patternIterator.next();
+      if (targetCodePoint != patternCodePoint) {
+        return MATCH_NOT_FOUND;
+      }
+    }
+    // If the pattern string has more characters, or the match is found at the middle of a
+    // character that maps to multiple characters in lowercase, then match is not found.
+    if (patternIterator.hasNext() || codePointBuffer != -1) {
+      return MATCH_NOT_FOUND;
+    }
+    // If all characters are equal, return the length of the match in the target string.
+    return matchLength;
   }
 
   /**
@@ -191,10 +253,9 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Lowercase UTF8String comparison used for UTF8_LCASE collation. While the default
-   * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
-   * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
-   * as well as handling special rules for one-to-many case mappings (see: lowerCaseCodePoints).
+   * Lowercase UTF8String comparison used for UTF8_LCASE collation. This method uses lowercased
+   * code points to compare the strings in a case-insensitive manner using ICU rules, taking into
+   * account special rules for one-to-many case mappings (see: lowerCaseCodePoints).
    *
    * @param left The first UTF8String to compare.
    * @param right The second UTF8String to compare.
@@ -325,8 +386,7 @@ public class CollationAwareUTF8String {
       return src;
     }
 
-    // TODO(SPARK-48725): Use lowerCaseCodePoints instead of UTF8String.toLowerCase.
-    UTF8String lowercaseSearch = search.toLowerCase();
+    UTF8String lowercaseSearch = lowerCaseCodePoints(search);
 
     int start = 0;
     int end = lowercaseFind(src, lowercaseSearch, start);
@@ -560,6 +620,58 @@ public class CollationAwareUTF8String {
   }
 
   /**
+   * Checks whether the target string contains the pattern string, with respect to the UTF8_LCASE
+   * collation. This method generally works with respect to code-point based comparison logic.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @return whether the target string contains the pattern string
+   */
+  public static boolean lowercaseContains(final UTF8String target, final UTF8String pattern) {
+    // Fast path for ASCII-only strings.
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().contains(pattern.toLowerCase());
+    }
+    // Slow path for non-ASCII strings.
+    return CollationAwareUTF8String.lowercaseIndexOfSlow(target, pattern, 0) >= 0;
+  }
+
+  /**
+   * Checks whether the target string starts with the pattern string, with respect to the UTF8_LCASE
+   * collation. This method generally works with respect to code-point based comparison logic.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @return whether the target string starts with the pattern string
+   */
+  public static boolean lowercaseStartsWith(final UTF8String target, final UTF8String pattern) {
+    // Fast path for ASCII-only strings.
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().startsWith(pattern.toLowerCase());
+    }
+    // Slow path for non-ASCII strings.
+    return CollationAwareUTF8String.lowercaseMatchFrom(target, lowerCaseCodePointsSlow(pattern), 0);
+  }
+
+  /**
+   * Checks whether the target string ends with the pattern string, with respect to the UTF8_LCASE
+   * collation. This method generally works with respect to code-point based comparison logic.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @return whether the target string ends with the pattern string
+   */
+  public static boolean lowercaseEndsWith(final UTF8String target, final UTF8String pattern) {
+    // Fast path for ASCII-only strings.
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().endsWith(pattern.toLowerCase());
+    }
+    // Slow path for non-ASCII strings.
+    return CollationAwareUTF8String.lowercaseMatchUntil(target, lowerCaseCodePointsSlow(pattern),
+      target.numChars());
+  }
+
+  /**
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
    * UTF8String), with respect to the UTF8_LCASE collation. If the pattern is not found,
@@ -573,7 +685,15 @@ public class CollationAwareUTF8String {
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
     if (pattern.numChars() == 0) return target.indexOfEmpty(start);
-    return lowercaseFind(target, pattern.toLowerCase(), start);
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().indexOf(pattern.toLowerCase(), start);
+    }
+    return lowercaseIndexOfSlow(target, pattern, start);
+  }
+
+  private static int lowercaseIndexOfSlow(final UTF8String target, final UTF8String pattern,
+      final int start) {
+    return lowercaseFind(target, lowerCaseCodePoints(pattern), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
@@ -587,7 +707,7 @@ public class CollationAwareUTF8String {
     return stringSearch.next();
   }
 
-  public static int find(UTF8String target, UTF8String pattern, int start,
+  private static int find(UTF8String target, UTF8String pattern, int start,
       int collationId) {
     assert (pattern.numBytes() > 0);
 
@@ -670,7 +790,7 @@ public class CollationAwareUTF8String {
       return UTF8String.EMPTY_UTF8;
     }
 
-    UTF8String lowercaseDelimiter = delimiter.toLowerCase();
+    UTF8String lowercaseDelimiter = lowerCaseCodePoints(delimiter);
 
     if (count > 0) {
       // Search left to right (note: the start code point is inclusive).
