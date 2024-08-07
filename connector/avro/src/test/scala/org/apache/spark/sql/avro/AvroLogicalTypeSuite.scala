@@ -29,7 +29,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DecimalType, LongType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType, StructField, StructType, TimestampNTZType, TimestampType}
 
 abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -449,35 +449,36 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-43901: LogicalType: Custom Decimal for Long Type") {
-    val schema =
-      new Schema.Parser().parse("""{
-        "namespace": "logical",
-        "type": "record",
-        "name": "test",
-        "fields": [
-         {
-           "name": "field1",
-           "type": {"type": "long", "logicalType": "custom-decimal", "scale": 2, "precision": 38}
-         },
-         {
-           "name": "field2",
-           "type": {"type": "long", "logicalType": "custom-decimal", "scale": 9, "precision": 33}
-         },
-         {
-           "name": "field3",
-           "type": "long"
-         }]
-        }""")
+  protected def customDecimalLogicalTypeCheck(avroType: Schema.Type) = {
+    val typeStr: String = avroType.getName
+    val schema = new Schema.Parser().parse(
+      s"""{
+      "namespace": "logical",
+      "type": "record",
+      "name": "test",
+      "fields": [
+       {
+         "name": "field1",
+         "type": {"type": "$typeStr", "logicalType": "custom-decimal", "scale": 2, "precision": 38}
+       },
+       {
+         "name": "field2",
+         "type": {"type": "$typeStr", "logicalType": "custom-decimal", "scale": 9, "precision": 33}
+       },
+       {
+         "name": "field3",
+         "type": "$typeStr"
+       }]
+      }""")
 
     withTempDir { dir =>
       val datumWriter = new GenericDatumWriter[GenericRecord](schema)
       val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
       dataFileWriter.create(schema, new File(s"$dir.avro"))
       val avroRec = new GenericData.Record(schema)
-      avroRec.put("field1", 123456789L)
-      avroRec.put("field2", 123456789L)
-      avroRec.put("field3", 123456789L)
+      avroRec.put("field1", 123456789)
+      avroRec.put("field2", 123456789)
+      avroRec.put("field3", 123456789)
       dataFileWriter.append(avroRec)
       dataFileWriter.flush()
       dataFileWriter.close()
@@ -487,27 +488,36 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         .load(s"$dir.avro")
       assertResult(DecimalType(38, 2))(df.schema.head.dataType)
       val firstRow = df.take(1)(0)
-      assertResult(java.math.BigDecimal.valueOf(123456789L, 2))(firstRow.getAs("field1"))
-      assertResult(java.math.BigDecimal.valueOf(123456789L, 9))(firstRow.getAs("field2"))
-      assertResult(123456789L)(firstRow.getAs("field3"))
+      assertResult(java.math.BigDecimal.valueOf(123456789, 2))(firstRow.getAs("field1"))
+      assertResult(java.math.BigDecimal.valueOf(123456789, 9))(firstRow.getAs("field2"))
+      assertResult(123456789)(firstRow.getAs("field3"))
     }
   }
 
-  test("SPARK-43901: LogicalType: Decimal for Long Type Exception Cases") {
+  test("SPARK-49140: LogicalType: Custom Decimal for Int Type") {
+    customDecimalLogicalTypeCheck(Schema.Type.INT)
+  }
+
+  test("SPARK-43901: LogicalType: Custom Decimal for Long Type") {
+    customDecimalLogicalTypeCheck(Schema.Type.LONG)
+  }
+
+  protected def customDecimalLogicalTypeException(avroType: Schema.Type) = {
     // Avro appears to catch all exceptions when creating a customized logical type and turn the
     // logical null and we can't distinguish with the case where the logical type isn't given.
+    val typeStr = avroType.getName
     Seq(
-      """ "type": "long", "logicalType": "custom-decimal", "scale": 2, "precision": 50 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": -2, "precision": 30 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": 2, "precision": -30 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": 30, "precision": 20 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": "2", "precision": 30 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": "xx", "precision": 30 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": 2, "precision": "30" """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": 2, "precision": "xx" """,
-      """ "type": "long", "logicalType": "custom-decimal", "precision": 30 """,
-      """ "type": "long", "logicalType": "custom-decimal", "scale": 2 """,
-      """ "type": "long", "logicalType": "custom-decimal" """
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": 2, "precision": 50 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": -2, "precision": 30 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": 2, "precision": -30 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": 30, "precision": 20 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": "2", "precision": 30 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": "xx", "precision": 30 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": 2, "precision": "30" """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": 2, "precision": "xx" """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "precision": 30 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal", "scale": 2 """,
+      s""" "type": "$typeStr", "logicalType": "custom-decimal" """
     ).foreach { d =>
       val schema =
         new Schema.Parser().parse(
@@ -527,18 +537,30 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
         dataFileWriter.create(schema, new File(s"$dir.avro"))
         val avroRec = new GenericData.Record(schema)
-        avroRec.put("field", 123456789L)
+        avroRec.put("field", 123456789)
         dataFileWriter.append(avroRec)
         dataFileWriter.flush()
         dataFileWriter.close()
-          val df = spark.read
-            .format("avro")
-            .load(s"$dir.avro")
-        assertResult(LongType)(df.schema.head.dataType)
+        val df = spark.read
+          .format("avro")
+          .load(s"$dir.avro")
+
+        avroType match {
+          case Schema.Type.INT => assertResult(IntegerType)(df.schema.head.dataType)
+          case Schema.Type.LONG => assertResult(LongType)(df.schema.head.dataType)
+          case _ =>
+        }
         val firstRow = df.take(1)(0)
-        assertResult(123456789L)(firstRow.getAs("field"))
+        assertResult(123456789)(firstRow.getAs("field"))
       }
     }
+  }
+  test("SPARK-49140: LogicalType: Decimal for Int Type Exception Cases") {
+    customDecimalLogicalTypeException(Schema.Type.INT)
+  }
+
+  test("SPARK-43901: LogicalType: Decimal for Long Type Exception Cases") {
+    customDecimalLogicalTypeException(Schema.Type.LONG)
   }
 }
 

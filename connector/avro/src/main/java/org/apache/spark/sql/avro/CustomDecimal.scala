@@ -27,8 +27,9 @@ private[spark] object CustomDecimal {
 }
 
 // A customized logical type, which will be registered to Avro. This logical type is similar to
-// Avro's builtin Decimal type, but is meant to be registered for long type. It indicates that
-// the long type should be converted to Spark's Decimal type, with provided precision and scale.
+// Avro's builtin Decimal type, but is meant to be registered for long type or int type. It
+// indicates that the long type or int type should be converted to Spark's Decimal type, with
+// provided precision and scale.
 private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME) {
   val scale : Int = {
     val obj = schema.getObjectProp("scale")
@@ -57,9 +58,9 @@ private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDec
 
   override def validate(schema: Schema): Unit = {
     super.validate(schema)
-    if (schema.getType != Schema.Type.LONG) {
+    if (schema.getType != Schema.Type.LONG && schema.getType != Schema.Type.INT) {
       throw new IllegalArgumentException(
-        s"${CustomDecimal.TYPE_NAME} can only be used with an underlying long type")
+        s"${CustomDecimal.TYPE_NAME} can only be used with an underlying long type or int type")
     }
     if (precision <= 0) {
       throw new IllegalArgumentException(s"Invalid decimal precision: $precision" +
