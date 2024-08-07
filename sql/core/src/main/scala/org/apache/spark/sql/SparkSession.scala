@@ -43,7 +43,6 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
@@ -831,36 +830,6 @@ class SparkSession private(
     println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
     // scalastyle:on println
     ret
-  }
-
-  /**
-   * Update rows in a table that match a condition.
-   *
-   * Scala Example:
-   * {{{
-   *   spark.update("source")
-   *    .set(
-   *      Map("salary" -> lit(200))
-   *    )
-   *    .where($"salary" === 100)
-   *    .execute()
-   *
-   * }}}
-   * @param tableName is either a qualified or unqualified name that designates a table or view.
-   *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first attempts to find a temporary view with the given name
-   *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
-   * @since 4.0.0
-   */
-  def update(tableName: String): UpdateWriter = {
-    val tableDF = table(tableName)
-    if (tableDF.isStreaming) {
-      throw new AnalysisException(
-        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
-        messageParameters = Map("methodName" -> toSQLId("update")))
-    }
-    new UpdateWriter(tableDF)
   }
 
   // scalastyle:off

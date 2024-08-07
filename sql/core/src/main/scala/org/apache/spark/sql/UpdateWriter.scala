@@ -22,35 +22,18 @@ import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
 import org.apache.spark.sql.functions.expr
 
 /**
- * `UpdateWriter` provides methods to define and execute an update action on a target table.
+ * This class defines methods to specify a condition an an update operation
+ * or directly executing it.
  *
- * @param tableDF DataFrame representing table to update.
- *
- * @since 4.0.0
- */
-@Experimental
-class UpdateWriter (tableDF: DataFrame) {
-
-  /**
-   * @param assignments A Map of column names to Column expressions representing the updates
-   *     to be applied.
-   */
-  def set(assignments: Map[String, Column]): UpdateWithAssignment = {
-    new UpdateWithAssignment(tableDF, assignments)
-  }
-}
-
-/**
- * A class for defining a condition on an update operation or directly executing it.
- *
- * @param tableDF DataFrame representing table to update.
- * @param assignment A Map of column names to Column expressions representing the updates
+ * @param dataset DataSet representing table to update.
+ * @param assignments A Map of column names to Column expressions representing the updates
  *     to be applied.
+ * @param T type of dataset
  *
  * @since 4.0.0
  */
 @Experimental
-class UpdateWithAssignment(tableDF: DataFrame, assignment: Map[String, Column]) {
+class UpdateWriter[T](dataset: Dataset[T], assignments: Map[String, Column]) {
 
   /**
    * Limits the update to rows matching the specified condition.
@@ -58,35 +41,35 @@ class UpdateWithAssignment(tableDF: DataFrame, assignment: Map[String, Column]) 
    * @param condition the update condition
    * @return
    */
-  def where(condition: Column): UpdateWithCondition = {
-    new UpdateWithCondition(tableDF, assignment, Some(condition))
+  def where(condition: Column): UpdateWithCondition[T] = {
+    new UpdateWithCondition(dataset, assignments, Some(condition))
   }
 
   /**
    * Executes the update operation.
    */
   def execute(): Unit = {
-    new UpdateWithCondition(tableDF, assignment, None)
+    new UpdateWithCondition(dataset, assignments, None)
   }
 }
 
 /**
  * A class for executing an update operation.
  *
- * @param tableDF DataFrame representing table to update.
+ * @param dataset Dataset representing table to update.
  * @param assignments A Map of column names to Column expressions representing the updates
  *     to be applied.
  * @param condition the update condition
  * @since 4.0.0
  */
 @Experimental
-class UpdateWithCondition(
-    tableDF: DataFrame,
+class UpdateWithCondition[T](
+    dataset: Dataset[T],
     assignments: Map[String, Column],
     condition: Option[Column]) {
 
-  private val sparkSession = tableDF.sparkSession
-  private val logicalPlan = tableDF.queryExecution.logical
+  private val sparkSession = dataset.sparkSession
+  private val logicalPlan = dataset.queryExecution.logical
 
   /**
    * Executes the update operation.
