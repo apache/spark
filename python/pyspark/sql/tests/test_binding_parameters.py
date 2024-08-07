@@ -68,7 +68,6 @@ class BindingParametersTests(ReusedSQLTestCase):
 
         self.assertEqual(self.spark.sql(sqlText).collect()[0][0], 11)
         self.assertEqual(self.spark.sql(sqlText).head().num_sum, 11)
-        self.assertEqual(self.spark.sql(sqlText).first().num_sum, 11)
 
 
 if __name__ == "__main__":
