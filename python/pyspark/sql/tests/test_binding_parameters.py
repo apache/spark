@@ -18,6 +18,7 @@
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
+
 class BindingParametersTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
@@ -38,33 +39,23 @@ class BindingParametersTests(ReusedSQLTestCase):
 
         # Binds to jvm.org.apache.spark.sql.catalyst.expressions.Literal.create(), a version that takes one input.
         boundMethodLiteralCreate = getattr(
-            getattr(
-                getattr(
-                    jvm.org.apache.spark.sql.catalyst.expressions,
-                    "Literal$"
-                ),
-                "MODULE$"
-            ),
-            "$anonfun$create$2"
+            getattr(getattr(jvm.org.apache.spark.sql.catalyst.expressions, "Literal$"), "MODULE$"),
+            "$anonfun$create$2",
         )
 
         # Binds Limit singleton.
         limitObj = getattr(
-            getattr(
-                jvm.org.apache.spark.sql.catalyst.plans.logical,
-                "Limit$"
-            ),
-            "MODULE$"
+            getattr(jvm.org.apache.spark.sql.catalyst.plans.logical, "Limit$"), "MODULE$"
         )
 
         # It is not possible to call Limit singleton's constructor, calling apply() built-in equivalent.
         analyzedplan = limitObj.apply(
             boundMethodLiteralCreate(100),  # Equivalent to Literal.create(100)
-            df._jdf.queryExecution().logical()
+            df._jdf.queryExecution().logical(),
         )
         self.spark._jsparkSession.sessionState().analyzer().executeAndCheck(
-            analyzedplan,
-            df._jdf.queryExecution().tracker())
+            analyzedplan, df._jdf.queryExecution().tracker()
+        )
 
         self.assertEqual(self.spark.sql(sqlText).collect()[0][0], 11)
         self.assertEqual(self.spark.sql(sqlText).head().num_sum, 11)
