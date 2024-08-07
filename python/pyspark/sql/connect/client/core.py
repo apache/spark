@@ -24,7 +24,6 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-import logging
 import threading
 import os
 import copy
