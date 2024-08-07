@@ -98,6 +98,7 @@ DIRECTORY	false
 DISTINCT	false
 DISTRIBUTE	false
 DIV	false
+DO	true
 DOUBLE	false
 DROP	false
 ELSE	false
@@ -350,6 +351,7 @@ WEEK	false
 WEEKS	false
 WHEN	false
 WHERE	false
+WHILE	true
 WINDOW	false
 WITH	false
 WITHIN	false
@@ -364,4 +366,5 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-
+DO
+WHILE
