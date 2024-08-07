@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `SHOW COLUMNS ...` command that
@@ -38,7 +41,7 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("basic test") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (col1 int, col2 string) $defaultUsing")
+      sql(s"CREATE TABLE $t(col1 int, col2 string) $defaultUsing")
       val expected = Seq(Row("col1"), Row("col2"))
       checkAnswer(sql(s"SHOW COLUMNS FROM $t IN ns"), expected)
       checkAnswer(sql(s"SHOW COLUMNS IN $t FROM ns"), expected)
@@ -46,9 +49,9 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("bad case") {
+  test("negative test") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (col1 int, col2 string) $defaultUsing")
+      sql(s"CREATE TABLE $t(col1 int, col2 string) $defaultUsing")
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -61,7 +64,7 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"SHOW COLUMNS IN $catalog.ns.tbl IN ns1")
+          sql(s"SHOW COLUMNS IN $t IN ns1")
         },
         errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
         parameters = Map(
@@ -69,6 +72,21 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
           "namespaceB" -> s"`ns`"
         )
       )
+
+      // When case sensitivity is true, the user supplied namespace name in table identifier
+      // should match the supplied namespace name in case sensitive way.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SHOW COLUMNS IN $t FROM ${"ns".toUpperCase(Locale.ROOT)}")
+          },
+          errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+          parameters = Map(
+            "namespaceA" -> s"`${"ns".toUpperCase(Locale.ROOT)}`",
+            "namespaceB" -> "`ns`"
+          )
+        )
+      }
     }
   }
 }

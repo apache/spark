@@ -35,12 +35,21 @@ class ShowColumnsParserSuite extends AnalysisTest {
         UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
         None))
     comparePlans(
-      parsePlan("SHOW COLUMNS IN a.b.c IN a.b"),
+      parsePlan("SHOW COLUMNS IN a.b.c FROM a.b"),
       ShowColumns(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
         Some(Seq("a", "b"))))
     comparePlans(
-      parsePlan("SHOW COLUMNS FROM a.b.c FROM a.b"),
+      parsePlan("SHOW COLUMNS FROM a.b.c IN a.b"),
       ShowColumns(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
         Some(Seq("a", "b"))))
+  }
+
+  test("illegal characters in unquoted identifier") {
+    checkError(
+      exception = parseException(parsePlan)("SHOW COLUMNS IN t FROM test-db"),
+      errorClass = "INVALID_IDENTIFIER",
+      sqlState = "42602",
+      parameters = Map("ident" -> "test-db")
+    )
   }
 }

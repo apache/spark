@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -28,7 +29,24 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.ShowColumnsSuite`
  */
-trait ShowColumnsSuiteBase extends command.ShowColumnsSuiteBase
+trait ShowColumnsSuiteBase extends command.ShowColumnsSuiteBase {
+
+  test("invalid db name") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(col1 int, col2 string) $defaultUsing")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SHOW COLUMNS IN tbl FROM a.b.c")
+        },
+        errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+        parameters = Map(
+          "sessionCatalog" -> catalog,
+          "namespace" -> "`a`.`b`.`c`"
+        )
+      )
+    }
+  }
+}
 
 /**
  * The class contains tests for the `SHOW COLUMNS ...` command to check V1 In-Memory
