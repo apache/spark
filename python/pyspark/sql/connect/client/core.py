@@ -997,6 +997,8 @@ class SparkConnectClient(object):
             return text_format.MessageToString(p2, as_one_line=True)
         except RecursionError:
             return "<Truncated message due to recursion error>"
+        except Exception:
+            return "<Truncated message due to truncation error>"
 
     def _truncate(self, p: google.protobuf.message.Message) -> google.protobuf.message.Message:
         """
