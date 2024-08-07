@@ -2964,7 +2964,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
         throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
           prettyName, numberOfElements)
       }
-      val flattenedData = new Array[AnyRef](numberOfElements.toInt)
+      val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
       for (ad <- arrayData) {
         val arr = ad.toObjectArray(elementType)
