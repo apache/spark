@@ -2710,12 +2710,9 @@ class CollationSQLExpressionsSuite
     val collation = "UNICODE"
     val query = s"SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b"))
-        )
-      )
+      val result = sql(query).collect().head.getSeq[String](0).toSet
+      val expected = Set("a", "b")
+      assert(result == expected)
       // check result row data type
       val dataType = ArrayType(StringType(collation), false)
       assert(sql(query).schema.head.dataType == dataType)
