@@ -1057,9 +1057,7 @@ class SparkConnectClient(object):
         """
         Return explain string for given plan.
         """
-        logger.debug(
-            f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}"
-        )
+        logger.debug(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}")
         result = self._analyze(
             method="explain", plan=plan, explain_mode=explain_mode
         ).explain_string
