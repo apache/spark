@@ -972,12 +972,12 @@ abstract class AvroSuite
 
       // long -> decimal
       val longPath = s"$tempPath/long_data"
-      val longDf = Seq(1F, Long.MinValue, Long.MaxValue).toDF("col")
+      val longDf = Seq(1L, Long.MinValue, Long.MaxValue).toDF("col")
       longDf.write.format("avro").save(longPath)
       Seq((20, 0), (20, 2)).foreach { case (precision, scale) =>
         checkAnswer(
           spark.read.schema(s"col Decimal($precision, $scale)").format("avro").load(longPath),
-          Seq(Row(java.math.BigDecimal.valueOf(1, scale)),
+          Seq(Row(java.math.BigDecimal.valueOf(1L, scale)),
             Row(java.math.BigDecimal.valueOf(-9223372036854775808L, scale)),
             Row(java.math.BigDecimal.valueOf(9223372036854775807L, scale)))
         )
