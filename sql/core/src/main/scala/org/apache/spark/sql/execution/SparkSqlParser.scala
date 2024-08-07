@@ -273,7 +273,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetNamespaceCommand]] logical command.
    */
   override def visitUseNamespace(ctx: UseNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference, Nil, (ident, _) => SetNamespaceCommand(ident))
+    withIdentClause(ctx.identifierReference, SetNamespaceCommand(_))
   }
 
   /**
@@ -348,7 +348,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
 
-      withIdentClause(identCtx, Nil, (ident, _) => {
+      withIdentClause(identCtx, ident => {
         val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
         val optionsList: Map[String, String] =
           options.options.map { case (key, value) =>
@@ -558,7 +558,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           schemaBinding
         }
       CreateView(
-        withIdentClause(ctx.identifierReference(), Nil, (ident, _) => UnresolvedIdentifier(ident)),
+        withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
@@ -621,7 +621,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
     }
 
-    withIdentClause(ctx.identifierReference(), Nil, (functionIdentifier, _) => {
+    withIdentClause(ctx.identifierReference(), functionIdentifier => {
       if (ctx.TEMPORARY == null) {
         CreateFunction(
           UnresolvedIdentifier(functionIdentifier),
@@ -694,7 +694,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val language: RoutineLanguage = optionalLanguage.getOrElse(LanguageSQL)
       val isTableFunc = ctx.TABLE() != null || returnTypeText.equalsIgnoreCase("table")
 
-      withIdentClause(ctx.identifierReference(), Nil, (functionIdentifier, _) => {
+      withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
           // TODO: support creating persistent UDFs.
           operationNotAllowed(s"creating persistent SQL functions is not supported", ctx)
@@ -828,7 +828,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), Nil, (functionName, _) => {
+    withIdentClause(ctx.identifierReference(), functionName => {
       val isTemp = ctx.TEMPORARY != null
       if (isTemp) {
         if (functionName.length > 1) {
@@ -1112,7 +1112,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val properties = visitPropertyKeys(ctx.propertyList)
     val cleanedProperties = cleanNamespaceProperties(properties.map(_ -> "").toMap, ctx).keys.toSeq
     UnsetNamespacePropertiesCommand(
-      withIdentClause(ctx.identifierReference(), Nil, (ident, _) => UnresolvedNamespace(ident)),
+      withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
       cleanedProperties)
   }
 }
