@@ -56,15 +56,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     private var callCount: Int = 0
 
     override def evaluateBooleanCondition(
-      session: SparkSession,
-      statement: LeafStatementExec): Boolean = {
-        if (callCount < reps) {
-          callCount += 1
-          true
-        } else {
-          callCount = 0
-          false
-        }
+        session: SparkSession,
+        statement: LeafStatementExec): Boolean = {
+      if (callCount < reps) {
+        callCount += 1
+        true
+      } else {
+        callCount = 0
+        false
+      }
     }
   }
 

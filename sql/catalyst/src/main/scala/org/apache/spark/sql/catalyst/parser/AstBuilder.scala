@@ -197,30 +197,14 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     beginLabelCtx.
-      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
-      toLowerCase(Locale.ROOT)
+      map(_.multipartIdentifier().getText)
+      .getOrElse(java.util.UUID.randomUUID.toString).toLowerCase(Locale.ROOT)
   }
-
-
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
 
     visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
-  }
-
-  override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val boolExpr = ctx.booleanExpression()
-
-    val condition = withOrigin(boolExpr) {
-      SingleStatement(
-        Project(
-          Seq(Alias(expression(boolExpr), "condition")()),
-          OneRowRelation()))}
-    val body = visitCompoundBody(ctx.compoundBody())
-
-    WhileStatement(condition, body, Some(labelText))
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
@@ -249,6 +233,20 @@ class AstBuilder extends DataTypeAstBuilder
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
       elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
     )
+  }
+
+  override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
+    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val boolExpr = ctx.booleanExpression()
+
+    val condition = withOrigin(boolExpr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(boolExpr), "condition")()),
+          OneRowRelation()))}
+    val body = visitCompoundBody(ctx.compoundBody())
+
+    WhileStatement(condition, body, Some(labelText))
   }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {

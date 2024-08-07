@@ -294,7 +294,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
   }
 
-
   test("declare in wrong scope") {
     val sqlScriptText =
       """
@@ -542,7 +541,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 42")
   }
 
-
   test("while") {
     val sqlScriptText =
       """BEGIN
@@ -590,6 +588,84 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(whileStmt.body.collection.length == 1)
     assert(whileStmt.body.collection.head.isInstanceOf[SingleStatement])
     assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+  }
+
+  test("while with if else block") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: WHILE 1 = 1 DO
+        |  IF 1 = 1 THEN
+        |    SELECT 1;
+        |  ELSE
+        |    SELECT 2;
+        |  END IF;
+        |END WHILE lbl;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+    assert(whileStmt.body.collection.head.isInstanceOf[IfElseStatement])
+    val ifStmt = whileStmt.body.collection.head.asInstanceOf[IfElseStatement]
+
+    assert(ifStmt.conditions.length == 1)
+    assert(ifStmt.conditionalBodies.length == 1)
+    assert(ifStmt.elseBody.isDefined)
+
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1 = 1")
+
+    assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 1")
+
+    assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 2")
+
+    assert(whileStmt.label.contains("lbl"))
+  }
+
+  test("nested while") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: WHILE 1 = 1 DO
+        |  WHILE 2 = 2 DO
+        |    SELECT 42;
+        |  END WHILE;
+        |END WHILE lbl;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+    assert(whileStmt.body.collection.head.isInstanceOf[WhileStatement])
+    val nestedWhileStmt = whileStmt.body.collection.head.asInstanceOf[WhileStatement]
+
+    assert(nestedWhileStmt.condition.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.condition.getText == "2 = 2")
+
+    assert(nestedWhileStmt.body.isInstanceOf[CompoundBody])
+    assert(nestedWhileStmt.body.collection.length == 1)
+    assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.body.collection.
+      head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+
+    assert(whileStmt.label.contains("lbl"))
 
   }
 
