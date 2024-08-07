@@ -464,6 +464,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('b', COLLATE('a', 'UTF8_BINARY'))"),
         Seq(Row("a")))
 
+      // array_append expression
+      checkAnswer(sql(s"SELECT array_append(array('a', 'b'), 'c' COLLATE UNICODE)"),
+        Seq(Row(Seq("a", "b", "c"))))
+
+      // map creation keys respects proper collation
+      assert(sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c', 'c')").schema.head.dataType ==
+        MapType(StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), false))
+
       // concat without type mismatch
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || 'a' || 'a' = 'aaa'"),
         Seq(Row("a"), Row("A")))
