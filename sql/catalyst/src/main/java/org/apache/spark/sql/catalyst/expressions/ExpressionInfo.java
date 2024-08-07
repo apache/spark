@@ -52,7 +52,7 @@ public class ExpressionInfo {
 
     private static final Set<String> validSources =
             new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf",
-                    "java_udf", "python_udtf"));
+                    "java_udf", "python_udtf", "internal"));
 
     public String getClassName() {
         return className;
