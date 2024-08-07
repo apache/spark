@@ -527,7 +527,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 42")
   }
 
-  test("searchedCaseStatement") {
+  test("searched case statement") {
     val sqlScriptText =
       """
         |BEGIN

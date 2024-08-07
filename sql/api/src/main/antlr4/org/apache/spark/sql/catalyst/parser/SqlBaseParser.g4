@@ -82,7 +82,7 @@ ifElseStatement
 caseStatement
     : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
         (ELSE elseBody=compoundBody)? END CASE                     #searchedCaseStatement
-    | CASE value=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
+    | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
         (ELSE elseBody=compoundBody)? END CASE                 #simpleCaseStatement
     ;
 
