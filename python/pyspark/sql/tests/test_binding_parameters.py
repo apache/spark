@@ -29,7 +29,7 @@ class BindingParametersTests(ReusedSQLTestCase):
     def test_wrapping_plan_in_limit_node(self):
         # Test the following Scala equivalent
         # val df = spark.sql("EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;")
-        # val analyzedPlan = Limit(Literal.create(100), df.queryExecution.initialParsedPlan)
+        # val analyzedPlan = Limit(Literal.create(100), df.queryExecution.logical)
         # spark.sessionState.analyzer.executeAndCheck(analyzedPlan, df.queryExecution.tracker)
         sqlText = """EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;"""
         df = self.spark.sql(sqlText)
