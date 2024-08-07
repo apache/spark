@@ -18,7 +18,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.types.{DataType, Metadata}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, Metadata}
 
 /**
  * AST for constructing columns. This API is implementation agnostic and allows us to build a
@@ -203,6 +203,8 @@ private[sql] object WindowFrame {
   object CurrentRow extends FrameBoundary
   object Unbounded extends FrameBoundary
   case class Value(value: ColumnNode) extends FrameBoundary
+  def value(i: Int): Value = Value(Literal(i, Some(IntegerType)))
+  def value(l: Long): Value = Value(Literal(l, Some(LongType)))
 }
 
 /**

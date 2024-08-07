@@ -215,7 +215,7 @@ object Window {
   }
 
   private[sql] def spec: WindowSpec = {
-    new WindowSpec(Seq.empty, Seq.empty, UnspecifiedFrame)
+    new WindowSpec(Seq.empty, Seq.empty, None)
   }
 
 }
