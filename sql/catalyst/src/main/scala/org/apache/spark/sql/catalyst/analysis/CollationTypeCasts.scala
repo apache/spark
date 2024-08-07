@@ -84,6 +84,8 @@ object CollationTypeCasts extends TypeCoercionRule {
       framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
 
     case mapCreate : CreateMap if mapCreate.children.size % 2 == 0 =>
+      // We only take in mapCreate if it has even number of children, as otherwise it should fail
+      // with wrong number of arguments
       val newKeys = collateToSingleType(mapCreate.keys)
       val newValues = collateToSingleType(mapCreate.values)
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
