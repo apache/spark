@@ -1111,8 +1111,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
   }
 
-  test("caseStatement") {
-  test("searchedCaseStatement") {
+  test("searched case statement") {
     val sqlScriptText =
       """
         |BEGIN
