@@ -405,6 +405,72 @@ class WhileStatementExec(
   }
 }
 
+class SearchedCaseStatementExec(
+    conditions: Seq[SingleStatementExec],
+    conditionalBodies: Seq[CompoundBodyExec],
+    elseBody: Option[CompoundBodyExec],
+    session: SparkSession) extends NonLeafStatementExec {
+  private object CaseState extends Enumeration {
+    val Condition, Body = Value
+  }
+
+  private var state = CaseState.Condition
+  private var curr: Option[CompoundStatementExec] = Some(conditions.head)
+
+  private var clauseIdx: Int = 0
+  private val conditionsCount = conditions.length
+  assert(conditionsCount == conditionalBodies.length)
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = curr.nonEmpty
+
+      override def next(): CompoundStatementExec = state match {
+        case CaseState.Condition =>
+          assert(curr.get.isInstanceOf[SingleStatementExec])
+          val condition = curr.get.asInstanceOf[SingleStatementExec]
+          if (evaluateBooleanCondition(session, condition)) {
+            state = CaseState.Body
+            curr = Some(conditionalBodies(clauseIdx))
+          } else {
+            clauseIdx += 1
+            if (clauseIdx < conditionsCount) {
+              // There are ELSE IF clauses remaining.
+              state = CaseState.Condition
+              curr = Some(conditions(clauseIdx))
+            } else if (elseBody.isDefined) {
+              // ELSE clause exists.
+              state = CaseState.Body
+              curr = Some(elseBody.get)
+            } else {
+              // No remaining clauses.
+              curr = None
+            }
+          }
+          condition
+        case CaseState.Body =>
+          assert(curr.get.isInstanceOf[CompoundBodyExec])
+          val currBody = curr.get.asInstanceOf[CompoundBodyExec]
+          val retStmt = currBody.getTreeIterator.next()
+          if (!currBody.getTreeIterator.hasNext) {
+            curr = None
+          }
+          retStmt
+      }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = CaseState.Condition
+    curr = Some(conditions.head)
+    clauseIdx = 0
+    conditions.foreach(c => c.reset())
+    conditionalBodies.foreach(b => b.reset())
+    elseBody.foreach(b => b.reset())
+  }
+}
+
 /**
  * Executable node for RepeatStatement.
  * @param condition Executable node for the condition - evaluates to a row with a single boolean

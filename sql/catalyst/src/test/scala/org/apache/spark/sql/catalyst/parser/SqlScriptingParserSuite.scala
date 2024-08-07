@@ -1112,21 +1112,94 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("caseStatement") {
+  test("searchedCaseStatement") {
     val sqlScriptText =
       """
         |BEGIN
-        | CASE 1
-        |   WHEN 1 THEN 1;
+        | CASE
+        |   WHEN 1 = 1 THEN
+        |     SELECT 1;
         | END CASE;
         |END
         |""".stripMargin
     val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[IfElseStatement])
-    val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
+    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+    val ifStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
     assert(ifStmt.conditions.length == 1)
     assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditions.head.getText == "1=1")
+    assert(ifStmt.conditions.head.getText == "1 = 1")
+  }
+
+  test("searchedCaseStatement2") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 1 THEN
+        |     SELECT 1;
+        |   WHEN 1 IN (1,2,3) THEN
+        |     SELECT 2;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        |   ELSE
+        |     SELECT 3;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+    val ifStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+    assert(ifStmt.conditions.length == 1)
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1 = 1")
+  }
+
+  test("simpleCaseStatement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | CASE (SELECT a FROM n)
+        |   WHEN 1 THEN
+        |     SELECT 1;
+        |   WHEN 1 IN (1,2,3) THEN
+        |     SELECT 2;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+    val ifStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+    assert(ifStmt.conditions.length == 1)
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1 = 1")
+  }
+
+  test("simpleCaseStatement2") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |     SELECT 1;
+        |   WHEN 2 THEN
+        |     SELECT 2;
+        |   ELSE
+        |     SELECT 3;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+    val ifStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+    assert(ifStmt.conditions.length == 1)
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1 = 1")
   }
 
   // Helper methods
