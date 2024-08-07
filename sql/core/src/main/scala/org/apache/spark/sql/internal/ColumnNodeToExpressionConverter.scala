@@ -19,13 +19,17 @@ package org.apache.spark.sql.internal
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
+import org.apache.spark.sql.expressions.Aggregator
 
 /**
  * Convert a [[ColumnNode]] into an [[Expression]].
@@ -148,6 +152,39 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             (apply(condition), apply(value))
           },
           elseValue = otherwise.map(apply))
+
+      case InvokeInlineUserDefinedFunction(f, arguments, _) =>
+        // This code is a bit clunky, it will stay this way until we have moved everything to
+        // sql/api and we can actually use the SparkUserDefinedFunction and
+        // UserDefinedAggregator classes.
+        (f.function, arguments.map(apply)) match {
+          case (a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil) =>
+            TypedAggregateExpression(a)(a.bufferEncoder, a.outputEncoder).toAggregateExpression()
+
+          case (a: Aggregator[Any @unchecked, Any  @unchecked, Any  @unchecked], children) =>
+            ScalaAggregator(
+              agg = a,
+              children = children,
+              inputEncoder = ExpressionEncoder(f.inputEncoders.head),
+              bufferEncoder = ExpressionEncoder(f.resultEncoder),
+              aggregatorName = f.name,
+              nullable = !f.nonNullable && f.resultEncoder.nullable,
+              isDeterministic = f.deterministic).toAggregateExpression()
+
+          case (function, children) =>
+            ScalaUDF(
+              function = function,
+              dataType = f.resultEncoder.dataType,
+              children = children,
+              inputEncoders = f.inputEncoders.map {
+                case UnboundEncoder => None
+                case encoder => Option(ExpressionEncoder(encoder))
+              },
+              outputEncoder = Option(ExpressionEncoder(f.resultEncoder)),
+              udfName = f.name,
+              nullable = !f.nonNullable && f.resultEncoder.nullable,
+              udfDeterministic = f.deterministic)
+        }
 
       case Extension(expression: Expression, _) =>
         expression

@@ -105,7 +105,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       <script type="module" src={UIUtils.prependBaseUri(
         request, "/static/utils.js")}></script> ++
       summary ++ appList ++ pageLink
-    UIUtils.basicSparkPage(request, content, "History Server", true)
+    UIUtils.basicSparkPage(request, content, parent.title, true)
   }
 
   def shouldDisplayApplications(requestedIncomplete: Boolean): Boolean = {

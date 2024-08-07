@@ -2633,6 +2633,11 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "DOUBLE" : {
+        "message" : [
+          "expects an double literal, but got <invalidValue>."
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
@@ -2666,6 +2671,11 @@
       "START" : {
         "message" : [
           "Expects a positive or a negative value for `start`, but got 0."
+        ]
+      },
+      "STRING" : {
+        "message" : [
+          "expects a string literal, but got <invalidValue>."
         ]
       },
       "ZERO_INDEX" : {
@@ -4001,6 +4011,14 @@
       "The options <options> cannot be specified together. Please specify the one."
     ],
     "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_OPERATOR_METADATA" : {
+    "message" : [
+      "Failed to read the operator metadata for checkpointLocation=<checkpointLocation> and batchId=<batchId>.",
+      "Either the file does not exist, or the file is corrupted.",
+      "Rerun the streaming query to construct the operator metadata, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
   },
   "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
     "message" : [
