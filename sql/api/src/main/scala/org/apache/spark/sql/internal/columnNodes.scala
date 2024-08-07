@@ -88,6 +88,7 @@ private[sql] case class UnresolvedFunction(
     arguments: Seq[ColumnNode],
     isDistinct: Boolean = false,
     isUserDefinedFunction: Boolean = false,
+    isInternal: Boolean = false,
     override val origin: Origin = CurrentOrigin.get)
   extends ColumnNode
 

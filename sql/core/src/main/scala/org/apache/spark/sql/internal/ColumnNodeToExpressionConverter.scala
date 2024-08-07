@@ -66,13 +66,17 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       case UnresolvedRegex(unparsedIdentifier, planId, _) =>
         convertUnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn = false)
 
-      case UnresolvedFunction(functionName, arguments, isDistinct, isUDF, _) =>
+      case UnresolvedFunction(functionName, arguments, isDistinct, isUDF, isInternal, _) =>
         val nameParts = if (isUDF) {
           parser.parseMultipartIdentifier(functionName)
         } else {
           Seq(functionName)
         }
-        analysis.UnresolvedFunction(nameParts, arguments.map(apply), isDistinct)
+        analysis.UnresolvedFunction(
+          nameParts = nameParts,
+          arguments = arguments.map(apply),
+          isDistinct = isDistinct,
+          isInternal = isInternal)
 
       case Alias(child, Seq(name), metadata, _) =>
         expressions.Alias(apply(child), name)(explicitMetadata = metadata)
