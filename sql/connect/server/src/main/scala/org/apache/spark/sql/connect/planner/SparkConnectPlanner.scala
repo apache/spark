@@ -1925,7 +1925,6 @@ class SparkConnectPlanner(
     }
   }
 
-
   private def extractProtobufArgs(children: Seq[Expression]) = {
     val msgName = extractString(children(1), "MessageClassName")
     var desc = Option.empty[Array[Byte]]
