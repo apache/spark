@@ -203,7 +203,6 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-
     visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
   }
 
