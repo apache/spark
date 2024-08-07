@@ -92,7 +92,6 @@ case class SqlScriptingInterpreter() {
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
-          conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, evaluator)
       case SearchedCaseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           // todo: what to put here for isInternal, in case of simple case statement
