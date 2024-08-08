@@ -1072,7 +1072,9 @@ class SparkConnectClient(object):
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
-            logger.debug(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}")
+            logger.debug(
+                f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}"
+            )
         result = self._analyze(
             method="explain", plan=plan, explain_mode=explain_mode
         ).explain_string
@@ -1358,7 +1360,9 @@ class SparkConnectClient(object):
             if logger.isEnabledFor(logging.DEBUG):
                 # inside an if statement to not incur a performance cost converting proto to string
                 # when not at debug log level.
-                logger.debug(f"ExecuteAndFetchAsIterator. Response received: {self._proto_to_string(b)}")
+                logger.debug(
+                    f"ExecuteAndFetchAsIterator. Response received: {self._proto_to_string(b)}"
+                )
 
             if b.HasField("metrics"):
                 logger.debug("Received metric batch.")
