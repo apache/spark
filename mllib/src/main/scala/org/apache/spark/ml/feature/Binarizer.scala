@@ -17,8 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.ArrayList
+
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.Transformer
@@ -116,8 +119,12 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         (Seq($(inputCol)), Seq($(outputCol)), Seq($(threshold)))
       }
 
+    val sparkSession = SparkSession.getDefaultSession.get
+    val transformDataset = sparkSession.createDataFrame(
+      new ArrayList[Row](), schema = dataset.schema
+    )
     val mappedOutputCols = inputColNames.zip(tds).map { case (colName, td) =>
-      dataset.schema(colName).dataType match {
+      transformDataset.col(colName).expr.dataType match {
         case DoubleType =>
           when(!col(colName).isNaN && col(colName) > td, lit(1.0))
             .otherwise(lit(0.0))
@@ -196,10 +203,21 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
 
     var outputFields = schema.fields
+    val sparkSession = SparkSession.getDefaultSession.get
+    val transformDataset = sparkSession.createDataFrame(new ArrayList[Row](), schema = schema)
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
       require(!schema.fieldNames.contains(outputColName),
         s"Output column $outputColName already exists.")
-      val inputType = schema(inputColName).dataType
+
+      val inputType = try {
+        transformDataset.col(inputColName).expr.dataType
+      } catch {
+        case _: AnalysisException =>
+          throw new SparkException(s"Input column $inputColName does not exist.")
+        case e: Exception =>
+          throw e
+      }
+
       val outputField = inputType match {
         case DoubleType =>
           BinaryAttribute.defaultAttr.withName(outputColName).toStructField()

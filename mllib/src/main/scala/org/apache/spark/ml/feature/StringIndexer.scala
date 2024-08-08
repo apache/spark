@@ -124,7 +124,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     require(outputColNames.distinct.length == outputColNames.length,
       s"Output columns should not be duplicate.")
 
-    val sparkSession = SparkSession.getActiveSession.get
+    val sparkSession = SparkSession.getDefaultSession.get
     val transformDataset = sparkSession.createDataFrame(new ArrayList[Row](), schema = schema)
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
