@@ -156,6 +156,9 @@ case class Mode(
       *  to a single value (the sum of the counts), and finally reduces the groups to a single map.
       *
       * The new map is then used in the rest of the Mode evaluation logic.
+      *
+      * It is expected to work for all simple and complex types with
+      *  collated fields, except for MapType (temporarily).
       */
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
 

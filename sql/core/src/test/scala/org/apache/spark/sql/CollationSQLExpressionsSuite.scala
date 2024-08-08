@@ -1887,7 +1887,6 @@ class CollationSQLExpressionsSuite
     })
   }
 
-
   test("SPARK-48430: Map value extraction with collations") {
     for {
       collateKey <- Seq(true, false)
