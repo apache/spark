@@ -2378,9 +2378,6 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
-    }
     ctx.identifier.getText
   }
 
