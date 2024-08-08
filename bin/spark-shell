@@ -74,22 +74,7 @@ function main() {
   if $connect_shell; then
      export SPARK_SUBMIT_OPTS
      export SPARK_CONNECT_SHELL=1
-     if [ -d "${SPARK_HOME}/jars" ]; then
-       # Production code path
-       coordinate=$(find "${SPARK_HOME}/jars" -type f -name 'spark-connect_*')
-       coordinate=$(basename $coordinate)
-       sparkver=${${${coordinate##*_}%.jar*}#*-}
-       scalaver=${${${coordinate##*_}%.jar*}%%-*}
-       "${SPARK_HOME}"/bin/spark-submit \
-         --class org.apache.spark.sql.application.ConnectRepl \
-         --packages com.lihaoyi:ammonite_2.13.14:3.0.0-M2,org.apache.spark:spark-connect-client-jvm_$scalaver:$sparkver --name "Connect shell" "$@"
-     else
-       # Development code path
-       SCCLASSPATH=$(connector/connect/bin/spark-connect-scala-client-classpath)
-       "${SPARK_HOME}"/bin/spark-submit \
-         --class org.apache.spark.sql.application.ConnectRepl \
-         --conf spark.driver.extraClassPath=$SCCLASSPATH --name "Connect shell" "$@"
-     fi
+     "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.sql.application.ConnectRepl --name "Connect shell" "$@"
   elif $cygwin; then
     # Workaround for issue involving JLine and Cygwin
     # (see http://sourceforge.net/p/jline/bugs/40/).

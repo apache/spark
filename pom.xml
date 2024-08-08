@@ -169,7 +169,6 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <!-- Update Scala version in bin/spark-shell script together -->
     <scala.version>2.13.14</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
@@ -228,7 +227,6 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>17.0.0</arrow.version>
-    <!-- Update bin/spark-shell's ammonite version together. -->
     <ammonite.version>3.0.0-M2</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -331,6 +329,8 @@
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.0.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
+    <!-- Used for SBT build to retrieve the Spark version -->
+    <spark.version>${project.version}</spark.version>
   </properties>
   <repositories>
     <repository>
