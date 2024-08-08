@@ -110,7 +110,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     if (node.getChildCount == 1) {
       node.getChild(0).accept(this)
     } else {
-      null
+      None
     }
   }
 
