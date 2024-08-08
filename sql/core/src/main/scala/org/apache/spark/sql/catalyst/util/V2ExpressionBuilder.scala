@@ -267,6 +267,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: DateAdd => generateExpressionWithName("DATE_ADD", expr, isPredicate)
     case _: DateDiff => generateExpressionWithName("DATE_DIFF", expr, isPredicate)
     case _: TruncDate => generateExpressionWithName("TRUNC", expr, isPredicate)
+    case _: TruncTimestamp => generateExpressionWithName("DATE_TRUNC", expr, isPredicate)
     case Second(child, _) =>
       generateExpression(child).map(v => new V2Extract("SECOND", v))
     case Minute(child, _) =>
