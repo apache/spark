@@ -42,6 +42,13 @@ case class Mode(
     this(child, 0, 0, Some(reverse))
   }
 
+  // Returns null for empty inputs
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
       !child.dataType.existsRecursively(f => f.isInstanceOf[MapType] &&
@@ -58,13 +65,6 @@ case class Mode(
         s"supported by ${prettyName}.")
     }
   }
-
-  // Returns null for empty inputs
-  override def nullable: Boolean = true
-
-  override def dataType: DataType = child.dataType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def prettyName: String = "mode"
 
@@ -91,31 +91,31 @@ case class Mode(
   private def getCollationAwareBuffer(
       childDataType: DataType,
       buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
-    def getBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
+    def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
       buffer.groupMapReduce(t =>
         groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
     }
-    def getMyBuffer(
+    def determineBufferingFunction(
         childDataType: DataType): Option[AnyRef => _] = {
       childDataType match {
         case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
-        case _ => Some(f(_, childDataType))
+        case _ => Some(collationAwareTransform(_, childDataType))
       }
     }
-    getMyBuffer(childDataType).map(getBuffer).getOrElse(buffer)
+    determineBufferingFunction(childDataType).map(groupAndReduceBuffer).getOrElse(buffer)
   }
 
-  private def f(myData: AnyRef, myElementType: DataType): AnyRef = {
+  private def collationAwareTransform(myData: AnyRef, myElementType: DataType): AnyRef = {
     if (UnsafeRowUtils.isBinaryStable(myElementType)) {
       // Short-circuit if there is no collation.
       myData
     } else if (myElementType.isInstanceOf[StructType]) {
-      recursivelyGetBufferForStructType(
+      processStructTypeWithBuffer(
         myData.asInstanceOf[InternalRow].toSeq(
           myElementType.asInstanceOf[StructType]).zip(
           myElementType.asInstanceOf[StructType].fields))
     } else if (myElementType.isInstanceOf[ArrayType]) {
-      recursivelyGetBufferForArrayType(
+      processArrayTypeWithBuffer(
         myElementType.asInstanceOf[ArrayType],
         myData.asInstanceOf[ArrayData])
     } else if (myElementType.isInstanceOf[StringType]) {
@@ -128,15 +128,16 @@ case class Mode(
     }
   }
 
-  private def recursivelyGetBufferForStructType(
+  private def processStructTypeWithBuffer(
       tuples: Seq[(Any, StructField)]): Seq[Any] = {
-   tuples.map(t => f(t._1.asInstanceOf[AnyRef], t._2.dataType))
+   tuples.map(t => collationAwareTransform(t._1.asInstanceOf[AnyRef], t._2.dataType))
   }
 
-  private def recursivelyGetBufferForArrayType(
+  private def processArrayTypeWithBuffer(
       a: ArrayType,
       data: ArrayData): Seq[Any] = {
-    (0 until data.numElements()).map(i => f(data.get(i, a.elementType), a.elementType))
+    (0 until data.numElements()).map(i =>
+      collationAwareTransform(data.get(i, a.elementType), a.elementType))
   }
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {

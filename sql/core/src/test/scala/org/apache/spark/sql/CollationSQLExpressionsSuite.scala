@@ -1757,38 +1757,6 @@ class CollationSQLExpressionsSuite
       assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
     })
   }
-//
-//  test("Support Mode.eval(buffer) with complex map types") {
-//    case class UTF8StringModeTestCase[R](
-//        collationId: String,
-//        bufferValues: Map[InternalRow, Long],
-//        result: R)
-//
-//    val bufferValuesUTF8String: Map[Any, Long] = Map(
-//      UTF8String.fromString("a") -> 5L,
-//      UTF8String.fromString("b") -> 4L,
-//      UTF8String.fromString("B") -> 3L,
-//      UTF8String.fromString("d") -> 2L,
-//      UTF8String.fromString("e") -> 1L)
-//
-//    val bufferValuesComplex = bufferValuesUTF8String.map{
-//      case (k, v) => (InternalRow.apply(Map(k -> 1)), v)
-//    }
-//    val testCasesUTF8String = Seq(
-//      UTF8StringModeTestCase("utf8_binary", bufferValuesComplex, "[a,a,a]"),
-//      UTF8StringModeTestCase("UTF8_LCASE", bufferValuesComplex, "[b,b,b]"),
-//      UTF8StringModeTestCase("unicode_ci", bufferValuesComplex, "[b,b,b]"),
-//      UTF8StringModeTestCase("unicode", bufferValuesComplex, "[a,a,a]"))
-//
-//    testCasesUTF8String.foreach(t => {
-//      val buffer = new OpenHashMap[AnyRef, Long](5)
-//      val myMode = Mode(child = Literal.create(null, StructType(Seq(
-//        StructField("f1", MapType(StringType(t.collationId), IntegerType), true)
-//      ))))
-//      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-//      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
-//    })
-//  }
 
   test("Support mode for string expression with collated strings in struct") {
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
@@ -1840,51 +1808,6 @@ class CollationSQLExpressionsSuite
       }
     })
   }
-//
-//  test("Support mode for string expression with collated strings in " +
-//    "recursively nested struct with map with collated keys") {
-//    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
-//    val testCases = Seq(
-//      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
-//      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}")
-//    )
-//    testCases.foreach(t => {
-//      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
-//        (0L to numRepeats).map(_ =>
-//          s"named_struct('m1', " +
-//          s"map(" +
-//            s"collate(" +
-//            s"'$elt', '${t.collationId}'" +
-//            s"), " +
-//            s"1))").mkString(",")
-//      }.mkString(",")
-//
-//      val tableName = s"t_${t.collationId}_mode_nested_struct1"
-//      withTable(tableName) {
-//        sql(s"CREATE TABLE ${tableName}(i STRUCT<m1: MAP<STRING COLLATE " +
-//          t.collationId + ", INT>>) USING parquet")
-//        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
-//        val query = s"SELECT lower(cast(mode(i).m1 as string))" +
-//          s" FROM ${tableName}"
-//        if (t.collationId == "utf8_binary" || t.collationId == "unicode") {
-//          checkAnswer(sql(query), Row(t.result))
-//        } else {
-//          checkError(
-//            exception = intercept[AnalysisException] {
-//              val testQuery = sql(query)
-//              testQuery.collect()
-//            },
-//            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-//            parameters = Map.apply(("sqlExpr", "\"mode(i)\""), ("msg",
-//              "The input to the function 'mode' includes a map with " +
-//              "keys and/or values which are not binary-stable." +
-//              " This is not yetsupported by mode."), ("hint", ""))
-//          )
-//        }
-//        checkAnswer(sql(query), Row(t.result))
-//      }
-//    })
-//  }
 
   test("Support mode for string expression with collated strings in array complex type") {
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
@@ -1923,36 +1846,16 @@ class CollationSQLExpressionsSuite
     testCases.foreach(t => {
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ =>
-          s"array(" +
-            s"array(" +
-            s"array(" +
-            s"collate('$elt', '${t.collationId}')" +
-            s")" +
-            s")" +
-            s")").mkString(",")
+          s"array(array(array(collate('$elt', '${t.collationId}'))))").mkString(",")
       }.mkString(",")
 
       val tableName = s"t_${t.collationId}_mode_nested_3d_array"
       withTable(tableName) {
-        sql(s"CREATE TABLE ${tableName}(" +
-          s"i ARRAY<" +
-          s"ARRAY<" +
-          s"ARRAY<" +
-          s"STRING COLLATE ${t.collationId}" +
-          s">" +
-          s">" +
-          s">)" +
-          s" USING parquet")
+        sql(s"CREATE TABLE ${tableName}(i ARRAY<ARRAY<ARRAY" +
+          s"<STRING COLLATE ${t.collationId}>>>) USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(" +
-          s"element_at(" +
-          s"element_at(" +
-          s"element_at(" +
-          s"mode(i)," +
-          s" 1)," +
-          s" 1)," +
-          s" 1)" +
-          s") FROM ${tableName}"
+          s"element_at(element_at(element_at(mode(i),1),1),1)) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
       }
     })
