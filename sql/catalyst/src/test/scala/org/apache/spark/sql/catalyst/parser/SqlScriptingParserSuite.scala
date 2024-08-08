@@ -396,6 +396,20 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
   }
 
+  test("declare handler duplicate sqlState") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR test, test BEGIN SELECT 1; END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "DUPLICATE_SQL_STATE_FOR_SAME_HANDLER",
+      parameters = Map("sqlState" -> "test"))
+  }
+
   test("SQL Scripting not enabled") {
     withSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key -> "false") {
       val sqlScriptText =

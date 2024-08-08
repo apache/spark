@@ -245,8 +245,14 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx.SQLEXCEPTION()).map(_ => Seq("SQLEXCEPTION")).getOrElse {
       Option(ctx.NOT()).map(_ => Seq("NOT FOUND")).getOrElse {
         val buff = ListBuffer[String]()
+        val seen = scala.collection.mutable.Set[String]()
         ctx.conditionValues.forEach { conditionValue =>
-          buff += visit(conditionValue).asInstanceOf[String]
+          val elem = visit(conditionValue).asInstanceOf[String]
+          if (seen(elem)) {
+            throw SqlScriptingErrors.duplicateSqlStateForSameHandler(CurrentOrigin.get, elem)
+          }
+          buff += elem
+          seen += elem
         }
         buff.toSeq
       }

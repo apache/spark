@@ -199,11 +199,12 @@ class CompoundBodyExec(
   extends NonLeafStatementExec {
 
   private def getHandler(condition: String): Option[ErrorHandlerExec] = {
-    var ret = conditionHandlerMap.get(condition)
-    if (ret.isEmpty) {
-      ret = conditionHandlerMap.get("UNKNOWN")
-    }
-    ret
+    conditionHandlerMap.get(condition)
+      .orElse(conditionHandlerMap.get("NOT FOUND") match {
+        case Some(handler) if condition.startsWith("02") => Some(handler)
+        case _ => None
+      })
+      .orElse(conditionHandlerMap.get("UNKNOWN"))
   }
 
   /**
