@@ -17,22 +17,48 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.internal.LogKeys.EXPR
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc, Cast => V2Cast, Expression => V2Expression, Extract => V2Extract}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableExpression
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
+class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
+
+  def buildPredicate(): Option[V2Predicate] = {
+
+    if (isPredicate) {
+      val translated = build()
+
+      val modifiedExprOpt = if (SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE) &&
+        translated.isDefined &&
+        !translated.get.isInstanceOf[V2Predicate]) {
+
+        // When isPredicate is specified we always expect to receive predicate.
+        // If this is not the case, and we received something that is not a predicate -
+        // don't fail query, act as if we didn't know how to translate it at all.
+        logWarning(log"Predicate expected but got class: ${MDC(EXPR, translated.get.describe())}")
+        None
+      } else { translated }
+
+      modifiedExprOpt.map { v =>
+        assert(v.isInstanceOf[V2Predicate])
+        v.asInstanceOf[V2Predicate]
+      }
+    } else { None }
+  }
 
   private def canTranslate(b: BinaryOperator) = b match {
     case _: BinaryComparison => true

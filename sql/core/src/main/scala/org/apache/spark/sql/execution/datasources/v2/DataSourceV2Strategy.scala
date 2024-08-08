@@ -43,7 +43,6 @@ import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode,
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
@@ -652,21 +651,5 @@ private[sql] object DataSourceV2Strategy extends Logging {
  * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
  */
 object PushablePredicate extends Logging {
-
-  def unapply(e: Expression): Option[Predicate] = {
-    val exprOpt = new V2ExpressionBuilder(e, true).build()
-
-    val modifiedExprOpt =
-      if (SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE) &&
-        exprOpt.isDefined &&
-        !exprOpt.get.isInstanceOf[Predicate]) {
-        logWarning(log"Predicate expected but got class: ${MDC(EXPR, exprOpt.get.describe())}")
-        None
-      } else { exprOpt }
-
-    modifiedExprOpt.map { v =>
-      assert(v.isInstanceOf[Predicate])
-      v.asInstanceOf[Predicate]
-    }
-  }
+  def unapply(e: Expression): Option[Predicate] = new V2ExpressionBuilder(e, true).buildPredicate()
 }
