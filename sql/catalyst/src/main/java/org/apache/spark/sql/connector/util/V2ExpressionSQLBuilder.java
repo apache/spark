@@ -117,8 +117,8 @@ public class V2ExpressionSQLBuilder {
           "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN", "TANH",
           "COT", "ASIN", "ASINH", "ACOS", "ACOSH", "ATAN", "ATANH", "ATAN2", "CBRT", "DEGREES",
           "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
-          "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
-          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT" ->
+          "DATE_ADD", "DATE_DIFF", "TRUNC", "DATE_TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1",
+          "SHA2", "MD5", "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT" ->
           visitSQLFunction(name, expressionsToStringArray(e.children()));
         case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
