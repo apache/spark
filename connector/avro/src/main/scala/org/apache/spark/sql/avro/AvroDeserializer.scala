@@ -111,6 +111,9 @@ private[sql] class AvroDeserializer(
   private lazy val preventReadingIncorrectType = !SQLConf.get
     .getConf(SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA)
 
+  private lazy val allowIncompatibleDecimalType = SQLConf.get
+    .getConf(SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_DECIMAL_TYPE)
+
   def deserialize(data: Any): Option[Any] = converter(data)
 
   /**
@@ -238,8 +241,7 @@ private[sql] class AvroDeserializer(
 
       case (FIXED, dt: DecimalType) =>
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
-        if (preventReadingIncorrectType &&
-          d.getPrecision - d.getScale > dt.precision - dt.scale) {
+        if (preventReadingIncorrectType && !isDecimalTypeCompatible(d, dt)) {
           throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
             toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
         }
@@ -251,8 +253,7 @@ private[sql] class AvroDeserializer(
 
       case (BYTES, dt: DecimalType) =>
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
-        if (preventReadingIncorrectType &&
-          d.getPrecision - d.getScale > dt.precision - dt.scale) {
+        if (preventReadingIncorrectType && !isDecimalTypeCompatible(d, dt)) {
           throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
             toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
         }
@@ -391,6 +392,16 @@ private[sql] class AvroDeserializer(
         updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
+    }
+  }
+
+  private def isDecimalTypeCompatible(d: LogicalTypes.Decimal, dt: DecimalType): Boolean = {
+    if (allowIncompatibleDecimalType) {
+      dt.precision - dt.scale >= d.getPrecision - d.getScale
+    } else {
+      val precisionIncrease = dt.precision - d.getPrecision
+      val scaleIncrease = dt.scale - d.getScale
+      scaleIncrease >= 0 && precisionIncrease >= scaleIncrease
     }
   }
 

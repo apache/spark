@@ -902,11 +902,7 @@ abstract class AvroSuite
           matchPVals = true
         )
       }
-      // The following used to work, so it should still work with the flag enabled
-      checkAnswer(
-        spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
-        Row(new java.math.BigDecimal("13.123"))
-      )
+
       withSQLConf(confKey -> "true") {
         // With the flag enabled, we return a null silently, which isn't great
         checkAnswer(
@@ -917,6 +913,43 @@ abstract class AvroSuite
           spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
           Row(new java.math.BigDecimal("13.123"))
         )
+      }
+    }
+  }
+
+  test("SPARK-49095: Add scale comparison to avoid loss of precision in the decimal part") {
+    withTempPath { path =>
+      val schemaConfKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      val decimalConfKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_DECIMAL_TYPE.key
+      sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
+      withSQLConf(schemaConfKey -> "false") {
+        withSQLConf(decimalConfKey -> "false") {
+          val ex = intercept[SparkException] {
+            spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString).collect()
+          }
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[AnalysisException],
+            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            parameters = Map("avroPath" -> "field 'a'",
+              "sqlPath" -> "field 'a'",
+              "avroType" -> "decimal\\(12,10\\)",
+              "sqlType" -> "\"DECIMAL\\(5,3\\)\""),
+            matchPVals = true
+          )
+
+          checkAnswer(
+            spark.read.schema("a DECIMAL(13, 11)").format("avro").load(path.toString),
+            Row(new java.math.BigDecimal("13.1234567890"))
+          )
+        }
+
+        withSQLConf(decimalConfKey -> "true") {
+          checkAnswer(
+            spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+            Row(new java.math.BigDecimal("13.123"))
+          )
+        }
       }
     }
   }

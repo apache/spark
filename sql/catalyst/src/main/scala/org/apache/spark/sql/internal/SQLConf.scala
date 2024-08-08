@@ -4841,6 +4841,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_DECIMAL_TYPE =
+    buildConf("spark.sql.legacy.avro.allowIncompatibleDecimalType")
+      .internal()
+      .doc("When set to false, when reading decimal fields from Avro data source, it requires " +
+        "that not only the `precision - scale` value of the `DecimalType` should be greater " +
+        "than or equal to that of decimal fields, but also the scale of the `DecimalType` " +
+        "should be greater than or equal to the scale of decimal fields. When set to true, it " +
+        "restores the legacy behavior, allowing the scale of `DecimalType` to be less than " +
+        "the scale of decimal fields, which may cause a loss of precision in the decimal part.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
