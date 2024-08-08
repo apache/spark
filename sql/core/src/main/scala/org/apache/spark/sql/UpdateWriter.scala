@@ -49,7 +49,7 @@ class UpdateWriter[T](dataset: Dataset[T], assignments: Map[String, Column]) {
    * Executes the update operation.
    */
   def execute(): Unit = {
-    new UpdateWithCondition(dataset, assignments, None)
+    new UpdateWithCondition(dataset, assignments, None).execute()
   }
 }
 
