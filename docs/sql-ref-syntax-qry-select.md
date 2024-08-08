@@ -51,7 +51,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     [ HAVING boolean_expression ]
 
 named_expression
-   expression [[AS] alias]
+   expression [ [ AS ] alias ]
 
 star_clause
    [ { table_name | view_name } . ] * [ except_clause ]
