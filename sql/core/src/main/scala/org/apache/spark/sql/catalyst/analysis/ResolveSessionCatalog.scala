@@ -68,7 +68,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
     case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
-        if isSessionCatalog(catalog) =>
+        if isSessionCatalog(catalog) && !isV2SessionCatalog(catalog) =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN with qualified column")
@@ -102,7 +102,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
 
     case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
-        if isSessionCatalog(catalog) =>
+        if isSessionCatalog(catalog) && !isV2SessionCatalog(catalog) =>
       val prop = Map(ClusterBySpec.toProperty(table.schema,
         clusterBySpecOpt.getOrElse(ClusterBySpec(Nil)), conf.resolver))
       AlterTableSetPropertiesCommand(table.catalogTable.identifier, prop, isView = false)
@@ -257,7 +257,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ShowTablePartition(
         ResolvedTable(catalog, _, table: V1Table, _),
         partitionSpec,
-        output) if isSessionCatalog(catalog) =>
+        output) if isSessionCatalog(catalog) && !isV2SessionCatalog(catalog) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
         output.head.withName("database") +: output.tail
       } else {
@@ -305,7 +305,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       if conf.useV1Command => ShowCreateTableCommand(ident, output)
 
     case ShowCreateTable(ResolvedTable(catalog, _, table: V1Table, _), _, output)
-        if isSessionCatalog(catalog) && DDLUtils.isHiveTable(table.catalogTable) =>
+        if isSessionCatalog(catalog) && !isV2SessionCatalog(catalog)
+          && DDLUtils.isHiveTable(table.catalogTable) =>
       ShowCreateTableCommand(table.catalogTable.identifier, output)
 
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
@@ -583,7 +584,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedV1TableIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedTable(catalog, _, t: V1Table, _) if isSessionCatalog(catalog) =>
+      case ResolvedTable(catalog, _, t: V1Table, _)
+        if isSessionCatalog(catalog) && !isV2SessionCatalog(catalog) =>
         Some(t.catalogTable.identifier)
       case _ => None
     }
@@ -599,7 +601,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedV1Identifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+      case ResolvedIdentifier(catalog, ident)
+        if isSessionCatalog(catalog) && !isV2SessionCatalog(catalog) =>
         if (ident.namespace().length != 1) {
           throw QueryCompilationErrors
             .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
@@ -624,7 +627,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private object DatabaseInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
-      case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(catalog, _, _)
+        if !isSessionCatalog(catalog) || isV2SessionCatalog(catalog) => None
       case ResolvedNamespace(_, Seq(), _) =>
         throw QueryCompilationErrors.databaseFromV1SessionCatalogNotSpecifiedError()
       case ResolvedNamespace(_, Seq(dbName), _) => Some(dbName)
@@ -637,7 +641,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private object DatabaseNameInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
-      case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(catalog, _, _)
+        if !isSessionCatalog(catalog) || isV2SessionCatalog(catalog) => None
       case ResolvedNamespace(_, Seq(dbName), _) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)

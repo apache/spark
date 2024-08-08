@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -442,6 +443,11 @@ private[sql] object CatalogV2Util {
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
+  }
+
+  def isV2SessionCatalog(catalog: CatalogPlugin): Boolean = {
+    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) &&
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
   }
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {
