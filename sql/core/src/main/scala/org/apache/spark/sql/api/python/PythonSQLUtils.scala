@@ -143,7 +143,7 @@ private[sql] object PythonSQLUtils extends Logging {
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(EWM(e.expr, alpha, ignoreNA))
+    Column(new EWM(e.expr, alpha, ignoreNA))
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 

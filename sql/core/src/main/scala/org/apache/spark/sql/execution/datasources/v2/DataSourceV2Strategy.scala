@@ -473,8 +473,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Seq(part).asResolvedPartitionSpecs.head,
         recacheTable(r)) :: Nil
 
-    case ShowColumns(_: ResolvedTable, _, _) =>
-      throw QueryCompilationErrors.showColumnsNotSupportedForV2TablesError()
+    case ShowColumns(resolvedTable: ResolvedTable, _, output) =>
+      ShowColumnsExec(output, resolvedTable) :: Nil
 
     case r @ ShowPartitions(
         ResolvedTable(catalog, _, table: SupportsPartitionManagement, _),
