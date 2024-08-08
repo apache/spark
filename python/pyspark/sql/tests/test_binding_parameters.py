@@ -29,15 +29,20 @@ class BindingParametersTests(ReusedSQLTestCase):
 
     def test_wrapping_plan_in_limit_node(self):
         # Test the following Scala equivalent
-        # val df = spark.sql("EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;")
+        # val df = spark.sql("EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?)
+        #                                        AS t(c1) ' USING 5, 6;")
         # val analyzedPlan = Limit(Literal.create(100), df.queryExecution.logical)
         # spark.sessionState.analyzer.executeAndCheck(analyzedPlan, df.queryExecution.tracker)
-        sqlText = """EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;"""
+        sqlText = (
+            """EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1)' """
+            """USING 5, 6;"""
+        )
         df = self.spark.sql(sqlText)
         jvm = self.spark._jvm
         assert jvm is not None
 
-        # Binds to jvm.org.apache.spark.sql.catalyst.expressions.Literal.create(), a version that takes one input.
+        # Binds to jvm.org.apache.spark.sql.catalyst.expressions.Literal.create(), a version that
+        # takes one input.
         boundMethodLiteralCreate = getattr(
             getattr(getattr(jvm.org.apache.spark.sql.catalyst.expressions, "Literal$"), "MODULE$"),
             "$anonfun$create$2",
@@ -48,7 +53,8 @@ class BindingParametersTests(ReusedSQLTestCase):
             getattr(jvm.org.apache.spark.sql.catalyst.plans.logical, "Limit$"), "MODULE$"
         )
 
-        # It is not possible to call Limit singleton's constructor, calling apply() built-in equivalent.
+        # It is not possible to call Limit singleton's constructor, calling apply() built-in
+        # equivalent.
         analyzedplan = limitObj.apply(
             boundMethodLiteralCreate(100),  # Equivalent to Literal.create(100)
             df._jdf.queryExecution().logical(),
