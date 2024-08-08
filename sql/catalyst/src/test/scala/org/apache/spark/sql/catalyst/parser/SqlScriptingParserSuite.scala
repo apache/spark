@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, In, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, Project}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
@@ -1249,27 +1250,72 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 42")
   }
 
-  test("simpleCaseStatement") {
+  test("simple case statement") {
     val sqlScriptText =
       """
         |BEGIN
-        | CASE (SELECT a FROM n)
+        | CASE 1
         |   WHEN 1 THEN
         |     SELECT 1;
-        |   WHEN 1 IN (1,2,3) THEN
-        |     SELECT 2;
-        |   WHEN (SELECT * FROM t) THEN
-        |     SELECT * FROM b;
         | END CASE;
         |END
         |""".stripMargin
     val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
-    val ifStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
-    assert(ifStmt.conditions.length == 1)
-    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditions.head.getText == "1 = 1")
+    val caseStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+    assert(caseStmt.conditions.length == 1)
+    assert(caseStmt.conditions.head.isInstanceOf[SingleStatement])
+    checkSimpleCaseStatementCondition(caseStmt.conditions.head, _ == Literal(1), _ == Literal(1))
+  }
+
+
+  test("simple case statement - multi when") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |     SELECT 1;
+        |   WHEN (SELECT 2) THEN
+        |     SELECT * FROM b;
+        |   WHEN 3 IN (1,2,3) THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val tree = parseScript(sqlScriptText)
+
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+
+    val caseStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+    assert(caseStmt.conditions.length == 3)
+    assert(caseStmt.conditionalBodies.length == 3)
+    assert(caseStmt.elseBody.isEmpty)
+
+    assert(caseStmt.conditions.head.isInstanceOf[SingleStatement])
+    checkSimpleCaseStatementCondition(caseStmt.conditions.head, _ == Literal(1), _ == Literal(1))
+
+    assert(caseStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
+    assert(caseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 1")
+
+    assert(caseStmt.conditions(1).isInstanceOf[SingleStatement])
+    checkSimpleCaseStatementCondition(
+    caseStmt.conditions(1), _ == Literal(1), _.isInstanceOf[ScalarSubquery])
+
+    assert(caseStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
+    assert(caseStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT * FROM b")
+
+    assert(caseStmt.conditions(2).isInstanceOf[SingleStatement])
+    checkSimpleCaseStatementCondition(
+      caseStmt.conditions(2), _ == Literal(1), _.isInstanceOf[In])
+
+    assert(caseStmt.conditionalBodies(2).collection.head.isInstanceOf[SingleStatement])
+    assert(caseStmt.conditionalBodies(2).collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 42")
   }
 
   test("simpleCaseStatement2") {
@@ -1294,6 +1340,79 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(ifStmt.conditions.head.getText == "1 = 1")
   }
+//
+//  test("searched case statement with else") {
+//    val sqlScriptText =
+//      """
+//        |BEGIN
+//        | CASE
+//        |   WHEN 1 = 1 THEN
+//        |     SELECT 42;
+//        |   ELSE
+//        |     SELECT 43;
+//        | END CASE;
+//        |END
+//        |""".stripMargin
+//    val tree = parseScript(sqlScriptText)
+//    assert(tree.collection.length == 1)
+//    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+//    val caseStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+//    assert(caseStmt.elseBody.isDefined)
+//    assert(caseStmt.conditions.length == 1)
+//    assert(caseStmt.conditions.head.isInstanceOf[SingleStatement])
+//    assert(caseStmt.conditions.head.getText == "1 = 1")
+//
+//    assert(caseStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+//    assert(caseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
+//      .getText == "SELECT 43")
+//  }
+//
+//  test("searched case statement nested") {
+//    val sqlScriptText =
+//      """
+//        |BEGIN
+//        | CASE
+//        |   WHEN 1 = 1 THEN
+//        |     CASE
+//        |       WHEN 2 = 1 THEN
+//        |         SELECT 41;
+//        |       ELSE
+//        |         SELECT 42;
+//        |     END CASE;
+//        |  END CASE;
+//        |END
+//        |""".stripMargin
+//    val tree = parseScript(sqlScriptText)
+//    assert(tree.collection.length == 1)
+//    assert(tree.collection.head.isInstanceOf[SearchedCaseStatement])
+//
+//    val caseStmt = tree.collection.head.asInstanceOf[SearchedCaseStatement]
+//    assert(caseStmt.conditions.length == 1)
+//    assert(caseStmt.conditionalBodies.length == 1)
+//    assert(caseStmt.elseBody.isEmpty)
+//
+//    assert(caseStmt.conditions.head.isInstanceOf[SingleStatement])
+//    assert(caseStmt.conditions.head.getText == "1 = 1")
+//
+//    assert(caseStmt.conditionalBodies.head.collection.head.isInstanceOf[SearchedCaseStatement])
+//    val nestedCaseStmt =
+//      caseStmt.conditionalBodies.head.collection.head.asInstanceOf[SearchedCaseStatement]
+//
+//    assert(nestedCaseStmt.conditions.length == 1)
+//    assert(nestedCaseStmt.conditionalBodies.length == 1)
+//    assert(nestedCaseStmt.elseBody.isDefined)
+//
+//    assert(nestedCaseStmt.conditions.head.isInstanceOf[SingleStatement])
+//    assert(nestedCaseStmt.conditions.head.getText == "2 = 1")
+//
+//    assert(nestedCaseStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
+//    assert(nestedCaseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+//      .getText == "SELECT 41")
+//
+//    assert(nestedCaseStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+//    assert(nestedCaseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
+//      .getText == "SELECT 42")
+//  }
 
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {
@@ -1302,5 +1421,18 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .replace("BEGIN", "")
       .replace("END", "")
       .trim
+  }
+
+  private def checkSimpleCaseStatementCondition(
+    conditionStatement: SingleStatement,
+    predicateLeft: Expression => Boolean,
+    predicateRight: Expression => Boolean): Unit = {
+    assert(conditionStatement.parsedPlan.isInstanceOf[Project])
+    val project = conditionStatement.parsedPlan.asInstanceOf[Project]
+    assert(project.projectList.head.isInstanceOf[Alias])
+    assert(project.projectList.head.asInstanceOf[Alias].child.isInstanceOf[EqualTo])
+    val equalTo = project.projectList.head.asInstanceOf[Alias].child.asInstanceOf[EqualTo]
+    assert(predicateLeft(equalTo.left))
+    assert(predicateRight(equalTo.right))
   }
 }
