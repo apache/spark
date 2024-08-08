@@ -14,23 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.expressions.aggregate
 
-package org.apache.spark.sql.jdbc
+import org.apache.spark.sql.catalyst.expressions.{BooleanLiteral, Expression, IntegerLiteral}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
-import org.apache.spark.internal.Logging
+private[expressions] object PandasAggregate {
+  def expressionToIgnoreNA(e: Expression, source: String): Boolean = e match {
+    case BooleanLiteral(ignoreNA) => ignoreNA
+    case _ => throw QueryCompilationErrors.invalidIgnoreNAParameter(source, e)
+  }
 
-class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
-  lazy override val imageName =
-    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.5-slim")
-  val oracle_password = "Th1s1sThe0racle#Pass"
-  override val env = Map(
-    "ORACLE_PWD" -> oracle_password, // oracle images uses this
-    "ORACLE_PASSWORD" -> oracle_password // gvenzl/oracle-free uses this
-  )
-  override val usesIpc = false
-  override val jdbcPort: Int = 1521
-
-  override def getJdbcUrl(ip: String, port: Int): String = {
-    s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
+  def expressionToDDOF(e: Expression, source: String): Int = e match {
+    case IntegerLiteral(ddof) => ddof
+    case _ => throw QueryCompilationErrors.invalidDdofParameter(source, e)
   }
 }

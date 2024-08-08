@@ -15,22 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedTable
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.execution.LeafExecNode
 
-class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
-  lazy override val imageName =
-    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.5-slim")
-  val oracle_password = "Th1s1sThe0racle#Pass"
-  override val env = Map(
-    "ORACLE_PWD" -> oracle_password, // oracle images uses this
-    "ORACLE_PASSWORD" -> oracle_password // gvenzl/oracle-free uses this
-  )
-  override val usesIpc = false
-  override val jdbcPort: Int = 1521
-
-  override def getJdbcUrl(ip: String, port: Int): String = {
-    s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
+/**
+ * Physical plan node for show columns from table.
+ */
+case class ShowColumnsExec(
+     output: Seq[Attribute],
+     resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
+  override protected def run(): Seq[InternalRow] = {
+    resolvedTable.table.columns().map(f => toCatalystRow(f.name())).toSeq
   }
 }

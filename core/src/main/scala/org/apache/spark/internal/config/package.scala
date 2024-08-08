@@ -1110,13 +1110,6 @@ package object config {
     .stringConf
     .createOptional
 
-  // To limit how many applications are shown in the History Server summary ui
-  private[spark] val HISTORY_UI_MAX_APPS =
-    ConfigBuilder("spark.history.ui.maxApplications")
-      .version("2.0.1")
-      .intConf
-      .createWithDefault(Integer.MAX_VALUE)
-
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .version("2.1.0")
     .booleanConf
@@ -1963,6 +1956,13 @@ package object config {
     .version("1.3.0")
     .intConf
     .createWithDefault(6066)
+
+  private[spark] val MASTER_REST_SERVER_FILTERS = ConfigBuilder("spark.master.rest.filters")
+    .doc("Comma separated list of filter class names to apply to the Spark Master REST API.")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")

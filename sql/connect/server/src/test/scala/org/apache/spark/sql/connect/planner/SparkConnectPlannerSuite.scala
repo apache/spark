@@ -87,7 +87,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
    */
   def createLocalRelationProto(
       attrs: Seq[AttributeReference],
-      data: Seq[InternalRow]): proto.Relation = {
+      data: Seq[InternalRow],
+      timeZoneId: String = "UTC"): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
     val bytes = ArrowConverters
@@ -96,7 +97,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
-        null,
+        timeZoneId,
         true)
       .next()
 
