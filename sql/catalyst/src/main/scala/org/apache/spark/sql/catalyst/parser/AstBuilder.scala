@@ -3431,7 +3431,7 @@ class AstBuilder extends DataTypeAstBuilder
         case ctx: GeneratedColumnContext => visitGeneratedColumn(ctx)
       },
       identityColumnSpec = generationExpression.collect {
-        case ctx: IdentityColumnContext => parseIdentityColumn(ctx, dataType)
+        case ctx: IdentityColumnContext => visitIdentityColumn(ctx, dataType)
       }
     )
   }
@@ -3500,9 +3500,9 @@ class AstBuilder extends DataTypeAstBuilder
    * @param dataType The data type of column defined as IDENTITY column. Used for verification.
    * @return Tuple containing start, step and allowExplicitInsert.
    */
-  protected def parseIdentityColumn(
-                                     ctx: IdentityColumnContext,
-                                     dataType: DataType): IdentityColumnSpec = {
+  protected def visitIdentityColumn(
+      ctx: IdentityColumnContext,
+      dataType: DataType): IdentityColumnSpec = {
     if (dataType != LongType) {
       throw QueryParsingErrors.identityColumnUnsupportedDataType(ctx, dataType.toString)
     }
@@ -3516,7 +3516,7 @@ class AstBuilder extends DataTypeAstBuilder
     IdentityColumnSpec(start, step, allowExplicitInsert)
   }
 
-  override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = withOrigin(ctx) {
+  override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = {
     val defaultStart = 1
     val defaultStep = 1
     if (ctx == null) {

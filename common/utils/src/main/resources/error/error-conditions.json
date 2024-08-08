@@ -1536,7 +1536,7 @@
   },
   "IDENTITY_COLUMNS_DUPLICATED_DESCRIPTOR" : {
     "message" : [
-      "Duplicated IDENTITY column descriptor: <option>."
+      "Duplicated IDENTITY column descriptor: <descriptor>."
     ],
     "sqlState" : "42734"
   },

@@ -44,7 +44,9 @@ case class ColumnDefinition(
     generationExpression: Option[String] = None,
     identityColumnSpec: Option[IdentityColumnSpec] = None,
     metadata: Metadata = Metadata.empty) extends Expression with Unevaluable {
-  assert(generationExpression.isEmpty || identityColumnSpec.isEmpty)
+  assert(
+    generationExpression.isEmpty || identityColumnSpec.isEmpty,
+    "A ColumnDefinition cannot contain both a generation expression and an identity column spec.")
 
   override def children: Seq[Expression] = defaultValue.toSeq
 
@@ -91,8 +93,7 @@ case class ColumnDefinition(
   }
 
   private def encodeIdentityColumnSpec(metadataBuilder: MetadataBuilder): Unit = {
-    identityColumnSpec.foreach{ spec: IdentityColumnSpec =>
-      // At table creation time, the high water mark field is not added.
+    identityColumnSpec.foreach { spec: IdentityColumnSpec =>
       metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_START, spec.start)
       metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_STEP, spec.step)
       metadataBuilder.putBoolean(

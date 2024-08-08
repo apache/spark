@@ -1276,8 +1276,13 @@ identityColSpec
     ;
 
 identityColSpecOption
-    : START WITH start=INTEGER_VALUE
-    | INCREMENT BY step=INTEGER_VALUE
+    : START WITH start=identityStartOrStep
+    | INCREMENT BY step=identityStartOrStep
+    ;
+
+identityStartOrStep
+    : MINUS? INTEGER_VALUE
+    | MINUS? BIGINT_LITERAL
     ;
 
 complexColTypeList

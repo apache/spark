@@ -31,6 +31,10 @@ object IdentityColumn {
   val IDENTITY_INFO_STEP = "identity.step"
   val IDENTITY_INFO_ALLOW_EXPLICIT_INSERT = "identity.allowExplicitInsert"
 
+  /**
+   * If `schema` contains any generated columns, check whether the table catalog supports identity
+   * columns. Otherwise throw an error.
+   */
   def validateIdentityColumn(
       schema: StructType,
       catalog: TableCatalog,

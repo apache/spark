@@ -2860,16 +2860,14 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
-  test("SPARK-48824: implement parser support for GENERATED ALWAYS AS IDENTITY columns in tables") {
-    for {
-      identityColumnDefStr <- Seq("BY DEFAULT", "ALWAYS")
-      identityColumnSpecStr <- Seq(
-        "START WITH 1 INCREMENT BY 1",
-        "INCREMENT BY 1 START WITH 1",
-        "START WITH 1",
-        "INCREMENT BY 1",
-        "")
-    } {
+  test("SPARK-48824: implement parser support for " +
+    "GENERATED ALWAYS/BY DEFAULT AS IDENTITY columns in tables") {
+    def parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr: String,
+        identityColumnSpecStr: String,
+        expectedStart: Long,
+        expectedStep: Long,
+        expectedAllowExplicitInsert: Boolean): Unit = {
       val columnsWithIdentitySpec = Seq(
         ColumnDefinition(
           "id",
@@ -2877,9 +2875,9 @@ class DDLParserSuite extends AnalysisTest {
           nullable = true,
           identityColumnSpec = Some(
             IdentityColumnSpec(
-              start = 1,
-              step = 1,
-              allowExplicitInsert = identityColumnDefStr == "BY DEFAULT"
+              start = expectedStart,
+              step = expectedStep,
+              allowExplicitInsert = expectedAllowExplicitInsert
             )
           )
         ),
@@ -2888,7 +2886,7 @@ class DDLParserSuite extends AnalysisTest {
       comparePlans(
         parsePlan(
           s"CREATE TABLE my_tab(id BIGINT GENERATED $identityColumnDefStr" +
-            s" AS IDENTITY($identityColumnSpecStr), val INT) USING parquet"
+            s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
         ),
         CreateTable(
           UnresolvedIdentifier(Seq("my_tab")),
@@ -2906,10 +2904,11 @@ class DDLParserSuite extends AnalysisTest {
           false
         )
       )
+
       comparePlans(
         parsePlan(
           s"REPLACE TABLE my_tab(id BIGINT GENERATED $identityColumnDefStr" +
-            s" AS IDENTITY($identityColumnSpecStr), val INT) USING parquet"
+            s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
         ),
         ReplaceTable(
           UnresolvedIdentifier(Seq("my_tab")),
@@ -2926,6 +2925,67 @@ class DDLParserSuite extends AnalysisTest {
           ),
           false
         )
+      )
+    }
+    for {
+      identityColumnDefStr <- Seq("BY DEFAULT", "ALWAYS")
+    } {
+      val expectedAllowExplicitInsert = identityColumnDefStr == "BY DEFAULT"
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "(START WITH 2 INCREMENT BY 2)",
+        expectedStart = 2,
+        expectedStep = 2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "(START WITH -2 INCREMENT BY -2)",
+        expectedStart = -2,
+        expectedStep = -2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "(START WITH 2)",
+        expectedStart = 2,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "(START WITH -2)",
+        expectedStart = -2,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "(INCREMENT BY 2)",
+        expectedStart = 1,
+        expectedStep = 2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "(INCREMENT BY -2)",
+        expectedStart = 1,
+        expectedStep = -2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "()",
+        expectedStart = 1,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
+      )
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDefStr,
+        "",
+        expectedStart = 1,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert
       )
     }
   }
@@ -2951,7 +3011,10 @@ class DDLParserSuite extends AnalysisTest {
       },
       errorClass = "IDENTITY_COLUMNS_ILLEGAL_STEP",
       parameters = Map.empty,
-      context = ExpectedContext(fragment = "(INCREMENT BY 0)", start = 66, stop = 81)
+      context = ExpectedContext(
+        fragment = "id BIGINT GENERATED ALWAYS AS IDENTITY(INCREMENT BY 0)",
+        start = 28,
+        stop = 81)
     )
   }
 

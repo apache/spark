@@ -542,11 +542,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def identityColumnUnsupportedDataType(
-                                         ctx: IdentityColumnContext,
-                                         dataType: String): Throwable = {
-    new ParseException(
-      "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE", Map("dataType" -> dataType), ctx)
+  def identityColumnUnsupportedDataType(ctx: IdentityColumnContext, dataType: String): Throwable = {
+    new ParseException("IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE", Map("dataType" -> dataType), ctx)
   }
 
   def identityColumnIllegalStep(ctx: IdentityColSpecContext): Throwable = {
@@ -554,9 +551,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def identityColumnDuplicatedDescriptor(
-                                 ctx: IdentityColSpecContext, option: String): Throwable = {
+      ctx: IdentityColSpecContext,
+      descriptor: String): Throwable = {
     new ParseException(
-      "IDENTITY_COLUMNS_DUPLICATED_DESCRIPTOR", Map("option" -> option), ctx)
+      "IDENTITY_COLUMNS_DUPLICATED_DESCRIPTOR",
+      Map("descriptor" -> descriptor),
+      ctx
+    )
   }
 
   def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
