@@ -1832,7 +1832,8 @@ class AstBuilder extends DataTypeAstBuilder
 
     withFuncIdentClause(
       func.functionName,
-      ident => {
+      Nil,
+      (ident, _) => {
         if (ident.length > 1) {
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
         }
