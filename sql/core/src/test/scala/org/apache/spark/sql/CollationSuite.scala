@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.internal.{SQLConf, SqlApiConf}
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -593,6 +593,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map("functionName" -> "`map`", "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3", "docroot" -> "https://spark.apache.org/docs/latest")
+    )
+
+    // make sure we fail this query even when collations are in
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c' COLLATE UNICODE, 'c')")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
+      parameters = Map(
+        "explicitTypes" ->
+          s"`string collate UTF8_LCASE`, `string collate UNICODE`"
+      )
     )
 
     // map creation keys respects proper collation
