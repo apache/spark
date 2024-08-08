@@ -192,10 +192,15 @@ trait CreatableRelationProvider {
       case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
       case BinaryType | BooleanType | ByteType | CharType(_) | DateType | _ : DecimalType |
            DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
-           _: StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
+           StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
       case _ => false
     }
   }
+
+  /**
+   * Returns whether the data source supports non-default collated data types.
+   */
+  def supportCollations: Boolean = true
 }
 
 /**
