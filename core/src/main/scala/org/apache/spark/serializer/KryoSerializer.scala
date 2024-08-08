@@ -38,6 +38,7 @@ import org.apache.avro.generic.{GenericContainer, GenericData, GenericRecord}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_NAME
@@ -519,6 +520,7 @@ private[spark] class KryoSerializerInstance(
  * Interface implemented by clients to register their classes with Kryo when using Kryo
  * serialization.
  */
+@DeveloperApi
 trait KryoRegistrator {
   def registerClasses(kryo: Kryo): Unit
 }
