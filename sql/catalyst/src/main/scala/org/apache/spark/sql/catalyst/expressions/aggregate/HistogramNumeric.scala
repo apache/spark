@@ -143,7 +143,7 @@ case class HistogramNumeric(
     if (buffer.getUsedBins < 1) {
       null
     } else {
-      val array = new Array[Any](buffer.getUsedBins)
+      val array = new Array[AnyRef](buffer.getUsedBins)
       (0 until buffer.getUsedBins).foreach { index =>
         // Note that the 'coord.x' and 'coord.y' have double-precision floating point type here.
         val coord = buffer.getBin(index)
