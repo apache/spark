@@ -327,7 +327,7 @@ object ResourceProfile extends Logging {
    */
   val CORES = "cores"
   /**
-   * built-in executor resource: cores
+   * built-in executor resource: memory
    */
   val MEMORY = "memory"
   /**
