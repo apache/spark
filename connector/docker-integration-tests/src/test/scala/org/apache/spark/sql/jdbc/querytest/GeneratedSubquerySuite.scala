@@ -152,7 +152,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     } else {
       operatorInSubquery match {
         case lo: LimitAndOffset =>
-          if (offsetValue == 0 && lo.limitValue == 0) {
+          if (lo.offsetValue == 0 && lo.limitValue == 0) {
             None
           } else {
             Some(lo)
