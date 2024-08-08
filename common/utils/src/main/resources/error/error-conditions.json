@@ -625,6 +625,17 @@
     ],
     "sqlState" : "40000"
   },
+  "CONFLICTING_PARTITION_COLUMN_NAMES" : {
+    "message" : [
+      "Conflicting partition column names detected:",
+      "<distinctPartColLists>",
+      "For partitioned table directories, data files should only live in leaf directories.",
+      "And directories at the same level should have the same partition column name.",
+      "Please check the following directories for unexpected files or inconsistent partition column names:",
+      "<suspiciousPaths>"
+    ],
+    "sqlState" : "KD009"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."

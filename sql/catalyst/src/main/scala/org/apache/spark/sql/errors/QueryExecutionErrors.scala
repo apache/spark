@@ -2837,4 +2837,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("unit"),
         "invalidValue" -> s"'$invalidValue'"))
   }
+
+  def conflictingPartitionColumnNamesError(
+      distinctPartColLists: Seq[String],
+      suspiciousPaths: Seq[Path]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      messageParameters = Map(
+        "distinctPartColLists" -> distinctPartColLists.mkString("\n\t", "\n\t", "\n"),
+        "suspiciousPaths" -> suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
+      )
+    )
+  }
 }
