@@ -130,6 +130,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
     getStoreMetadataAndRunChecks(sourceOptions)
 
+    // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (keyStateEncoderSpecOpt.isDefined) {
       keyStateEncoderSpecOpt.get
     } else {
@@ -236,7 +237,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
               storeMetadataEntry.operatorPropertiesJson)
             val stateVarInfoList = operatorProperties.stateVariables
               .filter(stateVar => stateVar.stateName == stateVarName)
-            require(stateVarInfoList.size == 1)
+            require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
+              s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
             val stateVarInfo = stateVarInfoList.head
             transformWithStateVariableInfoOpt = Some(stateVarInfo)
             val schemaFilePath = new Path(storeMetadataEntry.stateSchemaFilePath.get)
