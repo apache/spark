@@ -44,12 +44,6 @@ import org.apache.spark.sql.types._
 // scalastyle:on line.contains.tab
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    // We need to throw collationNotEnabledError before unexpectedNullError
-    // and nonFoldableArgumentError, as we do not want user to see misleading
-    // messages that collation is enabled
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
-    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
