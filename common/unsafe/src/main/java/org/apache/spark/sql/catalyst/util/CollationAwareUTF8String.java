@@ -299,27 +299,28 @@ public class CollationAwareUTF8String {
     return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
-  /*
+  /**
    * Performs string replacement for ICU collations by searching for instances of the search
-   * string in the `src` string, with respect to the specified collation, and then replacing
+   * string in the `target` string, with respect to the specified collation, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
    * @param collationId the collation ID to use for string search
-   * @return the position of the first occurrence of `match` in `set`
+   * @return the result of replacing all instances of `search` in `target` with `replace`
    */
-  public static UTF8String replace(final UTF8String src, final UTF8String search,
+  public static UTF8String replace(final UTF8String target, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(src, search, collationId);
+    StringSearch stringSearch = CollationFactory.getStringSearch(target, search, collationId);
+    UTF8String src = target.makeValid();
 
     // Find the first occurrence of the search string.
     int end = stringSearch.next();
@@ -367,26 +368,26 @@ public class CollationAwareUTF8String {
     return buf.build();
   }
 
-  /*
+  /**
    * Performs string replacement for UTF8_LCASE collation by searching for instances of the search
-   * string in the src string, with respect to lowercased string versions, and then replacing
+   * string in the target string, with respect to lowercased string versions, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
-   * @param collationId the collation ID to use for string search
-   * @return the position of the first occurrence of `match` in `set`
+   * @return the result of replacing all instances of `search` in `target` with `replace`
    */
-  public static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
+  public static UTF8String lowercaseReplace(final UTF8String target, final UTF8String search,
       final UTF8String replace) {
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
     UTF8String lowercaseSearch = lowerCaseCodePoints(search);
+    UTF8String src = target.makeValid();
 
     int start = 0;
     int end = lowercaseFind(src, lowercaseSearch, start);
