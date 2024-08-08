@@ -367,6 +367,7 @@ class CatalogTestsMixin:
                         nullable=True,
                         isPartition=False,
                         isBucket=False,
+                        isCluster=False,
                     ),
                 )
                 self.assertEqual(
@@ -378,6 +379,7 @@ class CatalogTestsMixin:
                         nullable=True,
                         isPartition=False,
                         isBucket=False,
+                        isCluster=False,
                     ),
                 )
                 columns2 = sorted(
@@ -393,6 +395,7 @@ class CatalogTestsMixin:
                         nullable=True,
                         isPartition=False,
                         isBucket=False,
+                        isCluster=False,
                     ),
                 )
                 self.assertEqual(
@@ -404,6 +407,7 @@ class CatalogTestsMixin:
                         nullable=True,
                         isPartition=False,
                         isBucket=False,
+                        isCluster=False,
                     ),
                 )
                 self.assertRaisesRegex(

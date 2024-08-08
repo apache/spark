@@ -229,7 +229,7 @@ class SparkSession private(
    */
   def udf: UDFRegistration = sessionState.udfRegistration
 
-  def udtf: UDTFRegistration = sessionState.udtfRegistration
+  private[sql] def udtf: UDTFRegistration = sessionState.udtfRegistration
 
   /**
    * A collection of methods for registering user-defined data sources.
@@ -846,7 +846,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   object implicits extends SQLImplicits with Serializable {
-    protected override def _sqlContext: SQLContext = SparkSession.this.sqlContext
+    protected override def session: SparkSession = SparkSession.this
   }
   // scalastyle:on
 

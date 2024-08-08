@@ -366,7 +366,7 @@ object SparkEnv extends Logging {
         name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
       if (isDriver) {
-        logInfo("Registering " + name)
+        logInfo(log"Registering ${MDC(LogKeys.ENDPOINT_NAME, name)}")
         rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
         RpcUtils.makeDriverRef(name, conf, rpcEnv)

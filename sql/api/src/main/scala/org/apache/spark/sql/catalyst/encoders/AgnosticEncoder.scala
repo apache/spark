@@ -48,6 +48,12 @@ trait AgnosticEncoder[T] extends Encoder[T] {
 }
 
 object AgnosticEncoders {
+  object UnboundEncoder extends AgnosticEncoder[Any] {
+    override def isPrimitive: Boolean = false
+    override def dataType: DataType = NullType
+    override def clsTag: ClassTag[Any] = classTag[Any]
+  }
+
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
     extends AgnosticEncoder[Option[E]] {
     override def isPrimitive: Boolean = false

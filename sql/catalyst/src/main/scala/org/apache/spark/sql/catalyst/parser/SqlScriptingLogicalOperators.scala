@@ -37,16 +37,40 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 
   override val origin: Origin = CurrentOrigin.get
 
-  def getText(sqlScriptText: String): String = {
-    if (origin.startIndex.isEmpty || origin.stopIndex.isEmpty) {
-      return null
-    }
-    sqlScriptText.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  /**
+   * Get the SQL query text corresponding to this statement.
+   * @return
+   *   SQL query text.
+   */
+  def getText: String = {
+    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 }
 
 /**
  * Logical operator for a compound body. Contains all statements within the compound body.
  * @param collection Collection of statements within the compound body.
+ * @param label Label set to CompoundBody by user or UUID otherwise.
+ *              It can be None in case when CompoundBody is not part of BeginEndCompoundBlock
+ *              for example when CompoundBody is inside loop or conditional block.
  */
-case class CompoundBody(collection: Seq[CompoundPlanStatement]) extends CompoundPlanStatement
+case class CompoundBody(
+    collection: Seq[CompoundPlanStatement],
+    label: Option[String]) extends CompoundPlanStatement
+
+/**
+ * Logical operator for IF ELSE statement.
+ * @param conditions Collection of conditions. First condition corresponds to IF clause,
+ *                   while others (if any) correspond to following ELSE IF clauses.
+ * @param conditionalBodies Collection of bodies that have a corresponding condition,
+ *                          in IF or ELSE IF branches.
+ * @param elseBody Body that is executed if none of the conditions are met,
+ *                          i.e. ELSE branch.
+ */
+case class IfElseStatement(
+    conditions: Seq[SingleStatement],
+    conditionalBodies: Seq[CompoundBody],
+    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+  assert(conditions.length == conditionalBodies.length)
+}

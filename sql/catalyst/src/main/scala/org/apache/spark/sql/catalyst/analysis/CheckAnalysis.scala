@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -141,6 +141,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)
     throw QueryCompilationErrors.unresolvedAttributeError(
       errorClass, missingCol, orderedCandidates, a.origin)
+  }
+
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
+  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case p: SupportsNonDeterministicExpression =>
+        p.allowNonDeterministicExpression
+      case _ => false
+    }
+  }
+
+  private def checkForUnspecifiedWindow(expressions: Seq[Expression]): Unit = {
+    expressions.foreach(_.transformDownWithPruning(
+      _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
+      case UnresolvedWindowExpression(_, windowSpec) =>
+        throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+      }
+    )
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -657,11 +677,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case p @ Project(projectList, _) =>
-            projectList.foreach(_.transformDownWithPruning(
-              _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
-              case UnresolvedWindowExpression(_, windowSpec) =>
-                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
-            })
+            checkForUnspecifiedWindow(projectList)
+
+          case agg@Aggregate(_, aggregateExpressions, _) if
+            PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>
+            checkForUnspecifiedWindow(aggregateExpressions)
 
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes =
@@ -718,6 +738,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been
             // already validated inside checkMetric function
@@ -893,40 +914,52 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
       // are not part of the correlated columns.
 
-      // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
-      val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
-      // Collect the inner query attributes that are guaranteed to have a single value for each
-      // outer row. See comment on getCorrelatedEquivalentInnerColumns.
-      val correlatedEquivalentCols = getCorrelatedEquivalentInnerColumns(query)
-      val nonEquivalentGroupByCols = groupByCols -- correlatedEquivalentCols
+      // Collect the inner query expressions that are guaranteed to have a single value for each
+      // outer row. See comment on getCorrelatedEquivalentInnerExpressions.
+      val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
+      // Grouping expressions, except outer refs and constant expressions - grouping by an
+      // outer ref or a constant is always ok
+      val groupByExprs =
+        ExpressionSet(agg.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
+          x.references.nonEmpty))
+      val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
 
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
-        nonEquivalentGroupByCols
+        nonEquivalentGroupByExprs
       } else {
         // Legacy incorrect logic for checking for invalid group-by columns (see SPARK-48503).
         // Allows any inner attribute that appears in a correlated predicate, even if it is a
         // non-equality predicate or under an operator that can change the values of the attribute
         // (see comments on getCorrelatedEquivalentInnerColumns for examples).
+        // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
+        val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
         val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
           .filterNot(conditions.flatMap(_.references).contains)
         val correlatedCols = AttributeSet(subqueryColumns)
         val invalidColsLegacy = groupByCols -- correlatedCols
-        if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
-          logWarning("Using legacy behavior for " +
-            s"${SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE
-              .key}. Query would be rejected with non-legacy behavior but is allowed by " +
-            s"legacy behavior. Query may be invalid and return wrong results if the scalar " +
-            s"subquery's group-by outputs multiple rows.")
+        if (!nonEquivalentGroupByExprs.isEmpty && invalidColsLegacy.isEmpty) {
+          logWarning(log"Using legacy behavior for " +
+            log"${MDC(LogKeys.CONFIG, SQLConf
+            .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
+            log"Query would be rejected with non-legacy behavior but is allowed by " +
+            log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
+            log"subquery's group-by outputs multiple rows.")
         }
         invalidColsLegacy
       }
 
       if (invalidCols.nonEmpty) {
+        val names = invalidCols.map { el =>
+          el match {
+            case attr: Attribute => attr.name
+            case expr: Expression => expr.toString
+          }
+        }
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
             "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-          messageParameters = Map("value" -> invalidCols.map(_.name).mkString(",")))
+          messageParameters = Map("value" -> names.mkString(",")))
       }
     }
 

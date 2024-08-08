@@ -20,11 +20,9 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.net.Socket
 import java.nio.channels.Channels
-import java.util.Locale
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
@@ -145,25 +143,9 @@ private[sql] object PythonSQLUtils extends Logging {
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(EWM(e.expr, alpha, ignoreNA))
+    Column(new EWM(e.expr, alpha, ignoreNA))
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
-
-  def makeInterval(unit: String, e: Column): Column = {
-    val zero = MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
-      days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
-
-    unit.toUpperCase(Locale.ROOT) match {
-      case "YEAR" => Column(zero.copy(years = e.expr))
-      case "MONTH" => Column(zero.copy(months = e.expr))
-      case "WEEK" => Column(zero.copy(weeks = e.expr))
-      case "DAY" => Column(zero.copy(days = e.expr))
-      case "HOUR" => Column(zero.copy(hours = e.expr))
-      case "MINUTE" => Column(zero.copy(mins = e.expr))
-      case "SECOND" => Column(zero.copy(secs = e.expr))
-      case _ => throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
-    }
-  }
 
   def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
     Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))

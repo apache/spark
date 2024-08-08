@@ -57,7 +57,7 @@ trait AlterNamespaceUnsetPropertiesSuiteBase extends QueryTest with DDLCommandTe
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> s"`$ns`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   test("basic test") {

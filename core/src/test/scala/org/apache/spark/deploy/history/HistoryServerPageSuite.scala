@@ -43,12 +43,13 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
   private val localhost: String = Utils.localHostNameForURI()
   private var port: Int = -1
 
-  private def startHistoryServer(logDir: String): Unit = {
+  private def startHistoryServer(logDir: String, title: Option[String] = None): Unit = {
     assert(server.isEmpty)
     val conf = new SparkConf()
       .set(HISTORY_LOG_DIR, logDir)
       .set(UPDATE_INTERVAL_S.key, "0")
       .set(IS_TESTING, true)
+    title.foreach(conf.set(HISTORY_SERVER_UI_TITLE.key, _))
     val provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
@@ -97,6 +98,21 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
           assert(apiResponse.isEmpty)
         }
       }
+      stopHistoryServer()
+    }
+  }
+
+  test("SPARK-49128: Support custom History Server UI title") {
+    Seq(None, Some("Custom History Server Title")).foreach { title =>
+      startHistoryServer(logDirs.head, title)
+      val page = new HistoryPage(server.get)
+      val (code, htmlOpt, errOpt) = HistoryServerSuite.getContentAndCode(
+        new URL(s"http://$localhost:$port/")
+      )
+      assert(code == HttpServletResponse.SC_OK)
+      val expected = title.getOrElse("History Server")
+      assert(htmlOpt.isDefined && htmlOpt.get.contains(s"<title>$expected</title>"))
+      assert(errOpt.isEmpty)
       stopHistoryServer()
     }
   }

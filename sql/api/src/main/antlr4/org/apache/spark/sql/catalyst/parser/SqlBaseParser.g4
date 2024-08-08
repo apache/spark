@@ -52,7 +52,7 @@ singleCompoundStatement
     ;
 
 beginEndCompoundBlock
-    : BEGIN compoundBody END
+    : beginLabel? BEGIN compoundBody END endLabel?
     ;
 
 compoundBody
@@ -61,11 +61,33 @@ compoundBody
 
 compoundStatement
     : statement
+    | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
+    | ifElseStatement
+    ;
+
+setStatementWithOptionalVarKeyword
+    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
+    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+ifElseStatement
+    : IF booleanExpression THEN conditionalBodies+=compoundBody
+        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSE elseBody=compoundBody)? END IF
     ;
 
 singleStatement
-    : statement SEMICOLON* EOF
+    : (statement|setResetStatement) SEMICOLON* EOF
+    ;
+
+beginLabel
+    : multipartIdentifier COLON
+    ;
+
+endLabel
+    : multipartIdentifier
     ;
 
 singleExpression
@@ -174,6 +196,8 @@ statement
     | ALTER TABLE identifierReference
         (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE identifierReference RECOVER PARTITIONS                 #recoverPartitions
+    | ALTER TABLE identifierReference
+        (clusterBySpec | CLUSTER BY NONE)                              #alterClusterBy
     | DROP TABLE (IF EXISTS)? identifierReference PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? identifierReference                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
@@ -198,11 +222,11 @@ statement
         routineCharacteristics
         RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
-    | DECLARE (OR REPLACE)? VARIABLE?
+    | DECLARE (OR REPLACE)? variable?
         identifierReference dataType? variableDefaultExpression?       #createVariable
-    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
+    | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
-        statement                                                      #explain
+        (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
@@ -241,26 +265,29 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
-    | SET COLLATION collationName=identifier                           #setCollation
-    | SET ROLE .*?                                                     #failNativeCommand
-    | SET TIME ZONE interval                                           #setTimeZone
-    | SET TIME ZONE timezone                                           #setTimeZone
-    | SET TIME ZONE .*?                                                #setTimeZone
-    | SET (VARIABLE | VAR) assignmentList                              #setVariable
-    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-          LEFT_PAREN query RIGHT_PAREN                                 #setVariable
-    | SET configKey EQ configValue                                     #setQuotedConfiguration
-    | SET configKey (EQ .*?)?                                          #setConfiguration
-    | SET .*? EQ configValue                                           #setQuotedConfiguration
-    | SET .*?                                                          #setConfiguration
-    | RESET configKey                                                  #resetQuotedConfiguration
-    | RESET .*?                                                        #resetConfiguration
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+setResetStatement
+    : SET COLLATION collationName=identifier                           #setCollation
+    | SET ROLE .*?                                                     #failSetRole
+    | SET TIME ZONE interval                                           #setTimeZone
+    | SET TIME ZONE timezone                                           #setTimeZone
+    | SET TIME ZONE .*?                                                #setTimeZone
+    | SET variable assignmentList                                      #setVariable
+    | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                                   #setVariable
+    | SET configKey EQ configValue                                     #setQuotedConfiguration
+    | SET configKey (EQ .*?)?                                          #setConfiguration
+    | SET .*? EQ configValue                                           #setQuotedConfiguration
+    | SET .*?                                                          #setConfiguration
+    | RESET configKey                                                  #resetQuotedConfiguration
+    | RESET .*?                                                        #resetConfiguration
     ;
 
 executeImmediate
@@ -386,9 +413,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference REPLACE whereClause                                             #insertIntoReplaceWhere
+    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -416,6 +443,11 @@ namespaces
     : NAMESPACES
     | DATABASES
     | SCHEMAS
+    ;
+
+variable
+    : VARIABLE
+    | VAR
     ;
 
 describeFuncName
@@ -853,11 +885,15 @@ identifierComment
 
 relationPrimary
     : identifierReference temporalClause?
-      sample? tableAlias                                    #tableName
+      optionsClause? sample? tableAlias                     #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
     | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
     | functionTable                                         #tableValuedFunction
+    ;
+
+optionsClause
+    : WITH options=propertyList
     ;
 
 inlineTable
@@ -1572,6 +1608,7 @@ ansiNonReserved
     | NANOSECOND
     | NANOSECONDS
     | NO
+    | NONE
     | NULLS
     | NUMERIC
     | OF
@@ -1920,6 +1957,7 @@ nonReserved
     | NANOSECOND
     | NANOSECONDS
     | NO
+    | NONE
     | NOT
     | NULL
     | NULLS

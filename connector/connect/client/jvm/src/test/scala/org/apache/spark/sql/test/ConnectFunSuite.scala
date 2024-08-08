@@ -36,7 +36,7 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   protected def baseResourcePath: Path = {
     getWorkspaceFilePath(
-      "connector",
+      "sql",
       "connect",
       "client",
       "jvm",
@@ -46,12 +46,6 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   }
 
   protected def commonResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources").toAbsolutePath
+    getWorkspaceFilePath("sql", "connect", "common", "src", "test", "resources").toAbsolutePath
   }
 }

@@ -56,6 +56,21 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     }
   }
 
+  test("Invalid location string") {
+    val ns = s"$catalog.$namespace"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE $ns")
+      val sqlText = s"ALTER NAMESPACE $ns SET LOCATION 'file:tmp'"
+      val e = intercept[SparkIllegalArgumentException] {
+        sql(sqlText)
+      }
+      checkError(
+        exception = e,
+        errorClass = "INVALID_LOCATION",
+        parameters = Map("location" -> "file:tmp"))
+    }
+  }
+
   test("Namespace does not exist") {
     val ns = "not_exist"
     val e = intercept[AnalysisException] {
@@ -63,7 +78,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`not_exist`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   // Hive catalog does not support "ALTER NAMESPACE ... SET LOCATION", thus
