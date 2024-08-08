@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, CollectTopK}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
@@ -92,12 +91,6 @@ object functions {
 
   private def withExpr(expr: => Expression): Column = withOrigin {
     Column(expr)
-  }
-
-  private def withAggregateFunction(
-    func: => AggregateFunction,
-    isDistinct: Boolean = false): Column = withOrigin {
-    Column(func.toAggregateExpression(isDistinct))
   }
 
   /**
@@ -397,7 +390,7 @@ object functions {
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    withAggregateFunction { CollectTopK(e.expr, num, reverse) }
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
@@ -5758,9 +5751,8 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    */
-  def timestamp_diff(unit: String, start: Column, end: Column): Column = withExpr {
-    TimestampDiff(unit, start.expr, end.expr)
-  }
+  def timestamp_diff(unit: String, start: Column, end: Column): Column =
+    Column.internalFn("timestampdiff", lit(unit), start, end)
 
   /**
    * Adds the specified number of units to the given timestamp.
@@ -5768,9 +5760,8 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    */
-  def timestamp_add(unit: String, quantity: Column, ts: Column): Column = withExpr {
-    TimestampAdd(unit, quantity.expr, ts.expr)
-  }
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
+    Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
    * Parses the `timestamp` expression with the `format` expression
@@ -8498,14 +8489,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Column, e: Column): Column = withExpr {
-      numBuckets.expr match {
-        case lit @ Literal(_, IntegerType) =>
-          Bucket(lit, e.expr)
-        case _ =>
-          throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
-      }
-    }
+    def bucket(numBuckets: Column, e: Column): Column = Column.internalFn("bucket", numBuckets, e)
 
     /**
      * (Scala-specific) A transform for any type that partitions by a hash of the input column.
@@ -8513,8 +8497,6 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Int, e: Column): Column = withExpr {
-      Bucket(Literal(numBuckets), e.expr)
-    }
+    def bucket(numBuckets: Int, e: Column): Column = bucket(lit(numBuckets), e)
   }
 }

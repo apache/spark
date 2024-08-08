@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -97,8 +97,10 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
         LogicalExpressions.days(ref(attr.name))
       case PartitionTransform.HOURS(Seq(attr: Attribute)) =>
         LogicalExpressions.hours(ref(attr.name))
-      case Bucket(Literal(numBuckets: Int, IntegerType), attr: Attribute) =>
+      case PartitionTransform.BUCKET(Seq(Literal(numBuckets: Int, IntegerType), attr: Attribute)) =>
         LogicalExpressions.bucket(numBuckets, Array(ref(attr.name)))
+      case PartitionTransform.BUCKET(Seq(numBuckets, e)) =>
+        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
       case attr: Attribute =>
         LogicalExpressions.identity(ref(attr.name))
       case expr =>
@@ -249,6 +251,7 @@ private object PartitionTransform {
   val DAYS = new ExtractTransform("days")
   val MONTHS = new ExtractTransform("months")
   val YEARS = new ExtractTransform("years")
+  val BUCKET = new ExtractTransform("bucket")
 }
 
 /**
