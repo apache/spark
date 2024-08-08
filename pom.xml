@@ -94,12 +94,12 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/connect/server</module>
+    <module>sql/connect/common</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>connect/server</module>
-    <module>connect/common</module>
     <module>connector/kafka-0-10-token-provider</module>
     <module>connector/kafka-0-10</module>
     <module>connector/kafka-0-10-assembly</module>
@@ -134,7 +134,7 @@
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.7.1</kafka.version>
+    <kafka.version>3.8.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.1</parquet.version>
@@ -153,7 +153,7 @@
     -->
     <codahale.metrics.version>4.2.26</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <avro.version>1.11.3</avro.version>
+    <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
@@ -197,6 +197,7 @@
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
+    <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.7</joda.version>
@@ -326,8 +327,8 @@
     <mysql.connector.version>9.0.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>12.6.3.jre11</mssql.jdbc.version>
-    <ojdbc11.version>23.4.0.24.05</ojdbc11.version>
+    <mssql.jdbc.version>12.8.0.jre11</mssql.jdbc.version>
+    <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
   </properties>
   <repositories>
     <repository>
@@ -571,6 +572,18 @@
       </dependency>
 
       <!-- End of shaded deps -->
+
+      <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>${gson.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
 
       <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
       <dependency>
@@ -830,7 +843,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.1</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -3105,7 +3118,6 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <spark.memory.debugFill>true</spark.memory.debugFill>
-              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
               <hive.conf.validation>false</hive.conf.validation>
@@ -3162,8 +3174,6 @@
               <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
-              <!--SPARK-42934: Need by `OrcEncryptionSuite` -->
-              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>

@@ -61,21 +61,27 @@ private[sql] object Column {
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
-    fn(name, isDistinct = false, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = false, inputs: _*)
   }
 
   private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
-    fn(name, isDistinct = isDistinct, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = isDistinct, isInternal = false, inputs)
   }
 
-  private[sql] def fn(
+  private[sql] def internalFn(name: String, inputs: Column*): Column = {
+    fn(name, isDistinct = false, isInternal = true, inputs)
+  }
+
+  private def fn(
       name: String,
       isDistinct: Boolean,
-      ignoreNulls: Boolean,
-      inputs: Column*): Column = withOrigin {
-    Column {
-      UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
-    }
+      isInternal: Boolean,
+      inputs: Seq[Column]): Column = withOrigin {
+    Column(UnresolvedFunction(
+      name :: Nil,
+      inputs.map(_.expr),
+      isDistinct = isDistinct,
+      isInternal = isInternal))
   }
 }
 
@@ -824,7 +830,7 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+  def isin(list: Any*): Column = Column.fn("in", this +: list.map(lit): _*)
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained

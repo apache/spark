@@ -351,6 +351,9 @@ case class PandasStddev(
     ddof: Int)
   extends CentralMomentAgg(child, true) {
 
+  def this(child: Expression, ddof: Expression) =
+    this(child, PandasAggregate.expressionToDDOF(ddof, "pandas_stddev"))
+
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
@@ -372,6 +375,9 @@ case class PandasVariance(
     child: Expression,
     ddof: Int)
   extends CentralMomentAgg(child, true) {
+
+  def this(child: Expression, ddof: Expression) =
+    this(child, PandasAggregate.expressionToDDOF(ddof, "pandas_variance"))
 
   override protected def momentOrder = 2
 

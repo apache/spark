@@ -245,6 +245,9 @@ case class PandasMode(
 
   def this(child: Expression) = this(child, true, 0, 0)
 
+  def this(child: Expression, ignoreNA: Expression) =
+    this(child, PandasAggregate.expressionToIgnoreNA(ignoreNA, "pandas_mode"))
+
   // Returns empty array for empty inputs
   override def nullable: Boolean = false
 

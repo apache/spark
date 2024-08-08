@@ -48,13 +48,14 @@ case class StateStoreColFamilySchema(
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
-    schemaFilePath: Option[Path] = None) extends Logging {
+    oldSchemaFilePath: Option[Path] = None,
+    newSchemaFilePath: Option[Path] = None) extends Logging {
 
-  private val schemaFileLocation = if (schemaFilePath.isEmpty) {
+  private val schemaFileLocation = if (oldSchemaFilePath.isEmpty) {
     val storeCpLocation = providerId.storeId.storeCheckpointLocation()
     schemaFile(storeCpLocation)
   } else {
-    schemaFilePath.get
+    oldSchemaFilePath.get
   }
 
   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
@@ -65,10 +66,6 @@ class StateSchemaCompatibilityChecker(
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
-      // Ensure that version 3 format has schema file path provided explicitly
-      if (versionStr == "v3" && schemaFilePath.isEmpty) {
-        throw new IllegalStateException("Schema file path is required for schema version 3")
-      }
       val schemaReader = SchemaReader.createSchemaReader(versionStr)
       schemaReader.read(inStream)
     } catch {
@@ -98,7 +95,7 @@ class StateSchemaCompatibilityChecker(
       stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       stateSchemaVersion: Int): Unit = {
     // Ensure that schema file path is passed explicitly for schema version 3
-    if (stateSchemaVersion == 3 && schemaFilePath.isEmpty) {
+    if (stateSchemaVersion == 3 && newSchemaFilePath.isEmpty) {
       throw new IllegalStateException("Schema file path is required for schema version 3")
     }
 
@@ -110,13 +107,19 @@ class StateSchemaCompatibilityChecker(
   private[sql] def createSchemaFile(
       stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       schemaWriter: SchemaWriter): Unit = {
-    val outStream = fm.createAtomic(schemaFileLocation, overwriteIfPossible = false)
+    val schemaFilePath = newSchemaFilePath match {
+      case Some(path) =>
+        fm.mkdirs(path.getParent)
+        path
+      case None => schemaFileLocation
+    }
+    val outStream = fm.createAtomic(schemaFilePath, overwriteIfPossible = false)
     try {
       schemaWriter.write(stateStoreColFamilySchema, outStream)
       outStream.close()
     } catch {
       case e: Throwable =>
-        logError(log"Fail to write schema file to ${MDC(LogKeys.PATH, schemaFileLocation)}", e)
+        logError(log"Fail to write schema file to ${MDC(LogKeys.PATH, schemaFilePath)}", e)
         outStream.cancel()
         throw e
     }
@@ -208,7 +211,10 @@ object StateSchemaCompatibilityChecker {
    * @param stateSchemaVersion - version of the state schema to be used
    * @param extraOptions - any extra options to be passed for StateStoreConf creation
    * @param storeName - optional state store name
-   * @param schemaFilePath - optional schema file path
+   * @param oldSchemaFilePath - optional path to the old schema file. If not provided, will default
+   *                          to the schema file location
+   * @param newSchemaFilePath - optional path to the destination schema file.
+   *                          Needed for schema version 3
    * @return - StateSchemaValidationResult containing the result of the schema validation
    */
   def validateAndMaybeEvolveStateSchema(
@@ -219,7 +225,8 @@ object StateSchemaCompatibilityChecker {
       stateSchemaVersion: Int,
       extraOptions: Map[String, String] = Map.empty,
       storeName: String = StateStoreId.DEFAULT_STORE_NAME,
-      schemaFilePath: Option[Path] = None): StateSchemaValidationResult = {
+      oldSchemaFilePath: Option[Path] = None,
+      newSchemaFilePath: Option[Path] = None): StateSchemaValidationResult = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -237,7 +244,7 @@ object StateSchemaCompatibilityChecker {
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
       stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-      schemaFilePath = schemaFilePath)
+      oldSchemaFilePath = oldSchemaFilePath, newSchemaFilePath = newSchemaFilePath)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema
@@ -261,6 +268,10 @@ object StateSchemaCompatibilityChecker {
     if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
       throw result.get
     }
-    StateSchemaValidationResult(evolvedSchema, checker.schemaFileLocation.toString)
+    val schemaFileLocation = newSchemaFilePath match {
+      case Some(path) => path.toString
+      case None => checker.schemaFileLocation.toString
+    }
+    StateSchemaValidationResult(evolvedSchema, schemaFileLocation)
   }
 }

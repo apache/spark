@@ -43,9 +43,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   private[spark] val errorInfoMap =
     jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
 
-  def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
+  def getErrorMessage(errorClass: String, messageParameters: Map[String, Any]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
-    val sub = new StringSubstitutor(messageParameters.asJava)
+    val sanitizedParameters = messageParameters.map {
+      case (key, null) => key -> "null"
+      case (key, value) => key -> value
+    }
+    val sub = new StringSubstitutor(sanitizedParameters.asJava)
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
     try {

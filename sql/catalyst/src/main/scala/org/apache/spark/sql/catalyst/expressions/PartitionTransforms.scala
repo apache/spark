@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -74,6 +75,17 @@ case class Hours(child: Expression) extends PartitionTransformExpression {
  * Expression for the v2 partition transform bucket.
  */
 case class Bucket(numBuckets: Literal, child: Expression) extends PartitionTransformExpression {
+  def this(numBuckets: Expression, child: Expression) =
+    this(Bucket.expressionToNumBuckets(numBuckets, child), child)
+
   override def dataType: DataType = IntegerType
   override protected def withNewChildInternal(newChild: Expression): Bucket = copy(child = newChild)
+}
+
+private[sql] object Bucket {
+  def expressionToNumBuckets(numBuckets: Expression, e: Expression): Literal = numBuckets match {
+    case l @ Literal(_, IntegerType) => l
+    case _ =>
+      throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
+  }
 }

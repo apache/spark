@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp, PandasAggregate}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
@@ -333,6 +333,11 @@ object WindowExpression {
   def hasWindowExpression(e: Expression): Boolean = {
     e.find(_.isInstanceOf[WindowExpression]).isDefined
   }
+
+  def expressionToIngnoreNulls(e: Expression, source: String): Boolean = e match {
+    case BooleanLiteral(ignoreNulls) => ignoreNulls
+    case _ => throw QueryCompilationErrors.invalidIgnoreNullsParameter(source, e)
+  }
 }
 
 case class WindowExpression(
@@ -525,6 +530,9 @@ case class Lead(
   def this(input: Expression, offset: Expression, default: Expression) =
     this(input, offset, default, false)
 
+  def this(input: Expression, offset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, offset, default, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "lead"))
+
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
   def this(input: Expression) = this(input, Literal(1))
@@ -578,6 +586,9 @@ case class Lag(
 
   def this(input: Expression, inputOffset: Expression, default: Expression) =
     this(input, inputOffset, default, false)
+
+  def this(input: Expression, offset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, offset, default, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "lag"))
 
   def this(input: Expression, inputOffset: Expression) = this(input, inputOffset, Literal(null))
 
@@ -726,6 +737,8 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes
     with BinaryLike[Expression] with QueryErrorsBase {
 
+  def this(input: Expression, offset: Expression, ignoreNulls: Expression) =
+    this(input, offset, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "nth_value"))
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)
@@ -1113,6 +1126,9 @@ case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
   extends AggregateWindowFunction with UnaryLike[Expression] {
   assert(0 < alpha && alpha <= 1)
 
+  def this(input: Expression, alpha: Expression, ignoreNA: Expression) =
+    this(input, EWM.expressionToAlpha(alpha), PandasAggregate.expressionToIgnoreNA(ignoreNA, "ewm"))
+
   override def dataType: DataType = DoubleType
 
   private val numerator = AttributeReference("numerator", DoubleType, nullable = false)()
@@ -1154,6 +1170,12 @@ case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
   override protected def withNewChildInternal(newChild: Expression): EWM = copy(input = newChild)
 }
 
+private[expressions] object EWM {
+  def expressionToAlpha(e: Expression): Double = e match {
+    case DoubleLiteral(alpha) => alpha
+    case _ => throw QueryCompilationErrors.invalidAlphaParameter(e)
+  }
+}
 
 /**
  * Return the indices for consecutive null values, for non-null values, it returns 0.

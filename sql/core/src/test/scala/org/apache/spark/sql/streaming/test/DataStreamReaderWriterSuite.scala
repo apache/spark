@@ -30,6 +30,7 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
@@ -47,6 +48,7 @@ object LastOptions {
   var sinkParameters: Map[String, String] = null
   var schema: Option[StructType] = null
   var partitionColumns: Seq[String] = Nil
+  var clusteringColumns: Seq[String] = Nil
 
   def clear(): Unit = {
     parameters = null
@@ -104,6 +106,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       outputMode: OutputMode): Sink = {
     LastOptions.sinkParameters = parameters
     LastOptions.partitionColumns = partitionColumns
+    LastOptions.clusteringColumns = parameters.get(DataSourceUtils.CLUSTERING_COLUMNS_KEY)
+      .map(DataSourceUtils.decodePartitioningColumns).getOrElse(Nil)
     LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     (_: Long, _: DataFrame) => {}
   }
@@ -253,6 +257,56 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
+        .start()
+        .stop()
+    }
+  }
+
+  test("clustering") {
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+
+    df.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .start()
+      .stop()
+    assert(LastOptions.partitionColumns == Nil)
+
+    df.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .clusterBy("a")
+      .start()
+      .stop()
+    assert(LastOptions.clusteringColumns == Seq("a"))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
+        .clusterBy("A")
+        .start()
+        .stop()
+      assert(LastOptions.clusteringColumns == Seq("a"))
+    }
+
+    intercept[AnalysisException] {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
+        .clusterBy("b")
+        .start()
+        .stop()
+    }
+
+    intercept[AnalysisException] {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
+        .clusterBy("a")
+        .partitionBy("a")
         .start()
         .stop()
     }
