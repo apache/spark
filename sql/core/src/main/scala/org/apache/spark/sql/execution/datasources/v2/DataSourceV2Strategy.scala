@@ -475,15 +475,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         recacheTable(r)) :: Nil
 
     case ShowColumns(resolvedTable: ResolvedTable, ns, output) =>
-      ns match {
-        case Some(namespace) =>
-          val tableNamespace = resolvedTable.identifier.namespace()
-          if (namespace.length != tableNamespace.length ||
-            !namespace.zip(tableNamespace).forall(SQLConf.get.resolver.tupled)) {
-            throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
-              namespace, tableNamespace.toSeq)
-          }
-        case _ =>
+      if (SQLConf.get.legacyShowColumnsCheckNamespace) {
+        ns match {
+          case Some(namespace) =>
+            val tableNamespace = resolvedTable.identifier.namespace()
+            if (namespace.length != tableNamespace.length ||
+              !namespace.zip(tableNamespace).forall(SQLConf.get.resolver.tupled)) {
+              throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+                namespace, tableNamespace.toSeq)
+            }
+          case _ =>
+        }
       }
       ShowColumnsExec(output, resolvedTable) :: Nil
 

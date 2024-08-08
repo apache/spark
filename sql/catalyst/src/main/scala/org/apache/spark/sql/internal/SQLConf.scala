@@ -5118,6 +5118,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_SHOW_COLUMNS_CHECK_NAMESPACE = buildConf("spark.sql.legacy.showColumnsCheckNamespace")
+    .internal()
+    .doc("When true, in `SHOW COLUMNS` syntax, if namespace is already specified in the table " +
+      "name, it's checked against the given namespace after table/view is resolved.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6023,6 +6031,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
+
+  def legacyShowColumnsCheckNamespace: Boolean = getConf(LEGACY_SHOW_COLUMNS_CHECK_NAMESPACE)
 
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
