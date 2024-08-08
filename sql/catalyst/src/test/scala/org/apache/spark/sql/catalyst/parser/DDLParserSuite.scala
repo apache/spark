@@ -2994,7 +2994,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = intercept[AnalysisException] {
         parsePlan(s"CREATE TABLE testcat.my_tab(id BIGINT GENERATED ALWAYS AS 1" +
-          s" GENERATED ALWAYS AS IDENTITY(), val INT) USING foo")
+          s" GENERATED ALWAYS AS IDENTITY, val INT) USING foo")
       },
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'1'", "hint" -> "")
@@ -3034,10 +3034,10 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-48824: Identity column spec descriptor cannot be duplicated") {
     val identityColumnSpecStrs = Seq(
-      "START WITH 0 START WITH 1",
-      "INCREMENT BY 1 INCREMENT BY 2",
-      "START WITH 0 INCREMENT BY 1 START WITH 1",
-      "INCREMENT BY 1 START WITH 0 INCREMENT BY 2"
+      "(START WITH 0 START WITH 1)",
+      "(INCREMENT BY 1 INCREMENT BY 2)",
+      "(START WITH 0 INCREMENT BY 1 START WITH 1)",
+      "(INCREMENT BY 1 START WITH 0 INCREMENT BY 2)"
     )
     for {
       identitySpecStr <- identityColumnSpecStrs
@@ -3045,7 +3045,7 @@ class DDLParserSuite extends AnalysisTest {
       val exception = intercept[ParseException] {
         parsePlan(
           s"CREATE TABLE testcat.my_tab" +
-            s"(id BIGINT GENERATED ALWAYS AS IDENTITY($identitySpecStr), val INT) USING foo"
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY $identitySpecStr, val INT) USING foo"
         )
       }
       assert(exception.getErrorClass === "IDENTITY_COLUMNS_DUPLICATED_DESCRIPTOR")
