@@ -23,7 +23,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{BooleanType, StructField}
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -63,7 +63,10 @@ trait NonLeafStatementExec extends CompoundStatementExec {
    * Evaluate the boolean condition represented by the statement.
    * @param session SparkSession that SQL script is executed within.
    * @param statement Statement representing the boolean condition to evaluate.
-   * @return Whether the condition evaluates to True.
+   * @return
+   *    The value (`true` or `false`) of condition evaluation;
+   *    or throw the error during the evaluation (eg: returning multiple rows of data
+   *    or non-boolean statement).
    */
   protected def evaluateBooleanCondition(
       session: SparkSession,
@@ -76,7 +79,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       //  of boolean type with value True.
       val df = Dataset.ofRows(session, statement.parsedPlan)
       df.schema.fields match {
-        case Array(StructField(_, BooleanType, _, _)) =>
+        case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
             case Array(row) => row.getBoolean(0)
             case _ =>
