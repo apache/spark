@@ -1420,6 +1420,22 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-49125: write CSV files with duplicated field names") {
+    withTempPath { path =>
+      sql("SELECT 's1' a, 's2' a").write.csv(path.getCanonicalPath)
+      val df = spark.read.csv(path.getCanonicalPath)
+      assert(df.columns === Array("_c0", "_c1"))
+      checkAnswer(df, Row("s1", "s2"))
+    }
+
+    withTempPath { path =>
+      sql(s"INSERT OVERWRITE DIRECTORY '${path.getCanonicalPath}' USING csv SELECT 's1' a, 's2' a")
+      val df = spark.read.csv(path.getCanonicalPath)
+      assert(df.columns === Array("_c0", "_c1"))
+      checkAnswer(df, Row("s1", "s2"))
+    }
+  }
+
   test("load null when the schema is larger than parsed tokens ") {
     withTempPath { path =>
       Seq("1").toDF().write.text(path.getAbsolutePath)

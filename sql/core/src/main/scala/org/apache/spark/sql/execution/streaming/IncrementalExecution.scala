@@ -221,7 +221,7 @@ class IncrementalExecution(
               val oldMetadata = try {
                 OperatorStateMetadataReader.createReader(
                   new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                  hadoopConf, ssw.operatorStateMetadataVersion).read()
+                  hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
               } catch {
                 case e: Exception =>
                   logWarning(log"Error reading metadata path for stateful operator. This " +
@@ -462,7 +462,9 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
-    private def checkOperatorValidWithMetadata(planWithStateOpId: SparkPlan): Unit = {
+    private def checkOperatorValidWithMetadata(
+        planWithStateOpId: SparkPlan,
+        batchId: Long): Unit = {
       // get stateful operators for current batch
       val opMapInPhysicalPlan: Map[Long, String] = planWithStateOpId.collect {
         case stateStoreWriter: StateStoreWriter =>
@@ -479,7 +481,7 @@ class IncrementalExecution(
           try {
             val reader = new StateMetadataPartitionReader(
               new Path(checkpointLocation).getParent.toString,
-              new SerializableConfiguration(hadoopConf))
+              new SerializableConfiguration(hadoopConf), batchId)
             val opMetadataList = reader.allOperatorStateMetadata
             ret = opMetadataList.map {
               case OperatorStateMetadataV1(operatorInfo, _) =>
@@ -517,7 +519,7 @@ class IncrementalExecution(
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch
       if (isFirstBatch && currentBatchId != 0) {
-        checkOperatorValidWithMetadata(planWithStateOpId)
+        checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
       // The rule below doesn't change the plan but can cause the side effect that

@@ -402,10 +402,11 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Parameters used for writing query to a table:
-   *   (table ident, tableColumnList, partitionKeys, ifPartitionNotExists, byName).
+   *   (table ident, options, tableColumnList, partitionKeys, ifPartitionNotExists, byName).
    */
   type InsertTableParams =
-    (IdentifierReferenceContext, Seq[String], Map[String, Option[String]], Boolean, Boolean)
+    (IdentifierReferenceContext, Option[OptionsClauseContext], Seq[String],
+      Map[String, Option[String]], Boolean, Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -432,11 +433,11 @@ class AstBuilder extends DataTypeAstBuilder
       //   2. Write commands do not hold the table logical plan as a child, and we need to add
       //      additional resolution code to resolve identifiers inside the write commands.
       case table: InsertIntoTableContext =>
-        val (relationCtx, cols, partition, ifPartitionNotExists, byName)
+        val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
         = visitInsertIntoTable(table)
         withIdentClause(relationCtx, ident => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident),
+            createUnresolvedRelation(relationCtx, ident, options),
             partition,
             cols,
             query,
@@ -445,11 +446,11 @@ class AstBuilder extends DataTypeAstBuilder
             byName)
         })
       case table: InsertOverwriteTableContext =>
-        val (relationCtx, cols, partition, ifPartitionNotExists, byName)
+        val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
         = visitInsertOverwriteTable(table)
         withIdentClause(relationCtx, ident => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident),
+            createUnresolvedRelation(relationCtx, ident, options),
             partition,
             cols,
             query,
@@ -460,7 +461,7 @@ class AstBuilder extends DataTypeAstBuilder
       case ctx: InsertIntoReplaceWhereContext =>
         withIdentClause(ctx.identifierReference, ident => {
           OverwriteByExpression.byPosition(
-            createUnresolvedRelation(ctx.identifierReference, ident),
+            createUnresolvedRelation(ctx.identifierReference, ident, Option(ctx.optionsClause())),
             query,
             expression(ctx.whereClause().booleanExpression()))
         })
@@ -489,7 +490,8 @@ class AstBuilder extends DataTypeAstBuilder
       invalidStatement("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (ctx.identifierReference, cols, partitionKeys, false, ctx.NAME() != null)
+    (ctx.identifierReference, Option(ctx.optionsClause()), cols, partitionKeys, false,
+      ctx.NAME() != null)
   }
 
   /**
@@ -509,7 +511,8 @@ class AstBuilder extends DataTypeAstBuilder
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (ctx.identifierReference, cols, partitionKeys, ctx.EXISTS() != null, ctx.NAME() != null)
+    (ctx.identifierReference, Option(ctx.optionsClause()), cols, partitionKeys,
+      ctx.EXISTS() != null, ctx.NAME() != null)
   }
 
   /**
@@ -3093,9 +3096,7 @@ class AstBuilder extends DataTypeAstBuilder
   private def createUnresolvedRelation(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext] = None): LogicalPlan = withOrigin(ctx) {
-    val options = optionsClause.map{ clause =>
-      new CaseInsensitiveStringMap(visitPropertyKeyValues(clause.options).asJava)
-    }.getOrElse(CaseInsensitiveStringMap.empty)
+    val options = resolveOptions(optionsClause)
     withIdentClause(ctx, parts =>
       new UnresolvedRelation(parts, options, isStreaming = false))
   }
@@ -3104,8 +3105,18 @@ class AstBuilder extends DataTypeAstBuilder
    * Create an [[UnresolvedRelation]] from a multi-part identifier.
    */
   private def createUnresolvedRelation(
-      ctx: ParserRuleContext, ident: Seq[String]): UnresolvedRelation = withOrigin(ctx) {
-    UnresolvedRelation(ident)
+      ctx: ParserRuleContext,
+      ident: Seq[String],
+      optionsClause: Option[OptionsClauseContext]): UnresolvedRelation = withOrigin(ctx) {
+    val options = resolveOptions(optionsClause)
+    new UnresolvedRelation(ident, options, isStreaming = false)
+  }
+
+  private def resolveOptions(
+      optionsClause: Option[OptionsClauseContext]): CaseInsensitiveStringMap = {
+    optionsClause.map{ clause =>
+      new CaseInsensitiveStringMap(visitPropertyKeyValues(clause.options).asJava)
+    }.getOrElse(CaseInsensitiveStringMap.empty)
   }
 
   /**
@@ -4974,7 +4985,8 @@ class AstBuilder extends DataTypeAstBuilder
       if (query.isDefined) {
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
-        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident), ident, isLazy, options)
+        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident, None),
+          ident, isLazy, options)
       }
     })
   }
