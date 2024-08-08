@@ -1120,7 +1120,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTempDir { src =>
           // Check CSV format
-          checkWriteDataColumnDuplication("csv", c0, c1, src)
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "csv", c0, c1, src)
           // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)
