@@ -201,8 +201,14 @@ case class TransformWithStateExec(
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     val keyObj = getKeyObj(keyRow)  // convert key to objects
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
+
+    // The statefulProcessor's handleInputRows method may create an eager iterator,
+    // and in that case, the implicit key needs to be set now. However, it could return
+    // a lazy iterator, in which case the implicit key should be set when the actual
+    // methods on the iterator are invoked. This is done with the wrapper class
+    // at the end of this method.
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val mappedIterator = statefulProcessor.handleInputRows(
       keyObj,
       valueObjIter,
@@ -211,7 +217,37 @@ case class TransformWithStateExec(
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    // Wrapper to ensure that the implicit key is set when the methods on the iterator
+    // are called. Inside of processNewData, we use a GroupedIterator, so handleInputRows
+    // is only called once per key. As such, we only have to set the implicit key when
+    // the first call to hasNext is made, and we have to remove it when hasNext returns
+    // false.
+    //
+    // Note: if we ever start to interleave the processing of the iterators we get back
+    // from handleInputRows (i.e. we don't process each iterator all at once), then this
+    // iterator will need to set/unset the implicit key every time hasNext/next is called,
+    // not just at the first and last calls to hasNext.
+    new Iterator[InternalRow] {
+      var hasStarted = false
+
+      override def hasNext: Boolean = {
+        if (!hasStarted) {
+          hasStarted = true
+          ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+        }
+
+        val hasNext = mappedIterator.hasNext
+        if (!hasNext) {
+          ImplicitGroupingKeyTracker.removeImplicitKey()
+        }
+        hasNext
+      }
+
+      override def next(): InternalRow = {
+        mappedIterator.next()
+      }
+    }
   }
 
   private def processInitialStateRows(
