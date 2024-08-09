@@ -49,8 +49,8 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       (testFunc: (TimeMode, String, String) => Unit): Unit = {
       test(s"$timeoutMode timer - " + testName) {
       val timeMode = timeoutMode match {
-        case "Processing" => TimeMode.ProcessingTime()
-        case "Event" => TimeMode.EventTime()
+        case "ProcessingTime" => TimeMode.ProcessingTime()
+        case "EventTime" => TimeMode.EventTime()
       }
 
       val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
@@ -254,7 +254,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   }
 
   testWithTimeMode(
-    "ttl States are populated for valueState and timeMode=ProcessingTime", "Processing") {
+    "ttl States are populated for valueState and timeMode=ProcessingTime", "ProcessingTime") {
     (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
@@ -277,7 +277,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   }
 
   testWithTimeMode(
-    "ttl States are populated for listState and timeMode=ProcessingTime", "Processing") {
+    "ttl States are populated for listState and timeMode=ProcessingTime", "ProcessingTime") {
     (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
@@ -300,7 +300,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   }
 
   testWithTimeMode(
-    "ttl States are populated for mapState and timeMode=ProcessingTime", "Processing") {
+    "ttl States are populated for mapState and timeMode=ProcessingTime", "ProcessingTime") {
     (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
