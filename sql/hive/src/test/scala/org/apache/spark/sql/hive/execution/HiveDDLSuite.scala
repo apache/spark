@@ -568,6 +568,11 @@ class HiveDDLSuite
              |CREATE TABLE $tab (key INT, value STRING)
              |PARTITIONED BY (ds STRING, hr STRING)
            """.stripMargin)
+        val newBasePath = new Path(spark.sessionState.conf.warehousePath, tab).toUri
+        val part1NewPath = new File(new File(newBasePath.getPath, "ds=2008-04-08"), "hr=11")
+        val part2NewPath = new File(new File(newBasePath.getPath, "ds=2008-04-08"), "hr=12")
+        val dirNewSet = part1NewPath :: part2NewPath :: Nil
+
         sql(
           s"""
              |ALTER TABLE $tab ADD
@@ -575,11 +580,13 @@ class HiveDDLSuite
              |PARTITION (ds='2008-04-08', hr=12) LOCATION '${part2Path.toURI}'
            """.stripMargin)
         assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+        assert(dirNewSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
 
         sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=11) SELECT 1, 'a'")
         sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=12) SELECT 2, 'b'")
         // add partition will not delete the data
-        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+        assert(dirNewSet.forall(dir => dir.listFiles.nonEmpty))
         checkAnswer(
           spark.table(tab),
           Row(1, "a", "2008-04-08", "11") :: Row(2, "b", "2008-04-08", "12") :: Nil
@@ -587,12 +594,12 @@ class HiveDDLSuite
 
         sql(s"ALTER TABLE $tab DROP PARTITION (ds='2008-04-08', hr=11)")
         // drop partition will delete the data
-        assert(part1Path.listFiles == null || part1Path.listFiles.isEmpty)
-        assert(part2Path.listFiles.nonEmpty)
+        assert(part1NewPath.listFiles == null || part1NewPath.listFiles.isEmpty)
+        assert(part2NewPath.listFiles.nonEmpty)
 
         sql(s"DROP TABLE $tab")
         // drop table will delete the data of the managed table
-        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+        assert(dirNewSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
       }
     }
   }
