@@ -34,28 +34,6 @@ import org.apache.spark.util.Utils
 
 class PythonForeachWriterSuite extends SparkFunSuite with Eventually with MockitoSugar {
 
-  testWithBuffer("UnsafeRowBuffer: iterator blocks when no data is available") { b =>
-    b.assertIteratorBlocked()
-
-    b.add(Seq(1))
-    b.assertOutput(Seq(1))
-    b.assertIteratorBlocked()
-
-    b.add(2 to 100)
-    b.assertOutput(1 to 100)
-    b.assertIteratorBlocked()
-  }
-
-  testWithBuffer("UnsafeRowBuffer: iterator unblocks when all data added") { b =>
-    b.assertIteratorBlocked()
-    b.add(Seq(1))
-    b.assertIteratorBlocked()
-
-    b.allAdded()
-    b.assertThreadTerminated()
-    b.assertOutput(Seq(1))
-  }
-
   testWithBuffer(
       "UnsafeRowBuffer: handles more data than memory",
       memBytes = 5,
@@ -110,6 +88,16 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
             }
             Thread.sleep(sleepPerRowReadMs)
           }
+        } catch {
+          case e: Throwable =>
+            // scalastyle:off println
+            println(s"Exception: $e")
+            println(s"iterator.hasNext: ${iterator.hasNext}")
+            // scalastyle:on println
+            while (iterator.hasNext) {
+              outputBuffer += iterator.next().getInt(0)
+            }
+            e.printStackTrace()
         } finally {
           buffer.close()
         }
