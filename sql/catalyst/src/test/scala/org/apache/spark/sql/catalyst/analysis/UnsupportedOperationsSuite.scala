@@ -115,11 +115,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation),
     outputMode = Append)
 
-  assertNotSupportedInStreamingPlan(
+  assertOutputModeNotSupportedInStreamingPlan(
     "aggregate - streaming aggregations without watermark in append mode",
     Aggregate(Nil, aggExprs("d"), streamRelation),
-    outputMode = Append,
-    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+    Append,
+    "streaming aggregations without watermark")
 
   // Aggregation: Distinct aggregates not supported on streaming relation
   val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
@@ -965,11 +965,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         streamRelation.groupBy("a")("count(*)"),
         outputMode = outputMode)
     } else {
-      assertNotSupportedInStreamingPlan(
-        s"$outputMode output mode - aggregation",
+      assertOutputModeNotSupportedInStreamingPlan(
+        s"$outputMode output mode - aggregation without watermark",
         streamRelation.groupBy("a")("count(*)"),
-        outputMode = outputMode,
-        Seq("aggregation", s"$outputMode output mode"))
+        outputMode,
+        "streaming aggregations without watermark")
     }
 
     // non aggregation
@@ -979,11 +979,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         streamRelation.where($"a" > 1),
         outputMode = outputMode)
     } else {
-      assertNotSupportedInStreamingPlan(
+      assertOutputModeNotSupportedInStreamingPlan(
         s"$outputMode output mode - no aggregation",
         streamRelation.where($"a" > 1),
-        outputMode = outputMode,
-        Seq("aggregation", s"$outputMode output mode"))
+        outputMode,
+        "no streaming aggregations")
     }
   }
 
@@ -1036,6 +1036,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported",
       errorClass) {
       UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+    }
+  }
+
+  /**
+   * Assert that output model is not supported in streaming plan.
+   */
+  def assertOutputModeNotSupportedInStreamingPlan(
+      name: String,
+      plan: LogicalPlan,
+      outputMode: OutputMode,
+      operation: String): Unit = {
+    test(s"streaming plan - $name: not supported") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+        },
+        errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+        sqlState = "42KDE",
+        parameters = Map(
+          "outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT),
+          "operation" -> operation))
     }
   }
 

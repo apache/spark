@@ -185,13 +185,17 @@ class TransformWithStateChainingSuite extends StreamTest {
         .groupBy(window($"outputEventTime", "1 minute"))
         .count()
 
-      val ex = intercept[ExtendedAnalysisException] {
-        testStream(result, OutputMode.Append())(
-          StartStream()
-        )
-      }
-      assert(ex.getMessage.contains("there are streaming aggregations on" +
-        " streaming DataFrames/DataSets without watermark"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          testStream(result, OutputMode.Append())(
+            StartStream()
+          )
+        },
+        errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+        sqlState = "42KDE",
+        parameters = Map(
+          "outputMode" -> "append",
+          "operation" -> "streaming aggregations without watermark"))
     }
   }
 

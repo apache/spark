@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -1640,12 +1642,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dataSourceOutputModeUnsupportedError(
-      className: String, outputMode: OutputMode): Throwable = {
+      className: String, outputMode: OutputMode): AnalysisException = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1131",
+      errorClass = "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE",
       messageParameters = Map(
         "className" -> className,
-        "outputMode" -> outputMode.toString))
+        "outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT)))
+  }
+
+  def unsupportedOutputModeForStreamingOperationError(
+      outputMode: OutputMode, operation: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      messageParameters = Map(
+        "outputMode" -> outputMode.toString().toLowerCase(Locale.ROOT),
+        "operation" -> operation))
   }
 
   def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {

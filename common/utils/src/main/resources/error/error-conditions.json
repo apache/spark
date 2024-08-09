@@ -1039,6 +1039,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE" : {
+    "message" : [
+      "Data source <className> does not support streaming output mode <outputMode>."
+    ],
+    "sqlState" : "42KDE"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2913,6 +2919,12 @@
       "The statement or clause: <operation> is not valid."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_STREAMING_OUTPUT_MODE" : {
+    "message" : [
+      "Invalid streaming output mode: <outputMode>. Accepted output modes are 'Append', 'Complete', 'Update'."
+    ],
+    "sqlState" : "42KDE"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
@@ -4942,6 +4954,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION" : {
+    "message" : [
+      "The output mode <outputMode> is not supported for <operation> on streaming DataFrames/DataSets."
+    ],
+    "sqlState" : "42KDE"
+  },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
       "Can't overwrite the target that is also being read from."
@@ -5734,11 +5752,6 @@
   "_LEGACY_ERROR_TEMP_1128" : {
     "message" : [
       "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1131" : {
-    "message" : [
-      "Data source <className> does not support <outputMode> output mode."
     ]
   },
   "_LEGACY_ERROR_TEMP_1132" : {
@@ -7163,11 +7176,6 @@
       "StreamingRelationExec cannot be executed."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2211" : {
-    "message" : [
-      "Invalid output mode: <outputMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2212" : {
     "message" : [
       "Invalid catalog name: <name>."
@@ -8487,11 +8495,6 @@
   "_LEGACY_ERROR_TEMP_3260" : {
     "message" : [
       "'<s>' is an invalid timestamp"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3261" : {
-    "message" : [
-      "Unknown output mode <outputMode>. Accepted output modes are 'append', 'complete', 'update'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3262" : {
