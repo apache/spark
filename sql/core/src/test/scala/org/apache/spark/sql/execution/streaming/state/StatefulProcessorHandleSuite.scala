@@ -45,6 +45,26 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
+  private def testWithTimeMode(testName: String, timeoutMode: String)
+      (testFunc: (TimeMode, String, String) => Unit): Unit = {
+      test(s"$timeoutMode timer - " + testName) {
+      val timeMode = timeoutMode match {
+        case "Processing" => TimeMode.ProcessingTime()
+        case "Event" => TimeMode.EventTime()
+      }
+
+      val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
+        TimerStateUtils.PROC_TIMERS_STATE_NAME
+      } else {
+        TimerStateUtils.EVENT_TIMERS_STATE_NAME
+      }
+      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+
+      testFunc(timeMode, keyToTsCFName, tsToKeyCFName)
+    }
+  }
+
   Seq("None", "ProcessingTime", "EventTime").foreach { timeMode =>
     test(s"value state creation with timeMode=$timeMode should succeed") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
@@ -143,19 +163,14 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
-    test(s"registering timeouts with timeMode=$timeMode should succeed") {
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    testWithTimeMode(
+      s"registering timeouts with timeMode=$timeoutMode should succeed", timeoutMode) {
+      (timeMode, keyToTsCFName, tsToKeyCFName) =>
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
-        val timerCFName = if (timeMode == "ProcessingTime") {
-          TimerStateUtils.PROC_TIMERS_STATE_NAME
-        } else {
-          TimerStateUtils.EVENT_TIMERS_STATE_NAME
-        }
-        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          UUID.randomUUID(), keyExprEncoder, timeMode,
           columnFamilyIds = Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
         handle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         assert(handle.getHandleState === StatefulProcessorHandleState.INITIALIZED)
@@ -172,19 +187,15 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
-    test(s"verify listing of registered timers with timeMode=$timeMode") {
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    testWithTimeMode(
+      s"verify listing of registered timers with timeMode=$timeoutMode should succeed",
+      timeoutMode) {
+      (timeMode, keyToTsCFName, tsToKeyCFName) =>
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-        val timerCFName = if (timeMode == "ProcessingTime") {
-          TimerStateUtils.PROC_TIMERS_STATE_NAME
-        } else {
-          TimerStateUtils.EVENT_TIMERS_STATE_NAME
-        }
-        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          UUID.randomUUID(), keyExprEncoder, timeMode,
           columnFamilyIds = Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
         handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
         assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
@@ -220,19 +231,15 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
-    test(s"registering timeouts with timeMode=$timeMode and invalid state should fail") {
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    testWithTimeMode(
+      s"registering timeouts with timeMode=$timeoutMode and invalid state should fail",
+      timeoutMode) {
+      (timeMode, keyToTsCFName, tsToKeyCFName) =>
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-        val timerCFName = if (timeMode == "ProcessingTime") {
-          TimerStateUtils.PROC_TIMERS_STATE_NAME
-        } else {
-          TimerStateUtils.EVENT_TIMERS_STATE_NAME
-        }
-        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          UUID.randomUUID(), keyExprEncoder, timeMode,
           columnFamilyIds = Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
 
         Seq(StatefulProcessorHandleState.CREATED,
@@ -246,15 +253,13 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("ttl States are populated for valueState and timeMode=ProcessingTime") {
+  testWithTimeMode(
+    "ttl States are populated for valueState and timeMode=ProcessingTime", "Processing") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-      val timerCFName = TimerStateUtils.PROC_TIMERS_STATE_NAME
-
-      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        UUID.randomUUID(), keyExprEncoder, timeMode,
         batchTimestampMs = Some(10), columnFamilyIds = Map(
           keyToTsCFName -> 1, tsToKeyCFName -> 2, "testState" -> 3,
           "_ttl_testState" -> 4
@@ -271,15 +276,13 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("ttl States are populated for listState and timeMode=ProcessingTime") {
+  testWithTimeMode(
+    "ttl States are populated for listState and timeMode=ProcessingTime", "Processing") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-      val timerCFName = TimerStateUtils.PROC_TIMERS_STATE_NAME
-
-      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        UUID.randomUUID(), keyExprEncoder, timeMode,
         batchTimestampMs = Some(10), columnFamilyIds = Map(
           keyToTsCFName -> 1, tsToKeyCFName -> 2, "testState" -> 3,
           "_ttl_testState" -> 4
@@ -296,15 +299,13 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("ttl States are populated for mapState and timeMode=ProcessingTime") {
+  testWithTimeMode(
+    "ttl States are populated for mapState and timeMode=ProcessingTime", "Processing") {
+    (timeMode, keyToTsCFName, tsToKeyCFName) =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val timerCFName = TimerStateUtils.PROC_TIMERS_STATE_NAME
-
-      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        UUID.randomUUID(), keyExprEncoder, timeMode,
         batchTimestampMs = Some(10), columnFamilyIds = Map(
           keyToTsCFName -> 1, tsToKeyCFName -> 2, "testState" -> 3,
           "_ttl_testState" -> 4
