@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.TestUtils
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerTaskEnd}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connector.write.SparkListenerSQLPartitionMetrics
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
@@ -104,55 +106,102 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(totalNumBytes > 0)
   }
 
+  private class CapturePartitionMetrics extends SparkListener {
+
+    val events: mutable.Buffer[SparkListenerSQLPartitionMetrics] =
+      mutable.Buffer[SparkListenerSQLPartitionMetrics]()
+
+    override def onOtherEvent(event: SparkListenerEvent): Unit = {
+      event match {
+        case metrics: SparkListenerSQLPartitionMetrics => events += metrics
+        case _ =>
+      }
+    }
+  }
+
+  protected def withSparkListener[L <: SparkListener]
+  (spark: SparkSession, listener: L)
+  (body: L => Unit): Unit = {
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      body(listener)
+    }
+    finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
   protected def testMetricsNonDynamicPartition(
       dataFormat: String,
       tableName: String): Unit = {
-    withTable(tableName) {
-      Seq((1, 2)).toDF("i", "j")
-        .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
+    val listener = new CapturePartitionMetrics()
+    withSparkListener(spark, listener) { _ =>
+      withTable(tableName) {
+        Seq((1, 2)).toDF("i", "j")
+          .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
 
-      val tableLocation =
-        new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
+        val tableLocation =
+          new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
 
-      // 2 files, 100 rows, 0 dynamic partition.
-      verifyWriteDataMetrics(Seq(2, 0, 100)) {
-        (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
-          .write.format(dataFormat).mode("overwrite").insertInto(tableName)
+        // 2 files, 100 rows, 0 dynamic partition.
+        verifyWriteDataMetrics(Seq(2, 0, 100)) {
+          (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
+            .write.format(dataFormat).mode("overwrite").insertInto(tableName)
+        }
+        assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
       }
-      assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
     }
+
+    // Verify that there are no partition metrics for the entire write process.
+    assert(listener.events.isEmpty)
   }
 
   protected def testMetricsDynamicPartition(
       provider: String,
       dataFormat: String,
       tableName: String): Unit = {
-    withTable(tableName) {
-      withTempPath { dir =>
-        spark.sql(
-          s"""
-             |CREATE TABLE $tableName(a int, b int)
-             |USING $provider
-             |PARTITIONED BY(a)
-             |LOCATION '${dir.toURI}'
+    val listener = new CapturePartitionMetrics()
+    withSparkListener(spark, listener) { _ =>
+      withTable(tableName) {
+        withTempPath { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE $tableName(a int, b int)
+               |USING $provider
+               |PARTITIONED BY(a)
+               |LOCATION '${dir.toURI}'
            """.stripMargin)
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
-          .selectExpr("id a", "id b")
+          val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+            .selectExpr("id a", "id b")
 
-        // 40 files, 80 rows, 40 dynamic partitions.
-        verifyWriteDataMetrics(Seq(40, 40, 80)) {
-          df.union(df).repartition(2, $"a")
-            .write
-            .format(dataFormat)
-            .mode("overwrite")
-            .insertInto(tableName)
+          // 40 files, 80 rows, 40 dynamic partitions.
+          verifyWriteDataMetrics(Seq(40, 40, 80)) {
+            df.union(df).repartition(2, $"a")
+              .write
+              .format(dataFormat)
+              .mode("overwrite")
+              .insertInto(tableName)
+          }
+          assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
         }
-        assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
       }
     }
+
+    // Verify that there a single event for partition metrics for the entire write process.  This
+    // test creates the table and performs a repartitioning, but only 1 action actually results
+    // in collecting partition metrics.
+    assert(listener.events.length == 1)
+    val event = listener.events.head
+
+    // Verify the number of partitions
+    assert(event.metrics.keySet.size == 40)
+    // Verify the number of files per partition
+    event.metrics.values.forEach(partitionStats => assert(partitionStats.numFiles == 1))
+    // Verify the number of rows per partition
+    event.metrics.values.forEach(partitionStats => assert(partitionStats.numRecords == 2))
   }
 
   /**

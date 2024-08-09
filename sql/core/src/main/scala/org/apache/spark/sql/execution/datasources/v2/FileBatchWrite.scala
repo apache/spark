@@ -40,7 +40,8 @@ class FileBatchWrite(
       log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
     processStats(
-      description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration)
+      description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration,
+      results.map(_.summary.updatedPartitionsMap).reduce(_ ++ _))
     logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
   }
 

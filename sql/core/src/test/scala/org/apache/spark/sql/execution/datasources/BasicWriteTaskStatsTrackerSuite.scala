@@ -23,7 +23,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FilterFileSystem, Path}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker.FILE_LENGTH_XATTR
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -68,6 +72,16 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
       files: Int,
       bytes: Int): Unit = {
     val stats = finalStatus(tracker)
+    assert(files === stats.numFiles, "Wrong number of files")
+    assert(bytes === stats.numBytes, "Wrong byte count of file size")
+  }
+
+  private def assertPartitionStats(
+      tracker: BasicWriteTaskStatsTracker,
+      partition: InternalRow,
+      files: Int,
+      bytes: Int): Unit = {
+    val stats = finalStatus(tracker).partitionsStats.apply(partition)
     assert(files === stats.numFiles, "Wrong number of files")
     assert(bytes === stats.numBytes, "Wrong byte count of file size")
   }
@@ -123,6 +137,23 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     assertStats(tracker, 1, len1)
   }
 
+  test("Partitioned file with data") {
+    val schema: StructType = new StructType()
+      .add("day", StringType)
+    val row = Row("day", "Monday")
+    val lit = Literal.create(row, schema)
+    val internalRow = lit.value.asInstanceOf[InternalRow]
+
+    val file = new Path(tempDirPath, "day=Monday/file-with-data")
+    val tracker = new BasicWriteTaskStatsTracker(conf)
+    tracker.newPartition(internalRow)
+    tracker.newFile(file.toString, Some(internalRow))
+    write1(file)
+    tracker.closeFile(file.toString)
+    assertStats(tracker, 1, len1)
+    assertPartitionStats(tracker, internalRow, 1, len1)
+  }
+
   test("Open file") {
     val file = new Path(tempDirPath, "file-open")
     val tracker = new BasicWriteTaskStatsTracker(conf)
@@ -150,6 +181,27 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     write2(file2)
     tracker.closeFile(file2.toString)
     assertStats(tracker, 2, len1 + len2)
+  }
+
+  test("Partitioned two files") {
+    val schema: StructType = new StructType()
+      .add("day", StringType)
+    val row = Row("day", "Monday")
+    val lit = Literal.create(row, schema)
+    val internalRow = lit.value.asInstanceOf[InternalRow]
+
+    val file1 = new Path(tempDirPath, "day=Monday/f-2-1")
+    val file2 = new Path(tempDirPath, "day=Monday/f-2-2")
+    val tracker = new BasicWriteTaskStatsTracker(conf)
+    tracker.newPartition(internalRow)
+    tracker.newFile(file1.toString, Some(internalRow))
+    write1(file1)
+    tracker.closeFile(file1.toString)
+    tracker.newFile(file2.toString, Some(internalRow))
+    write2(file2)
+    tracker.closeFile(file2.toString)
+    assertStats(tracker, 2, len1 + len2)
+    assertPartitionStats(tracker, internalRow, 2, len1 + len2)
   }
 
   test("Three files, last one empty") {
