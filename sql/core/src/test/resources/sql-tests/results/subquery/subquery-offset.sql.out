@@ -80,6 +80,38 @@ struct<x1:int,x2:int>
 
 
 -- !query
+select * from x where exists (select * from y where x1 = y1 offset 2)
+-- !query schema
+struct<x1:int,x2:int>
+-- !query output
+
+
+
+-- !query
+select * from x join lateral (select * from y where x1 = y1 offset 2)
+-- !query schema
+struct<x1:int,x2:int,y1:int,y2:int>
+-- !query output
+
+
+
+-- !query
+select * from x where x1 in (select y1 from y offset 2)
+-- !query schema
+struct<x1:int,x2:int>
+-- !query output
+1	1
+
+
+-- !query
+select * from x where (select sum(y2) from y where x1 = y1 offset 2) > 2
+-- !query schema
+struct<x1:int,x2:int>
+-- !query output
+
+
+
+-- !query
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -137,6 +169,36 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    GROUP  BY state
                    ORDER  BY state
                    LIMIT 2
+                   OFFSET 1)
+-- !query schema
+struct<emp_name:string>
+-- !query output
+
+
+
+-- !query
+SELECT emp_name
+FROM   emp
+WHERE EXISTS (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   OFFSET 1)
+-- !query schema
+struct<emp_name:string>
+-- !query output
+
+
+
+-- !query
+SELECT emp_name
+FROM   emp
+JOIN LATERAL (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
                    OFFSET 1)
 -- !query schema
 struct<emp_name:string>

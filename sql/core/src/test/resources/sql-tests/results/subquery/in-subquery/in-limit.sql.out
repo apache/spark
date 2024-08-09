@@ -95,6 +95,69 @@ val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
 -- !query
 SELECT *
 FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d)
+LIMIT  2
+OFFSET 1
+-- !query schema
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+-- !query output
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+
+
+-- !query
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d
+               LIMIT 10
+               OFFSET 2)
+LIMIT  2
+OFFSET 1
+-- !query schema
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+-- !query output
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+
+
+-- !query
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d)
+OFFSET 1
+-- !query schema
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+-- !query output
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+
+
+-- !query
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d
+               OFFSET 2)
+OFFSET 1
+-- !query schema
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+-- !query output
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+
+
+-- !query
+SELECT *
+FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
                WHERE  t2b >= 8
