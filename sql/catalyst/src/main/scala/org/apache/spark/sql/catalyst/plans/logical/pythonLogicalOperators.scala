@@ -21,7 +21,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -159,6 +159,41 @@ case class FlatMapGroupsInPandasWithState(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
+}
+
+object TransformWithStateInPandas {
+  def apply(functionExpr: Expression,
+      groupingAttributes: Seq[Attribute],
+      outputAttrs: Seq[Attribute],
+      outputMode: OutputMode,
+      timeMode: TimeMode,
+      child: LogicalPlan): TransformWithStateInPandas = {
+
+    new TransformWithStateInPandas(
+      functionExpr,
+      groupingAttributes,
+      outputAttrs,
+      outputMode,
+      timeMode,
+      child = child
+    )
+  }
+}
+
+case class TransformWithStateInPandas(
+    functionExpr: Expression,
+    groupingAttributes: Seq[Attribute],
+    outputAttrs: Seq[Attribute],
+    outputMode: OutputMode,
+    timeMode: TimeMode,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = outputAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): TransformWithStateInPandas = copy(child = newChild)
 }
 
 /**
