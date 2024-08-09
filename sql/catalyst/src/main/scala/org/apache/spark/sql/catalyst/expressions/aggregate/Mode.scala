@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -50,7 +50,9 @@ case class Mode(
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (UnsafeRowUtils.isBinaryStable(child.dataType) || child.dataType.isInstanceOf[StringType]) {
+    if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
+      !child.dataType.existsRecursively(f => f.isInstanceOf[MapType] &&
+        !UnsafeRowUtils.isBinaryStable(f))) {
       /*
         * The Mode class uses collation awareness logic to handle string data.
         * Complex types with collated fields are not yet supported.
@@ -58,9 +60,9 @@ case class Mode(
       // TODO: SPARK-48700: Mode expression for complex types (all collations)
       super.checkInputDataTypes()
     } else {
-      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was" +
-        " a type of binary-unstable type that is " +
-        s"not currently supported by ${prettyName}.")
+      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' includes" +
+        " a map with keys and/or values which are not binary-stable. This is not yet" +
+        s"supported by ${prettyName}.")
     }
   }
 
@@ -86,6 +88,58 @@ case class Mode(
     buffer
   }
 
+  private def getCollationAwareBuffer(
+      childDataType: DataType,
+      buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
+    def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
+      buffer.groupMapReduce(t =>
+        groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
+    }
+    def determineBufferingFunction(
+        childDataType: DataType): Option[AnyRef => _] = {
+      childDataType match {
+        case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
+        case _ => Some(collationAwareTransform(_, childDataType))
+      }
+    }
+    determineBufferingFunction(childDataType).map(groupAndReduceBuffer).getOrElse(buffer)
+  }
+
+  private def collationAwareTransform(myData: AnyRef, myElementType: DataType): AnyRef = {
+    if (UnsafeRowUtils.isBinaryStable(myElementType)) {
+      // Short-circuit if there is no collation.
+      myData
+    } else if (myElementType.isInstanceOf[StructType]) {
+      processStructTypeWithBuffer(
+        myData.asInstanceOf[InternalRow].toSeq(
+          myElementType.asInstanceOf[StructType]).zip(
+          myElementType.asInstanceOf[StructType].fields))
+    } else if (myElementType.isInstanceOf[ArrayType]) {
+      processArrayTypeWithBuffer(
+        myElementType.asInstanceOf[ArrayType],
+        myData.asInstanceOf[ArrayData])
+    } else if (myElementType.isInstanceOf[StringType]) {
+      CollationFactory.getCollationKey(
+        myData.asInstanceOf[UTF8String],
+        myElementType.asInstanceOf[StringType].collationId)
+    } else {
+      throw new UnsupportedOperationException(
+        s"Unsupported data type for collation-aware mode: $myElementType")
+    }
+  }
+
+  private def processStructTypeWithBuffer(
+      tuples: Seq[(Any, StructField)]): Seq[Any] = {
+   tuples.map(t => collationAwareTransform(t._1.asInstanceOf[AnyRef], t._2.dataType))
+  }
+
+  private def processArrayTypeWithBuffer(
+      a: ArrayType,
+      data: ArrayData): Seq[Any] = {
+    (0 until data.numElements()).map(i =>
+      collationAwareTransform(data.get(i, a.elementType), a.elementType))
+  }
+
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
     if (buffer.isEmpty) {
       return null
@@ -102,17 +156,12 @@ case class Mode(
       *  to a single value (the sum of the counts), and finally reduces the groups to a single map.
       *
       * The new map is then used in the rest of the Mode evaluation logic.
+      *
+      * It is expected to work for all simple and complex types with
+      *  collated fields, except for MapType (temporarily).
       */
-    val collationAwareBuffer = child.dataType match {
-      case c: StringType if
-        !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
-        val collationId = c.collationId
-        val modeMap = buffer.toSeq.groupMapReduce {
-         case (k, _) => CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], collationId)
-        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
-        modeMap
-      case _ => buffer
-    }
+    val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
