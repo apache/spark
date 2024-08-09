@@ -1778,7 +1778,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary1", false),
-        Row("test", "employee_bonus", false)))
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
