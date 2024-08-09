@@ -685,7 +685,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val rowNumberAlias = Alias(rowNumber, "rn")()
               // Window function computes row_number() when partitioning by correlated references,
               // and projects all the other fields from the input.
-              val window = Window(Seq(rowNumberAlias) ++ newChild.output,
+              val window = Window(Seq(rowNumberAlias),
                 partitionFields, orderByFields, newChild)
               val filter = Filter(GreaterThan(rowNumberAlias.toAttribute, offset), window)
               val project = Project(newChild.output, filter)
@@ -735,7 +735,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val rowNumberAlias = Alias(rowNumber, "rn")()
               // Window function computes row_number() when partitioning by correlated references,
               // and projects all the other fields from the input.
-              val window = Window(Seq(rowNumberAlias) ++ newChild.output,
+              val window = Window(Seq(rowNumberAlias),
                 partitionFields, orderByFields, newChild)
               val filter = offsetExpr match {
                 case IntegerLiteral(0) =>
