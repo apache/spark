@@ -256,6 +256,26 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
+      "INVALID_CHANGE_LOG_READER_VERSION" : {
+        "message" : [
+          "The change log reader version cannot be <version>."
+        ]
+      },
+      "INVALID_CHANGE_LOG_WRITER_VERSION" : {
+        "message" : [
+          "The change log writer version cannot be <version>."
+        ]
+      },
+      "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load RocksDB state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
       "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
         "message" : [
           "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
