@@ -4978,6 +4978,41 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SHOW_CREATE_TABLE" : {
+    "message" : [
+      "Unsupported show create table command:"
+    ],
+    "subClass" : {
+      "ON_SPARK_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
+        "message" : [
+          "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+        ]
+      },
+      "ON_TEMPORARY_VIEW" : {
+        "message" : [
+          "SHOW CREATE TABLE is not supported on a temporary view: <table>."
+        ]
+      },
+      "ON_TRANSACTIONAL_HIVE_TABLE" : {
+        "message" : [
+          "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+        ]
+      },
+      "WITH_UNSUPPORTED_FEATURE" : {
+        "message" : [
+          "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
+          "<unsupportedFeatures>"
+        ]
+      },
+      "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
+        "message" : [
+          "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+          "<configs>"
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -6206,41 +6241,6 @@
   "_LEGACY_ERROR_TEMP_1268" : {
     "message" : [
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1270" : {
-    "message" : [
-      "SHOW CREATE TABLE is not supported on a temporary view: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1271" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported feature(s)",
-      "<unsupportedFeatures>",
-      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1272" : {
-    "message" : [
-      "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1273" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
-      "<configs>",
-      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1274" : {
-    "message" : [
-      "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1275" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
-      "<features>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1276" : {
