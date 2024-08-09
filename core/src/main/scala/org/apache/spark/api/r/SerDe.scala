@@ -21,7 +21,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Time, Timestamp}
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 import org.apache.spark.util.collection.Utils
 
@@ -296,6 +296,7 @@ private[spark] object SerDe {
       // type "scala.collection.mutable.ArraySeq"
       val value = obj match {
         case wa: mutable.ArraySeq[_] => wa.array
+        case im: immutable.ArraySeq[_] => im.unsafeArray
         case other => other
       }
 

@@ -23,7 +23,7 @@ import java.util
 import java.util.{Collections, Objects}
 
 import scala.beans.BeanProperty
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.reflect.classTag
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
@@ -511,9 +511,9 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     val encoder = toRowEncoder(schema)
     val iterator = roundTrip(encoder, Iterator.single(Row(Seq())))
     val Seq(Row(raw)) = iterator.toSeq
-    val seq = raw.asInstanceOf[mutable.ArraySeq[String]]
+    val seq = raw.asInstanceOf[immutable.ArraySeq[String]]
     assert(seq.isEmpty)
-    assert(seq.array.getClass == classOf[Array[String]])
+    assert(seq.unsafeArray.getClass == classOf[Array[String]])
     iterator.close()
   }
 

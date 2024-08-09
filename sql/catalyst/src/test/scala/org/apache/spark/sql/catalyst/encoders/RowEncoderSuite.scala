@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.util.Random
 
 import org.apache.spark.SparkRuntimeException
@@ -315,10 +315,10 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
     val schema = new StructType().add("a", ArrayType(dt, nullable))
-    test(s"RowEncoder should return mutable.ArraySeq with properly typed array for $schema") {
+    test(s"RowEncoder should return immutable.ArraySeq with properly typed array for $schema") {
       val encoder = ExpressionEncoder(schema).resolveAndBind()
-      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.ArraySeq[_]](0)
-      assert(result.array.getClass === data.getClass)
+      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[immutable.ArraySeq[_]](0)
+      assert(result.unsafeArray.getClass === data.getClass)
       assert(result === data)
     }
   }

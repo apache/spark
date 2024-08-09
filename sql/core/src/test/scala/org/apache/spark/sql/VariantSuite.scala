@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import scala.collection.mutable
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
@@ -167,7 +167,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         if (v == null) {
           "null"
         } else {
-          v.asInstanceOf[mutable.ArraySeq[Any]]
+          v.asInstanceOf[immutable.ArraySeq[Any]]
            .map(_.asInstanceOf[VariantVal].debugString()).mkString(",")
         }
       }.sorted
