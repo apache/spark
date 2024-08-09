@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.streaming.StateTTLSchema.TTL_VALUE_ROW_SCH
 import org.apache.spark.sql.execution.streaming.TimerStateUtils.TIMER_VALUE_ROW_SCHEMA
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.streaming.TimeMode
 
 
 object StateStoreColumnFamilySchemaUtils {
