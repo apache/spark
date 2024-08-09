@@ -400,6 +400,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+
+        // Check for unresolved TABLE arguments after the main check above to allow other analysis
+        // errors to apply first, providing better error messages.
+        getAllExpressions(operator).foreach(_.foreachUp {
+          case expr: FunctionTableSubqueryArgumentExpression =>
+            expr.failAnalysis(
+              errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+              messageParameters = Map("treeNode" -> planToString(plan)))
+          case _ =>
+        })
+
         if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
@@ -1078,9 +1089,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case _: FunctionTableSubqueryArgumentExpression =>
-        expr.failAnalysis(
-          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-          messageParameters = Map("treeNode" -> planToString(plan)))
+        // Do nothing here, since we will check for this pattern later.
 
       case inSubqueryOrExistsSubquery =>
         plan match {
