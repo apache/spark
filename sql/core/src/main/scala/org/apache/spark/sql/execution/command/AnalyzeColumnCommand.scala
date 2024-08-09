@@ -62,12 +62,16 @@ case class AnalyzeColumnCommand(
   private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
     val df = Dataset.ofRows(sparkSession, plan)
-    cacheManager.lookupCachedData(df).map { cachedData =>
-      val columnsToAnalyze = getColumnsToAnalyze(
-        tableIdent, cachedData.cachedRepresentation, columnNames, allColumns)
-      cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
-      cachedData
-    }.isDefined
+    cacheManager.lookupCachedData(df).exists { cachedData =>
+      if (cachedData.cachedRepresentation.isRight) {
+        val columnsToAnalyze = getColumnsToAnalyze(
+          tableIdent, cachedData.cachedRepresentation.merge, columnNames, allColumns)
+        cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
+        true
+      } else {
+        false
+      }
+    }
   }
 
   private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
