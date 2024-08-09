@@ -1995,19 +1995,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1172",
+      errorClass = "PARQUET_TYPE_NOT_SUPPORTED",
       messageParameters = Map("parquetType" -> parquetType))
   }
 
   def illegalParquetTypeError(parquetType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1173",
+      errorClass = "PARQUET_TYPE_ILLEGAL",
       messageParameters = Map("parquetType" -> parquetType))
   }
 
   def unrecognizedParquetTypeError(field: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1174",
+      errorClass = "PARQUET_TYPE_NOT_RECOGNIZED",
       messageParameters = Map("field" -> field))
   }
 

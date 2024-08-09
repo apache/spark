@@ -24,6 +24,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import logging
 import threading
 import os
 import copy
@@ -863,7 +864,10 @@ class SparkConnectClient(object):
         """
         Return given plan as a PyArrow Table iterator.
         """
-        logger.info(f"Executing plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
@@ -879,7 +883,10 @@ class SparkConnectClient(object):
         """
         Return given plan as a PyArrow Table.
         """
-        logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req, observations)
@@ -895,7 +902,10 @@ class SparkConnectClient(object):
         """
         Return given plan as a pandas DataFrame.
         """
-        logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         (self_destruct_conf,) = self.get_config_with_defaults(
@@ -1045,7 +1055,10 @@ class SparkConnectClient(object):
         """
         Return schema for given plan.
         """
-        logger.debug(f"Schema for plan: {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Schema for plan: {self._proto_to_string(plan, True)}")
         schema = self._analyze(method="schema", plan=plan).schema
         assert schema is not None
         # Server side should populate the struct field which is the schema.
@@ -1056,7 +1069,12 @@ class SparkConnectClient(object):
         """
         Return explain string for given plan.
         """
-        logger.debug(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(
+                f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}"
+            )
         result = self._analyze(
             method="explain", plan=plan, explain_mode=explain_mode
         ).explain_string
@@ -1069,7 +1087,10 @@ class SparkConnectClient(object):
         """
         Execute given command.
         """
-        logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1090,9 +1111,12 @@ class SparkConnectClient(object):
         """
         Execute given command. Similar to execute_command, but the value is returned using yield.
         """
-        logger.debug(
-            f"Execute command as iterator for command {self._proto_to_string(command, True)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(
+                f"Execute command as iterator for command {self._proto_to_string(command, True)}"
+            )
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1311,7 +1335,10 @@ class SparkConnectClient(object):
             Dict[str, Any],
         ]
     ]:
-        logger.debug(f"ExecuteAndFetchAsIterator. Request: {req}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"ExecuteAndFetchAsIterator. Request: {self._proto_to_string(req)}")
 
         num_records = 0
 
@@ -1330,7 +1357,12 @@ class SparkConnectClient(object):
             nonlocal num_records
             # The session ID is the local session ID and should match what we expect.
             self._verify_response_integrity(b)
-            logger.debug(f"ExecuteAndFetchAsIterator. Response received: {b}")
+            if logger.isEnabledFor(logging.DEBUG):
+                # inside an if statement to not incur a performance cost converting proto to string
+                # when not at debug log level.
+                logger.debug(
+                    f"ExecuteAndFetchAsIterator. Response received: {self._proto_to_string(b)}"
+                )
 
             if b.HasField("metrics"):
                 logger.debug("Received metric batch.")
