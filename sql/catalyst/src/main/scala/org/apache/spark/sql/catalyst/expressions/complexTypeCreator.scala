@@ -436,7 +436,7 @@ object CreateStruct {
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
   """,
-  since = "1.5.0",
+  since = "3.5.0",
   group = "struct_funcs")
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
