@@ -74,3 +74,18 @@ case class IfElseStatement(
     elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
 }
+
+/**
+ * Logical operator for while statement.
+ * @param condition Any expression evaluating to a Boolean.
+ *                 Body is executed as long as the condition evaluates to true
+ * @param body Compound body is a collection of statements that are executed if condition is true.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the LOOP statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class WhileStatement(
+    condition: SingleStatement,
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement
