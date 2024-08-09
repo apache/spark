@@ -85,6 +85,10 @@ private[spark] class SparkSubmit extends Logging {
         Logging.disableStructuredLogging()
       }
     }
+
+    // We should initialize log again after `spark.log.structuredLogging.enabled` effected
+    Logging.uninitialize()
+
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
