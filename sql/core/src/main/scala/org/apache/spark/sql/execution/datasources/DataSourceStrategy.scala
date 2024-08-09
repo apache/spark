@@ -35,11 +35,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{EqualTo => ExpressionsEqualTo, In => ExpressionsIn}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, UNION}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
@@ -186,6 +188,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       // values in the PARTITION clause (e.g. b in the above example).
       // dynamic_partitioning_columns are partitioning columns that do not assigned
       // values in the PARTITION clause (e.g. c in the above example).
+      val pullTopPredicateParts = mutable.Map[String, Option[String]]()
       val actualQuery = if (parts.exists(_._2.isDefined)) {
         val projectList = convertStaticPartitions(
           sourceAttributes = query.output,
@@ -194,6 +197,22 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
           targetPartitionSchema = t.partitionSchema)
         Project(projectList, query)
       } else {
+        query.transformWithPruning(!_.containsAnyPattern(UNION, JOIN)) {
+          case filter @ LogicalFilter(condition, _) if
+            condition.deterministic && !SubqueryExpression.hasSubquery(condition) =>
+            val normalizedFilters = DataSourceStrategy.normalizeExprs(Seq(condition), l.output)
+            val (partitionKeyFilters, _) = DataSourceUtils
+              .getPartitionFiltersAndDataFilters(t.partitionSchema, normalizedFilters)
+
+            partitionKeyFilters.map {
+              case ExpressionsEqualTo(AttributeReference(name, _, _, _), Literal(value, _)) =>
+                pullTopPredicateParts += (name -> Some(value.toString))
+              case ExpressionsIn(AttributeReference(name, _, _, _), list @ Seq(Literal(value, _)))
+                if list.size == 1 => pullTopPredicateParts += (name -> Some(value.toString))
+              case _ => // do nothing
+            }
+            filter
+        }
         query
       }
 
@@ -208,6 +227,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       val partitionSchema = actualQuery.resolve(
         t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      val pullTopPredicateStaticPartitions = pullTopPredicateParts.filter(_._2.nonEmpty)
+        .map { case (k, v) => k -> v.get }.toMap
       val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       val insertCommand = InsertIntoHadoopFsRelationCommand(
@@ -222,7 +243,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         mode,
         table,
         Some(t.location),
-        actualQuery.output.map(_.name))
+        actualQuery.output.map(_.name),
+        pullTopPredicateStaticPartitions)
 
       // For dynamic partition overwrite, we do not delete partition directories ahead.
       // We write to staging directories and move to final partition directories after writing
