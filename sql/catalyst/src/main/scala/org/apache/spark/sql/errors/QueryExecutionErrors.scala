@@ -2837,4 +2837,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("unit"),
         "invalidValue" -> s"'$invalidValue'"))
   }
+
+  def unsupportedStreamingQueryWithoutWatermark(
+      outputMode: String,
+      statefulOperator: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_STREAMING_QUERY_WITHOUT_WATERMARK",
+      messageParameters = Map(
+        "outputMode" -> outputMode,
+        "statefulOperator" -> statefulOperator)
+    )
+  }
 }
