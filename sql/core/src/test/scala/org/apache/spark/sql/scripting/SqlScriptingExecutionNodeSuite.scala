@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -32,6 +33,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   // Helpers
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
+
+    override def execute(session: SparkSession): Unit = ()
   }
 
   case class TestIfElseCondition(condVal: Boolean, description: String)
@@ -39,6 +42,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       isInternal = false)
+
+  case class TestCompoundBody(statements: Seq[CompoundStatementExec])
+    extends CompoundBodyExec(statements, spark)
+
+  case class TestIfElseStatement(
+      conditions: Seq[TestIfElseCondition],
+      conditionalBodies: Seq[TestCompoundBody],
+      elseBody: Option[TestCompoundBody])
+    extends IfElseStatementExec(conditions, conditionalBodies, elseBody, spark)
 
   private def extractStatementValue(statement: CompoundStatementExec): String =
     statement match {
@@ -49,44 +61,43 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   // Tests
   test("test body - single statement") {
-    val iter = new CompoundBodyExec(Seq(TestLeafStatement("one"))).getTreeIterator
+    val iter = TestCompoundBody(Seq(TestLeafStatement("one"))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one"))
   }
 
   test("test body - no nesting") {
-    val iter = new CompoundBodyExec(
+    val iter = TestCompoundBody(
       Seq(
         TestLeafStatement("one"),
         TestLeafStatement("two"),
-        TestLeafStatement("three")))
-      .getTreeIterator
+        TestLeafStatement("three")
+      )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "two", "three"))
   }
 
   test("test body - nesting") {
-    val iter = new CompoundBodyExec(
+    val iter = TestCompoundBody(
       Seq(
-        new CompoundBodyExec(Seq(TestLeafStatement("one"), TestLeafStatement("two"))),
+        TestCompoundBody(Seq(TestLeafStatement("one"), TestLeafStatement("two"))),
         TestLeafStatement("three"),
-        new CompoundBodyExec(Seq(TestLeafStatement("four"), TestLeafStatement("five")))))
-      .getTreeIterator
+        TestCompoundBody(Seq(TestLeafStatement("four"), TestLeafStatement("five")))
+      )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "two", "three", "four", "five"))
   }
 
   test("if else - enter body of the IF clause") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = true, description = "con1")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+          TestCompoundBody(Seq(TestLeafStatement("body1")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body2")))),
-        session = spark
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2"))))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -94,16 +105,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else - enter body of the ELSE clause") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+          TestCompoundBody(Seq(TestLeafStatement("body1")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body2")))),
-        session = spark
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2"))))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -111,18 +121,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - enter body of the IF clause") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = true, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body3")))),
-        session = spark
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3"))))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -130,18 +139,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - enter body of the ELSE IF clause") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body3")))),
-        session = spark
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3"))))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -149,20 +157,19 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - enter body of the second ELSE IF clause") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2"),
           TestIfElseCondition(condVal = true, description = "con3")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body2"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body3")))
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2"))),
+          TestCompoundBody(Seq(TestLeafStatement("body3")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body4")))),
-        session = spark
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body4"))))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -170,18 +177,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - enter body of the ELSE clause") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body3")))),
-        session = spark
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3"))))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -189,18 +195,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - without else (successful check)") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
-        elseBody = None,
-        session = spark
+        elseBody = None
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -208,18 +213,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - without else (unsuccessful checks)") {
-    val iter = new CompoundBodyExec(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(Seq(
+      TestIfElseStatement(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
-          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
-        elseBody = None,
-        session = spark
+        elseBody = None
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq

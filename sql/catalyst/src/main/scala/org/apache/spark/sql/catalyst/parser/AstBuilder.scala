@@ -117,13 +117,14 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCompoundOrSingleStatement(
-      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+      ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!SQLConf.get.sqlScriptingEnabled) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
-      val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)))
+      visitSingleStatement(ctx.singleStatement())
     }
   }
 
@@ -182,15 +183,15 @@ class AstBuilder extends DataTypeAstBuilder
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-              el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
+            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) => withOrigin(bl) {
           throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
         }
-      case (None, Some(el: EndLabelContext)) =>
-        withOrigin(el) {
+      case (None, Some(el: EndLabelContext)) => withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            el.multipartIdentifier().getText)
         }
       case _ =>
     }
@@ -225,8 +226,7 @@ class AstBuilder extends DataTypeAstBuilder
             OneRowRelation()))
       }),
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
-      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
-    )
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
   }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
