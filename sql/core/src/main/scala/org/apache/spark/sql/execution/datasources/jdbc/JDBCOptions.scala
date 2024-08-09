@@ -283,6 +283,14 @@ class JdbcOptionsInWrite(
 }
 
 object JDBCOptions {
+
+  /**
+   * Load DriverManager first to avoid any race condition between
+   * DriverManager static initialization block and specific driver class's
+   * static initialization block. e.g. com.mysql.jdbc.Driver
+   */
+  DriverManager.getDrivers
+
   private val curId = new java.util.concurrent.atomic.AtomicLong(0L)
   private val jdbcOptionNames = collection.mutable.Set[String]()
 
