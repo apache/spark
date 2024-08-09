@@ -22,10 +22,21 @@ import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
 private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
+
+  /**
+   * Returns jdbc version that this dialect uses.
+   */
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.DERBY_JDBC_VERSION)
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.DERBY_DIALECT_VERSION)
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
