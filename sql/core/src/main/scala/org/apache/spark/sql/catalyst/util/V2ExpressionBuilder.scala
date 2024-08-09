@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTru
 import org.apache.spark.sql.execution.datasources.PushableExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.util.Utils
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -42,22 +43,33 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     if (isPredicate) {
       val translated = build()
 
-      val modifiedExprOpt = if (SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE) &&
-        translated.isDefined &&
-        !translated.get.isInstanceOf[V2Predicate]) {
+      val modifiedExprOpt = if (
+        SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
+          && translated.isDefined
+          && !translated.get.isInstanceOf[V2Predicate]) {
 
         // When isPredicate is specified we always expect to receive predicate.
         // If this is not the case, and we received something that is not a predicate -
         // don't fail query, act as if we didn't know how to translate it at all.
         logWarning(log"Predicate expected but got class: ${MDC(EXPR, translated.get.describe())}")
         None
-      } else { translated }
+      } else {
+        translated
+      }
+
+      // for testing purposes we still want to assert on initial
+      // result of build - no matter the SQLConf
+      translated.foreach(t => assert(Utils.isTesting &&
+        t.isInstanceOf[V2Predicate],
+        s"Predicate expected but found, ${t.describe()}"))
 
       modifiedExprOpt.map { v =>
         assert(v.isInstanceOf[V2Predicate])
         v.asInstanceOf[V2Predicate]
       }
-    } else { None }
+    } else {
+      None
+    }
   }
 
   private def canTranslate(b: BinaryOperator) = b match {
