@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
@@ -160,9 +160,10 @@ class StatePartitionReader(
             stateVarType match {
               case StateVariableType.ValueState =>
                 if (hasTTLEnabled) {
-                  unifyStateRowPairWithTTL((pair.key, pair.value))
+                  StateSchemaUtils.unifyStateRowPairWithTTL((pair.key, pair.value), valueSchema,
+                    partition.partition)
                 } else {
-                  unifyStateRowPair((pair.key, pair.value))
+                  StateSchemaUtils.unifyStateRowPair((pair.key, pair.value), partition.partition)
                 }
 
               case _ =>
@@ -171,7 +172,7 @@ class StatePartitionReader(
             }
 
           case None =>
-            unifyStateRowPair((pair.key, pair.value))
+            StateSchemaUtils.unifyStateRowPair((pair.key, pair.value), partition.partition)
         }
       )
   }
@@ -180,24 +181,6 @@ class StatePartitionReader(
     store.abort()
     super.close()
   }
-
-  private def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
-    val row = new GenericInternalRow(3)
-    row.update(0, pair._1)
-    row.update(1, pair._2)
-    row.update(2, partition.partition)
-    row
-  }
-
-  private def unifyStateRowPairWithTTL(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
-    val row = new GenericInternalRow(4)
-    row.update(0, pair._1)
-    row.update(1, pair._2.get(0, valueSchema))
-    row.update(2, pair._2.get(1, LongType))
-    row.update(3, partition.partition)
-    row
-  }
-
 }
 
 /**
