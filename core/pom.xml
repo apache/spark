@@ -617,6 +617,26 @@
       </properties>
     </profile>
     <profile>
+      <id>opentelemetry-reporter</id>
+      <dependencies>
+        <dependency>
+          <groupId>io.opentelemetry</groupId>
+          <artifactId>opentelemetry-sdk</artifactId>
+          <version>1.40.0</version>
+        </dependency>
+        <dependency>
+          <groupId>io.opentelemetry</groupId>
+          <artifactId>opentelemetry-api</artifactId>
+          <version>1.40.0</version>
+        </dependency>
+        <dependency>
+          <groupId>io.opentelemetry</groupId>
+          <artifactId>opentelemetry-exporter-otlp</artifactId>
+          <version>1.40.0</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>sparkr</id>
       <build>
         <plugins>
