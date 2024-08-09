@@ -71,28 +71,22 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       properties: java.util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
     val key = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY
-    val updatedProps =
-      if (properties.containsKey(TableCatalog.PROP_LOCATION)) {
-        val newProps = new java.util.HashMap[String, String]()
-        newProps.putAll(properties)
-        newProps.put(TableCatalog.PROP_EXTERNAL, "true")
-        newProps
-      } else {
-        properties
-      }
+    val newProps = new java.util.HashMap[String, String]()
+    newProps.putAll(properties)
+    if (properties.containsKey(TableCatalog.PROP_LOCATION)) {
+      newProps.put(TableCatalog.PROP_EXTERNAL, "true")
+    }
 
-    val propsWithLocation = if (updatedProps.containsKey(key)) {
+    val propsWithLocation = if (newProps.containsKey(key)) {
       // Always set a location so that CREATE EXTERNAL TABLE won't fail with LOCATION not specified.
-      if (!updatedProps.containsKey(TableCatalog.PROP_LOCATION)) {
-        val newProps = new java.util.HashMap[String, String]()
-        newProps.putAll(updatedProps)
+      if (!newProps.containsKey(TableCatalog.PROP_LOCATION)) {
         newProps.put(TableCatalog.PROP_LOCATION, "file:/abc")
         newProps
       } else {
-        updatedProps
+        newProps
       }
     } else {
-      updatedProps
+      newProps
     }
     super.createTable(ident, columns, partitions, propsWithLocation)
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)

@@ -2105,6 +2105,9 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("REPLACE TABLE: v1 table") {
     sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    val descInfo = sql(s"DESCRIBE TABLE EXTENDED tbl").collectAsList()
+    // This is the provider field that we check the table is a type of `SimpleScanSource`.
+    assert(descInfo.get(9).getString(1) == classOf[SimpleScanSource].getName)
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
