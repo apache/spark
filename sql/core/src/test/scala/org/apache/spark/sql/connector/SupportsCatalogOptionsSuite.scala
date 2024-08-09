@@ -216,9 +216,9 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   test("DataFrameReader read non-existent table") {
     val e = intercept[NoSuchTableException] {
-      spark.read.format(format).option("name", "non_existent_table").load()
+      spark.read.format(format).option("name", s"non_existent_table").load()
     }
-    checkErrorTableNotFound(e, "`default`.`non_existent_table`")
+    checkErrorTableNotFound(e, "`spark_catalog`.`default`.`non_existent_table`")
   }
 
   test("DataFrameWriter creates v2Relation with identifiers") {

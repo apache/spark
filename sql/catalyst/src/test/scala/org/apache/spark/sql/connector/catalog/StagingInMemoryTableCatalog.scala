@@ -48,8 +48,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     validateStagedTable(partitions, properties)
-    new TestStagedReplaceTable(
-      ident,
+    new TestStagedReplaceTable(name(), ident,
       new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
   }
 
@@ -110,6 +109,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
   }
 
   private class TestStagedReplaceTable(
+      catalogName: String,
       ident: Identifier,
       delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
 
@@ -117,7 +117,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
       maybeSimulateDropBeforeCommit()
       val maybePreCommittedTable = tables.replace(ident, delegateTable)
       if (maybePreCommittedTable == null) {
-        throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+        throw QueryCompilationErrors.cannotReplaceMissingTableError(catalogName, ident)
       }
     }
 
