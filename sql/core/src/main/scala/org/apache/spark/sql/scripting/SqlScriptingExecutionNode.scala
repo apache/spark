@@ -83,8 +83,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
           df.limit(2).collect() match {
             case Array(row) => row.getBoolean(0)
             case _ =>
-              throw SqlScriptingErrors.booleanStatementTooManyRows(
-                statement.origin, statement.getText)
+              throw SparkException.internalError(
+                s"Boolean statement ${statement.getText} is invalid. It returns more than one row.")
           }
         case _ =>
           throw SqlScriptingErrors.invalidBooleanStatement(statement.origin, statement.getText)

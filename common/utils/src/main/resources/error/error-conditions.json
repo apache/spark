@@ -125,12 +125,6 @@
     ],
     "sqlState" : "22003"
   },
-  "BOOLEAN_STATEMENT_TOO_MANY_ROWS" : {
-    "message" : [
-      "Boolean statement <invalidStatement> is invalid. It returns more than one row."
-    ],
-    "sqlState" : "21000"
-  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."

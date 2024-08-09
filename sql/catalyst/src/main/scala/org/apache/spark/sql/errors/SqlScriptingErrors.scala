@@ -74,14 +74,4 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
-
-  def booleanStatementTooManyRows(
-      origin: Origin,
-      stmt: String): Throwable = {
-    new SqlScriptingException(
-      origin = origin,
-      errorClass = "BOOLEAN_STATEMENT_TOO_MANY_ROWS",
-      cause = null,
-      messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
-  }
 }
