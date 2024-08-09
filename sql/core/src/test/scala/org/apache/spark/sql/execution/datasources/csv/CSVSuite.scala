@@ -1781,6 +1781,32 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-49016: Queries from raw CSV files are disallowed when the referenced columns only" +
+    " include the internal corrupt record column") {
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", DateType)
+      .add("_corrupt_record", StringType)
+
+    // negative cases
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).csv(testFile(valueMalformedFile))
+          .select("_corrupt_record").collect()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1285",
+      parameters = Map.empty
+    )
+    // workaround
+    val df2 = spark.read.schema(schema).csv(testFile(valueMalformedFile)).cache()
+    assert(df2.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(df2.filter($"_corrupt_record".isNull).count() == 1)
+    checkAnswer(
+      df2.select("_corrupt_record"),
+      Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil
+    )
+  }
+
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
     // Set default values for the DataSource parameters to make sure
     // that whole test file is mapped to only one partition. This will guarantee
