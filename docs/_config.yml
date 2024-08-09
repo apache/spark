@@ -46,4 +46,4 @@ DOCSEARCH_SCRIPT: |
 
 permalink: 404.html
 
-exclude: ['README.md']
+exclude: ['README.md', "util"]
