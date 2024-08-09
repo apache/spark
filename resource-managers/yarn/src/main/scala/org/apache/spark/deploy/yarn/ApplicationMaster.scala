@@ -749,11 +749,9 @@ private[spark] class ApplicationMaster(
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case SparkUserAppException(exitCode) =>
-                val msg = log"User application exited with status " +
-                  log"${MDC(LogKeys.EXIT_CODE, exitCode)}"
-                logError(msg)
-                finish(FinalApplicationStatus.FAILED, exitCode, msg.message)
+              case e @ SparkUserAppException(exitCode, _) =>
+                logError(e.getMessage)
+                finish(FinalApplicationStatus.FAILED, exitCode, e.getMessage)
               case cause: Throwable =>
                 logError("User class threw exception: ", cause)
                 finish(FinalApplicationStatus.FAILED,

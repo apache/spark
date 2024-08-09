@@ -31,6 +31,7 @@ import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
@@ -3187,6 +3188,81 @@ private[spark] class RedirectThread(
     }
   }
 }
+
+/**
+ * PythonRunner process wrapper. In this wrapper will collect process error message,
+ * if process exit with exception, spark can get process exit message.
+ *
+ * @param process PythonRunner python process
+ * @param out Where to redirect the message.
+ * @param name process name.
+ * @param propagateEof If propagate Eof.
+ */
+private[spark] class PythonRunnerProcessWrapper(
+    process: Process,
+    out: OutputStream,
+    name: String,
+    propagateEof: Boolean = false) extends Thread(name) {
+
+  val lock = new ReentrantReadWriteLock()
+  val error = new CircularBuffer(1024 * 1024)
+
+  def errorMessage: String = error.toString()
+
+  private class ProcessRedirectThread(
+      in: InputStream,
+      out: OutputStream,
+      name: String,
+      isStderr: Boolean)
+    extends Thread(name) {
+
+    setDaemon(true)
+    override def run(): Unit = {
+      scala.util.control.Exception.ignoring(classOf[IOException]) {
+        Utils.tryWithSafeFinally {
+          val buf = new Array[Byte](1024)
+          var len = in.read(buf)
+          while (len != -1) {
+            lock.writeLock().lock()
+            while (len > 0) {
+              out.write(buf, 0, len)
+              out.flush()
+              if (isStderr) {
+                error.write(buf, 0, len)
+                error.flush()
+              }
+              len = in.read(buf)
+            }
+            lock.writeLock().unlock()
+            if (len != -1) {
+              len = in.read(buf)
+            }
+          }
+        } {}
+      }
+    }
+  }
+
+  setDaemon(true)
+  override def run(): Unit = {
+    scala.util.control.Exception.ignoring(classOf[IOException]) {
+      Utils.tryWithSafeFinally {
+        val inputThread =
+          new ProcessRedirectThread(process.getInputStream, out, "input stream", false)
+        val errorThread =
+          new ProcessRedirectThread(process.getErrorStream, out, "error stream", true)
+
+        inputThread.start()
+        errorThread.start()
+      } {
+        if (propagateEof) {
+          out.close()
+        }
+      }
+    }
+  }
+}
+
 
 /**
  * An [[OutputStream]] that will store the last 10 kilobytes (by default) written to it
