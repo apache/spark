@@ -40,6 +40,40 @@ public class CollationSupportSuite {
     {"UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"};
 
   /**
+   * Utility method that converts a hex string to a byte array. The hex string should be formatted
+   * as a space-separated list of hexadecimal values (e.g. "0xFF 0x61"). The method will return a
+   * byte array with the corresponding byte values, in the same order as they appear originally.
+   * @param hexString The hex string to convert to a byte array.
+   * @return The byte array corresponding to the hex string.
+   */
+  private static byte[] getBytesFromHexString(String hexString) {
+    if (hexString.isEmpty()) return new byte[0];
+    String[] hexValues = hexString.split(" ");
+    byte[] byteArray = new byte[hexValues.length];
+    for (int i = 0; i < hexValues.length; i++) {
+      int intValue = Integer.decode(hexValues[i]);
+      byteArray[i] = (byte) intValue;
+    }
+    return byteArray;
+  }
+
+  /**
+   * Utility method that converts a string to a UTF8String. If the string is a hex string, i.e.
+   * formatted like "0xFF 0x61", the method will convert it to a byte array and then to its
+   * corresponding UTF8String. Otherwise, the method will convert the string to a UTF8String.
+   * @param useHex Whether the input string is a hex string, as described above.
+   * @param inputString The string to convert to a UTF8String.
+   * @return The UTF8String corresponding to the input string, given the rules above.
+   */
+  private static UTF8String getUTF8StringFromString(boolean useHex, String inputString) {
+    if (useHex) {
+      return UTF8String.fromBytes(getBytesFromHexString(inputString));
+    } else {
+      return UTF8String.fromString(inputString);
+    }
+  }
+
+  /**
    * Collation-aware UTF8String comparison.
    */
 
@@ -2155,16 +2189,18 @@ public class CollationSupportSuite {
       String matchingString,
       String replaceString,
       String collationName,
-      String expectedResultString) throws SparkException {
+      String expectedString) throws SparkException {
     int collationId = CollationFactory.collationNameToId(collationName);
     Map<String, String> dict = buildDict(matchingString, replaceString);
     UTF8String source = UTF8String.fromString(inputString);
     UTF8String result = CollationSupport.StringTranslate.exec(source, dict, collationId);
-    assertEquals(expectedResultString, result.toString());
+    assertEquals(expectedString, result.toString());
   }
 
   @Test
   public void testStringTranslate() throws SparkException {
+    // TODO Empty UTF-8 strings.
+    // TODO Invalid UTF-8 strings.
     // Basic tests - UTF8_BINARY.
     assertStringTranslate("Translate", "Rnlt", "12", "UTF8_BINARY", "Tra2sae");
     assertStringTranslate("Translate", "Rn", "1234", "UTF8_BINARY", "Tra2slate");
