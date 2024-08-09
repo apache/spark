@@ -357,21 +357,20 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE test CONDITION;
         |END""".stripMargin
     val tree = parseScript(sqlScriptText)
-    assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[ErrorCondition])
-    assert(tree.collection.head.asInstanceOf[ErrorCondition].value.equals("45000"))
+    assert(tree.conditions.size == 1)
+    assert(tree.conditions("test").equals("45000")) // Default SQLSTATE
   }
 
   test("declare condition: custom sqlstate") {
     val sqlScriptText =
       """
         |BEGIN
+        |  SELECT 1;
         |  DECLARE test CONDITION FOR '12000';
         |END""".stripMargin
     val tree = parseScript(sqlScriptText)
-    assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[ErrorCondition])
-    assert(tree.collection.head.asInstanceOf[ErrorCondition].value.equals("12000"))
+    assert(tree.conditions.size == 1)
+    assert(tree.conditions("test").equals("12000"))
   }
 
   test("declare handler") {

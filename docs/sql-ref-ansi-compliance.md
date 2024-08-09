@@ -454,6 +454,7 @@ Below is a list of all the keywords in Spark SQL.
 |CONCATENATE|non-reserved|non-reserved|non-reserved|
 |CONSTRAINT|reserved|non-reserved|reserved|
 |CONTAINS|non-reserved|non-reserved|non-reserved|
+|CONTINUE|non-reserved|non-reserved|non-reserved|
 |COST|non-reserved|non-reserved|non-reserved|
 |CREATE|reserved|non-reserved|reserved|
 |CROSS|reserved|strict-non-reserved|reserved|
@@ -530,6 +531,7 @@ Below is a list of all the keywords in Spark SQL.
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|
 |GROUPING|non-reserved|non-reserved|reserved|
+|HANDLER|non-reserved|non-reserved|non-reserved|
 |HAVING|reserved|non-reserved|reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
