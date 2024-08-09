@@ -564,7 +564,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .build())))
-    val error = "fails to parse as a valid literal value"
+    val error = "parse existence default as literal err"
     assert(ResolveDefaultColumns.existenceDefaultValues(source2).length == 1)
     assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
 
@@ -576,7 +576,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
-    assert(intercept[AnalysisException] {
+    assert(intercept[SparkException] {
       ResolveDefaultColumns.existenceDefaultValues(source3)
     }.getMessage.contains(error))
 
@@ -592,7 +592,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
             "(SELECT 'abc' FROM missingtable)")
           .build())))
-    assert(intercept[AnalysisException] {
+    assert(intercept[SparkException] {
       ResolveDefaultColumns.existenceDefaultValues(source4)
     }.getMessage.contains(error))
   }

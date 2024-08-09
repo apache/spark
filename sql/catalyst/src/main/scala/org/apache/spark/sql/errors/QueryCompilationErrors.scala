@@ -3599,17 +3599,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def failedToParseExistenceDefaultAsLiteral(fieldName: String, defaultValue: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1344",
-      messageParameters = Map(
-        "fieldName" -> fieldName,
-        "defaultValue" -> defaultValue))
+    SparkException.internalError(s"parse existence default as literal err," +
+      s" field name: $fieldName, value: $defaultValue")
   }
 
   def defaultReferencesNotAllowedInDataSource(
       statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1345",
+      errorClass = "DEFAULT_UNSUPPORTED",
       messageParameters = Map(
         "statementType" -> statementType,
         "dataSource" -> dataSource))
@@ -3618,7 +3615,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def addNewDefaultColumnToExistingTableNotAllowed(
       statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1346",
+      errorClass = "ADD_DEFAULT_UNSUPPORTED",
       messageParameters = Map(
         "statementType" -> statementType,
         "dataSource" -> dataSource))
