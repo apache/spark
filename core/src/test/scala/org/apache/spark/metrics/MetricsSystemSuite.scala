@@ -20,8 +20,9 @@ package org.apache.spark.metrics
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 
-import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.{Gauge, MetricRegistry, MetricRegistryListener}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -44,10 +45,11 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with default config") {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf)
     metricsSystem.start()
-    val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
+    val sources =
+      PrivateMethod[HashMap[Source, MetricRegistryListener]](Symbol("sourcesWithListeners"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
+    assert(metricsSystem.invokePrivate(sources()).size === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 0)
     assert(metricsSystem.getServletHandlers.nonEmpty)
   }
@@ -55,16 +57,17 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf)
     metricsSystem.start()
-    val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
+    val sources =
+      PrivateMethod[HashMap[Source, MetricRegistryListener]](Symbol("sourcesWithListeners"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
+    assert(metricsSystem.invokePrivate(sources()).size === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 1)
     assert(metricsSystem.getServletHandlers.nonEmpty)
 
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    assert(metricsSystem.invokePrivate(sources()).size === StaticSources.allSources.length + 1)
   }
 
   test("MetricsSystem with Driver instance") {
@@ -280,6 +283,28 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
     assert(metricsSystem.invokePrivate(sinks()).length === 1)
+  }
+
+  test("MetricsSystem registers dynamically added metrics") {
+    val registry = new MetricRegistry()
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val instanceName = "testInstance"
+    val metricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, registry)
+    metricsSystem.registerSource(source)
+    assert(!registry.getNames.contains("dummySource.newMetric"), "Metric shouldn't be registered")
+
+    source.metricRegistry.register(
+      "newMetric",
+      new Gauge[Integer] {
+        override def getValue: Integer = 1
+      })
+    assert(
+      registry.getNames.contains("dummySource.newMetric"),
+      "Metric should have been registered")
   }
 }
 
