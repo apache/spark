@@ -45,7 +45,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .secrets()
       .inNamespace(kubernetesTestComponents.namespace)
-      .createOrReplace(envSecret)
+      .resource(envSecret).serverSideApply()
   }
 
   private def deleteTestSecret(): Unit = {

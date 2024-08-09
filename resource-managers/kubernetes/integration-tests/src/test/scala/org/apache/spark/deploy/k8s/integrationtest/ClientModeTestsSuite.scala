@@ -34,7 +34,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
       .getKubernetesClient
       .services()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(new ServiceBuilder()
+      .resource(new ServiceBuilder()
         .withNewMetadata()
           .withName(s"$driverPodName-svc")
           .endMetadata()
@@ -52,12 +52,12 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .withNewTargetPort(blockManagerPort)
             .endPort()
           .endSpec()
-        .build())
+        .build()).create()
     try {
       val driverPod = testBackend.getKubernetesClient
         .pods()
         .inNamespace(kubernetesTestComponents.namespace)
-        .create(new PodBuilder()
+        .resource(new PodBuilder()
           .withNewMetadata()
           .withName(driverPodName)
           .withLabels(labels.asJava)
@@ -94,7 +94,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .addToArgs("10")
             .endContainer()
           .endSpec()
-        .build())
+        .build()).create()
       Eventually.eventually(TIMEOUT, INTERVAL) {
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
