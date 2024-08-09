@@ -1018,6 +1018,8 @@ final class ShuffleBlockFetcherIterator(
             shuffleId, shuffleMergeId, reduceId, bitmaps, localDirs) =>
             // Fetch push-merged-local shuffle block data as multiple shuffle chunks
             val shuffleBlockId = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
+            pushBasedFetchHelper.checkPushMergedBlockMetaConsistency(
+              shuffleBlockId, blockManager.blockManagerId, bitmaps)
             try {
               val bufs: Seq[ManagedBuffer] = blockManager.getLocalMergedBlockData(shuffleBlockId,
                 localDirs)
@@ -1055,6 +1057,8 @@ final class ShuffleBlockFetcherIterator(
           // count of this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
           numBlocksInFlightPerAddress(address) -= 1
           numBlocksToFetch -= 1
+          pushBasedFetchHelper.checkPushMergedBlockMetaConsistency(
+            ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId), address, bitmaps)
           val blocksToFetch = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
             shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps)
           val additionalRemoteReqs = new ArrayBuffer[FetchRequest]
