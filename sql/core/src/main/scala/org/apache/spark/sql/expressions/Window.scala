@@ -19,7 +19,6 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{WindowSpec => _, _}
 
 /**
  * Utility functions for defining window in DataFrames.
@@ -215,7 +214,7 @@ object Window {
   }
 
   private[sql] def spec: WindowSpec = {
-    new WindowSpec(Seq.empty, Seq.empty, UnspecifiedFrame)
+    new WindowSpec(Seq.empty, Seq.empty, None)
   }
 
 }

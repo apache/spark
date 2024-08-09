@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
+import org.apache.spark.sql.expressions.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1576,7 +1577,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     },
     StringType,
     inputEncoders = Seq.fill(1)(None),
-    name = Some(name)) {
+    givenName = Some(name)) {
 
     override def apply(exprs: Column*): Column = {
       assert(exprs.length == 1, "Defined UDF only has one column")
@@ -1586,7 +1587,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
             "as input. Try df(name) or df.col(name)")
         expr.dataType
       }
-      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), rt))
+      Column(Cast(toScalaUDF(this, Cast(expr, StringType) :: Nil), rt))
     }
 
     override def withName(name: String): TestInternalScalaUDF = {

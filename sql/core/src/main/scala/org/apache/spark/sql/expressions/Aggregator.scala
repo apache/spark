@@ -18,8 +18,7 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.sql.{Encoder, TypedColumn}
-import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 
 /**
  * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
@@ -50,7 +49,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @since 1.6.0
  */
 @SerialVersionUID(2093413866369130093L)
-abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
+abstract class Aggregator[-IN, BUF, OUT] extends Serializable with UserDefinedFunctionLike {
 
   /**
    * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
@@ -94,11 +93,8 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    implicit val bEncoder = bufferEncoder
-    implicit val cEncoder = outputEncoder
-
-    val expr = TypedAggregateExpression(this).toAggregateExpression()
-
-    new TypedColumn[IN, OUT](expr, encoderFor[OUT])
+    new TypedColumn[IN, OUT](
+      InvokeInlineUserDefinedFunction(this, Nil),
+      outputEncoder)
   }
 }

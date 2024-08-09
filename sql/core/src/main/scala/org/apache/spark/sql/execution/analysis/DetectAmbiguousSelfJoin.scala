@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Column, Dataset}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 
 /**
  * Detects ambiguous self-joins, so that we can fail the query instead of returning confusing
@@ -169,7 +170,16 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
     plan.transformExpressions {
       case a: AttributeReference if isColumnReference(a) =>
         // Remove the special metadata from this `AttributeReference`, as the detection is done.
-        Column.stripColumnReferenceMetadata(a)
+        stripColumnReferenceMetadata(a)
     }
+  }
+
+  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(Dataset.DATASET_ID_KEY)
+      .remove(Dataset.COL_POS_KEY)
+      .build()
+    a.withMetadata(metadataWithoutId)
   }
 }

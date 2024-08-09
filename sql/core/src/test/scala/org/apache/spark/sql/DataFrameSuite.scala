@@ -32,7 +32,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, CreateMap, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, CreateMap, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
@@ -1566,7 +1566,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
-        new Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
+        Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
       val df = spark.range(1000).filter($"id" === subquery)
       assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
 
@@ -1839,7 +1839,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
-    val df = spark.range(1).select($"id", new Column(Uuid()))
+    val df = spark.range(1).select($"id", uuid())
     checkAnswer(df, df.collect())
   }
 
