@@ -32,5 +32,20 @@ class SerDeUtilSuite extends SparkFunSuite with SharedSparkContext {
     val pythonRdd = SerDeUtil.javaToPython(javaRdd)
     SerDeUtil.pythonToPairRDD(pythonRdd, false)
   }
-}
 
+  test("Testing AutoBatchedPickler in supporting large rows (SPARK-48380)") {
+    val largeString = "1" * 1000_000_000
+    val largeRdd = sc.parallelize(Seq[(Any, Any)](
+      ("", ""),
+      ("", ""),
+      ("", ""),
+      ("", largeString),
+      ("", largeString),
+      ("", largeString),
+      ("", largeString)
+    ), 1)
+    val javaRdd = largeRdd.toJavaRDD()
+    val pythonRdd = SerDeUtil.javaToPython(javaRdd)
+    pythonRdd.count()
+  }
+}
