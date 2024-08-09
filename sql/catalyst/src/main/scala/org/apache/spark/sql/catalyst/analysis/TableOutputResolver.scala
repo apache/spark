@@ -413,8 +413,18 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
-      val func = LambdaFunction(res.head, Seq(param))
-      Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      // If the element expression have not changed, we just check original array field.
+      // Otherwise, we add transformations to the elements.
+      if (res.head.fastEquals(param)) {
+        input match {
+          case n: NamedExpression =>
+            checkField(tableName, expected, n, byName, conf, addError, colPath)
+          case _ => None
+        }
+      } else {
+        val func = LambdaFunction(res.head, Seq(param))
+        Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      }
     } else {
       None
     }
@@ -452,11 +462,29 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
-      val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
-      val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
-      val newKeys = ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
-      val newValues = ArrayTransform(MapValues(nullCheckedInput), valueFunc)
-      Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
+      // If the key and value expressions have not changed, we just check original map field.
+      // Otherwise, we construct a new map by adding transformations to the keys and values.
+      if (resKey.head.fastEquals(keyParam) && resValue.head.fastEquals(valueParam)) {
+        input match {
+          case n: NamedExpression =>
+            checkField(tableName, expected, n, byName, conf, addError, colPath)
+          case _ => None
+        }
+      } else {
+        val newKeys = if (!resKey.head.fastEquals(keyParam)) {
+          val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
+          ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
+        } else {
+          MapKeys(nullCheckedInput)
+        }
+        val newValues = if (!resValue.head.fastEquals(valueParam)) {
+          val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
+          ArrayTransform(MapValues(nullCheckedInput), valueFunc)
+        } else {
+          MapValues(nullCheckedInput)
+        }
+        Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
+      }
     } else {
       None
     }
