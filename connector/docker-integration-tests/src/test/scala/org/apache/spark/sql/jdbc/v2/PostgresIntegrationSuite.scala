@@ -22,6 +22,7 @@ import java.sql.Connection
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -65,6 +66,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
          |)
                    """.stripMargin
     ).executeUpdate()
+    connection.prepareStatement(
+      s"CREATE TABLE datetime_table (id INTEGER, time TIMESTAMP)"
+    ).executeUpdate()
+    Iterator.range(1, 4).foreach(h => {
+      connection.prepareStatement(s"INSERT INTO datetime_table VALUES ($h, '2024-01-02 $h:00:00')")
+        .executeUpdate()
+    })
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -122,5 +130,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
         parameters = Map("relationName" -> "`t2`")
       )
     }
+  }
+
+  test("SPARK-49162: Push down date_trunc function") {
+    val df = sql(s"SELECT * FROM $catalogName.datetime_table" +
+      " WHERE DATE_TRUNC('DAY', time) = '2024-01-02 00:00:00'")
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filter.isEmpty)
+    assert(df.collect().length == 3)
   }
 }
