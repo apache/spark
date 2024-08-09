@@ -354,31 +354,44 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
-    class ProcessorWithLazyIterator
-      extends StatefulProcessor[Int, Int, Int] {
-      @transient protected var _myValueState: ValueState[Int] = _
+    class ProcessorWithLazyIterators
+      extends StatefulProcessor[Long, Long, Long] {
+      @transient protected var _myValueState: ValueState[Long] = _
+      var hasSetTimer = false
 
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-        _myValueState = getHandle.getValueState[Int](
+        _myValueState = getHandle.getValueState[Long](
           "myValueState",
-          Encoders.scalaInt
+          Encoders.scalaLong
         )
       }
 
       override def handleInputRows(
-          key: Int,
-          inputRows: Iterator[Int],
+          key: Long,
+          inputRows: Iterator[Long],
           timerValues: TimerValues,
-          expiredTimerInfo: ExpiredTimerInfo): Iterator[Int] = {
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
         // Eagerly get/set a state variable
         _myValueState.get()
         _myValueState.update(1)
 
-        inputRows.map { r =>
+        val iter = inputRows.map { r =>
           // In the lazy iterator, make some more updates
           _myValueState.get()
           _myValueState.update(r)
-          r
+          42L
+        }
+
+        if (expiredTimerInfo.isValid()) {
+          getHandle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
+          iter
+        } else {
+          // Create a timer so that we can test timers have their implicit key set
+          if (!hasSetTimer) {
+              getHandle.registerTimer(0)
+              hasSetTimer = true
+          }
+          iter
         }
       }
     }
@@ -392,14 +405,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val inputData = MemoryStream[Int]
       val result = inputData
         .toDS()
+        .select(timestamp_seconds($"value"))
+        .as[(Long)]
         .groupByKey(x => x)
         .transformWithState(
-          new ProcessorWithLazyIterator(), TimeMode.None(), OutputMode.Update())
+          new ProcessorWithLazyIterators(), TimeMode.EventTime(), OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         StartStream(),
-        AddData(inputData, 3),
-        CheckNewAnswer(3)
+        AddData(inputData, 0, 12),
+        CheckAnswer(42, 42)
       )
     }
   }
