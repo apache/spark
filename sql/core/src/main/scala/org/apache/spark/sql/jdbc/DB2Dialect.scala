@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
@@ -167,6 +168,9 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
+          case "42710" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case _ => super.classifyException(e, errorClass, messageParameters, description)

@@ -944,4 +944,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).getDouble(0) === 0.0)
     }
   }
+
+  test("SPARK-48618: Renaming the table to the name of an existing table") {
+    withTable(s"$catalogName.tbl1", s"$catalogName.tbl2") {
+      sql(s"CREATE TABLE $catalogName.tbl1 (col1 INT, col2 INT)")
+      sql(s"CREATE TABLE $catalogName.tbl2 (col3 INT, col4 INT)")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $catalogName.tbl2 RENAME TO tbl1")
+        },
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`tbl1`")
+      )
+    }
+  }
 }
