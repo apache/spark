@@ -221,7 +221,8 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitBinaryComparison(String name, String l, String r) {
     if (name.equals("<=>")) {
-      return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
+      return "((" + l + " IS NOT NULL AND " + r + " IS NOT NULL AND " + l + " = " + r + ") " +
+              "OR (" + l + " IS NULL AND " + r + " IS NULL))";
     }
     return l + " " + name + " " + r;
   }

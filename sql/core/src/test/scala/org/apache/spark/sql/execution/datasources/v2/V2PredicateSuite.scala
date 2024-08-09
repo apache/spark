@@ -107,7 +107,8 @@ class V2PredicateSuite extends SparkFunSuite {
     val predicate2 = new Predicate("<=>", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(predicate1.describe.equals("(a = 1) OR (a IS NULL AND 1 IS NULL)"))
+    assert(predicate1.describe.equals(
+      "((a IS NOT NULL AND 1 IS NOT NULL AND a = 1) OR (a IS NULL AND 1 IS NULL))"))
 
     val v1Filter = EqualNullSafe("a", 1)
     assert(v1Filter.toV2 == predicate1)
