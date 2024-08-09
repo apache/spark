@@ -279,15 +279,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- C2: integer (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(sqlText, 0, 51))
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`C2`"))
     }
     // Drop a column to not existing table and namespace
     Seq(
@@ -319,16 +315,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- ID: double (nullable = true)
-              | |-- deptno: double (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(sqlText, 0, 64))
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`, `deptno`"))
       // Update column to wrong type
       checkError(
         exception = intercept[ParseException] {
@@ -368,16 +359,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- ID: integer (nullable = true)
-              | |-- deptno: integer (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(sqlText, 0, 66))
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`, `deptno`"))
     }
     // Update column nullability in not existing table and namespace
     Seq(
@@ -465,15 +451,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- ID: integer (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(sqlText, 0, 67))
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`"))
     }
     // Update column comments in not existing table and namespace
     Seq(
@@ -504,16 +486,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C2",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: integer (nullable = true)
-                | |-- c2: integer (nullable = true)
-                |""".stripMargin),
-          context = ExpectedContext(sqlText, 0, 51))
+            "objectName" -> "`C2`",
+            "proposal" -> "`c1`, `c2`"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -531,16 +508,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C3",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: integer (nullable = true)
-                | |-- c3: integer (nullable = true)
-                |""".stripMargin),
-          context = ExpectedContext(sqlText, 0, sqlText.length - 1))
+            "objectName" -> "`C3`",
+            "proposal" -> "`c1`, `c3`"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -557,15 +529,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C1",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: integer (nullable = true)
-                |""".stripMargin),
-          context = ExpectedContext(sqlText, 0, sqlText.length - 1))
+            "objectName" -> "`C1`",
+            "proposal" -> "`c1`"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -582,15 +550,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C1",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: double (nullable = true)
-                |""".stripMargin),
-          context = ExpectedContext(sqlText, 0, sqlText.length - 1))
+            "objectName" -> "`C1`",
+            "proposal" -> "`c1`"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {

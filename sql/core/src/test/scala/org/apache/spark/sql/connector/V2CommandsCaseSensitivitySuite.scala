@@ -37,7 +37,6 @@ class V2CommandsCaseSensitivitySuite
   with QueryErrorsBase {
 
   import CreateTablePartitioningValidationSuite._
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val table = ResolvedTable(
     catalog,
@@ -156,7 +155,10 @@ class V2CommandsCaseSensitivitySuite
           Seq(QualifiedColType(
             Some(UnresolvedFieldName(field.init.toImmutableArraySeq)),
             field.last, LongType, true, None, None, None))),
-        Seq("Missing field " + field.head)
+        expectedErrorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        expectedMessageParameters = Map(
+          "objectName" -> s"`${field.head}`",
+          "proposal" -> "`id`, `data`, `point`")
       )
     }
   }
@@ -328,18 +330,20 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       Seq(true, false).foreach { ifExists =>
-        val expectedErrors = if (ifExists) {
-          Seq.empty[String]
-        } else {
-          Seq("Missing field " + ref.quoted)
-        }
         val alter = DropColumns(table, Seq(UnresolvedFieldName(ref.toImmutableArraySeq)), ifExists)
         if (ifExists) {
           // using IF EXISTS will silence all errors for missing columns
           assertAnalysisSuccess(alter, caseSensitive = true)
           assertAnalysisSuccess(alter, caseSensitive = false)
         } else {
-          alterTableTest(alter, expectedErrors, expectErrorOnCaseSensitive = true)
+          alterTableTest(
+            alter = alter,
+            expectedErrorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            expectedMessageParameters = Map(
+              "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
+              "proposal" -> "`id`, `data`, `point`"
+            ),
+            expectErrorOnCaseSensitive = true)
         }
       }
     }
@@ -348,8 +352,11 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: rename column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        RenameColumn(table, UnresolvedFieldName(ref.toImmutableArraySeq), "newName"),
-        Seq("Missing field " + ref.quoted)
+        alter = RenameColumn(table, UnresolvedFieldName(ref.toImmutableArraySeq), "newName"),
+        expectedErrorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        expectedMessageParameters = Map(
+          "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
+          "proposal" -> "`id`, `data`, `point`")
       )
     }
   }
@@ -359,7 +366,10 @@ class V2CommandsCaseSensitivitySuite
       alterTableTest(
         AlterColumn(table, UnresolvedFieldName(ref.toImmutableArraySeq),
           None, Some(true), None, None, None),
-        Seq("Missing field " + ref.quoted)
+        expectedErrorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        expectedMessageParameters = Map(
+          "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
+          "proposal" -> "`id`, `data`, `point`")
       )
     }
   }
@@ -369,7 +379,10 @@ class V2CommandsCaseSensitivitySuite
       alterTableTest(
         AlterColumn(table, UnresolvedFieldName(ref.toImmutableArraySeq),
           Some(StringType), None, None, None, None),
-        Seq("Missing field " + ref.quoted)
+        expectedErrorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        expectedMessageParameters = Map(
+          "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
+          "proposal" -> "`id`, `data`, `point`")
       )
     }
   }
@@ -379,7 +392,10 @@ class V2CommandsCaseSensitivitySuite
       alterTableTest(
         AlterColumn(table, UnresolvedFieldName(ref.toImmutableArraySeq),
           None, None, Some("comment"), None, None),
-        Seq("Missing field " + ref.quoted)
+        expectedErrorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        expectedMessageParameters = Map(
+          "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
+          "proposal" -> "`id`, `data`, `point`")
       )
     }
   }
@@ -397,13 +413,15 @@ class V2CommandsCaseSensitivitySuite
 
   private def alterTableTest(
       alter: => AlterTableCommand,
-      error: Seq[String],
+      expectedErrorClass: String,
+      expectedMessageParameters: Map[String, String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
-          assertAnalysisError(alter, error, caseSensitive)
+          assertAnalysisErrorClass(
+            alter, expectedErrorClass, expectedMessageParameters, caseSensitive = caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)
         }
