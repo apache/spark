@@ -982,9 +982,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               hadoopConf, Some(schemaFilePath))
             val colFamilySeq = checker.readSchemaFile()
             assert(colFamilySeq.length == 3)
-            assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2
-            ).map(_.toString))
+            assert(colFamilySeq.map(_.toString).toSet == expectedSchemas.map(_.toString))
           },
           StopStream
         )
