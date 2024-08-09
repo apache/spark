@@ -25,9 +25,9 @@ import org.apache.spark.sql.types._
 
 // scalastyle:off nonascii
 class CollationStringExpressionsSuite
-    extends QueryTest
-    with SharedSparkSession
-    with ExpressionEvalHelper {
+  extends QueryTest
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   test("Support `ConcatWs` string expression with collation") {
     case class ConcatWsTestCase[R](
