@@ -29,10 +29,8 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.{IsolationLevel, TopicPartition}
 import org.apache.kafka.common.requests.OffsetFetchResponse
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{NUM_RETRY, OFFSETS, TOPIC_PARTITION_OFFSET}
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.util.ArrayImplicits._
@@ -52,7 +50,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     consumerStrategy: ConsumerStrategy,
     override val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String) extends KafkaOffsetReader with Logging {
+    driverGroupIdPrefix: String,
+    partitionLocationAssigner: KafkaPartitionLocationAssigner
+  ) extends KafkaOffsetReader with Logging {
 
   private[kafka010] val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
@@ -102,12 +102,23 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
+  private def userSpecifiedLocationPreferences(executors: Array[ExecutorDescription])
+      : Map[TopicPartition, Array[String]] = {
+    val partitionDescrs = consumerStrategy.assignedPartitionDescriptions(admin)
+      .toArray
+      .sortBy(descr => (descr.topic, descr.partition))
+
+    partitionLocationAssigner.getLocationPreferences(partitionDescrs, executors)
+      .map {
+        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.host))
+      }
+  }
+
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
    */
-  private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
+  private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean =
     minPartitions.map(_ > numTopicPartitions).getOrElse(false)
-  }
 
   override def toString(): String = consumerStrategy.toString
 
@@ -423,24 +434,12 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         }
       }.toArray.toImmutableArraySeq
     } else {
-      offsetRangesBase
+      val execs = getSortedExecutorList
+      rangeCalculator.getLocatedRanges(
+        offsetRangesBase,
+        execs.map(_.host),
+        userSpecifiedLocationPreferences(execs))
     }
-  }
-
-  private def getSortedExecutorList: Array[String] = {
-    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-      if (a.host == b.host) {
-        a.executorId > b.executorId
-      } else {
-        a.host > b.host
-      }
-    }
-
-    val bm = SparkEnv.get.blockManager
-    bm.master.getPeers(bm.blockManagerId).toArray
-      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith(compare)
-      .map(_.toString)
   }
 
   override def getOffsetRangesFromResolvedOffsets(
@@ -503,7 +502,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList.toImmutableArraySeq)
+    val execs = getSortedExecutorList
+    rangeCalculator.getRanges(ranges, execs.map(_.host), userSpecifiedLocationPreferences(execs))
   }
 
   private def partitionsAssignedToAdmin(
