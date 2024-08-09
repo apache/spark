@@ -89,12 +89,19 @@ private[spark] object Column {
 @Stable
 class TypedColumn[-T, U](
     node: ColumnNode,
-    private[sql] val encoder: ExpressionEncoder[U])
+    private[sql] val encoder: Encoder[U],
+    private[sql] val inputType: Option[(ExpressionEncoder[_], Seq[Attribute])] = None)
   extends Column(node) {
 
-  // TODO get rid of this.
-  //   This requires one or two more ColumnNodes...
-  def this(expr: Expression, encoder: ExpressionEncoder[U]) = this(Extension(expr), encoder)
+  override lazy val expr: Expression = {
+    val expression = internal.ColumnNodeToExpressionConverter(node)
+    inputType match {
+      case Some((inputEncoder, inputAttributes)) =>
+        TypedAggUtils.withInputType(expression, inputEncoder, inputAttributes)
+      case None =>
+        expression
+    }
+  }
 
   /**
    * Inserts the specific input type and schema into any expressions that are expected to operate
@@ -103,8 +110,7 @@ class TypedColumn[-T, U](
   private[sql] def withInputType(
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val newExpr = TypedAggUtils.withInputType(expr, inputEncoder, inputAttributes)
-    new TypedColumn[T, U](newExpr, encoder)
+    new TypedColumn[T, U](node, encoder, Option((inputEncoder, inputAttributes)))
   }
 
   /**
