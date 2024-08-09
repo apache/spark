@@ -86,8 +86,10 @@ public class CollationAwareUTF8String {
       int startPos) {
     assert startPos >= 0;
     // Use code point iterators for efficient string search.
-    Iterator<Integer> targetIterator = target.codePointIterator();
-    Iterator<Integer> patternIterator = lowercasePattern.codePointIterator();
+    Iterator<Integer> targetIterator = target.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    Iterator<Integer> patternIterator = lowercasePattern.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     // Skip to startPos in the target string.
     for (int i = 0; i < startPos; ++i) {
       if (targetIterator.hasNext()) {

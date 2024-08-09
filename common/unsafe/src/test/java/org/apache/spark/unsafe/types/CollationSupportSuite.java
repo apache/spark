@@ -40,6 +40,40 @@ public class CollationSupportSuite {
     {"UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"};
 
   /**
+   * Utility method that converts a hex string to a byte array. The hex string should be formatted
+   * as a space-separated list of hexadecimal values (e.g. "0xFF 0x61"). The method will return a
+   * byte array with the corresponding byte values, in the same order as they appear originally.
+   * @param hexString The hex string to convert to a byte array.
+   * @return The byte array corresponding to the hex string.
+   */
+  private static byte[] getBytesFromHexString(String hexString) {
+    if (hexString.isEmpty()) return new byte[0];
+    String[] hexValues = hexString.split(" ");
+    byte[] byteArray = new byte[hexValues.length];
+    for (int i = 0; i < hexValues.length; i++) {
+      int intValue = Integer.decode(hexValues[i]);
+      byteArray[i] = (byte) intValue;
+    }
+    return byteArray;
+  }
+
+  /**
+   * Utility method that converts a string to a UTF8String. If the string is a hex string, i.e.
+   * formatted like "0xFF 0x61", the method will convert it to a byte array and then to its
+   * corresponding UTF8String. Otherwise, the method will convert the string to a UTF8String.
+   * @param useHex Whether the input string is a hex string, as described above.
+   * @param inputString The string to convert to a UTF8String.
+   * @return The UTF8String corresponding to the input string, given the rules above.
+   */
+  private static UTF8String getUTF8StringFromString(boolean useHex, String inputString) {
+    if (useHex) {
+      return UTF8String.fromBytes(getBytesFromHexString(inputString));
+    } else {
+      return UTF8String.fromString(inputString);
+    }
+  }
+
+  /**
    * Collation-aware UTF8String comparison.
    */
 
@@ -858,102 +892,166 @@ public class CollationSupportSuite {
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
   }
 
-  private void assertStringInstr(String string, String substring, String collationName,
-          Integer expected) throws SparkException {
-    UTF8String str = UTF8String.fromString(string);
-    UTF8String substr = UTF8String.fromString(substring);
+  private void assertStringInstr(boolean useHex, String string, String substring,
+      String collationName, int expected) throws SparkException {
+    UTF8String str = getUTF8StringFromString(useHex, string);
+    UTF8String substr = getUTF8StringFromString(useHex, substring);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.StringInstr.exec(str, substr, collationId) + 1);
+    int result = CollationSupport.StringInstr.exec(str, substr, collationId) + 1;
+    assertEquals(expected, result);
   }
 
   @Test
   public void testStringInstr() throws SparkException {
-    assertStringInstr("aaads", "Aa", "UTF8_BINARY", 0);
-    assertStringInstr("aaaDs", "de", "UTF8_BINARY", 0);
-    assertStringInstr("aaads", "ds", "UTF8_BINARY", 4);
-    assertStringInstr("xxxx", "", "UTF8_BINARY", 1);
-    assertStringInstr("", "xxxx", "UTF8_BINARY", 0);
-    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_BINARY", 5);
-    assertStringInstr("test大千世界X大千世界", "界X", "UTF8_BINARY", 8);
-    assertStringInstr("aaads", "Aa", "UTF8_LCASE", 1);
-    assertStringInstr("aaaDs", "de", "UTF8_LCASE", 0);
-    assertStringInstr("aaaDs", "ds", "UTF8_LCASE", 4);
-    assertStringInstr("xxxx", "", "UTF8_LCASE", 1);
-    assertStringInstr("", "xxxx", "UTF8_LCASE", 0);
-    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_LCASE", 5);
-    assertStringInstr("test大千世界X大千世界", "界x", "UTF8_LCASE", 8);
-    assertStringInstr("aaads", "Aa", "UNICODE", 0);
-    assertStringInstr("aaads", "aa", "UNICODE", 1);
-    assertStringInstr("aaads", "de", "UNICODE", 0);
-    assertStringInstr("xxxx", "", "UNICODE", 1);
-    assertStringInstr("", "xxxx", "UNICODE", 0);
-    assertStringInstr("test大千世界X大千世界", "界x", "UNICODE", 0);
-    assertStringInstr("test大千世界X大千世界", "界X", "UNICODE", 8);
-    assertStringInstr("xxxx", "", "UNICODE_CI", 1);
-    assertStringInstr("", "xxxx", "UNICODE_CI", 0);
-    assertStringInstr("aaads", "AD", "UNICODE_CI", 3);
-    assertStringInstr("aaads", "dS", "UNICODE_CI", 4);
-    assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
-    assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
-    assertStringInstr("i̇", "i", "UNICODE_CI", 0);
-    assertStringInstr("i̇", "\u0307", "UNICODE_CI", 0);
-    assertStringInstr("i̇", "İ", "UNICODE_CI", 1);
-    assertStringInstr("İ", "i", "UNICODE_CI", 0);
-    assertStringInstr("İoi̇o12", "i̇o", "UNICODE_CI", 1);
-    assertStringInstr("i̇oİo12", "İo", "UNICODE_CI", 1);
-    assertStringInstr("abİoi̇o", "i̇o", "UNICODE_CI", 3);
-    assertStringInstr("abi̇oİo", "İo", "UNICODE_CI", 3);
-    assertStringInstr("ai̇oxXİo", "Xx", "UNICODE_CI", 5);
-    assertStringInstr("aİoi̇oxx", "XX", "UNICODE_CI", 7);
-    assertStringInstr("i̇", "i", "UTF8_LCASE", 1); // != UNICODE_CI
-    assertStringInstr("i̇", "\u0307", "UTF8_LCASE", 2); // != UNICODE_CI
-    assertStringInstr("i̇", "İ", "UTF8_LCASE", 1);
-    assertStringInstr("İ", "i", "UTF8_LCASE", 0);
-    assertStringInstr("İoi̇o12", "i̇o", "UTF8_LCASE", 1);
-    assertStringInstr("i̇oİo12", "İo", "UTF8_LCASE", 1);
-    assertStringInstr("abİoi̇o", "i̇o", "UTF8_LCASE", 3);
-    assertStringInstr("abi̇oİo", "İo", "UTF8_LCASE", 3);
-    assertStringInstr("abI\u0307oi̇o", "İo", "UTF8_LCASE", 3);
-    assertStringInstr("ai̇oxXİo", "Xx", "UTF8_LCASE", 5);
-    assertStringInstr("abİoi̇o", "\u0307o", "UTF8_LCASE", 6);
-    assertStringInstr("aİoi̇oxx", "XX", "UTF8_LCASE", 7);
+    // Empty UTF-8 strings.
+    assertStringInstr(false, "", "", "UTF8_BINARY", 1);
+    assertStringInstr(false, "", "", "UTF8_LCASE", 1);
+    assertStringInstr(false, "", "", "UNICODE_CI", 1);
+    assertStringInstr(false, "", "", "UNICODE", 1);
+    assertStringInstr(false, "a", "", "UTF8_BINARY", 1);
+    assertStringInstr(false, "a", "", "UTF8_LCASE", 1);
+    assertStringInstr(false, "a", "", "UNICODE", 1);
+    assertStringInstr(false, "a", "", "UNICODE_CI", 1);
+    assertStringInstr(false, "", "x", "UTF8_BINARY", 0);
+    assertStringInstr(false, "", "x", "UTF8_LCASE", 0);
+    assertStringInstr(false, "", "x", "UNICODE", 0);
+    assertStringInstr(false, "", "x", "UNICODE_CI", 0);
+    // Invalid UTF-8 strings.
+    assertStringInstr(true, "0xFF", "", "UTF8_BINARY", 1);
+    assertStringInstr(true, "0xFF", "", "UTF8_LCASE", 1);
+    assertStringInstr(true, "0xFF", "", "UNICODE", 1);
+    assertStringInstr(true, "0xFF", "", "UNICODE_CI", 1);
+    assertStringInstr(true, "0xFF", "0x61", "UTF8_BINARY", 0);
+    assertStringInstr(true, "0xFF", "0x61", "UTF8_LCASE", 0);
+    assertStringInstr(true, "0xFF", "0x61", "UNICODE", 0);
+    assertStringInstr(true, "0xFF", "0x61", "UNICODE_CI", 0);
+    assertStringInstr(true, "", "0xFF", "UTF8_BINARY", 0);
+    assertStringInstr(true, "", "0xFF", "UTF8_LCASE", 0);
+    assertStringInstr(true, "", "0xFF", "UNICODE", 0);
+    assertStringInstr(true, "", "0xFF", "UNICODE_CI", 0);
+    assertStringInstr(true, "0x61", "0xFF", "UTF8_BINARY", 0);
+    assertStringInstr(true, "0x61", "0xFF", "UTF8_LCASE", 0);
+    assertStringInstr(true, "0x61", "0xFF", "UNICODE", 0);
+    assertStringInstr(true, "0x61", "0xFF", "UNICODE_CI", 0);
+    assertStringInstr(true, "0xFF", "0xFF", "UTF8_BINARY", 1);
+    assertStringInstr(true, "0xFF", "0xFF", "UTF8_LCASE", 1);
+    assertStringInstr(true, "0xFF", "0xFF", "UNICODE", 1);
+    assertStringInstr(true, "0xFF", "0xFF", "UNICODE_CI", 1);
+    assertStringInstr(true, "0xFF 0x61", "0xFF", "UTF8_BINARY", 1);
+    assertStringInstr(true, "0xFF 0x61", "0xFF", "UTF8_LCASE", 1);
+    assertStringInstr(true, "0xFF 0x61", "0xFF", "UNICODE", 1);
+    assertStringInstr(true, "0xFF 0x61", "0xFF", "UNICODE_CI", 1);
+    assertStringInstr(true, "0x61 0xFF", "0xFF", "UTF8_BINARY", 2);
+    assertStringInstr(true, "0x61 0xFF", "0xFF", "UTF8_LCASE", 2);
+    assertStringInstr(true, "0x61 0xFF", "0xFF", "UNICODE", 2);
+    assertStringInstr(true, "0x61 0xFF", "0xFF", "UNICODE_CI", 2);
+    assertStringInstr(true, "0xFF 0x61", "0x61", "UTF8_BINARY", 2);
+    assertStringInstr(true, "0xFF 0x61", "0x61", "UTF8_LCASE", 2);
+    assertStringInstr(true, "0xFF 0x61", "0x61", "UNICODE", 2);
+    assertStringInstr(true, "0xFF 0x61", "0x61", "UNICODE_CI", 2);
+    assertStringInstr(true, "0x61 0xFF", "0x61", "UTF8_BINARY", 1);
+    assertStringInstr(true, "0x61 0xFF", "0x61", "UTF8_LCASE", 1);
+    assertStringInstr(true, "0x61 0xFF", "0x61", "UNICODE", 1);
+    assertStringInstr(true, "0x61 0xFF", "0x61", "UNICODE_CI", 1);
+    assertStringInstr(true, "0xC2 0xFF", "0xFF", "UTF8_BINARY", 0);
+    assertStringInstr(true, "0xC2 0xFF", "0xFF", "UTF8_LCASE", 1);
+    assertStringInstr(true, "0xC2 0xFF", "0xFF", "UNICODE", 1);
+    assertStringInstr(true, "0xC2 0xFF", "0xFF", "UNICODE_CI", 1);
+    assertStringInstr(true, "0xC2 0x61", "0x61", "UTF8_BINARY", 0);
+    assertStringInstr(true, "0xC2 0x61", "0x61", "UTF8_LCASE", 2);
+    assertStringInstr(true, "0xC2 0x61", "0x61", "UNICODE", 2);
+    assertStringInstr(true, "0xC2 0x61", "0x61", "UNICODE_CI", 2);
+    assertStringInstr(true, "0xC2 0xC2", "0xC2", "UTF8_BINARY", 1);
+    assertStringInstr(true, "0xC2 0xC2", "0xC2", "UTF8_LCASE", 1);
+    assertStringInstr(true, "0xC2 0xC2", "0xC2", "UNICODE", 1);
+    assertStringInstr(true, "0xC2 0xC2", "0xC2", "UNICODE_CI", 1);
+    // Basic tests.
+    assertStringInstr(false, "aaads", "Aa", "UTF8_BINARY", 0);
+    assertStringInstr(false, "aaaDs", "de", "UTF8_BINARY", 0);
+    assertStringInstr(false, "aaads", "ds", "UTF8_BINARY", 4);
+    assertStringInstr(false, "xxxx", "", "UTF8_BINARY", 1);
+    assertStringInstr(false, "", "xxxx", "UTF8_BINARY", 0);
+    assertStringInstr(false, "test大千世界X大千世界", "大千", "UTF8_BINARY", 5);
+    assertStringInstr(false, "test大千世界X大千世界", "界X", "UTF8_BINARY", 8);
+    assertStringInstr(false, "aaads", "Aa", "UTF8_LCASE", 1);
+    assertStringInstr(false, "aaaDs", "de", "UTF8_LCASE", 0);
+    assertStringInstr(false, "aaaDs", "ds", "UTF8_LCASE", 4);
+    assertStringInstr(false, "xxxx", "", "UTF8_LCASE", 1);
+    assertStringInstr(false, "", "xxxx", "UTF8_LCASE", 0);
+    assertStringInstr(false, "test大千世界X大千世界", "大千", "UTF8_LCASE", 5);
+    assertStringInstr(false, "test大千世界X大千世界", "界x", "UTF8_LCASE", 8);
+    assertStringInstr(false, "aaads", "Aa", "UNICODE", 0);
+    assertStringInstr(false, "aaads", "aa", "UNICODE", 1);
+    assertStringInstr(false, "aaads", "de", "UNICODE", 0);
+    assertStringInstr(false, "xxxx", "", "UNICODE", 1);
+    assertStringInstr(false, "", "xxxx", "UNICODE", 0);
+    assertStringInstr(false, "test大千世界X大千世界", "界x", "UNICODE", 0);
+    assertStringInstr(false, "test大千世界X大千世界", "界X", "UNICODE", 8);
+    assertStringInstr(false, "xxxx", "", "UNICODE_CI", 1);
+    assertStringInstr(false, "", "xxxx", "UNICODE_CI", 0);
+    assertStringInstr(false, "aaads", "AD", "UNICODE_CI", 3);
+    assertStringInstr(false, "aaads", "dS", "UNICODE_CI", 4);
+    assertStringInstr(false, "test大千世界X大千世界", "界y", "UNICODE_CI", 0);
+    assertStringInstr(false, "test大千世界X大千世界", "界x", "UNICODE_CI", 8);
+    assertStringInstr(false, "i̇", "i", "UNICODE_CI", 0);
+    assertStringInstr(false, "i̇", "\u0307", "UNICODE_CI", 0);
+    assertStringInstr(false, "i̇", "İ", "UNICODE_CI", 1);
+    assertStringInstr(false, "İ", "i", "UNICODE_CI", 0);
+    assertStringInstr(false, "İoi̇o12", "i̇o", "UNICODE_CI", 1);
+    assertStringInstr(false, "i̇oİo12", "İo", "UNICODE_CI", 1);
+    assertStringInstr(false, "abİoi̇o", "i̇o", "UNICODE_CI", 3);
+    assertStringInstr(false, "abi̇oİo", "İo", "UNICODE_CI", 3);
+    assertStringInstr(false, "ai̇oxXİo", "Xx", "UNICODE_CI", 5);
+    assertStringInstr(false, "aİoi̇oxx", "XX", "UNICODE_CI", 7);
+    assertStringInstr(false, "i̇", "i", "UTF8_LCASE", 1); // != UNICODE_CI
+    assertStringInstr(false, "i̇", "\u0307", "UTF8_LCASE", 2); // != UNICODE_CI
+    assertStringInstr(false, "i̇", "İ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "İ", "i", "UTF8_LCASE", 0);
+    assertStringInstr(false, "İoi̇o12", "i̇o", "UTF8_LCASE", 1);
+    assertStringInstr(false, "i̇oİo12", "İo", "UTF8_LCASE", 1);
+    assertStringInstr(false, "abİoi̇o", "i̇o", "UTF8_LCASE", 3);
+    assertStringInstr(false, "abi̇oİo", "İo", "UTF8_LCASE", 3);
+    assertStringInstr(false, "abI\u0307oi̇o", "İo", "UTF8_LCASE", 3);
+    assertStringInstr(false, "ai̇oxXİo", "Xx", "UTF8_LCASE", 5);
+    assertStringInstr(false, "abİoi̇o", "\u0307o", "UTF8_LCASE", 6);
+    assertStringInstr(false, "aİoi̇oxx", "XX", "UTF8_LCASE", 7);
     // Greek sigmas.
-    assertStringInstr("σ", "σ", "UTF8_BINARY", 1);
-    assertStringInstr("σ", "ς", "UTF8_BINARY", 0);
-    assertStringInstr("σ", "Σ", "UTF8_BINARY", 0);
-    assertStringInstr("ς", "σ", "UTF8_BINARY", 0);
-    assertStringInstr("ς", "ς", "UTF8_BINARY", 1);
-    assertStringInstr("ς", "Σ", "UTF8_BINARY", 0);
-    assertStringInstr("Σ", "σ", "UTF8_BINARY", 0);
-    assertStringInstr("Σ", "ς", "UTF8_BINARY", 0);
-    assertStringInstr("Σ", "Σ", "UTF8_BINARY", 1);
-    assertStringInstr("σ", "σ", "UTF8_LCASE", 1);
-    assertStringInstr("σ", "ς", "UTF8_LCASE", 1);
-    assertStringInstr("σ", "Σ", "UTF8_LCASE", 1);
-    assertStringInstr("ς", "σ", "UTF8_LCASE", 1);
-    assertStringInstr("ς", "ς", "UTF8_LCASE", 1);
-    assertStringInstr("ς", "Σ", "UTF8_LCASE", 1);
-    assertStringInstr("Σ", "σ", "UTF8_LCASE", 1);
-    assertStringInstr("Σ", "ς", "UTF8_LCASE", 1);
-    assertStringInstr("Σ", "Σ", "UTF8_LCASE", 1);
-    assertStringInstr("σ", "σ", "UNICODE", 1);
-    assertStringInstr("σ", "ς", "UNICODE", 0);
-    assertStringInstr("σ", "Σ", "UNICODE", 0);
-    assertStringInstr("ς", "σ", "UNICODE", 0);
-    assertStringInstr("ς", "ς", "UNICODE", 1);
-    assertStringInstr("ς", "Σ", "UNICODE", 0);
-    assertStringInstr("Σ", "σ", "UNICODE", 0);
-    assertStringInstr("Σ", "ς", "UNICODE", 0);
-    assertStringInstr("Σ", "Σ", "UNICODE", 1);
-    assertStringInstr("σ", "σ", "UNICODE_CI", 1);
-    assertStringInstr("σ", "ς", "UNICODE_CI", 1);
-    assertStringInstr("σ", "Σ", "UNICODE_CI", 1);
-    assertStringInstr("ς", "σ", "UNICODE_CI", 1);
-    assertStringInstr("ς", "ς", "UNICODE_CI", 1);
-    assertStringInstr("ς", "Σ", "UNICODE_CI", 1);
-    assertStringInstr("Σ", "σ", "UNICODE_CI", 1);
-    assertStringInstr("Σ", "ς", "UNICODE_CI", 1);
-    assertStringInstr("Σ", "Σ", "UNICODE_CI", 1);
+    assertStringInstr(false, "σ", "σ", "UTF8_BINARY", 1);
+    assertStringInstr(false, "σ", "ς", "UTF8_BINARY", 0);
+    assertStringInstr(false, "σ", "Σ", "UTF8_BINARY", 0);
+    assertStringInstr(false, "ς", "σ", "UTF8_BINARY", 0);
+    assertStringInstr(false, "ς", "ς", "UTF8_BINARY", 1);
+    assertStringInstr(false, "ς", "Σ", "UTF8_BINARY", 0);
+    assertStringInstr(false, "Σ", "σ", "UTF8_BINARY", 0);
+    assertStringInstr(false, "Σ", "ς", "UTF8_BINARY", 0);
+    assertStringInstr(false, "Σ", "Σ", "UTF8_BINARY", 1);
+    assertStringInstr(false, "σ", "σ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "σ", "ς", "UTF8_LCASE", 1);
+    assertStringInstr(false, "σ", "Σ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "ς", "σ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "ς", "ς", "UTF8_LCASE", 1);
+    assertStringInstr(false, "ς", "Σ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "Σ", "σ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "Σ", "ς", "UTF8_LCASE", 1);
+    assertStringInstr(false, "Σ", "Σ", "UTF8_LCASE", 1);
+    assertStringInstr(false, "σ", "σ", "UNICODE", 1);
+    assertStringInstr(false, "σ", "ς", "UNICODE", 0);
+    assertStringInstr(false, "σ", "Σ", "UNICODE", 0);
+    assertStringInstr(false, "ς", "σ", "UNICODE", 0);
+    assertStringInstr(false, "ς", "ς", "UNICODE", 1);
+    assertStringInstr(false, "ς", "Σ", "UNICODE", 0);
+    assertStringInstr(false, "Σ", "σ", "UNICODE", 0);
+    assertStringInstr(false, "Σ", "ς", "UNICODE", 0);
+    assertStringInstr(false, "Σ", "Σ", "UNICODE", 1);
+    assertStringInstr(false, "σ", "σ", "UNICODE_CI", 1);
+    assertStringInstr(false, "σ", "ς", "UNICODE_CI", 1);
+    assertStringInstr(false, "σ", "Σ", "UNICODE_CI", 1);
+    assertStringInstr(false, "ς", "σ", "UNICODE_CI", 1);
+    assertStringInstr(false, "ς", "ς", "UNICODE_CI", 1);
+    assertStringInstr(false, "ς", "Σ", "UNICODE_CI", 1);
+    assertStringInstr(false, "Σ", "σ", "UNICODE_CI", 1);
+    assertStringInstr(false, "Σ", "ς", "UNICODE_CI", 1);
+    assertStringInstr(false, "Σ", "Σ", "UNICODE_CI", 1);
   }
 
   private void assertFindInSet(String word, UTF8String set, String collationName,
