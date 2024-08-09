@@ -401,7 +401,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {
-        case DatabaseInSessionCatalogForNonV2Commands(db) => ShowViewsCommand(db, pattern, output)
+        case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
           throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "views")
       }
@@ -425,7 +425,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case ShowFunctions(
-    DatabaseInSessionCatalogForNonV2Commands(db), userScope, systemScope, pattern, output) =>
+    ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
       ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
 
     case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
@@ -651,7 +651,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   // Use this object to help match commands that do not have a v2 implementation.
-  private object DatabaseInSessionCatalogForNonV2Commands {
+  private object ResolvedDatabaseInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
       case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
       case ResolvedNamespace(_, Seq(), _) =>
