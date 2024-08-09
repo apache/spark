@@ -284,8 +284,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               .add("key", new StructType().add("value", StringType))
               .add("expiryTimestampMs", LongType, false),
             1)),
-          None,
-          1
+          None
         )
 
         val schema1 = StateStoreColFamilySchema(
@@ -299,19 +298,19 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               .add("expiryTimestampMs", LongType, false)
               .add("key", new StructType().add("value", StringType)),
             List(0))),
-          None,
-          2
+          None
         )
 
         val schema2 = StateStoreColFamilySchema(
-          "_ttl_listState",
-          expirationSchema.add("groupingKey", keySchema),
-          new StructType().add("__dummy__", NullType),
-          Some(RangeKeyScanStateEncoderSpec(
-            expirationSchema.add("groupingKey", keySchema),
-            List(0))),
-          None,
-          3
+          "mapState",
+          compositeKeySchema,
+          new StructType()
+            .add("value", new StructType().add("value", StringType))
+            .add("ttlExpirationMs", LongType),
+          Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
+          Some(new StructType()
+            .add("id", IntegerType, false)
+            .add("name", StringType))
         )
 
         val schema3 = StateStoreColFamilySchema(
@@ -329,22 +328,10 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
                 .add("id", IntegerType, false)
                 .add("name", StringType)),
             List(0))),
-          None,
-          4
+          None
         )
 
         val schema4 = StateStoreColFamilySchema(
-          "_ttl_valueStateTTL",
-          expirationSchema.add("groupingKey", keySchema),
-          new StructType().add("__dummy__", NullType),
-          Some(RangeKeyScanStateEncoderSpec(
-            expirationSchema.add("groupingKey", keySchema),
-            List(0))),
-          None,
-          5
-        )
-
-        val schema5 = StateStoreColFamilySchema(
           "listState",
           keySchema,
           new StructType()
@@ -353,42 +340,55 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None,
-          6
+          None
+        )
+
+        val schema5 = StateStoreColFamilySchema(
+          "_ttl_listState",
+          expirationSchema.add("groupingKey", keySchema),
+          new StructType().add("__dummy__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            expirationSchema.add("groupingKey", keySchema),
+            List(0))),
+          None
         )
 
         val schema6 = StateStoreColFamilySchema(
-          "mapState",
-          compositeKeySchema,
-          new StructType()
-            .add("value", new StructType().add("value", StringType))
-            .add("ttlExpirationMs", LongType),
-          Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-          Some(new StructType()
-            .add("id", IntegerType, false)
-            .add("name", StringType)),
-          7
-        )
-
-        val schema7 = StateStoreColFamilySchema(
           "valueState",
           keySchema,
           new StructType().add("value", IntegerType, false),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None,
-          8
+          None
         )
 
-        val schema8 = StateStoreColFamilySchema(
+        val schema7 = StateStoreColFamilySchema(
           "valueStateTTL",
           keySchema,
           new StructType()
             .add("value", new StructType().add("value", IntegerType, false))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None,
-          9
+          None
         )
+
+        val schema8 = StateStoreColFamilySchema(
+          "_ttl_valueStateTTL",
+          expirationSchema.add("groupingKey", keySchema),
+          new StructType().add("__dummy__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            expirationSchema.add("groupingKey", keySchema),
+            List(0))),
+          None
+        )
+
+        val expectedSchemas = List(
+          schema0, schema1, schema2, schema3, schema4, schema5, schema6, schema7, schema8)
+            .sortBy(_.colFamilyName)
+            .zipWithIndex
+            .map { case (schema, index) =>
+              schema.copy(colFamilyId = (index + 1).toShort)
+            }.toSet
+
 
         val ttlKey = "k1"
         val noTtlKey = "k2"
@@ -431,9 +431,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
                 .get("numMapStateWithTTLVars").toInt)
 
             assert(colFamilySeq.length == 9)
-            assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2, schema3, schema4, schema5, schema6, schema7, schema8
-            ).map(_.toString))
+            assert(colFamilySeq.map(_.toString).toSet == expectedSchemas.map(_.toString))
           },
           StopStream
         )

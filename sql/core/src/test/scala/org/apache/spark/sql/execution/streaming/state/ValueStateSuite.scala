@@ -192,8 +192,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
       provider.init(
         storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-        useColumnFamilies = true,
-        storeConf, new Configuration)
+        useColumnFamilies = true, storeConf, new Configuration)
     }
     checkError(
       ex,

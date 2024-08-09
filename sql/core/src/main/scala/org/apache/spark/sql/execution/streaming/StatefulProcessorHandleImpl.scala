@@ -78,6 +78,8 @@ class QueryInfoImpl(
  * @param isStreaming - defines whether the query is streaming or batch
  * @param batchTimestampMs - timestamp for the current batch if available
  * @param metrics - metrics to be updated as part of stateful processing
+ * @param columnFamilyIds - map of column family name to virtual column family id,
+ *                        assigned at query planning time to be used by the state store provider
  */
 class StatefulProcessorHandleImpl(
     store: StateStore,

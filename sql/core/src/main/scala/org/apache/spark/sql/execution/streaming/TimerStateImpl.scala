@@ -34,6 +34,7 @@ object TimerStateUtils {
   val EVENT_TIMERS_STATE_NAME = "_eventTimers"
   val KEY_TO_TIMESTAMP_CF = "_keyToTimestamp"
   val TIMESTAMP_TO_KEY_CF = "_timestampToKey"
+  val TIMER_VALUE_ROW_SCHEMA = StructType(Array(StructField("__dummy__", NullType)))
 }
 
 /**

@@ -902,8 +902,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           keySchema,
           new StructType().add("value", LongType, false),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None,
-          1.toShort
+          None
         )
         val schema1 = StateStoreColFamilySchema(
           "listState",
@@ -912,8 +911,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               .add("id", LongType, false)
               .add("name", StringType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None,
-          2.toShort
+          None
         )
 
         val userKeySchema = new StructType()
@@ -927,9 +925,15 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           compositeKeySchema,
           new StructType().add("value", StringType),
           Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-          Option(userKeySchema),
-          3.toShort
+          Option(userKeySchema)
         )
+
+        val expectedSchemas = List(schema0, schema1, schema2)
+          .sortBy(_.colFamilyName)
+          .zipWithIndex
+          .map { case (schema, index) =>
+              schema.copy(colFamilyId = (index + 1).toShort)
+            }.toSet
 
         val inputData = MemoryStream[String]
         val result = inputData.toDS()
@@ -959,9 +963,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
             assert(colFamilySeq.length == 3)
-            assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2
-            ).map(_.toString))
+            assert(colFamilySeq.map(_.toString).toSet == expectedSchemas.map(_.toString))
           },
           StopStream
         )

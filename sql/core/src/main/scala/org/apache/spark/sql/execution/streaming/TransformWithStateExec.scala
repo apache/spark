@@ -695,7 +695,7 @@ object TransformWithStateExec {
       .sortBy(_._2.colFamilyName)
       .zipWithIndex
       .map { case ((name, schema), index) =>
-        name -> schema.copy(colFamilyId = index.toShort)
+        name -> schema.copy(colFamilyId = (index + 1).toShort)
       }.toMap
 
     statefulProcessor.close()

@@ -125,7 +125,9 @@ trait StateStore extends ReadStateStore {
   def removeColFamilyIfExists(colFamilyName: String): Boolean
 
   /**
-   * Create column family with given name, if absent.
+   * Create a virtual column family by adding a mapping from
+   * column family name to column family id map, and populating
+   * the encoders for this column family id in the provider.
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,

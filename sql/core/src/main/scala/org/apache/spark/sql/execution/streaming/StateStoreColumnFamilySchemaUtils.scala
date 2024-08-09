@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.StateTTLSchema.TTL_VALUE_ROW_SCHEMA
+import org.apache.spark.sql.execution.streaming.TimerStateUtils.TIMER_VALUE_ROW_SCHEMA
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
-import org.apache.spark.sql.streaming.TimeMode
-import org.apache.spark.sql.types.{NullType, StructField, StructType}
+
 
 object StateStoreColumnFamilySchemaUtils {
 
@@ -109,19 +109,18 @@ object StateStoreColumnFamilySchemaUtils {
     }
     val rowEncoder = new TimerKeyEncoder(keyEncoder)
     val schemaForKeyRow = rowEncoder.schemaForKeyRow
-    val schemaForValueRow = StructType(Array(StructField("__dummy__", NullType)))
 
     List(
       StateStoreColFamilySchema(
         timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF,
         schemaForKeyRow,
-        schemaForValueRow,
+        TIMER_VALUE_ROW_SCHEMA,
         Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1))
       ),
       StateStoreColFamilySchema(
         timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF,
         rowEncoder.keySchemaForSecIndex,
-        schemaForValueRow,
+        TIMER_VALUE_ROW_SCHEMA,
         Some(RangeKeyScanStateEncoderSpec(rowEncoder.keySchemaForSecIndex, Seq(0)))
       )
     )

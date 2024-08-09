@@ -254,7 +254,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
         TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs),
-        columnFamilyIds = Map("testState" -> 1.toShort))
+        columnFamilyIds = Map("testState" -> 1.toShort, "_ttl_testState" -> 2.toShort))
 
       Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)

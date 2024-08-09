@@ -162,23 +162,26 @@ class StateSchemaCompatibilityChecker(
 
   /**
    * Function to validate the new state store schema and evolve the schema if required.
+   * This function also assigns the virtual column family IDs for each column family.
+   * If schema for a particular column family evolves
    * @param newStateSchema - proposed new state store schema by the operator
    * @param ignoreValueSchema - whether to ignore value schema compatibility checks or not
    * @param stateSchemaVersion - version of the state schema to be used
-   * @return - true if the schema has evolved, false otherwise
+   * @return - true if the schema has evolved, false otherwise. We also return a list of
+   *         column family schemas, with their
    */
   def validateAndMaybeEvolveStateSchema(
       newStateSchema: List[StateStoreColFamilySchema],
       ignoreValueSchema: Boolean,
       stateSchemaVersion: Int): (Boolean, List[StateStoreColFamilySchema]) = {
     val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
-    // assign colFamilyIds based on position in list
     var maxId: Short = existingStateSchemaList.map(_.colFamilyId).maxOption.getOrElse(0)
 
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
       val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName).zipWithIndex.map {
         case (schema, index) =>
+          // assign colFamilyIds based on position in list
           schema.copy(colFamilyId = (index + 1).toShort)
       }
       createSchemaFile(newStateSchemaList, stateSchemaVersion)
