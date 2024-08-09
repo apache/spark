@@ -174,7 +174,7 @@ class SingleStatementExec(
         }
       case throwable: Throwable =>
         raisedError = true
-        errorState = Some("UNKNOWN")
+        errorState = Some("SQLEXCEPTION")
         rethrow = Some(throwable)
     }
   }
@@ -200,7 +200,7 @@ class CompoundBodyExec(
         case Some(handler) if condition.startsWith("02") => Some(handler)
         case _ => None
       })
-      .orElse(conditionHandlerMap.get("UNKNOWN"))
+      .orElse(conditionHandlerMap.get("SQLEXCEPTION"))
   }
 
   /**

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 
+
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
  */
@@ -97,12 +98,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
     if (isExitHandler) {
       val leave = new LeaveStatementExec(label)
-      val stmts = compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++
+      val statements = compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++
         dropVariables :+ leave
 
       return new CompoundBodyExec(
         compoundBody.label,
-        stmts,
+        statements,
         conditionHandlerMap,
         session)
     }
@@ -150,7 +151,16 @@ case class SqlScriptingInterpreter(session: SparkSession) {
     val executionPlan = buildExecutionPlan(compoundBody)
     executionPlan.flatMap {
       case statement: SingleStatementExec if statement.raisedError =>
-        throw statement.rethrow.get
+        val sqlState = statement.errorState.getOrElse(throw statement.rethrow.get)
+
+        // SQLWARNING and NOT FOUND are not considered as errors.
+        if (!sqlState.startsWith("01") || !sqlState.startsWith("02")) {
+          // Throw the error for SQLEXCEPTION.
+          throw statement.rethrow.get
+        }
+
+        // Return empty result set for SQLWARNING and NOT FOUND.
+        None
       case statement: SingleStatementExec if statement.shouldCollectResult => statement.result
       case _ => None
     }

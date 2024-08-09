@@ -18,8 +18,8 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -430,6 +430,33 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
                         // skip select 5
                         // skip select 6
       Array(Row(1)),    // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - continue resolve by the CATCH ALL handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  SELECT 1/0;
+        |  SELECT 3;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Array.empty[Row], // declare var
+      Array(Row(2)),    // select
+      Array(Row(-1)),   // select flag
+      Array.empty[Row], // set flag
+      Array(Row(3)),    // select
+      Array(Row(1)),    // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
