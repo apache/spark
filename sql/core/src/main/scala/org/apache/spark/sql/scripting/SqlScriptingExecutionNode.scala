@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -83,10 +83,11 @@ trait NonLeafStatementExec extends CompoundStatementExec {
           df.limit(2).collect() match {
             case Array(row) => row.getBoolean(0)
             case _ =>
-              throw QueryExecutionErrors.invalidBooleanStatementError(statement.getText)
+              throw SqlScriptingErrors.booleanStatementTooManyRows(
+                statement.origin, statement.getText)
           }
         case _ =>
-          throw QueryExecutionErrors.invalidBooleanStatementError(statement.getText)
+          throw SqlScriptingErrors.invalidBooleanStatement(statement.origin, statement.getText)
       }
     case _ =>
       throw SparkException.internalError("Boolean condition must be SingleStatementExec")

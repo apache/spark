@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -378,11 +379,35 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |END
           |""".stripMargin
       checkError(
-        exception = intercept[SparkIllegalArgumentException] (
+        exception = intercept[SqlScriptingException] (
           runSqlScript(commands)
         ),
         errorClass = "INVALID_BOOLEAN_STATEMENT",
         parameters = Map("invalidStatement" -> "1")
+      )
+    }
+  }
+
+  test("if's condition must return a single row data") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a BOOLEAN) USING parquet;
+          |  INSERT INTO t VALUES (true);
+          |  INSERT INTO t VALUES (true);
+          |  IF (select * from t) THEN
+          |    SELECT 46;
+          |  END IF;
+          |END
+          |""".stripMargin
+      checkError(
+        exception = intercept[SparkException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(select * from t)", start = 118, stop = 134)
       )
     }
   }
