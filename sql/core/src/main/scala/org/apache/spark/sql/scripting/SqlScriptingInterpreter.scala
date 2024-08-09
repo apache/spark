@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.SparkSession
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, IfElseStatement, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, IfElseStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
+
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
  */
-case class SqlScriptingInterpreter() {
+case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
    * Build execution plan and return statements that need to be executed,
@@ -39,10 +44,8 @@ case class SqlScriptingInterpreter() {
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(
-      compound: CompoundBody,
-      session: SparkSession): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound, session).asInstanceOf[CompoundBodyExec].getTreeIterator
+  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
@@ -58,44 +61,108 @@ case class SqlScriptingInterpreter() {
       case _ => None
     }
 
+  private def transformBodyIntoExec(
+      compoundBody: CompoundBody,
+      isExitHandler: Boolean = false,
+      label: String = ""): CompoundBodyExec = {
+    val variables = compoundBody.collection.flatMap {
+      case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
+      case _ => None
+    }
+    val dropVariables = variables
+      .map(varName => DropVariable(varName, ifExists = true))
+      .map(new SingleStatementExec(_, Origin(), isInternal = true))
+      .reverse
+
+    val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
+    val handlers = ListBuffer[ErrorHandlerExec]()
+    compoundBody.handlers.foreach(handler => {
+      val handlerBodyExec =
+        transformBodyIntoExec(handler.body,
+          handler.handlerType == HandlerType.EXIT,
+          compoundBody.label.get)
+      val handlerExec = new ErrorHandlerExec(handlerBodyExec)
+
+      handler.conditions.foreach(condition => {
+        val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
+        conditionHandlerMap.get(conditionValue) match {
+          case Some(_) =>
+            throw SqlScriptingErrors.duplicateHandlerForSameSqlState(
+              CurrentOrigin.get, conditionValue)
+          case None => conditionHandlerMap.put(conditionValue, handlerExec)
+        }
+      })
+
+      handlers += handlerExec
+    })
+
+    if (isExitHandler) {
+      val leave = new LeaveStatementExec(label)
+      val statements = compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++
+        dropVariables :+ leave
+
+      return new CompoundBodyExec(
+        compoundBody.label,
+        statements,
+        conditionHandlerMap,
+        session)
+    }
+
+    new CompoundBodyExec(
+      compoundBody.label,
+      compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
+      conditionHandlerMap,
+      session)
+  }
+
   /**
    * Transform the parsed tree to the executable node.
    *
    * @param node
    *   Root node of the parsed tree.
-   * @param session
-   *   Spark session that SQL script is executed within.
    * @return
    *   Executable statement.
    */
-  private def transformTreeIntoExecutable(
-      node: CompoundPlanStatement, session: SparkSession): CompoundStatementExec =
+  private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
-        val variables = body.collection.flatMap {
-          case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
-          case _ => None
-        }
-        val dropVariables = variables
-          .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true))
-          .reverse
-        new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st, session)) ++ dropVariables)
+        transformBodyIntoExec(body)
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
         val conditionalBodiesExec = conditionalBodies.map(body =>
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
-          isInternal = false)
+          shouldCollectResult = true)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Unsupported operation in the execution plan.")
     }
+
+  def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val executionPlan = buildExecutionPlan(compoundBody)
+    executionPlan.flatMap {
+      case statement: SingleStatementExec if statement.raisedError =>
+        val sqlState = statement.errorState.getOrElse(throw statement.rethrow.get)
+
+        // SQLWARNING and NOT FOUND are not considered as errors.
+        if (!sqlState.startsWith("01") || !sqlState.startsWith("02")) {
+          // Throw the error for SQLEXCEPTION.
+          throw statement.rethrow.get
+        }
+
+        // Return empty result set for SQLWARNING and NOT FOUND.
+        None
+      case statement: SingleStatementExec if statement.shouldCollectResult => statement.result
+      case _ => None
+    }
+  }
 }

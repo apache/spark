@@ -40,7 +40,9 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
@@ -632,6 +634,11 @@ class SparkSession private(
    |  Everything else  |
    * ----------------- */
 
+  private def executeScript(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val interpreter = sessionState.sqlScriptingInterpreter
+    interpreter.execute(compoundBody)
+  }
+
   /**
    * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
@@ -650,14 +657,27 @@ class SparkSession private(
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
-          parsedPlan
+        val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
+        parsedPlan match {
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label, _, _) if args.nonEmpty =>
+            CompoundBody(Seq(SingleStatement(
+              PosParameterizedQuery(
+                singleStmtPlan.parsedPlan, args.map(lit(_).expr).toImmutableArraySeq))), label)
+          case p =>
+            assert(args.isEmpty, "Named parameters are not supported for batch queries")
+            p
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) =>
+          Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
+        case _ =>
+          // execute the plan directly if it is not a single statement
+          val lastRow = executeScript(plan).foldLeft(Array.empty[Row])((_, next) => next)
+          val attributes = DataTypeUtils.toAttributes(lastRow.head.schema)
+          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow.toIndexedSeq))
+      }
     }
 
   /**
@@ -703,14 +723,27 @@ class SparkSession private(
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+        val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
+        parsedPlan match {
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label, _, _) if args.nonEmpty =>
+            CompoundBody(Seq(SingleStatement(
+              NameParameterizedQuery(
+                singleStmtPlan.parsedPlan, args.transform((_, v) => lit(v).expr)))), label)
+          case p =>
+            assert(args.isEmpty, "Positional parameters are not supported for batch queries")
+            p
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _, _, _) =>
+          Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
+        case _ =>
+          // execute the plan directly if it is not a single statement
+          val lastRow = executeScript(plan).foldLeft(Array.empty[Row])((_, next) => next)
+          val attributes = DataTypeUtils.toAttributes(lastRow.head.schema)
+          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow.toIndexedSeq))
+      }
     }
 
   /**

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 
@@ -57,7 +60,40 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
-    label: Option[String]) extends CompoundPlanStatement
+    label: Option[String] = None,
+    handlers: Seq[ErrorHandler] = Seq.empty,
+    conditions: mutable.HashMap[String, String] = mutable.HashMap()) extends CompoundPlanStatement
+
+/**
+ * Logical operator for an error condition.
+ * @param conditionName Name of the error condition.
+ * @param value SQLSTATE or Error Code.
+ */
+case class ErrorCondition(
+    conditionName: String,
+    value: String) extends CompoundPlanStatement
+
+object HandlerType extends Enumeration {
+    type HandlerType = Value
+    val EXIT, CONTINUE = Value
+}
+
+/**
+ * Logical operator for an error condition.
+ * @param conditions Name of the error condition variable for which the handler is built.
+ * @param body CompoundBody of the handler.
+ * @param handlerType Type of the handler (CONTINUE or EXIT).
+ */
+case class ErrorHandler(
+    conditions: Seq[String],
+    body: CompoundBody,
+    handlerType: HandlerType) extends CompoundPlanStatement
+
+/**
+ * Logical operator for a leave statement.
+ * @param label Label of the CompoundBody leave statement should exit.
+ */
+case class BatchLeaveStatement(label: String) extends CompoundPlanStatement
 
 /**
  * Logical operator for IF ELSE statement.

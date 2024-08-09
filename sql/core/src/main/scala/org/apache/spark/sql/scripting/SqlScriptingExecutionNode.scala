@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import scala.collection.mutable
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.types.BooleanType
@@ -44,7 +46,34 @@ sealed trait CompoundStatementExec extends Logging {
 /**
  * Leaf node in the execution tree.
  */
-trait LeafStatementExec extends CompoundStatementExec
+trait LeafStatementExec extends CompoundStatementExec {
+
+  /**
+  * Execute the statement.
+  * @param session Spark session.
+  */
+  def execute(session: SparkSession): Unit
+
+  /**
+   * Whether an error was raised during the execution of this statement.
+   */
+  var raisedError: Boolean = false
+
+  /**
+   * Error state of the statement.
+   */
+  var errorState: Option[String] = None
+
+  /**
+   * Error raised during statement execution.
+   */
+  var error: Option[SparkThrowable] = None
+
+  /**
+   * Throwable to rethrow after the statement execution if the error is not handled.
+   */
+  var rethrow: Option[Throwable] = None
+}
 
 /**
  * Non-leaf node in the execution tree. It is an iterator over executable child nodes.
@@ -68,9 +97,6 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       session: SparkSession,
       statement: LeafStatementExec): Boolean = statement match {
     case statement: SingleStatementExec =>
-      assert(!statement.isExecuted)
-      statement.isExecuted = true
-
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
       val df = Dataset.ofRows(session, statement.parsedPlan)
@@ -96,18 +122,21 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
  *   compound.
+ * @param shouldCollectResult
+ *   Whether we should collect result after statement execution. Example: results from conditions
+ *   in if-else or loops should not be collected.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
-    override val isInternal: Boolean)
+    override val isInternal: Boolean = false,
+    val shouldCollectResult: Boolean = false)
   extends LeafStatementExec with WithOrigin {
 
   /**
-   * Whether this statement has been executed during the interpretation phase.
-   * Example: Statements in conditions of If/Else, While, etc.
+   * Data returned after execution.
    */
-  var isExecuted = false
+  var result: Option[Array[Row]] = None
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -119,20 +148,112 @@ class SingleStatementExec(
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 
-  override def reset(): Unit = isExecuted = false
+  override def reset(): Unit = {
+    raisedError = false
+    errorState = None
+    error = None
+    rethrow = None
+    result = None // Should we do this?
+  }
+
+  def execute(session: SparkSession): Unit = {
+    try {
+      val rows = Some(Dataset.ofRows(session, parsedPlan).collect())
+      if (shouldCollectResult) {
+        result = rows
+      }
+    } catch {
+      case e: SparkThrowable =>
+        raisedError = true
+        errorState = Some(e.getSqlState)
+        error = Some(e)
+        e match {
+          case throwable: Throwable =>
+            rethrow = Some(throwable)
+          case _ =>
+        }
+      case throwable: Throwable =>
+        raisedError = true
+        errorState = Some("SQLEXCEPTION")
+        rethrow = Some(throwable)
+    }
+  }
 }
 
 /**
- * Abstract class for all statements that contain nested statements.
- * Implements recursive iterator logic over all child execution nodes.
- * @param collection
- *   Collection of child execution nodes.
+ * Executable node for CompoundBody.
+ * @param statements
+ *   Executable nodes for nested statements within the CompoundBody.
+ * @param session
+ *   Spark session.
  */
-abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
+class CompoundBodyExec(
+      label: Option[String] = None,
+      statements: Seq[CompoundStatementExec],
+      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
+      session: SparkSession)
   extends NonLeafStatementExec {
 
-  private var localIterator = collection.iterator
-  private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private def getHandler(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+      .orElse(conditionHandlerMap.get("NOT FOUND") match {
+        case Some(handler) if condition.startsWith("02") => Some(handler)
+        case _ => None
+      })
+      .orElse(conditionHandlerMap.get("SQLEXCEPTION"))
+  }
+
+  /**
+   * Handle error raised during the execution of the statement.
+   * @param statement statement that possibly raised the error
+   * @return pass through the statement
+   */
+  private def handleError(statement: LeafStatementExec): LeafStatementExec = {
+    if (statement.raisedError) {
+      getHandler(statement.errorState.get).foreach { handler =>
+        statement.reset() // Clear all flags and result
+        handler.reset()
+        returnHere = curr
+        curr = Some(handler.getHandlerBody)
+      }
+    }
+    statement
+  }
+
+  /**
+   * Check if the leave statement was used, if it is not used stop iterating surrounding
+   * [[CompoundBodyExec]] and move iterator forward. If the label of the block matches the label of
+   * the leave statement, mark the leave statement as used.
+   * @param leave leave  statement
+   * @return pass through the leave statement
+   */
+  private def handleLeave(leave: LeaveStatementExec): LeaveStatementExec = {
+    if (!leave.used) {
+      // Hard stop the iteration of the current begin/end block
+      stopIteration = true
+      // If label of the block matches the label of the leave statement,
+      // mark the leave statement as used
+      if (label.getOrElse("").equals(leave.getLabel)) {
+        leave.used = true
+      }
+    }
+    curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+    leave
+  }
+
+  private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
+  private var curr: Option[CompoundStatementExec] =
+    if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var stopIteration: Boolean = false  // hard stop iteration flag
+  private var returnHere: Option[CompoundStatementExec] = None
+
+  def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    statements.foreach(_.reset())
+    localIterator = statements.iterator
+    curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  }
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
@@ -144,7 +265,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        localIterator.hasNext || childHasNext
+        (localIterator.hasNext || childHasNext || returnHere.isDefined) && !stopIteration
       }
 
       @scala.annotation.tailrec
@@ -152,14 +273,31 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
+          case Some(leave: LeaveStatementExec) =>
+            handleLeave(leave)
           case Some(statement: LeafStatementExec) =>
+            statement.execute(session)  // Execute the leaf statement
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-            statement
+            handleError(statement)  // Handle error if raised
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
-              body.getTreeIterator.next()
+              val statement = body.getTreeIterator.next() // Get next statement from the child node
+              statement match {
+                case leave: LeaveStatementExec =>
+                  handleLeave(leave)
+                case leafStatement: LeafStatementExec =>
+                  // This check is done to handle error in surrounding begin/end block
+                  // if it was not handled in the nested block
+                  handleError(leafStatement)
+                case nonLeafStatement: NonLeafStatementExec => nonLeafStatement
+              }
             } else {
-              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+              if (returnHere.isDefined) {
+                curr = returnHere
+                returnHere = None
+              } else {
+                curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+              }
               next()
             }
           case _ => throw SparkException.internalError(
@@ -167,23 +305,44 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
         }
       }
     }
+}
 
-  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+class ErrorHandlerExec(body: CompoundBodyExec) extends NonLeafStatementExec {
 
-  override def reset(): Unit = {
-    collection.foreach(_.reset())
-    localIterator = collection.iterator
-    curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-  }
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  def getHandlerBody: CompoundBodyExec = body
+
+  override def reset(): Unit = body.reset()
 }
 
 /**
- * Executable node for CompoundBody.
- * @param statements
- *   Executable nodes for nested statements within the CompoundBody.
+ * Executable node for Leave statement.
+ * @param label
+ *   Label of the [[CompoundBodyExec]] that should be exited.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec])
-  extends CompoundNestedStatementIteratorExec(statements)
+class LeaveStatementExec(val label: String) extends LeafStatementExec {
+
+  var used: Boolean = false
+
+  def getLabel: String = label
+
+  override def execute(session: SparkSession): Unit = ()
+
+  override def reset(): Unit = used = false
+}
+
+/**
+ * Executable node for Continue statement.
+ */
+class ContinueStatementExec() extends LeafStatementExec {
+
+  var used: Boolean = false
+
+  override def execute(session: SparkSession): Unit = ()
+
+  override def reset(): Unit = used = false
+}
 
 /**
  * Executable node for IfElseStatement.

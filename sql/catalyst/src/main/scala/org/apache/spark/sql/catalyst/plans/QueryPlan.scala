@@ -17,22 +17,19 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import java.util.IdentityHashMap
-
-import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.rules.RuleId
-import org.apache.spark.sql.catalyst.rules.UnknownRuleId
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.rules.{RuleId, UnknownRuleId}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
-import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag, TreePatternBits}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.collection.BitSet
+
+import java.util.IdentityHashMap
+import scala.collection.mutable
 
 /**
  * An abstraction of the Spark SQL query plan tree, which can be logical or physical. This class
