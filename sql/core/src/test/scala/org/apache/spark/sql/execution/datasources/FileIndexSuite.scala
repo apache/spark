@@ -112,7 +112,7 @@ class FileIndexSuite extends SharedSparkSession {
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val msg = intercept[AssertionError] {
+        val msg = intercept[SparkRuntimeException] {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           fileIndex.partitionSpec()
         }.getMessage

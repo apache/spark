@@ -625,6 +625,17 @@
     ],
     "sqlState" : "40000"
   },
+  "CONFLICTING_PARTITION_COLUMN_NAMES" : {
+    "message" : [
+      "Conflicting partition column names detected:",
+      "<distinctPartColLists>",
+      "For partitioned table directories, data files should only live in leaf directories.",
+      "And directories at the same level should have the same partition column name.",
+      "Please check the following directories for unexpected files or inconsistent partition column names:",
+      "<suspiciousPaths>"
+    ],
+    "sqlState" : "KD009"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
@@ -3543,6 +3554,24 @@
     ],
     "sqlState" : "42805"
   },
+  "PARQUET_TYPE_ILLEGAL" : {
+    "message" : [
+      "Illegal Parquet type: <parquetType>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_RECOGNIZED" : {
+    "message" : [
+      "Unrecognized Parquet type: <field>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_SUPPORTED" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
+    ],
+    "sqlState" : "42846"
+  },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
       "Syntax error, unexpected empty statement."
@@ -5879,21 +5908,6 @@
   "_LEGACY_ERROR_TEMP_1171" : {
     "message" : [
       "createTableColumnTypes option column <col> not found in schema <schema>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1172" : {
-    "message" : [
-      "Parquet type not yet supported: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1173" : {
-    "message" : [
-      "Illegal Parquet type: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1174" : {
-    "message" : [
-      "Unrecognized Parquet type: <field>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1181" : {
