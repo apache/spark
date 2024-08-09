@@ -16,9 +16,9 @@
     under the License.
 
 
-========
-StatefulProcessor
-========
+==================
+Stateful Processor
+==================
 .. currentmodule:: pyspark.sql.streaming
 
 .. autosummary::

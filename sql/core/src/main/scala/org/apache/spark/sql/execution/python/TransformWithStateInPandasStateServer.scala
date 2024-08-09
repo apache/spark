@@ -46,11 +46,17 @@ import org.apache.spark.sql.types.StructType
 class TransformWithStateInPandasStateServer(
     private val stateServerSocket: ServerSocket,
     private val statefulProcessorHandle: StatefulProcessorHandleImpl,
-    private val groupingKeySchema: StructType)
+    private val groupingKeySchema: StructType,
+    private val outputStreamForTest: DataOutputStream = null,
+    private val valueStateMapForTest: mutable.HashMap[String, ValueState[Row]] = null)
   extends Runnable with Logging {
   private var inputStream: DataInputStream = _
-  private var outputStream: DataOutputStream = _
-  private val valueStates = mutable.HashMap[String, ValueState[Row]]()
+  private var outputStream: DataOutputStream = outputStreamForTest
+  private val valueStates = if (valueStateMapForTest != null) {
+    valueStateMapForTest
+  } else {
+    new mutable.HashMap[String, ValueState[Row]]()
+  }
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -123,7 +129,7 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def handleStatefulProcessorCall(message: StatefulProcessorCall): Unit = {
+  private[sql] def handleStatefulProcessorCall(message: StatefulProcessorCall): Unit = {
     message.getMethodCase match {
       case StatefulProcessorCall.MethodCase.SETHANDLESTATE =>
         val requestedState = message.getSetHandleState.getState
@@ -158,7 +164,7 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def handleValueStateRequest(message: ValueStateCall): Unit = {
+  private[sql] def handleValueStateRequest(message: ValueStateCall): Unit = {
     val stateName = message.getStateName
     message.getMethodCase match {
       case ValueStateCall.MethodCase.EXISTS =>

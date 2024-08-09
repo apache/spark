@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 import java.net.ServerSocket
-import java.util.concurrent.TimeUnit
 
 import scala.concurrent.ExecutionContext
 
@@ -112,7 +111,6 @@ class TransformWithStateInPandasPythonRunner(
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")
-      executor.awaitTermination(10, TimeUnit.SECONDS)
       executor.shutdownNow()
       closeServerSocketChannelSilently(stateServerSocket)
     }
