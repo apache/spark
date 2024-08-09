@@ -40,6 +40,40 @@ public class CollationSupportSuite {
     {"UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"};
 
   /**
+   * Utility method that converts a hex string to a byte array. The hex string should be formatted
+   * as a space-separated list of hexadecimal values (e.g. "0xFF 0x61"). The method will return a
+   * byte array with the corresponding byte values, in the same order as they appear originally.
+   * @param hexString The hex string to convert to a byte array.
+   * @return The byte array corresponding to the hex string.
+   */
+  private static byte[] getBytesFromHexString(String hexString) {
+    if (hexString.isEmpty()) return new byte[0];
+    String[] hexValues = hexString.split(" ");
+    byte[] byteArray = new byte[hexValues.length];
+    for (int i = 0; i < hexValues.length; i++) {
+      int intValue = Integer.decode(hexValues[i]);
+      byteArray[i] = (byte) intValue;
+    }
+    return byteArray;
+  }
+
+  /**
+   * Utility method that converts a string to a UTF8String. If the string is a hex string, i.e.
+   * formatted like "0xFF 0x61", the method will convert it to a byte array and then to its
+   * corresponding UTF8String. Otherwise, the method will convert the string to a UTF8String.
+   * @param useHex Whether the input string is a hex string, as described above.
+   * @param inputString The string to convert to a UTF8String.
+   * @return The UTF8String corresponding to the input string, given the rules above.
+   */
+  private static UTF8String getUTF8StringFromString(boolean useHex, String inputString) {
+    if (useHex) {
+      return UTF8String.fromBytes(getBytesFromHexString(inputString));
+    } else {
+      return UTF8String.fromString(inputString);
+    }
+  }
+
+  /**
    * Collation-aware UTF8String comparison.
    */
 
@@ -1185,118 +1219,189 @@ public class CollationSupportSuite {
 
   }
 
-  private void assertLocate(String substring, String string, Integer start, String collationName,
-        Integer expected) throws SparkException {
-    UTF8String substr = UTF8String.fromString(substring);
-    UTF8String str = UTF8String.fromString(string);
+  private void assertStringLocate(boolean useHex, String substring, String string, int start,
+      String collationName, int expected) throws SparkException {
+    // Note: When using start < 1, be careful to understand the behavior of the `indexOf`
+    // method and the implications of using `indexOf` in the `StringLocate` case class.
+    UTF8String substr = getUTF8StringFromString(useHex, substring);
+    UTF8String str = getUTF8StringFromString(useHex, string);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr,
-      start - 1, collationId) + 1);
+    int result = CollationSupport.StringLocate.exec(str, substr, start - 1, collationId) + 1;
+    assertEquals(expected, result);
   }
 
   @Test
-  public void testLocate() throws SparkException {
-    // If you add tests with start < 1 be careful to understand the behavior of the indexOf method
-    // and usage of indexOf in the StringLocate class.
-    assertLocate("aa", "aaads", 1, "UTF8_BINARY", 1);
-    assertLocate("aa", "aaads", 2, "UTF8_BINARY", 2);
-    assertLocate("aa", "aaads", 3, "UTF8_BINARY", 0);
-    assertLocate("Aa", "aaads", 1, "UTF8_BINARY", 0);
-    assertLocate("Aa", "aAads", 1, "UTF8_BINARY", 2);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
-    assertLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
-    assertLocate("AA", "aaads", 1, "UTF8_LCASE", 1);
-    assertLocate("aa", "aAads", 2, "UTF8_LCASE", 2);
-    assertLocate("aa", "aaAds", 3, "UTF8_LCASE", 0);
-    assertLocate("abC", "abcabc", 1, "UTF8_LCASE", 1);
-    assertLocate("abC", "abCabc", 2, "UTF8_LCASE", 4);
-    assertLocate("abc", "abcabc", 4, "UTF8_LCASE", 4);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_LCASE", 8);
-    assertLocate("界X", "test大千世界Xtest大千世界", 1, "UTF8_LCASE", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_LCASE", 13);
-    assertLocate("大千", "test大千世界大千世界", 1, "UTF8_LCASE", 5);
-    assertLocate("大千", "test大千世界大千世界", 9, "UTF8_LCASE", 9);
-    assertLocate("大千", "大千世界大千世界", 1, "UTF8_LCASE", 1);
-    assertLocate("aa", "Aaads", 1, "UNICODE", 2);
-    assertLocate("AA", "aaads", 1, "UNICODE", 0);
-    assertLocate("aa", "aAads", 2, "UNICODE", 0);
-    assertLocate("aa", "aaAds", 3, "UNICODE", 0);
-    assertLocate("abC", "abcabc", 1, "UNICODE", 0);
-    assertLocate("abC", "abCabc", 2, "UNICODE", 0);
-    assertLocate("abC", "abCabC", 2, "UNICODE", 4);
-    assertLocate("abc", "abcabc", 1, "UNICODE", 1);
-    assertLocate("abc", "abcabc", 3, "UNICODE", 4);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE", 0);
-    assertLocate("界X", "test大千世界X大千世界", 1, "UNICODE", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE", 13);
-    assertLocate("AA", "aaads", 1, "UNICODE_CI", 1);
-    assertLocate("aa", "aAads", 2, "UNICODE_CI", 2);
-    assertLocate("aa", "aaAds", 3, "UNICODE_CI", 0);
-    assertLocate("abC", "abcabc", 1, "UNICODE_CI", 1);
-    assertLocate("abC", "abCabc", 2, "UNICODE_CI", 4);
-    assertLocate("abc", "abcabc", 4, "UNICODE_CI", 4);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
-    assertLocate("大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
-    assertLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
-    assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
+  public void testStringLocate() throws SparkException {
+    // Empty UTF-8 strings.
+    assertStringLocate(false, "", "", -1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "", "", -1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "", "", -1, "UNICODE", 1);
+    assertStringLocate(false, "", "", -1, "UNICODE_CI", 1);
+    assertStringLocate(false, "", "", 0, "UTF8_BINARY", 1);
+    assertStringLocate(false, "", "", 0, "UTF8_LCASE", 1);
+    assertStringLocate(false, "", "", 0, "UNICODE", 1);
+    assertStringLocate(false, "", "", 0, "UNICODE_CI", 1);
+    assertStringLocate(false, "", "", 1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "", "", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "", "", 1, "UNICODE", 1);
+    assertStringLocate(false, "", "", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "a", "", -1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "a", "", -1, "UTF8_LCASE", 0);
+    assertStringLocate(false, "a", "", -1, "UNICODE", 0);
+    assertStringLocate(false, "a", "", -1, "UNICODE_CI", 0);
+    assertStringLocate(false, "a", "", 0, "UTF8_BINARY", 0);
+    assertStringLocate(false, "a", "", 0, "UTF8_LCASE", 0);
+    assertStringLocate(false, "a", "", 0, "UNICODE", 0);
+    assertStringLocate(false, "a", "", 0, "UNICODE_CI", 0);
+    assertStringLocate(false, "a", "", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "a", "", 1, "UTF8_LCASE", 0);
+    assertStringLocate(false, "a", "", 1, "UNICODE", 0);
+    assertStringLocate(false, "a", "", 1, "UNICODE_CI", 0);
+    assertStringLocate(false, "", "x", -1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "", "x", -1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "", "x", -1, "UNICODE", 1);
+    assertStringLocate(false, "", "x", -1, "UNICODE_CI", 1);
+    assertStringLocate(false, "", "x", 0, "UTF8_BINARY", 1);
+    assertStringLocate(false, "", "x", 0, "UTF8_LCASE", 1);
+    assertStringLocate(false, "", "x", 0, "UNICODE", 1);
+    assertStringLocate(false, "", "x", 0, "UNICODE_CI", 1);
+    assertStringLocate(false, "", "x", 1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "", "x", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "", "x", 1, "UNICODE", 1);
+    assertStringLocate(false, "", "x", 1, "UNICODE_CI", 1);
+    // Invalid UTF-8 strings.
+    assertStringLocate(true, "0xFF", "", 1, "UTF8_BINARY", 0);
+    assertStringLocate(true, "0xFF", "", 1, "UTF8_LCASE", 0);
+    assertStringLocate(true, "0xFF", "", 1, "UNICODE", 0);
+    assertStringLocate(true, "0xFF", "", 1, "UNICODE_CI", 0);
+    assertStringLocate(true, "", "0xFF", 1, "UTF8_BINARY", 1);
+    assertStringLocate(true, "", "0xFF", 1, "UTF8_LCASE", 1);
+    assertStringLocate(true, "", "0xFF", 1, "UNICODE", 1);
+    assertStringLocate(true, "", "0xFF", 1, "UNICODE_CI", 1);
+    assertStringLocate(true, "0xFF", "0xFF", 1, "UTF8_BINARY", 1);
+    assertStringLocate(true, "0xFF", "0xFF", 1, "UTF8_LCASE", 1);
+    assertStringLocate(true, "0xFF", "0xFF", 1, "UNICODE", 1);
+    assertStringLocate(true, "0xFF", "0xFF", 1, "UNICODE_CI", 1);
+    assertStringLocate(true, "0xC2", "0xFF", 1, "UTF8_BINARY", 0);
+    assertStringLocate(true, "0xC2", "0xFF", 1, "UTF8_LCASE", 1);
+    assertStringLocate(true, "0xC2", "0xFF", 1, "UNICODE", 1);
+    assertStringLocate(true, "0xC2", "0xFF", 1, "UNICODE_CI", 1);
+    assertStringLocate(true, "0xFF", "0xC2", 1, "UTF8_BINARY", 0);
+    assertStringLocate(true, "0xFF", "0xC2", 1, "UTF8_LCASE", 1);
+    assertStringLocate(true, "0xFF", "0xC2", 1, "UNICODE", 1);
+    assertStringLocate(true, "0xFF", "0xC2", 1, "UNICODE_CI", 1);
+    assertStringLocate(true, "0xFF", "0xFF 0xFF", 1, "UTF8_BINARY", 1);
+    assertStringLocate(true, "0xFF", "0xFF 0xFF", 1, "UTF8_LCASE", 1);
+    assertStringLocate(true, "0xFF", "0xFF 0xFF", 1, "UNICODE", 1);
+    assertStringLocate(true, "0xFF", "0xFF 0xFF", 1, "UNICODE_CI", 1);
+    assertStringLocate(true, "0xC2", "0xFF 0xFF", 2, "UTF8_BINARY", 0);
+    assertStringLocate(true, "0xC2", "0xFF 0xFF", 2, "UTF8_LCASE", 2);
+    assertStringLocate(true, "0xC2", "0xFF 0xFF", 2, "UNICODE", 2);
+    assertStringLocate(true, "0xC2", "0xFF 0xFF", 2, "UNICODE_CI", 2);
+    assertStringLocate(true, "0xFF", "0xC2 0xFF", 2, "UTF8_BINARY", 0);
+    assertStringLocate(true, "0xFF", "0xC2 0xFF", 2, "UTF8_LCASE", 2);
+    assertStringLocate(true, "0xFF", "0xC2 0xFF", 2, "UNICODE", 2);
+    assertStringLocate(true, "0xFF", "0xC2 0xFF", 2, "UNICODE_CI", 2);
+    // Basic tests.
+    assertStringLocate(false, "aa", "aaads", 1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "aa", "aaads", 2, "UTF8_BINARY", 2);
+    assertStringLocate(false, "aa", "aaads", 3, "UTF8_BINARY", 0);
+    assertStringLocate(false, "Aa", "aaads", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "Aa", "aAads", 1, "UTF8_BINARY", 2);
+    assertStringLocate(false, "界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
+    assertStringLocate(false, "界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
+    assertStringLocate(false, "AA", "aaads", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "aa", "aAads", 2, "UTF8_LCASE", 2);
+    assertStringLocate(false, "aa", "aaAds", 3, "UTF8_LCASE", 0);
+    assertStringLocate(false, "abC", "abcabc", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "abC", "abCabc", 2, "UTF8_LCASE", 4);
+    assertStringLocate(false, "abc", "abcabc", 4, "UTF8_LCASE", 4);
+    assertStringLocate(false, "界x", "test大千世界X大千世界", 1, "UTF8_LCASE", 8);
+    assertStringLocate(false, "界X", "test大千世界Xtest大千世界", 1, "UTF8_LCASE", 8);
+    assertStringLocate(false, "界", "test大千世界X大千世界", 13, "UTF8_LCASE", 13);
+    assertStringLocate(false, "大千", "test大千世界大千世界", 1, "UTF8_LCASE", 5);
+    assertStringLocate(false, "大千", "test大千世界大千世界", 9, "UTF8_LCASE", 9);
+    assertStringLocate(false, "大千", "大千世界大千世界", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "aa", "Aaads", 1, "UNICODE", 2);
+    assertStringLocate(false, "AA", "aaads", 1, "UNICODE", 0);
+    assertStringLocate(false, "aa", "aAads", 2, "UNICODE", 0);
+    assertStringLocate(false, "aa", "aaAds", 3, "UNICODE", 0);
+    assertStringLocate(false, "abC", "abcabc", 1, "UNICODE", 0);
+    assertStringLocate(false, "abC", "abCabc", 2, "UNICODE", 0);
+    assertStringLocate(false, "abC", "abCabC", 2, "UNICODE", 4);
+    assertStringLocate(false, "abc", "abcabc", 1, "UNICODE", 1);
+    assertStringLocate(false, "abc", "abcabc", 3, "UNICODE", 4);
+    assertStringLocate(false, "界x", "test大千世界X大千世界", 1, "UNICODE", 0);
+    assertStringLocate(false, "界X", "test大千世界X大千世界", 1, "UNICODE", 8);
+    assertStringLocate(false, "界", "test大千世界X大千世界", 13, "UNICODE", 13);
+    assertStringLocate(false, "AA", "aaads", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "aa", "aAads", 2, "UNICODE_CI", 2);
+    assertStringLocate(false, "aa", "aaAds", 3, "UNICODE_CI", 0);
+    assertStringLocate(false, "abC", "abcabc", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "abC", "abCabc", 2, "UNICODE_CI", 4);
+    assertStringLocate(false, "abc", "abcabc", 4, "UNICODE_CI", 4);
+    assertStringLocate(false, "界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
+    assertStringLocate(false, "界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
+    assertStringLocate(false, "大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
+    assertStringLocate(false, "大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
+    assertStringLocate(false, "大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
     // Case-variable character length
-    assertLocate("\u0307", "i̇", 1, "UTF8_BINARY", 2);
-    assertLocate("\u0307", "İ", 1, "UTF8_LCASE", 0); // != UTF8_BINARY
-    assertLocate("i", "i̇", 1, "UNICODE_CI", 0);
-    assertLocate("\u0307", "i̇", 1, "UNICODE_CI", 0);
-    assertLocate("i̇", "i", 1, "UNICODE_CI", 0);
-    assertLocate("İ", "i̇", 1, "UNICODE_CI", 1);
-    assertLocate("İ", "i", 1, "UNICODE_CI", 0);
-    assertLocate("i", "i̇", 1, "UTF8_LCASE", 1); // != UNICODE_CI
-    assertLocate("\u0307", "i̇", 1, "UTF8_LCASE", 2); // != UNICODE_CI
-    assertLocate("i̇", "i", 1, "UTF8_LCASE", 0);
-    assertLocate("İ", "i̇", 1, "UTF8_LCASE", 1);
-    assertLocate("İ", "i", 1, "UTF8_LCASE", 0);
-    assertLocate("i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
-    assertLocate("i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
-    assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
-    assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
-    assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
-    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12);
+    assertStringLocate(false, "\u0307", "i̇", 1, "UTF8_BINARY", 2);
+    assertStringLocate(false, "\u0307", "İ", 1, "UTF8_LCASE", 0); // != UTF8_BINARY
+    assertStringLocate(false, "i", "i̇", 1, "UNICODE_CI", 0);
+    assertStringLocate(false, "\u0307", "i̇", 1, "UNICODE_CI", 0);
+    assertStringLocate(false, "i̇", "i", 1, "UNICODE_CI", 0);
+    assertStringLocate(false, "İ", "i̇", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "İ", "i", 1, "UNICODE_CI", 0);
+    assertStringLocate(false, "i", "i̇", 1, "UTF8_LCASE", 1); // != UNICODE_CI
+    assertStringLocate(false, "\u0307", "i̇", 1, "UTF8_LCASE", 2); // != UNICODE_CI
+    assertStringLocate(false, "i̇", "i", 1, "UTF8_LCASE", 0);
+    assertStringLocate(false, "İ", "i̇", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "İ", "i", 1, "UTF8_LCASE", 0);
+    assertStringLocate(false, "i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
+    assertStringLocate(false, "i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
+    assertStringLocate(false, "İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
+    assertStringLocate(false, "İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12);
     // Greek sigmas.
-    assertLocate("σ", "σ", 1, "UTF8_BINARY", 1);
-    assertLocate("σ", "ς", 1, "UTF8_BINARY", 0);
-    assertLocate("σ", "Σ", 1, "UTF8_BINARY", 0);
-    assertLocate("ς", "σ", 1, "UTF8_BINARY", 0);
-    assertLocate("ς", "ς", 1, "UTF8_BINARY", 1);
-    assertLocate("ς", "Σ", 1, "UTF8_BINARY", 0);
-    assertLocate("Σ", "σ", 1, "UTF8_BINARY", 0);
-    assertLocate("Σ", "ς", 1, "UTF8_BINARY", 0);
-    assertLocate("Σ", "Σ", 1, "UTF8_BINARY", 1);
-    assertLocate("σ", "σ", 1, "UTF8_LCASE", 1);
-    assertLocate("σ", "ς", 1, "UTF8_LCASE", 1);
-    assertLocate("σ", "Σ", 1, "UTF8_LCASE", 1);
-    assertLocate("ς", "σ", 1, "UTF8_LCASE", 1);
-    assertLocate("ς", "ς", 1, "UTF8_LCASE", 1);
-    assertLocate("ς", "Σ", 1, "UTF8_LCASE", 1);
-    assertLocate("Σ", "σ", 1, "UTF8_LCASE", 1);
-    assertLocate("Σ", "ς", 1, "UTF8_LCASE", 1);
-    assertLocate("Σ", "Σ", 1, "UTF8_LCASE", 1);
-    assertLocate("σ", "σ", 1, "UNICODE", 1);
-    assertLocate("σ", "ς", 1, "UNICODE", 0);
-    assertLocate("σ", "Σ", 1, "UNICODE", 0);
-    assertLocate("ς", "σ", 1, "UNICODE", 0);
-    assertLocate("ς", "ς", 1, "UNICODE", 1);
-    assertLocate("ς", "Σ", 1, "UNICODE", 0);
-    assertLocate("Σ", "σ", 1, "UNICODE", 0);
-    assertLocate("Σ", "ς", 1, "UNICODE", 0);
-    assertLocate("Σ", "Σ", 1, "UNICODE", 1);
-    assertLocate("σ", "σ", 1, "UNICODE_CI", 1);
-    assertLocate("σ", "ς", 1, "UNICODE_CI", 1);
-    assertLocate("σ", "Σ", 1, "UNICODE_CI", 1);
-    assertLocate("ς", "σ", 1, "UNICODE_CI", 1);
-    assertLocate("ς", "ς", 1, "UNICODE_CI", 1);
-    assertLocate("ς", "Σ", 1, "UNICODE_CI", 1);
-    assertLocate("Σ", "σ", 1, "UNICODE_CI", 1);
-    assertLocate("Σ", "ς", 1, "UNICODE_CI", 1);
-    assertLocate("Σ", "Σ", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "σ", "σ", 1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "σ", "ς", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "σ", "Σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "ς", "σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "ς", "ς", 1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "ς", "Σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "Σ", "σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "Σ", "ς", 1, "UTF8_BINARY", 0);
+    assertStringLocate(false, "Σ", "Σ", 1, "UTF8_BINARY", 1);
+    assertStringLocate(false, "σ", "σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "σ", "ς", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "σ", "Σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "ς", "σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "ς", "ς", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "ς", "Σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "Σ", "σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "Σ", "ς", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "Σ", "Σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate(false, "σ", "σ", 1, "UNICODE", 1);
+    assertStringLocate(false, "σ", "ς", 1, "UNICODE", 0);
+    assertStringLocate(false, "σ", "Σ", 1, "UNICODE", 0);
+    assertStringLocate(false, "ς", "σ", 1, "UNICODE", 0);
+    assertStringLocate(false, "ς", "ς", 1, "UNICODE", 1);
+    assertStringLocate(false, "ς", "Σ", 1, "UNICODE", 0);
+    assertStringLocate(false, "Σ", "σ", 1, "UNICODE", 0);
+    assertStringLocate(false, "Σ", "ς", 1, "UNICODE", 0);
+    assertStringLocate(false, "Σ", "Σ", 1, "UNICODE", 1);
+    assertStringLocate(false, "σ", "σ", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "σ", "ς", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "σ", "Σ", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "ς", "σ", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "ς", "ς", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "ς", "Σ", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "Σ", "σ", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "Σ", "ς", 1, "UNICODE_CI", 1);
+    assertStringLocate(false, "Σ", "Σ", 1, "UNICODE_CI", 1);
   }
 
   private void assertSubstringIndex(String string, String delimiter, Integer count,
