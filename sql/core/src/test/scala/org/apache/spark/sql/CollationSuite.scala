@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -157,6 +158,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable bucketing on collated string column") {
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(bucketColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
@@ -180,8 +182,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           createTable(bucketColumns: _*)
         },
-        errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
+      errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+      parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
   }
@@ -758,6 +760,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable partition on collated string column") {
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(partitionColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {

@@ -441,13 +441,13 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
-  def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
-    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
+  def supportsV1Command(catalog: CatalogPlugin): Boolean = {
+    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) &&
+      !SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
   }
 
-  def isV2SessionCatalog(catalog: CatalogPlugin): Boolean = {
-    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) &&
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
+  def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
+    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {
