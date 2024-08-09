@@ -157,6 +157,8 @@ license: |
 
   - Since Spark 3.2, all the supported JDBC dialects use StringType for ROWID. In Spark 3.1 or earlier, Oracle dialect uses StringType and the other dialects use LongType.
 
+  - Since Spark 3.2, Parquet files with nanosecond precision for timestamp type (`INT64 (TIMESTAMP(NANOS, true))`) are not readable. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.parquet.nanosAsLong` to `true`.
+
   - In Spark 3.2, PostgreSQL JDBC dialect uses StringType for MONEY and MONEY[] is not supported due to the JDBC driver for PostgreSQL can't handle those types properly. In Spark 3.1 or earlier, DoubleType and ArrayType of DoubleType are used respectively.
 
   - In Spark 3.2, `spark.sql.adaptive.enabled` is enabled by default. To restore the behavior before Spark 3.2, you can set `spark.sql.adaptive.enabled` to `false`.

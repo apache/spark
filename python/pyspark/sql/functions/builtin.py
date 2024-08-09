@@ -27,8 +27,7 @@ from typing import (
     Any,
     cast,
     Callable,
-    Dict,
-    List,
+    Mapping,
     Sequence,
     Iterable,
     overload,
@@ -138,7 +137,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     return _invoke_function(name, *cols)
 
 
-def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optional[str]]:
+def _options_to_str(options: Optional[Mapping[str, Any]] = None) -> Mapping[str, Optional[str]]:
     if options:
         return {key: _to_str(value) for (key, value) in options.items()}
     return {}
@@ -6286,7 +6285,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     """Returns the exact percentile(s) of numeric column `expr` at the given percentage(s)
@@ -6339,7 +6338,7 @@ def percentile(
 @_try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -6397,7 +6396,7 @@ def percentile_approx(
 @_try_remote_functions
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -16161,7 +16160,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
 def from_json(
     col: "ColumnOrName",
     schema: Union[ArrayType, StructType, Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
@@ -16504,7 +16503,7 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
@@ -16612,7 +16611,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 
 
 @_try_remote_functions
-def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]] = None) -> Column:
     """
     Parses a JSON string and infers its schema in DDL format.
 
@@ -16725,7 +16724,7 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 def from_xml(
     col: "ColumnOrName",
     schema: Union[StructType, Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
     Parses a column containing a XML string to a row with
@@ -16817,7 +16816,7 @@ def from_xml(
 
 
 @_try_remote_functions
-def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] = None) -> Column:
     """
     Parses a XML string and infers its schema in DDL format.
 
@@ -16894,7 +16893,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = N
 
 
 @_try_remote_functions
-def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType` into a XML string.
     Throws an exception, in the case of an unsupported type.
@@ -16931,7 +16930,7 @@ def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
 
 
 @_try_remote_functions
-def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] = None) -> Column:
     """
     CSV Function: Parses a CSV string and infers its schema in DDL format.
 
@@ -17015,7 +17014,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
 
 
 @_try_remote_functions
-def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
     CSV Function: Converts a column containing a :class:`StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
@@ -18454,7 +18453,7 @@ def sequence(
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
     CSV Function: Parses a column containing a CSV string into a row with the specified schema.
@@ -18655,8 +18654,8 @@ def _create_lambda(f: Callable) -> Callable:
 
 def _invoke_higher_order_function(
     name: str,
-    cols: List["ColumnOrName"],
-    funs: List[Callable],
+    cols: Sequence["ColumnOrName"],
+    funs: Sequence[Callable],
 ) -> Column:
     """
     Invokes expression identified by name,

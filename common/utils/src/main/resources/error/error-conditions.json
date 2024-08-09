@@ -2633,6 +2633,11 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "DOUBLE" : {
+        "message" : [
+          "expects an double literal, but got <invalidValue>."
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
@@ -2666,6 +2671,11 @@
       "START" : {
         "message" : [
           "Expects a positive or a negative value for `start`, but got 0."
+        ]
+      },
+      "STRING" : {
+        "message" : [
+          "expects a string literal, but got <invalidValue>."
         ]
       },
       "ZERO_INDEX" : {
@@ -3532,6 +3542,24 @@
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "PARQUET_TYPE_ILLEGAL" : {
+    "message" : [
+      "Illegal Parquet type: <parquetType>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_RECOGNIZED" : {
+    "message" : [
+      "Unrecognized Parquet type: <field>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_SUPPORTED" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
+    ],
+    "sqlState" : "42846"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
@@ -5869,21 +5897,6 @@
   "_LEGACY_ERROR_TEMP_1171" : {
     "message" : [
       "createTableColumnTypes option column <col> not found in schema <schema>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1172" : {
-    "message" : [
-      "Parquet type not yet supported: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1173" : {
-    "message" : [
-      "Illegal Parquet type: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1174" : {
-    "message" : [
-      "Unrecognized Parquet type: <field>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1181" : {
