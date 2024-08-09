@@ -182,8 +182,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           createTable(bucketColumns: _*)
         },
-      errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
-      parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
+        errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
   }
