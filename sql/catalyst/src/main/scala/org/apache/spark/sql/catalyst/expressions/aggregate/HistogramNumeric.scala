@@ -143,7 +143,8 @@ case class HistogramNumeric(
     if (buffer.getUsedBins < 1) {
       null
     } else {
-      val result = (0 until buffer.getUsedBins).map { index =>
+      val array = new Array[AnyRef](buffer.getUsedBins)
+      (0 until buffer.getUsedBins).foreach { index =>
         // Note that the 'coord.x' and 'coord.y' have double-precision floating point type here.
         val coord = buffer.getBin(index)
         if (propagateInputType) {
@@ -163,16 +164,16 @@ case class HistogramNumeric(
               coord.x.toLong
             case _ => coord.x
           }
-          InternalRow.apply(result, coord.y)
+          array(index) = InternalRow.apply(result, coord.y)
         } else {
           // Otherwise, just apply the double-precision values in 'coord.x' and 'coord.y' to the
           // output row directly. In this case: 'SELECT histogram_numeric(val, 3)
           // FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)' returns an array of structs where the
           // first field has DoubleType.
-          InternalRow.apply(coord.x, coord.y)
+          array(index) = InternalRow.apply(coord.x, coord.y)
         }
       }
-      new GenericArrayData(result)
+      new GenericArrayData(array)
     }
   }
 
