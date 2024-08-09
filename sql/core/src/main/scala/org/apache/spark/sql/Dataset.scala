@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
+import java.math.BigInteger
 
 import scala.annotation.varargs
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -68,6 +69,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+
 
 private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -581,6 +583,16 @@ class Dataset[T] private[sql](
    */
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
+
+  /**
+   * Returns an approximate size in bytes of the Dataset.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def sizeInBytesApproximation(): BigInteger = {
+    queryExecution.optimizedPlan.stats.sizeInBytes.bigInteger
+  }
 
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.

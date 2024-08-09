@@ -1904,6 +1904,13 @@ class DataFrame(ParentDataFrame):
         else:
             print(self.schema.treeString())
 
+    def sizeInBytesApproximation(self) -> int:
+        relation = self._plan.plan(self._session.client)
+        result = self._session.client._size_in_bytes(relation=relation).size_in_bytes
+        assert result is not None
+
+        return int.from_bytes(bytes=result, byteorder="big", signed=True)
+
     @functools.cache
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)

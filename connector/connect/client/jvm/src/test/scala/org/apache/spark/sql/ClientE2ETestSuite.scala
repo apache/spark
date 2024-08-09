@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
+import java.math.BigInteger
 import java.nio.file.Files
 import java.time.DateTimeException
 import java.util.Properties
@@ -642,6 +643,12 @@ class ClientE2ETestSuite
     assert(df.columns === Array("id"))
     testCapturedStdOut(df.printSchema(), expectedSchema.treeString)
     testCapturedStdOut(df.printSchema(5), expectedSchema.treeString(5))
+  }
+
+  test("Dataframe sizeInBytes") {
+    val df = spark.sql("select * from range(10)")
+    val sizeInBytes = df.sizeInBytesApproximation()
+    assert(sizeInBytes.compareTo(BigInteger.valueOf(0)) == 1)
   }
 
   test("Dataset explain") {
