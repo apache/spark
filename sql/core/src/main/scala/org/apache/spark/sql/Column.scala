@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{ColumnNode, Extension, TypedAggUtils}
+import org.apache.spark.sql.internal.{ColumnNode, TypedAggUtils, Wrapper}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -39,30 +39,16 @@ private[spark] object Column {
 
   def apply(colName: String): Column = new Column(colName)
 
-  // TODO move this to a separate class!
-  //  Move as much as we can to the new API
-  //  Create internal util for create expression(nodes)
-  def apply(expr: Expression): Column = Column(Extension(expr))
+  def apply(expr: Expression): Column = Column(Wrapper(expr))
 
   def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
 
-  // TODO move this else where...
   private[sql] def generateAlias(e: Expression): String = {
     e match {
       case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
         a.aggregateFunction.toString
       case expr => toPrettySQL(expr)
     }
-  }
-
-  // TODO move this else where...
-  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
-    val metadataWithoutId = new MetadataBuilder()
-      .withMetadata(a.metadata)
-      .remove(Dataset.DATASET_ID_KEY)
-      .remove(Dataset.COL_POS_KEY)
-      .build()
-    a.withMetadata(metadataWithoutId)
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
@@ -163,8 +149,6 @@ class TypedColumn[-T, U](
  */
 @Stable
 class Column(val node: ColumnNode) extends Logging {
-  // TODO this will be moved to the calling classes.
-  //  We must, must, must move all user facing use cases.
   lazy val expr: Expression = internal.ColumnNodeToExpressionConverter(node)
 
   def this(name: String) = this(withOrigin {
@@ -185,19 +169,18 @@ class Column(val node: ColumnNode) extends Logging {
     Column.fn(name, this, lit(other))
   }
 
-  override def toString: String = toPrettySQL(expr)
+  override def toString: String = node.sql
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.node == this.node
+    case that: Column => that.node.normalized == this.node.normalized
     case _ => false
   }
 
-  override def hashCode: Int = this.node.hashCode()
+  override def hashCode: Int = this.node.normalized.hashCode()
 
   /**
    * Returns the expression for this column either with an existing or auto assigned name.
    */
-  // TODO move this elsewhere.
   private[sql] def named: NamedExpression = expr match {
     case expr: NamedExpression => expr
 
@@ -1231,7 +1214,7 @@ class Column(val node: ColumnNode) extends Logging {
    * @since 4.0.0
    */
   def try_cast(to: DataType): Column = {
-    Column(internal.Cast(node, to, Option(internal.Cast.EvalMode.Try)))
+    Column(internal.Cast(node, to, Option(internal.Cast.Try)))
   }
 
   /**
@@ -1249,8 +1232,8 @@ class Column(val node: ColumnNode) extends Logging {
   }
 
   private def sortOrder(
-      sortDirection: internal.SortOrder.SortDirection.Value,
-      nullOrdering: internal.SortOrder.NullOrdering.Value): Column = {
+      sortDirection: internal.SortOrder.SortDirection,
+      nullOrdering: internal.SortOrder.NullOrdering): Column = {
     Column(internal.SortOrder(node, sortDirection, nullOrdering))
   }
 
@@ -1289,8 +1272,8 @@ class Column(val node: ColumnNode) extends Logging {
    * @since 2.1.0
    */
   def desc_nulls_first: Column = sortOrder(
-    internal.SortOrder.SortDirection.Descending,
-    internal.SortOrder.NullOrdering.NullsFirst)
+    internal.SortOrder.Descending,
+    internal.SortOrder.NullsFirst)
 
   /**
    * Returns a sort expression based on the descending order of the column,
@@ -1307,8 +1290,8 @@ class Column(val node: ColumnNode) extends Logging {
    * @since 2.1.0
    */
   def desc_nulls_last: Column = sortOrder(
-    internal.SortOrder.SortDirection.Descending,
-    internal.SortOrder.NullOrdering.NullsLast)
+    internal.SortOrder.Descending,
+    internal.SortOrder.NullsLast)
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1340,8 +1323,8 @@ class Column(val node: ColumnNode) extends Logging {
    * @since 2.1.0
    */
   def asc_nulls_first: Column = sortOrder(
-    internal.SortOrder.SortDirection.Ascending,
-    internal.SortOrder.NullOrdering.NullsFirst)
+    internal.SortOrder.Ascending,
+    internal.SortOrder.NullsFirst)
 
   /**
    * Returns a sort expression based on ascending order of the column,
@@ -1358,8 +1341,8 @@ class Column(val node: ColumnNode) extends Logging {
    * @since 2.1.0
    */
   def asc_nulls_last: Column = sortOrder(
-    internal.SortOrder.SortDirection.Ascending,
-    internal.SortOrder.NullOrdering.NullsLast)
+    internal.SortOrder.Ascending,
+    internal.SortOrder.NullsLast)
 
   /**
    * Prints the expression to the console for debugging purposes.
@@ -1372,7 +1355,7 @@ class Column(val node: ColumnNode) extends Logging {
     if (extended) {
       println(node)
     } else {
-      println(expr.sql) // TODO (need to add this to the nodes)!
+      println(node.sql)
     }
     // scalastyle:on println
   }
