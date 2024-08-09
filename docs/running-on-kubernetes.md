@@ -430,6 +430,14 @@ The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
 
+When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
+
+```
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_APP_ID='$(SPARK_APPLICATION_ID)'
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_EXECUTOR_ID='$(SPARK_EXECUTOR_ID)'
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+```
+
 ### Accessing Driver UI
 
 The UI associated with any application can be accessed locally using
