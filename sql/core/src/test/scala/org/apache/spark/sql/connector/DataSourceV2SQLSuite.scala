@@ -2374,14 +2374,6 @@ class DataSourceV2SQLSuiteV1Filter
     sql(s"UNCACHE TABLE IF EXISTS $t")
   }
 
-  test("SHOW COLUMNS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
-    }
-  }
-
   test("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

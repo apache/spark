@@ -1059,13 +1059,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def showColumnsWithConflictDatabasesError(
-      db: Seq[String], v1TableName: TableIdentifier): Throwable = {
+  def showColumnsWithConflictNamespacesError(
+      namespaceA: Seq[String],
+      namespaceB: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1057",
+      errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
       messageParameters = Map(
-        "dbA" -> db.head,
-        "dbB" -> v1TableName.database.get))
+        "namespaceA" -> toSQLId(namespaceA),
+        "namespaceB" -> toSQLId(namespaceB)))
   }
 
   def cannotCreateTableWithBothProviderAndSerdeError(
@@ -1591,10 +1592,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def showCreateTableAsSerdeNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("SHOW CREATE TABLE AS SERDE")
-  }
-
-  def showColumnsNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("SHOW COLUMNS")
   }
 
   def repairTableNotSupportedForV2TablesError(): Throwable = {
