@@ -381,7 +381,8 @@ private[spark] class TaskSchedulerImpl(
    * @param availableResources remaining resources per offer,
    *                           value at index 'i' corresponds to shuffledOffers[i]
    * @param tasks tasks scheduled per offer, value at index 'i' corresponds to shuffledOffers[i]
-   * @return tuple of (no delay schedule rejects?, option of min locality of launched task)
+   * @return tuple of (no delay schedule rejects?, option of min locality of launched task,
+   *         rejects because the number of tasks executed concurrently is limited.)
    */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
@@ -390,7 +391,7 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       availableResources: Array[ExecutorResourcesAmounts],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
-    : (Boolean, Option[TaskLocality]) = {
+    : (Boolean, Option[TaskLocality], Boolean) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
     // nodes and executors that are excluded for the entire application have already been
@@ -399,7 +400,9 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
-
+      if (ExecutionLimitTracker.shouldLimit(taskSet.taskSet)) {
+        return (noDelayScheduleRejects, minLaunchedLocality, true)
+      }
       // check whether the task can be scheduled to the executor base on resource profile.
       if (sc.resourceProfileManager
         .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
@@ -438,12 +441,12 @@ private[spark] class TaskSchedulerImpl(
               // scalastyle:on
               // Do not offer resources for this task, but don't throw an error to allow other
               // task sets to be submitted.
-              return (noDelayScheduleRejects, minLaunchedLocality)
+              return (noDelayScheduleRejects, minLaunchedLocality, false)
           }
         }
       }
     }
-    (noDelayScheduleRejects, minLaunchedLocality)
+    (noDelayScheduleRejects, minLaunchedLocality, false)
   }
 
   /**
@@ -571,17 +574,19 @@ private[spark] class TaskSchedulerImpl(
         var launchedAnyTask = false
         var noDelaySchedulingRejects = true
         var globalMinLocality: Option[TaskLocality] = None
-        for (currentMaxLocality <- taskSet.myLocalityLevels) {
+        var limitByConcurrentTasks = false
+        for (currentMaxLocality <- taskSet.myLocalityLevels if !limitByConcurrentTasks) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
-            val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
-              taskSet, currentMaxLocality, shuffledOffers, availableCpus,
+            val (noDelayScheduleReject, minLocality, limitReject) =
+              resourceOfferSingleTaskSet(taskSet, currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks)
             launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
             noDelaySchedulingRejects &= noDelayScheduleReject
             globalMinLocality = minTaskLocality(globalMinLocality, minLocality)
-          } while (launchedTaskAtCurrentMaxLocality)
+            limitByConcurrentTasks = limitReject
+          } while (launchedTaskAtCurrentMaxLocality && !limitByConcurrentTasks)
         }
 
         if (!legacyLocalityWaitReset) {
@@ -807,6 +812,7 @@ private[spark] class TaskSchedulerImpl(
             if (TaskState.isFinished(state)) {
               cleanupTaskState(tid)
               taskSet.removeRunningTask(tid)
+              ExecutionLimitTracker.decreaseRunningTasksIfNeed(taskSet.taskSet)
               if (state == TaskState.FINISHED) {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
