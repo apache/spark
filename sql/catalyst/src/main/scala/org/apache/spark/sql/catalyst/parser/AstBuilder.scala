@@ -2641,7 +2641,14 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitWindowDef(ctx: WindowDefContext): WindowSpecDefinition = withOrigin(ctx) {
     // CLUSTER BY ... | PARTITION BY ... ORDER BY ...
     val partition = ctx.partition.asScala.map(expression)
-    val order = ctx.sortItem.asScala.map(visitSortItem)
+    var order = ctx.sortItem.asScala.map(visitSortItem)
+
+    // Add SortOrder for window expresssion
+    if (ctx.sortItem.asScala.isEmpty && conf.hiveWindowFunctionOrderSpec) {
+      order = ctx.partition.asScala.map { expr =>
+        SortOrder(expression(expr), Ascending, Ascending.defaultNullOrdering, Seq.empty)
+      }
+    }
 
     // RANGE/ROWS BETWEEN ...
     val frameSpecOption = Option(ctx.windowFrame).map { frame =>
