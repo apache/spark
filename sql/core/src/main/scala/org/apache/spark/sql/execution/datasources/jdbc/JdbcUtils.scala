@@ -1259,6 +1259,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def classifyException[T](
+      catalogName: String,
       errorClass: String,
       messageParameters: Map[String, String],
       dialect: JdbcDialect,
@@ -1268,7 +1269,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     } catch {
       case e: SparkThrowable with Throwable => throw e
       case e: Throwable =>
-        throw dialect.classifyException(e, errorClass, messageParameters, description)
+        throw dialect.classifyException(catalogName, e, errorClass, messageParameters, description)
     }
   }
 

@@ -50,7 +50,8 @@ case class CreateTableExec(
             log"Table ${MDC(TABLE_NAME, identifier.quoted)} was created concurrently. Ignoring.")
       }
     } else if (!ignoreIfExists) {
-      throw QueryCompilationErrors.tableAlreadyExistsError(identifier)
+      throw QueryCompilationErrors.tableAlreadyExistsError(
+        catalog.name() +: identifier.asMultipartIdentifier)
     }
 
     Seq.empty

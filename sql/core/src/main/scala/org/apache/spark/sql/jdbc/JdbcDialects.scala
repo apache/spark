@@ -737,6 +737,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param catalogName catalog's name
    * @param e The dialect specific exception.
    * @param errorClass The error class assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
@@ -744,6 +745,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return `AnalysisException` or its sub-class.
    */
   def classifyException(
+      catalogName: String,
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
@@ -847,6 +849,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 trait NoLegacyJDBCError extends JdbcDialect {
 
   override def classifyException(
+      catalogName: String,
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],

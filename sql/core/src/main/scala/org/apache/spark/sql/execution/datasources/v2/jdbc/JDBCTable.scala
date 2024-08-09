@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -32,7 +33,11 @@ import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
+case class JDBCTable(
+    catalogName: String,
+    ident: Identifier,
+    schema: StructType,
+    jdbcOptions: JDBCOptions)
   extends Table
   with SupportsRead
   with SupportsWrite
@@ -63,14 +68,17 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
+      val fullIndexName = toSQLId(Seq(catalogName, indexName))
+      val fullTableName = toSQLId(catalogName +: ident.asMultipartIdentifier)
       JdbcUtils.classifyException(
+        catalogName = catalogName,
         errorClass = "FAILED_JDBC.CREATE_INDEX",
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
-          "indexName" -> toSQLId(indexName),
-          "tableName" -> toSQLId(name)),
+          "indexName" -> fullIndexName,
+          "tableName" -> fullTableName),
         dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to create index $indexName in ${name()}") {
+        description = s"Failed to create index $fullIndexName in $fullTableName") {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
@@ -85,14 +93,17 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
 
   override def dropIndex(indexName: String): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
+      val fullIndexName = toSQLId(Seq(catalogName, indexName))
+      val fullTableName = toSQLId(catalogName +: ident.asMultipartIdentifier)
       JdbcUtils.classifyException(
+        catalogName = catalogName,
         errorClass = "FAILED_JDBC.DROP_INDEX",
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
-          "indexName" -> toSQLId(indexName),
-          "tableName" -> toSQLId(name)),
+          "indexName" -> fullIndexName,
+          "tableName" -> fullTableName),
         dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to drop index $indexName in ${name()}") {
+        description = s"Failed to drop index $fullIndexName in $fullTableName") {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }
     }
