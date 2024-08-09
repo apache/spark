@@ -203,10 +203,11 @@ def build_error_docs
   || raise("Error doc generation failed")
 end
 
-if not (ENV['SKIP_API'] == '1')
-
+if not (ENV['SKIP_ERRORDOC'] == '1')
   build_error_docs
+end
 
+if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')
     build_scala_and_java_docs
   end

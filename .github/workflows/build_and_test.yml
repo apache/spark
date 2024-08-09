@@ -874,14 +874,15 @@ jobs:
         ln -s "$(which python3.9)" "/usr/local/bin/python3"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
-        cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
+        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        # Print the values of environment variables `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
         echo "SKIP_SCALADOC: $SKIP_SCALADOC"
         echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
         echo "SKIP_RDOC: $SKIP_RDOC"
