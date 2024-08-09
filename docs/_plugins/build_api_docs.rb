@@ -199,7 +199,7 @@ def build_error_docs
     raise("Missing python3 in your path, stopping error doc generation")
   end
 
-  system("python3 '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+  system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
 
