@@ -64,6 +64,14 @@ sealed abstract class UserDefinedFunction {
   def deterministic: Boolean
 
   /**
+   * Returns true iff the UDF is foldable, i.e. the UDF can be evaludated during constant folding
+   * if all arguments are also foldable.
+   *
+   * @since 4.0.0
+   */
+  def foldable: Boolean
+
+  /**
    * Returns an expression that invokes the UDF, using the given arguments.
    *
    * @since 3.4.0
@@ -91,6 +99,13 @@ sealed abstract class UserDefinedFunction {
    * @since 3.4.0
    */
   def asNondeterministic(): UserDefinedFunction
+
+  /**
+   * Updates UserDefinedFunction to be foldable.
+   *
+   * @since 4.0.0
+   */
+  def asFoldable(): UserDefinedFunction
 }
 
 /**
@@ -104,6 +119,7 @@ case class ScalaUserDefinedFunction private[sql] (
     name: Option[String],
     override val nullable: Boolean,
     override val deterministic: Boolean,
+    override val foldable: Boolean,
     aggregate: Boolean)
     extends UserDefinedFunction {
 
@@ -136,6 +152,8 @@ case class ScalaUserDefinedFunction private[sql] (
   override def asNonNullable(): ScalaUserDefinedFunction = copy(nullable = false)
 
   override def asNondeterministic(): ScalaUserDefinedFunction = copy(deterministic = false)
+
+  override def asFoldable(): ScalaUserDefinedFunction = copy(foldable = true)
 
   def toProto: proto.CommonInlineUserDefinedFunction = {
     val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
@@ -198,6 +216,7 @@ object ScalaUserDefinedFunction {
       name = None,
       nullable = true,
       deterministic = true,
+      foldable = false,
       aggregate = aggregate)
   }
 

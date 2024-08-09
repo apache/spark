@@ -53,10 +53,13 @@ case class ScalaUDF(
     outputEncoder: Option[ExpressionEncoder[_]] = None,
     udfName: Option[String] = None,
     nullable: Boolean = true,
-    udfDeterministic: Boolean = true)
+    udfDeterministic: Boolean = true,
+    udfFoldable: Boolean = false)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+
+  override lazy val foldable: Boolean = udfFoldable && children.forall(_.foldable) && deterministic
 
   // `ScalaUDF` uses `ExpressionEncoder` to convert the function result to Catalyst internal format.
   // `ExpressionEncoder` is stateful as it reuses the `UnsafeRow` instance, thus `ScalaUDF` is

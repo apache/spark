@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -436,6 +437,51 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(
       Optimize.execute(oneRowScalarSubquery),
       oneRowScalarSubquery)
+  }
+
+  test("SPARK-48769: Support folding ScalaUDF") {
+    val myConstant = ScalaUDF(
+      function = () => 7,
+      dataType = IntegerType,
+      children = Nil,
+      nullable = false,
+      inputEncoders = Seq(),
+      udfFoldable = true
+    )
+    val myAdd = ScalaUDF(
+      function = (a: Int, b: Int) => a + b,
+      dataType = IntegerType,
+      children = Literal(3) :: myConstant :: Nil,
+      nullable = false,
+      inputEncoders = Seq(
+        Some(ExpressionEncoder[Int]().resolveAndBind()),
+        Some(ExpressionEncoder[Int]().resolveAndBind())),
+      udfFoldable = true
+    )
+    val arrayConstant = ScalaUDF(
+      function = () => List(1, 2, 3),
+      dataType = ArrayType(IntegerType),
+      children = Nil,
+      nullable = false,
+      inputEncoders = Seq(),
+      udfFoldable = true
+    )
+    val originalQuery =
+      testRelation.select(
+        myConstant.as("constant"),
+        arrayConstant.as("array"),
+        myConstant.copy(udfDeterministic = false).as("nonDeterministic"),
+        myAdd.as("add"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation.select(
+        Literal(7).as("constant"),
+        Literal.create(Seq(1, 2, 3), ArrayType(IntegerType)).as("array"),
+        myConstant.copy(udfDeterministic = false).as("nonDeterministic"),
+        Literal(10).as("add")).analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }
 
