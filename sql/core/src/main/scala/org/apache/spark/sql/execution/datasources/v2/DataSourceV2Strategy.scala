@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXPR
@@ -55,7 +53,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  lazy private val hadoopConf = new Configuration()
+  lazy private val hadoopConf = session.sparkContext.hadoopConfiguration
 
   private def withProjectAndFilter(
       project: Seq[NamedExpression],

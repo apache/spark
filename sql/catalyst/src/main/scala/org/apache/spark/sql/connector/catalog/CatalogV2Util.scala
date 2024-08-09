@@ -35,7 +35,6 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -439,11 +438,6 @@ private[sql] object CatalogV2Util {
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
-  }
-
-  def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) &&
-      !SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
