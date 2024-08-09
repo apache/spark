@@ -505,6 +505,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_arrow_cogrouped_map",
         "pyspark.sql.tests.test_arrow_grouped_map",
         "pyspark.sql.tests.test_arrow_python_udf",
+        "pyspark.sql.tests.test_binding_parameters",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
