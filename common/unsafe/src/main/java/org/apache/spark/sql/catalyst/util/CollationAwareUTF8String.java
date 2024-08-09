@@ -1018,12 +1018,14 @@ public class CollationAwareUTF8String {
 
     // Create a hash set of lowercased code points for all characters of `trimString`.
     HashSet<Integer> trimChars = new HashSet<>();
-    Iterator<Integer> trimIter = trimString.codePointIterator();
+    Iterator<Integer> trimIter = trimString.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the left to find the first character that is not in the set.
     int searchIndex = 0, codePoint;
-    Iterator<Integer> srcIter = srcString.codePointIterator();
+    Iterator<Integer> srcIter = srcString.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (srcIter.hasNext()) {
       codePoint = getLowercaseCodePoint(srcIter.next());
       // Special handling for Turkish dotted uppercase letter I.
@@ -1128,12 +1130,14 @@ public class CollationAwareUTF8String {
 
     // Create a hash set of lowercased code points for all characters of `trimString`.
     HashSet<Integer> trimChars = new HashSet<>();
-    Iterator<Integer> trimIter = trimString.codePointIterator();
+    Iterator<Integer> trimIter = trimString.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the right to find the first character that is not in the set.
     int searchIndex = srcString.numChars(), codePoint;
-    Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
+    Iterator<Integer> srcIter = srcString.reverseCodePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (srcIter.hasNext()) {
       codePoint = getLowercaseCodePoint(srcIter.next());
       // Special handling for Turkish dotted uppercase letter I.
