@@ -60,6 +60,8 @@ license: |
 - Since Spark 4.0, By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.legacy.viewSchemaCompensation` to `false`.
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable this feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
 - Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
+- Since Spark 4.0, when reading decimal fields from Avro data source, it requires that not only the `precision - scale` value of the `DecimalType` should be greater than or equal to that of decimal fields, but also the scale of the `DecimalType` should be greater than or equal to the scale of decimal fields. Otherwise, an `AnalysisException` will be thrown. To restore the legacy behavior, set `spark.sql.legacy.avro.allowIncompatibleDecimalType` to `true`.
+
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
