@@ -25,10 +25,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Cast, Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.aggregate.Avg
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
@@ -53,7 +54,14 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("UPPER", "LOWER")
+  private val supportedMathFunctions = Set("SIN", "COS", "ABS", "FLOOR")
+  private val supportedSqlFunctions = Set("COALESCE")
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+    supportedStringFunctions ++
+    supportedMathFunctions ++
+    supportedSqlFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -88,13 +96,24 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map {
-              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+              case p: Predicate
+              if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
+                s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
               case o => inputToSQL(o)
             }
             visitBinaryComparison(e.name(), l, r)
           case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
           case _ => super.build(expr)
         }
+        case avg: Avg =>
+          // SqlServer handles the Average in different way than other data sources.
+          // When the column type over which average is done is of Integer
+          // type (or Short, Byte, and Long), SqlServer will return average as integer, meaning
+          // that it will be rounded. In Spark we have different behavior and therefore we need
+          // to cast these columns to Double type so that we get correct average back from
+          // SqlServer. The only unnecessary thing being done here is that casting is done over
+          // Double-like-columns too.
+          super.build(new Avg(new Cast(avg.children.head, DoubleType), avg.isDistinct))
         case _ => super.build(expr)
       }
     }
@@ -141,6 +160,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     case ShortType if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
+    case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
+    case DoubleType => Some(JdbcType("FLOAT", java.sql.Types.FLOAT))
+    case _ if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled => JdbcUtils.getCommonJDBCType(dt)
     case _ => None
   }
 

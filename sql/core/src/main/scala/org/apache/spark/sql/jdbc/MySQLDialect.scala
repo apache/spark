@@ -46,7 +46,14 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("UPPER", "LOWER", "CHAR_LENGTH")
+  private val supportedMathFunctions = Set("SIN", "COS", "ABS", "FLOOR")
+  private val supportedSqlFunctions = Set("COALESCE")
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+      supportedStringFunctions ++
+      supportedMathFunctions ++
+      supportedSqlFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -92,6 +99,27 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      dataType match {
+        case _: IntegralType =>
+          // MySQL does not support cast to SHORT, INT, BIGINT
+          s"CAST($expr AS SIGNED)"
+        case _: StringType =>
+          // GetJDBCType will return LONGTEXT for StringType, but LONGTEXT cannot be used for CAST
+          // function, so we need to override this type
+          s"CAST($expr AS CHAR)"
+        case _: DatetimeType =>
+          // TODO: Check whether is ok to cast to DATETIME instead of TIMESTAMP
+          // Get JDBC Type will return TIMESTAMP when conversion is being done, so to be consistent,
+          // it is better for now to throw exception instead of pushing down
+          throw new UnsupportedOperationException("Cannot cast to timestamp type")
+        case _: BooleanType =>
+          throw new UnsupportedOperationException("Cannot cast to boolean type")
+        case _ =>
+          super.visitCast(expr, exprDataType, dataType)
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
