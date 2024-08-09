@@ -288,7 +288,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
           }
         }.getOrElse(u)
 
-      case p: PlanWithUnresolvedIdentifier => p // Just delay until bindings are done
+      case p: PlanWithUnresolvedIdentifier =>
+        // We must look up CTE relations first when resolving `UnresolvedRelation`s,
+        // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
+        // and may produce `UnresolvedRelation` later.
+        // Here we wrap it with `UnresolvedWithCTERelations` so that we can
+        // delay the CTE relations lookup after `PlanWithUnresolvedIdentifier` is resolved.
+        UnresolvedWithCTERelations(p, cteRelations)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.

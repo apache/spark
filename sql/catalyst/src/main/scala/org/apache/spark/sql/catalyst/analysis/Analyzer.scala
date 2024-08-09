@@ -1815,6 +1815,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
+      case u: UnresolvedWithCTERelations =>
+        UnresolvedWithCTERelations(this.apply(u.unresolvedPlan), u.cteRelations)
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))
