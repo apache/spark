@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
+import scala.concurrent.duration.NANOSECONDS
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
@@ -61,6 +62,8 @@ abstract class FileFormatDataWriter(
   /** Trackers for computing various statistics on the data as it's being written out. */
   protected val statsTrackers: Seq[WriteTaskStatsTracker] =
     description.statsTrackers.map(_.newTaskInstance())
+
+  private val startTimeNano = System.nanoTime()
 
   /** Release resources of `currentWriter`. */
   protected def releaseCurrentWriter(): Unit = {
@@ -122,12 +125,14 @@ abstract class FileFormatDataWriter(
    */
   final override def commit(): WriteTaskResult = enrichWriteError(description.path) {
     releaseResources()
+    val endTimeNano = System.nanoTime()
+    val writeDuration = math.max(NANOSECONDS.toMillis(endTimeNano - startTimeNano), 0)
     val (taskCommitMessage, taskCommitTime) = Utils.timeTakenMs {
       committer.commitTask(taskAttemptContext)
     }
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
-      stats = statsTrackers.map(_.getFinalStats(taskCommitTime)))
+      stats = statsTrackers.map(_.getFinalStats(taskCommitTime, writeDuration)))
     WriteTaskResult(taskCommitMessage, summary)
   }
 

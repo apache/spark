@@ -52,7 +52,8 @@ case class BasicWriteTaskStats(
  */
 class BasicWriteTaskStatsTracker(
     hadoopConf: Configuration,
-    taskCommitTimeMetric: Option[SQLMetric] = None)
+    taskCommitTimeMetric: Option[SQLMetric] = None,
+    writeTimeMetric: Option[SQLMetric] = None)
   extends WriteTaskStatsTracker with Logging {
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
@@ -159,7 +160,7 @@ class BasicWriteTaskStatsTracker(
     numRows += 1
   }
 
-  override def getFinalStats(taskCommitTime: Long): WriteTaskStats = {
+  override def getFinalStats(taskCommitTime: Long, writeTime: Long): WriteTaskStats = {
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
     Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
       outputMetrics.setBytesWritten(numBytes)
@@ -172,6 +173,7 @@ class BasicWriteTaskStatsTracker(
         log"writing empty files, or files being not immediately visible in the filesystem.")
     }
     taskCommitTimeMetric.foreach(_ += taskCommitTime)
+    writeTimeMetric.foreach(_ += writeTime)
     BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
   }
 }
@@ -186,17 +188,20 @@ class BasicWriteTaskStatsTracker(
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
     @transient val driverSideMetrics: Map[String, SQLMetric],
-    taskCommitTimeMetric: SQLMetric)
+    taskCommitTimeMetric: SQLMetric,
+    writeTimeMetric: SQLMetric)
   extends WriteJobStatsTracker {
 
   def this(
       serializableHadoopConf: SerializableConfiguration,
       metrics: Map[String, SQLMetric]) = {
-    this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, metrics(TASK_COMMIT_TIME))
+    this(serializableHadoopConf, metrics - TASK_COMMIT_TIME - WRITE_TIME,
+      metrics(TASK_COMMIT_TIME), metrics(WRITE_TIME))
   }
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
-    new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
+    new BasicWriteTaskStatsTracker(serializableHadoopConf.value,
+      Some(taskCommitTimeMetric), Some(writeTimeMetric))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
@@ -233,6 +238,7 @@ object BasicWriteJobStatsTracker {
   private val NUM_PARTS_KEY = "numParts"
   val TASK_COMMIT_TIME = "taskCommitTime"
   val JOB_COMMIT_TIME = "jobCommitTime"
+  val WRITE_TIME = "writeTime"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
@@ -244,7 +250,8 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
       TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "task commit time"),
-      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
+      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time"),
+      WRITE_TIME -> SQLMetrics.createTimingMetric(sparkContext, "data write time")
     )
   }
 }
