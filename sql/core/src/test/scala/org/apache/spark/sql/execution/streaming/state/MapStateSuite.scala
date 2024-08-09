@@ -40,8 +40,12 @@ class MapStateSuite extends StateVariableSuiteBase {
   test("Map state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
+      val columnFamilyIds = Map(
+        "testState" -> 1.toShort
+      )
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None(),
+        columnFamilyIds = columnFamilyIds)
 
       val testState: MapState[String, Double] =
         handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble)
@@ -75,7 +79,11 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None(),
+        columnFamilyIds = Map(
+          "testState1" -> 1.toShort,
+          "testState2" -> 2.toShort
+        ))
 
       val testState1: MapState[Long, Double] =
         handle.getMapState[Long, Double]("testState1", Encoders.scalaLong, Encoders.scalaDouble)
@@ -114,7 +122,13 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None(),
+        columnFamilyIds = Map(
+          "mapTestState1" -> 1.toShort,
+          "mapTestState2" -> 2.toShort,
+          "valueTestState" -> 3.toShort,
+          "listTestState" -> 4.toShort
+        ))
 
       val mapTestState1: MapState[String, Int] =
         handle.getMapState[String, Int]("mapTestState1", Encoders.STRING, Encoders.scalaInt)
@@ -176,7 +190,11 @@ class MapStateSuite extends StateVariableSuiteBase {
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(timestampMs))
+        batchTimestampMs = Some(timestampMs),
+        columnFamilyIds = Map(
+          "testState" -> 1.toShort,
+          "_ttl_testState" -> 2.toShort
+        ))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
       val testState: MapStateImplWithTTL[String, String] =
@@ -197,7 +215,8 @@ class MapStateSuite extends StateVariableSuiteBase {
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs),
+        columnFamilyIds = Map("testState" -> 1.toShort, "_ttl_testState" -> 2.toShort))
 
       val nextBatchTestState: MapStateImplWithTTL[String, String] =
         nextBatchHandle.getMapState[String, String](
@@ -234,7 +253,8 @@ class MapStateSuite extends StateVariableSuiteBase {
       val batchTimestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs),
+        columnFamilyIds = Map("testState" -> 1.toShort))
 
       Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
@@ -262,7 +282,8 @@ class MapStateSuite extends StateVariableSuiteBase {
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(timestampMs))
+        batchTimestampMs = Some(timestampMs),
+        columnFamilyIds = Map("testState" -> 1.toShort, "_ttl_testState" -> 2.toShort))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
       val testState: MapStateImplWithTTL[POJOTestClass, TestClass] =

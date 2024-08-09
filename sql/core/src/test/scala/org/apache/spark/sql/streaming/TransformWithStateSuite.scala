@@ -902,7 +902,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           keySchema,
           new StructType().add("value", LongType, false),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None
+          None,
+          1.toShort
         )
         val schema1 = StateStoreColFamilySchema(
           "listState",
@@ -911,7 +912,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               .add("id", LongType, false)
               .add("name", StringType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None
+          None,
+          2.toShort
         )
 
         val userKeySchema = new StructType()
@@ -925,7 +927,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           compositeKeySchema,
           new StructType().add("value", StringType),
           Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-          Option(userKeySchema)
+          Option(userKeySchema),
+          3.toShort
         )
 
         val inputData = MemoryStream[String]
@@ -955,6 +958,27 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
               q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
+            assert(colFamilySeq.length == 3)
+            assert(colFamilySeq.map(_.toString).toSet == Set(
+              schema0, schema1, schema2
+            ).map(_.toString))
+          },
+          StopStream
+        )
+
+        // test that columnFamilyIds are the same on restart
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "2"), ("b", "2")),
+          // assert that columnFamilySchemas don't change
+          Execute { q =>
+            val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+            val providerId = StateStoreProviderId(StateStoreId(
+              checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+            val checker = new StateSchemaCompatibilityChecker(providerId,
+              hadoopConf, Some(schemaFilePath))
+            val colFamilySeq = checker.readSchemaFile()
             assert(colFamilySeq.length == 3)
             assert(colFamilySeq.map(_.toString).toSet == Set(
               schema0, schema1, schema2

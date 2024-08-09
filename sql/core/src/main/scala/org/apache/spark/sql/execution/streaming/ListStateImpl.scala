@@ -35,14 +35,16 @@ import org.apache.spark.sql.streaming.ListState
 class ListStateImpl[S](
      store: StateStore,
      stateName: String,
+     colFamilyIds: Map[String, Short],
      keyExprEnc: ExpressionEncoder[Any],
      valEncoder: Encoder[S])
   extends ListState[S] with Logging {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
 
-  store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
-    NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
+  store.createColFamilyIfAbsent(stateName, colFamilyIds(stateName), keyExprEnc.schema,
+    valEncoder.schema, NoPrefixKeyStateEncoderSpec(keyExprEnc.schema),
+    useMultipleValuesPerKey = true)
 
   /** Whether state exists or not. */
    override def exists(): Boolean = {

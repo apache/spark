@@ -116,7 +116,12 @@ case class TransformWithStateExec(
    * after init is called.
    */
   private def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    val driverProcessorHandle = getDriverProcessorHandle()
+    // this is just to add the timer column family schemas
+    if (timeMode != NoTime) {
+      driverProcessorHandle.registerTimer(0L)
+    }
+    val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
   }
@@ -583,6 +588,11 @@ case class TransformWithStateExec(
     })
   }
 
+  private def getColFamilyIds: Map[String, Short] =
+    getStateInfo.colFamilySchemas.map { case (name, schema) =>
+      name -> schema.colFamilyId
+    }
+
   /**
    * Process the data in the partition using the state store and the stateful processor.
    * @param store The state store to use
@@ -593,7 +603,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, metrics, getColFamilyIds)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -606,8 +616,9 @@ case class TransformWithStateExec(
       childDataIterator: Iterator[InternalRow],
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
-    val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+    val processorHandle = new StatefulProcessorHandleImpl(
+      store, getStateInfo.queryRunId, keyEncoder, timeMode,
+      isStreaming, batchTimestampMs, metrics, getColFamilyIds)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -667,12 +678,35 @@ object TransformWithStateExec {
       initialStateDeserializer: Expression,
       initialState: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
+
+    // We are assigning the columnFamilyIds based on their alphabetic order
+    // in the batch world since there is no notion of restarts, and we don't need
+    // the columnFamilyIds here to be consistent between runs
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    if (timeMode != NoTime) {
+      driverProcessorHandle.registerTimer(0L)
+    }
+    val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
+    // assign columnFamilyIds based on alphabetic name within map
+    val columnFamilySchemasWithIds = columnFamilySchemas.toList
+      .sortBy(_._2.colFamilyName)
+      .zipWithIndex
+      .map { case ((name, schema), index) =>
+        name -> schema.copy(colFamilyId = index.toShort)
+      }.toMap
+
+    statefulProcessor.close()
+
     val statefulOperatorStateInfo = StatefulOperatorStateInfo(
       checkpointLocation = "", // empty checkpointLocation will be populated in doExecute
       queryRunId = UUID.randomUUID(),
       operatorId = 0,
       storeVersion = 0,
-      numPartitions = shufflePartitions
+      numPartitions = shufflePartitions,
+      colFamilySchemas = columnFamilySchemasWithIds
     )
 
     new TransformWithStateExec(

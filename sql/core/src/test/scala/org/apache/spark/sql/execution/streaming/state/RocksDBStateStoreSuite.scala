@@ -297,8 +297,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       // use non-default col family if column families are enabled
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(cfName,
+        store.createColFamilyIfAbsent(cfName, colFamilyId.toShort,
           keySchemaWithRangeScan, valueSchema,
           RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
       }
@@ -353,8 +355,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           testSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, Seq(0)))
       }
@@ -404,8 +409,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           keySchemaWithRangeScan, valueSchema,
           RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
       }
@@ -464,8 +472,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(cfName,
+        store.createColFamilyIfAbsent(cfName, colFamilyId.toShort,
           testSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
@@ -518,9 +528,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(
           cfName,
+          colFamilyId.toShort,
           testSchema,
           valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals)
@@ -598,8 +611,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           testSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
@@ -656,6 +672,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store1 = provider.getStore(0)
       if (colFamiliesEnabled) {
         store1.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           testSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
@@ -698,8 +715,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           testSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
@@ -751,8 +771,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           testSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
@@ -787,8 +810,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           valueSchema, valueSchema,
           RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)))
       }
@@ -830,8 +856,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
+          colFamilyId.toShort,
           keySchemaWithRangeScan, valueSchema,
           RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
       }
@@ -861,11 +890,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   testWithColumnFamilies("rocksdb key and value schema encoders for column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     val testColFamily = "testState"
-
+    val colFamilyId = 1
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(testColFamily,
+          colFamilyId.toShort,
           keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
         val keyRow1 = dataToKeyRow("a", 0)
         val valueRow1 = dataToValueRow(1)
@@ -927,7 +957,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       Seq("default", "", " ", "    ", " default", " default ").foreach { colFamilyName =>
         val ex = intercept[SparkUnsupportedOperationException] {
-          store.createColFamilyIfAbsent(colFamilyName,
+          store.createColFamilyIfAbsent(colFamilyName, 0,
             keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
         }
 
@@ -964,7 +994,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       Seq("_internal", "_test", "_test123", "__12345").foreach { colFamilyName =>
         val ex = intercept[SparkUnsupportedOperationException] {
-          store.createColFamilyIfAbsent(colFamilyName,
+          store.createColFamilyIfAbsent(colFamilyName, 1,
             keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
         }
 
@@ -1048,9 +1078,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val colFamily1: String = "abc"
       val colFamily2: String = "xyz"
-      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+      store.createColFamilyIfAbsent(colFamily1, 1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
-      store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
+      store.createColFamilyIfAbsent(colFamily2, 2, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
 
       assert(get(store, "a", 1, colFamily1) === null)
@@ -1101,8 +1131,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           val store = provider.getStore(0)
 
           val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+          val colFamilyId = if (colFamiliesEnabled) 1 else 0
+
           if (colFamiliesEnabled) {
-            store.createColFamilyIfAbsent(cfName, keySchema, valueSchema, keyEncoder)
+            store.createColFamilyIfAbsent(cfName, colFamilyId.toShort,
+              keySchema, valueSchema, keyEncoder)
           }
 
           var timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
@@ -1145,7 +1178,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val store = provider.getStore(0)
 
         val cfName = "testColFamily"
-        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema, keyEncoder)
+        store.createColFamilyIfAbsent(cfName, 1, keySchema, valueSchema, keyEncoder)
 
         // remove non-exist col family will return false
         assert(!store.removeColFamilyIfExists("non-existence"))

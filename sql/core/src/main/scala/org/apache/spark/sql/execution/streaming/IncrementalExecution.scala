@@ -130,7 +130,8 @@ class IncrementalExecution(
       runId,
       statefulOperatorId.getAndIncrement(),
       currentBatchId,
-      numStateStores)
+      numStateStores,
+      colFamilySchemas = StreamExecution.getColumnFamilySchemas(queryId))
   }
 
   sealed trait SparkPlanPartialRule {
@@ -242,7 +243,20 @@ class IncrementalExecution(
             metadataWriter.write(metadata)
           case _ =>
         }
-        statefulOp
+        statefulOp match {
+          case tws: TransformWithStateExec =>
+            // create map of columnFamilyName -> columnFamilyId
+            val newSchemas = schemaValidationResult.head.newSchemas
+            val columnFamilySchemas = newSchemas.map { case schema =>
+              schema.colFamilyName -> schema
+            }.toMap
+            StreamExecution.updateColumnFamilySchemas(
+              queryId, columnFamilySchemas)
+            val stateInfo = tws.getStateInfo
+            tws.copy(stateInfo = Some(
+              stateInfo.copy(colFamilySchemas = columnFamilySchemas)))
+          case _ => statefulOp
+        }
     }
   }
 
@@ -522,12 +536,9 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
-      // The rule below doesn't change the plan but can cause the side effect that
-      // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
-
-      simulateWatermarkPropagation(planWithStateOpId)
-      planWithStateOpId transform WatermarkPropagationRule.rule
+      val planWithVCF = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      simulateWatermarkPropagation(planWithVCF)
+      planWithVCF transform WatermarkPropagationRule.rule
     }
   }
 

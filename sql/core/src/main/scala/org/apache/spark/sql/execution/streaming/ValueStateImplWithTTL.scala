@@ -38,12 +38,13 @@ import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 class ValueStateImplWithTTL[S](
     store: StateStore,
     stateName: String,
+    colFamilyIds: Map[String, Short],
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long)
   extends SingleKeyTTLStateImpl(
-    stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
+    stateName, colFamilyIds, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
@@ -53,7 +54,7 @@ class ValueStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName,
+    store.createColFamilyIfAbsent(stateName, colFamilyIds(stateName),
       keyExprEnc.schema, getValueSchemaWithTTL(valEncoder.schema, true),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }

@@ -39,12 +39,13 @@ import org.apache.spark.util.NextIterator
 class ListStateImplWithTTL[S](
     store: StateStore,
     stateName: String,
+    colFamilyIds: Map[String, Short],
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long)
   extends SingleKeyTTLStateImpl(
-    stateName, store, keyExprEnc, batchTimestampMs) with ListState[S] {
+    stateName, colFamilyIds, store, keyExprEnc, batchTimestampMs) with ListState[S] {
 
   private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
@@ -55,7 +56,7 @@ class ListStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema,
+    store.createColFamilyIfAbsent(stateName, colFamilyIds(stateName), keyExprEnc.schema,
       getValueSchemaWithTTL(valEncoder.schema, true),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
   }

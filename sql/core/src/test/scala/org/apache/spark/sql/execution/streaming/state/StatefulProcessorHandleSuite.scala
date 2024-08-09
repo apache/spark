@@ -23,7 +23,7 @@ import java.util.UUID
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, TimerStateUtils}
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig}
 
 
@@ -50,7 +50,10 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          columnFamilyIds = Map(
+            "testState" -> 1.toShort
+          ))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
         handle.getValueState[Long]("testState", Encoders.scalaLong)
       }
@@ -144,8 +147,16 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     test(s"registering timeouts with timeMode=$timeMode should succeed") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
+        val timerCFName = if (timeMode == "ProcessingTime") {
+          TimerStateUtils.PROC_TIMERS_STATE_NAME
+        } else {
+          TimerStateUtils.EVENT_TIMERS_STATE_NAME
+        }
+        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          columnFamilyIds = Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
         handle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         assert(handle.getHandleState === StatefulProcessorHandleState.INITIALIZED)
 
@@ -164,9 +175,17 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   Seq("ProcessingTime", "EventTime").foreach { timeMode =>
     test(s"verify listing of registered timers with timeMode=$timeMode") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+        val timerCFName = if (timeMode == "ProcessingTime") {
+          TimerStateUtils.PROC_TIMERS_STATE_NAME
+        } else {
+          TimerStateUtils.EVENT_TIMERS_STATE_NAME
+        }
+        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          columnFamilyIds = Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
         handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
         assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
 
@@ -204,9 +223,17 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   Seq("ProcessingTime", "EventTime").foreach { timeMode =>
     test(s"registering timeouts with timeMode=$timeMode and invalid state should fail") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+        val timerCFName = if (timeMode == "ProcessingTime") {
+          TimerStateUtils.PROC_TIMERS_STATE_NAME
+        } else {
+          TimerStateUtils.EVENT_TIMERS_STATE_NAME
+        }
+        val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+        val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode),
+          columnFamilyIds = Map(keyToTsCFName -> 1, tsToKeyCFName -> 2))
 
         Seq(StatefulProcessorHandleState.CREATED,
           StatefulProcessorHandleState.TIMER_PROCESSED,
@@ -221,10 +248,17 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
   test("ttl States are populated for valueState and timeMode=ProcessingTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val timerCFName = TimerStateUtils.PROC_TIMERS_STATE_NAME
+
+      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(10))
+        batchTimestampMs = Some(10), columnFamilyIds = Map(
+          keyToTsCFName -> 1, tsToKeyCFName -> 2, "testState" -> 3,
+          "_ttl_testState" -> 4
+        ))
 
       val valueStateWithTTL = handle.getValueState("testState",
         Encoders.STRING, TTLConfig(Duration.ofHours(1)))
@@ -239,10 +273,17 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
   test("ttl States are populated for listState and timeMode=ProcessingTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val timerCFName = TimerStateUtils.PROC_TIMERS_STATE_NAME
+
+      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(10))
+        batchTimestampMs = Some(10), columnFamilyIds = Map(
+          keyToTsCFName -> 1, tsToKeyCFName -> 2, "testState" -> 3,
+          "_ttl_testState" -> 4
+        ))
 
       val listStateWithTTL = handle.getListState("testState",
         Encoders.STRING, TTLConfig(Duration.ofHours(1)))
@@ -258,9 +299,16 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   test("ttl States are populated for mapState and timeMode=ProcessingTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
+      val timerCFName = TimerStateUtils.PROC_TIMERS_STATE_NAME
+
+      val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+      val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(10))
+        batchTimestampMs = Some(10), columnFamilyIds = Map(
+          keyToTsCFName -> 1, tsToKeyCFName -> 2, "testState" -> 3,
+          "_ttl_testState" -> 4
+        ))
 
       val mapStateWithTTL = handle.getMapState("testState",
         Encoders.STRING, Encoders.STRING, TTLConfig(Duration.ofHours(1)))
@@ -277,7 +325,12 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
+        UUID.randomUUID(), keyExprEncoder, TimeMode.None(),
+        columnFamilyIds =
+          Map("testValueState" -> 1,
+            "testListState" -> 2,
+            "testMapState" -> 3)
+      )
 
       handle.getValueState("testValueState", Encoders.STRING)
       handle.getListState("testListState", Encoders.STRING)

@@ -34,6 +34,7 @@ import org.apache.spark.sql.streaming.ValueState
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
+    colFamilyIds: Map[String, Short],
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S])
   extends ValueState[S] with Logging {
@@ -43,7 +44,8 @@ class ValueStateImpl[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+    store.createColFamilyIfAbsent(stateName, colFamilyIds(stateName),
+      keyExprEnc.schema, valEncoder.schema,
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 

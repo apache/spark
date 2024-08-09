@@ -58,16 +58,19 @@ private[sql] class RocksDBStateStoreProvider
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
+        colFamilyId: Short,
         keySchema: StructType,
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
-      val newColFamilyId = ColumnFamilyUtils.createColFamilyIfAbsent(colFamilyName, isInternal)
-
+      ColumnFamilyUtils.
+        verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
+      colFamilyNameToIdMap.put(colFamilyName, colFamilyId)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies, newColFamilyId),
-         RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
+          (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
+          Some(colFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
+          useMultipleValuesPerKey)))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -355,6 +358,7 @@ private[sql] class RocksDBStateStoreProvider
       colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, colFamilyId.shortValue())
       defaultColFamilyId = Option(colFamilyId.shortValue())
     }
+
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
         useColumnFamilies, defaultColFamilyId),
@@ -448,6 +452,7 @@ private[sql] class RocksDBStateStoreProvider
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
   private val colFamilyNameToIdMap = new java.util.concurrent.ConcurrentHashMap[String, Short]
+
   // TODO SPARK-48796 load column family id from state schema when restarting
   private val colFamilyId = new AtomicInteger(0)
 
@@ -542,7 +547,7 @@ private[sql] class RocksDBStateStoreProvider
      * @param operationName - name of the store operation
      * @param colFamilyName - name of the column family
      */
-    private def verifyColFamilyCreationOrDeletion(
+    def verifyColFamilyCreationOrDeletion(
         operationName: String,
         colFamilyName: String,
         isInternal: Boolean = false): Unit = {
@@ -573,19 +578,6 @@ private[sql] class RocksDBStateStoreProvider
      * @return - true if the column family is for internal use, false otherwise
      */
     def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
-
-    /**
-     * Create RocksDB column family, if not created already
-     */
-    def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false):
-      Option[Short] = {
-      verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      if (!checkColFamilyExists(colFamilyName)) {
-        val newColumnFamilyId = colFamilyId.incrementAndGet().toShort
-        colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
-        Option(newColumnFamilyId)
-      } else None
-    }
 
     /**
      * Remove RocksDB column family, if exists

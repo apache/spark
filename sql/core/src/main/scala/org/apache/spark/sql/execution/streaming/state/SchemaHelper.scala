@@ -97,6 +97,7 @@ object SchemaHelper {
       (0 until numEntries).map { _ =>
         // read the col family name and the key and value schema
         val colFamilyName = inputStream.readUTF()
+        val colFamilyId = inputStream.readShort()
         val keySchemaStr = readJsonSchema(inputStream)
         val valueSchemaStr = readJsonSchema(inputStream)
         val keySchema = StructType.fromString(keySchemaStr)
@@ -114,7 +115,8 @@ object SchemaHelper {
           keySchema,
           StructType.fromString(valueSchemaStr),
           Some(encoderSpec),
-          userKeyEncoderSchema)
+          userKeyEncoderSchema,
+          colFamilyId = colFamilyId)
       }.toList
     }
   }
@@ -206,6 +208,7 @@ object SchemaHelper {
       stateStoreColFamilySchema.foreach { colFamilySchema =>
         assert(colFamilySchema.keyStateEncoderSpec.isDefined)
         outputStream.writeUTF(colFamilySchema.colFamilyName)
+        outputStream.writeShort(colFamilySchema.colFamilyId)
         writeJsonSchema(outputStream, colFamilySchema.keySchema.json)
         writeJsonSchema(outputStream, colFamilySchema.valueSchema.json)
         writeJsonSchema(outputStream, colFamilySchema.keyStateEncoderSpec.get.json)

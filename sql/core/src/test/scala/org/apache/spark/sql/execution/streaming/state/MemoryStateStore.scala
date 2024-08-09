@@ -32,6 +32,7 @@ class MemoryStateStore extends StateStore() {
 
   override def createColFamilyIfAbsent(
       colFamilyName: String,
+      colFamilyId: Short,
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,

@@ -86,7 +86,8 @@ class StatefulProcessorHandleImpl(
     timeMode: TimeMode,
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
-    metrics: Map[String, SQLMetric] = Map.empty)
+    metrics: Map[String, SQLMetric] = Map.empty,
+    columnFamilyIds: Map[String, Short] = Map.empty)
   extends StatefulProcessorHandleImplBase(timeMode, keyEncoder) with Logging {
   import StatefulProcessorHandleState._
 
@@ -121,12 +122,12 @@ class StatefulProcessorHandleImpl(
     metrics.get(metricName).foreach(_.add(1))
   }
 
-  override def getValueState[T](
-      stateName: String,
-      valEncoder: Encoder[T]): ValueState[T] = {
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
     incrementMetric("numValueStateVars")
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    assert(columnFamilyIds.contains(stateName))
+    val resultState = new ValueStateImpl[T](store, stateName,
+      columnFamilyIds, keyEncoder, valEncoder)
     resultState
   }
 
@@ -135,10 +136,12 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
+    assert(columnFamilyIds.contains(stateName))
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+      columnFamilyIds,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numValueStateWithTTLVars")
     ttlStates.add(valueStateWithTTL)
@@ -147,7 +150,8 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  private lazy val timerState = new TimerStateImpl(store, timeMode, keyEncoder)
+  private lazy val timerState = new TimerStateImpl(
+    store, timeMode, keyEncoder, columnFamilyIds)
 
   /**
    * Function to register a timer for the given expiryTimestampMs
@@ -217,8 +221,10 @@ class StatefulProcessorHandleImpl(
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", CREATED)
+    assert(columnFamilyIds.contains(stateName))
     incrementMetric("numListStateVars")
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    val resultState = new ListStateImpl[T](store, stateName,
+      columnFamilyIds, keyEncoder, valEncoder)
     resultState
   }
 
@@ -243,11 +249,13 @@ class StatefulProcessorHandleImpl(
       ttlConfig: TTLConfig): ListState[T] = {
 
     verifyStateVarOperations("get_list_state", CREATED)
+    assert(columnFamilyIds.contains(stateName))
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+      columnFamilyIds, keyEncoder, valEncoder, ttlConfig,
+      batchTimestampMs.get)
     incrementMetric("numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
 
@@ -259,8 +267,10 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", CREATED)
+    assert(columnFamilyIds.contains(stateName))
     incrementMetric("numMapStateVars")
-    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
+    val resultState = new MapStateImpl[K, V](store, stateName, columnFamilyIds,
+      keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
 
@@ -270,10 +280,12 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", CREATED)
+    assert(columnFamilyIds.contains(stateName))
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
-    val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
+    val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName,
+      columnFamilyIds, keyEncoder, userKeyEnc,
       valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numMapStateWithTTLVars")
     ttlStates.add(mapStateWithTTL)
@@ -320,10 +332,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchemaList = StateStoreColumnFamilySchemaUtils.
       getValueStateSchema(stateName, keyExprEnc, valEncoder, false)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    colFamilySchemaList.foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
     val stateVariableInfo = TransformWithStateVariableUtils.
       getValueState(stateName, ttlEnabled = false)
     stateVariableInfos.put(stateName, stateVariableInfo)
@@ -335,10 +349,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchemaList = StateStoreColumnFamilySchemaUtils.
       getValueStateSchema(stateName, keyExprEnc, valEncoder, true)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    colFamilySchemaList.foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
     val stateVariableInfo = TransformWithStateVariableUtils.
       getValueState(stateName, ttlEnabled = true)
     stateVariableInfos.put(stateName, stateVariableInfo)
@@ -347,10 +363,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchemaList = StateStoreColumnFamilySchemaUtils.
       getListStateSchema(stateName, keyExprEnc, valEncoder, false)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    colFamilySchemaList.foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
     val stateVariableInfo = TransformWithStateVariableUtils.
       getListState(stateName, ttlEnabled = false)
     stateVariableInfos.put(stateName, stateVariableInfo)
@@ -362,10 +380,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchemaList = StateStoreColumnFamilySchemaUtils.
       getListStateSchema(stateName, keyExprEnc, valEncoder, true)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    colFamilySchemaList.foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
     val stateVariableInfo = TransformWithStateVariableUtils.
       getListState(stateName, ttlEnabled = true)
     stateVariableInfos.put(stateName, stateVariableInfo)
@@ -377,10 +397,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchemaList = StateStoreColumnFamilySchemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, false)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    colFamilySchemaList.foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = false)
     stateVariableInfos.put(stateName, stateVariableInfo)
@@ -393,9 +415,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchemaList = StateStoreColumnFamilySchemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, true)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    colFamilySchemaList.foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = true)
     stateVariableInfos.put(stateName, stateVariableInfo)
@@ -415,6 +439,10 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
+    StateStoreColumnFamilySchemaUtils.getTimerSchema(
+      keyExprEnc, timeMode).foreach { colFamilySchema =>
+      columnFamilySchemas.put(colFamilySchema.colFamilyName, colFamilySchema)
+    }
   }
 
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
