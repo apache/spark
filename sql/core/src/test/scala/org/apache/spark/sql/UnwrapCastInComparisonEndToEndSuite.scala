@@ -21,7 +21,7 @@ import java.time.LocalDateTime
 
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, IntegerType, StructType}
 
 class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -286,6 +286,16 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
       checkAnswer(df.where(s"cast(dt as timestamp) = $ts2"), Seq(d2).map(Row(_)))
       checkAnswer(df.where(s"cast(dt as timestamp) < $ts2"), Seq(d1).map(Row(_)))
       checkAnswer(df.where(s"cast(dt as timestamp) <= $ts2"), Seq(d1, d2).map(Row(_)))
+    }
+  }
+
+  test("SPARK-4905: display more primitive name for the `::` operator") {
+    withTempView("tbl") {
+      sql("CREATE TABLE tbl as (SELECT cast(1 as int), 1::int)")
+      val df = sql("SELECT * FROM tbl")
+      assert(df.schema === new StructType().
+        add("CAST(1 AS INT)", IntegerType, nullable = true).
+        add("1::INT", IntegerType, nullable = true))
     }
   }
 
