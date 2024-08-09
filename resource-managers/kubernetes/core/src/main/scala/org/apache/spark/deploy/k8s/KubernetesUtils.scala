@@ -20,10 +20,11 @@ import java.io.{File, IOException}
 import java.net.URI
 import java.security.SecureRandom
 import java.util.{Collections, UUID}
+import scala.util.control.NonFatal
 
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder,PersistentVolumeClaim, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -235,7 +236,6 @@ object KubernetesUtils extends Logging {
    */
   @Since("3.0.0")
   def uniqueID(clock: Clock = systemClock): String = {
-    val random = new Array[Byte](3)
     synchronized {
       RNG.nextBytes(random)
     }
@@ -414,5 +414,68 @@ object KubernetesUtils extends Logging {
             .build())
           .build()
       }
+  }
+
+  @Since("3.5.0")
+  def createPreResource(
+                         client: KubernetesClient,
+                         resource: HasMetadata,
+                         namespace: String): Unit = {
+    resource match {
+      case pvc: PersistentVolumeClaim =>
+        logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
+          s"StorageClass ${pvc.getSpec.getStorageClassName}")
+        client.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
+      case other =>
+        client.resourceList(Seq(other): _*).forceConflicts().serverSideApply()
+    }
+  }
+
+  /**
+   * Refresh OwnerReference in the given resource
+   * making the driver or executor pod an owner of them
+   */
+  @Since("3.5.0")
+  def refreshOwnerReferenceInResource(
+                                       client: KubernetesClient,
+                                       resource: HasMetadata,
+                                       namespace: String,
+                                       pod: Pod): Unit = {
+    resource match {
+      case pvc: PersistentVolumeClaim =>
+        var retryCount = 0
+        var success = false
+        while (retryCount < 3 && !success) {
+          try {
+            val createdPVC =
+              client
+                .persistentVolumeClaims()
+                .inNamespace(namespace)
+                .withName(pvc.getMetadata.getName)
+                .get()
+            addOwnerReference(pod, Seq(createdPVC))
+            logInfo(s"Trying to refresh PersistentVolumeClaim ${createdPVC.getMetadata.getName}" +
+              s"with OwnerReference ${createdPVC.getMetadata.getOwnerReferences}")
+            client
+              .persistentVolumeClaims()
+              .inNamespace(namespace)
+              .withName(createdPVC.getMetadata.getName)
+              .patch(createdPVC)
+            success = true
+          } catch {
+            case NonFatal(e) =>
+              retryCount += 1
+              if (retryCount < 3) {
+                logWarning(s"Attempt $retryCount to refresh owner reference failed, retrying.", e)
+              } else {
+                logError(s"Failed to refresh owner reference after $retryCount attempts.", e)
+                throw e
+              }
+          }
+        }
+      case other =>
+        addOwnerReference(pod, Seq(other))
+        client.resourceList(Seq(other): _*).forceConflicts().serverSideApply()
+    }
   }
 }

@@ -29,7 +29,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
   import MountVolumesFeatureStep._
 
-  val additionalResources = ArrayBuffer.empty[HasMetadata]
+  val additionalPreResources = ArrayBuffer.empty[HasMetadata]
   val accessMode = if (conf.get(KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE)) {
     "ReadWriteOnce"
   } else {
@@ -86,7 +86,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
                 .replaceAll(PVC_ON_DEMAND, s"${conf.resourceNamePrefix}-driver$PVC_POSTFIX-$i")
           }
           if (storageClass.isDefined && size.isDefined) {
-            additionalResources.append(new PersistentVolumeClaimBuilder()
+            additionalPreResources.append(new PersistentVolumeClaimBuilder()
               .withKind(PVC)
               .withApiVersion("v1")
               .withNewMetadata()
@@ -123,8 +123,8 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
     }
   }
 
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    additionalResources.toSeq
+  override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
+    additionalPreResources.toSeq
   }
 }
 

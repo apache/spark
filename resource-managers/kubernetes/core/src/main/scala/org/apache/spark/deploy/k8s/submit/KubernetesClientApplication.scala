@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
+import org.apache.spark.deploy.k8s.KubernetesUtils.{addOwnerReference, createPreResource, refreshOwnerReferenceInResource}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, SUBMISSION_ID}
 import org.apache.spark.util.Utils
@@ -137,16 +137,17 @@ private[spark] class Client(
 
     // setup resources before pod creation
     val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
-    try {
-      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
-    } catch {
-      case NonFatal(e) =>
-        logError("Please check \"kubectl auth can-i create [resource]\" first." +
-          " It should be yes. And please also check your feature step implementation.")
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        throw e
+    preKubernetesResources.foreach { resource =>
+      try {
+        createPreResource(kubernetesClient, resource, conf.namespace)
+      } catch {
+        case NonFatal(e) =>
+          logError("Please check \"kubectl auth can-i create [resource]\" first." +
+            " It should be yes. And please also check feature step implementation.")
+          kubernetesClient.resourceList(Seq(resource): _*).delete()
+          throw e
+      }
     }
-
     var watch: Watch = null
     var createdDriverPod: Pod = null
     try {
@@ -160,16 +161,17 @@ private[spark] class Client(
     }
 
     // Refresh all pre-resources' owner references
-    try {
-      addOwnerReference(createdDriverPod, preKubernetesResources)
-      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
-    } catch {
-      case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        throw e
-    }
-
+      preKubernetesResources.foreach { resource =>
+        try {
+          refreshOwnerReferenceInResource(kubernetesClient, resource, conf.namespace,
+            createdDriverPod)
+        } catch {
+          case NonFatal(e) =>
+            kubernetesClient.pods().resource(createdDriverPod).delete()
+            kubernetesClient.resourceList(Seq(resource): _*).delete()
+            throw e
+        }
+      }
     // setup resources after pod creation, and refresh all resources' owner references
     try {
       val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)

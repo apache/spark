@@ -103,7 +103,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     (invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(executorPodWithId(0,
-        k8sConf.resourceProfileId.toInt), Seq.empty)
+        k8sConf.resourceProfileId.toInt), Seq.empty,Seq.empty)
   }
 
   before {

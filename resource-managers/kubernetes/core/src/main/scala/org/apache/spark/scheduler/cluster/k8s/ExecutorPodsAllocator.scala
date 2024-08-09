@@ -32,7 +32,7 @@ import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
-import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
+import org.apache.spark.deploy.k8s.KubernetesUtils.{createPreResource, refreshOwnerReferenceInResource}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -472,34 +472,42 @@ class ExecutorPodsAllocator(
         .addToContainers(executorPod.container)
         .endSpec()
         .build()
-      val resources = replacePVCsIfNeeded(
-        podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-      val createdExecutorPod =
-        kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
-      try {
-        addOwnerReference(createdExecutorPod, resources)
-        resources
-          .filter(_.getKind == "PersistentVolumeClaim")
-          .foreach { resource =>
-            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-              addOwnerReference(driverPod.get, Seq(resource))
-            }
-            val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(log"Trying to create PersistentVolumeClaim " +
-              log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
-              log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
-            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
+      val preResources = replacePVCsIfNeeded(
+        podWithAttachedContainer, resolvedExecutorSpec.executorPreKubernetesResources, reusablePVCs)
+
+      preResources.foreach { resource =>
+        try {
+          createPreResource(kubernetesClient, resource, namespace)
+          if (resource.isInstanceOf[PersistentVolumeClaim]) {
             PVC_COUNTER.incrementAndGet()
           }
-        newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
-        logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
-      } catch {
-        case NonFatal(e) =>
-          kubernetesClient.pods()
-            .inNamespace(namespace)
-            .resource(createdExecutorPod)
-            .delete()
-          throw e
+        } catch {
+          case NonFatal(e) =>
+            logError("Please check \"kubectl auth can-i create [resource]\" first." +
+              " It should be yes. And please also check feature step implementation.")
+            kubernetesClient.resourceList(Seq(resource): _*).delete()
+            throw e
+        }
+      }
+
+      val createdExecutorPod =
+        kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
+      preResources.foreach { resource =>
+        try {
+          if (resource.isInstanceOf[PersistentVolumeClaim] &&
+            conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+            refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
+              driverPod.get)
+          } else {
+            refreshOwnerReferenceInResource(kubernetesClient, resource, namespace,
+              createdExecutorPod)
+          }
+        } catch {
+          case NonFatal(e) =>
+            kubernetesClient.pods().inNamespace(namespace).resource(createdExecutorPod).delete()
+            kubernetesClient.resourceList(Seq(resource): _*).delete()
+            throw e
+        }
       }
     }
   }
