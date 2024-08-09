@@ -4137,6 +4137,29 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Update rows in a table that match a condition.
+   *
+   * Scala Example:
+   * {{{
+   *   spark.table("source").update(Map("salary" -> lit(200)))
+   *    .where($"salary" === 100)
+   *    .execute()
+   *
+   * }}}
+   * @param assignments A Map of column names to Column expressions representing the updates
+   *     to be applied.
+   * @since 4.0.0
+   */
+  def update(assignments: Map[String, Column]): UpdateWriter[T] = {
+    if (isStreaming) {
+      throw new AnalysisException(
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("update")))
+    }
+    new UpdateWriter[T](this, assignments)
+  }
+
+  /**
    * Interface for saving the content of the streaming Dataset out into external storage.
    *
    * @group basic
