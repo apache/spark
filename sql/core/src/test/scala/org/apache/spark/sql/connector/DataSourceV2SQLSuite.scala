@@ -458,7 +458,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:/tmp/foo")
+        assert(location === "file:///tmp/foo")
       }
     }
   }
