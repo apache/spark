@@ -524,6 +524,24 @@ case class CreateTableAsSelect(
 }
 
 /**
+ * Create a new table using the definition of an existing table with a v2 catalog.
+ */
+case class CreateTableLike(
+  targetName: LogicalPlan,
+  sourceName: LogicalPlan,
+  tableSpec: TableSpecBase,
+  ignoreIfExists: Boolean)
+  extends BinaryCommand {
+  override def left: LogicalPlan = targetName
+
+  override def right: LogicalPlan = sourceName
+
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(targetName = newLeft, sourceName = newRight)
+}
+
+/**
  * Replace a table with a v2 catalog.
  *
  * If the table does not exist, and orCreate is true, then it will be created.
