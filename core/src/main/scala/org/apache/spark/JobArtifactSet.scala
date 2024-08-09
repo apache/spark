@@ -20,6 +20,8 @@ package org.apache.spark
 import java.io.Serializable
 import java.util.Objects
 
+import scala.collection.concurrent.{Map => CMAP}
+
 /**
  * Job artifact state. For example, Spark Connect client sets the state specifically
  * for the current client.
@@ -96,6 +98,15 @@ private[spark] object JobArtifactSet {
     }
   }
 
+  private def mergeWithDefault(artifactMap: CMAP[String, CMAP[String, Long]],
+                               uuid: String) : scala.collection.Map[String, Long] = {
+    var sessionMap = artifactMap.getOrElse(uuid, Map.empty[String, Long])
+    if(!uuid.equals("default")) {
+      sessionMap ++= artifactMap.getOrElse("default", Map.empty[String, Long])
+    }
+    sessionMap
+  }
+
   /**
    * When Spark Connect isn't used, we default back to the shared resources.
    *
@@ -110,13 +121,13 @@ private[spark] object JobArtifactSet {
     new JobArtifactSet(
       state = maybeState,
       jars = maybeState
-        .map(s => sc.addedJars.getOrElse(s.uuid, Map.empty[String, Long]))
+        .map(s => mergeWithDefault(sc.addedJars, s.uuid))
         .getOrElse(sc.allAddedJars).toMap,
       files = maybeState
-        .map(s => sc.addedFiles.getOrElse(s.uuid, Map.empty[String, Long]))
+        .map(s => mergeWithDefault(sc.addedFiles, s.uuid))
         .getOrElse(sc.allAddedFiles).toMap,
       archives = maybeState
-        .map(s => sc.addedArchives.getOrElse(s.uuid, Map.empty[String, Long]))
+        .map(s => mergeWithDefault(sc.addedArchives, s.uuid))
         .getOrElse(sc.allAddedArchives).toMap)
   }
 }

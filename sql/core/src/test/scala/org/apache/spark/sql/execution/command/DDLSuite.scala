@@ -2171,7 +2171,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       root = Utils.createTempDir().getCanonicalPath, namePrefix = "addDirectory")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
-    assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
+    assert(new File(SparkFiles.get(
+      s"${spark.sessionUUID}/${directoryToAdd.getName}/${testFile.getName}")).exists())
   }
 
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to true") {

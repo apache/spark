@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -26,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{JobArtifactSet, SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.{Logging, MDC}
@@ -280,6 +281,24 @@ class SparkSession private(
   }
 
   /**
+   * Clone JobArtifact set info from parent session while call cloneSession api.
+   */
+  private[sql] def cloneJobArtifactSet(parentSessionId: String, childSessionId: String): Unit = {
+      sparkContext.addedJars.get(parentSessionId).foreach { jars =>
+      val newJars = new ConcurrentHashMap[String, Long]().asScala ++= jars
+      sparkContext.addedJars.put(childSessionId, newJars)
+    }
+    sparkContext.addedFiles.get(parentSessionId).foreach { files =>
+      val newFiles = new ConcurrentHashMap[String, Long]().asScala ++= files
+      sparkContext.addedFiles.put(childSessionId, newFiles)
+    }
+    sparkContext.addedArchives.get(parentSessionId).foreach { archives =>
+      val newArchives = new ConcurrentHashMap[String, Long]().asScala ++= archives
+      sparkContext.addedArchives.put(childSessionId, newArchives)
+    }
+  }
+
+  /**
    * Create an identical copy of this `SparkSession`, sharing the underlying `SparkContext`
    * and shared state. All the state of this session (i.e. SQL configurations, temporary tables,
    * registered functions) is copied over, and the cloned session is set up with the same shared
@@ -299,6 +318,7 @@ class SparkSession private(
       extensions,
       Map.empty)
     result.sessionState // force copy of SessionState
+    cloneJobArtifactSet(sessionUUID, result.sessionUUID)
     result
   }
 
@@ -920,8 +940,10 @@ class SparkSession private(
     // active session once we are done.
     val old = SparkSession.activeThreadSession.get()
     SparkSession.setActiveSession(this)
-    try block finally {
-      SparkSession.setActiveSession(old)
+    JobArtifactSet.withActiveJobArtifactState(artifactManager.state) {
+      try block finally {
+        SparkSession.setActiveSession(old)
+      }
     }
   }
 
