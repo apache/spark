@@ -239,7 +239,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |  BEGIN
         |    SET VAR flag = 1;
         |  END;
-        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  DECLARE CONTINUE HANDLER FOR '22012'
         |  BEGIN
         |    SET VAR flag = 2;
         |  END;

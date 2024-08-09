@@ -144,19 +144,15 @@ class SingleStatementExec(
    *   SQL query text.
    */
   def getText: String = {
-//    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
-    try {
-      origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
-    } catch {
-      case e: Exception =>
-        "DROP VARIABLE"
-    }
+    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 
   override def reset(): Unit = {
     raisedError = false
     errorState = None
     error = None
+    rethrow = None
     result = None // Should we do this?
   }
 

@@ -238,7 +238,8 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   override def visitConditionValue(ctx: ConditionValueContext): String = {
-    Option(ctx.multipartIdentifier()).map(_.getText).getOrElse(ctx.stringLit().getText)
+    Option(ctx.multipartIdentifier()).map(_.getText)
+      .getOrElse(ctx.stringLit().getText).replace("'", "")
   }
 
   override def visitConditionValueList(ctx: ConditionValueListContext): Seq[String] = {
