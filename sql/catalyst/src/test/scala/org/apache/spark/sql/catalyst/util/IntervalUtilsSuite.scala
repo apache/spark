@@ -670,6 +670,22 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-35680: format negative month intervals") {
+    import org.apache.spark.sql.types.YearMonthIntervalType._
+    Seq(
+      0 -> ("0-0", "INTERVAL '0' MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
+      11 -> ("0-11", "INTERVAL '11' MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
+      12 -> ("1-0", "INTERVAL '12' MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+    }
+  }
+
   test("SPARK-35734: Format day-time intervals using type fields") {
     import DayTimeIntervalType._
     Seq(
