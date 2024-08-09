@@ -16,13 +16,14 @@
 #
 
 import importlib
+import math
 
 import pandas as pd
 import numpy as np
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.utils import is_remote
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
@@ -464,22 +465,44 @@ class KdePlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
-        from pyspark.mllib.stat import KernelDensity
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
 
-        # 'sdf' is a Spark DataFrame that selects one column.
+        assert ind is not None, "'ind' must be a scalar array."
 
-        # Using RDD is slow so we might have to change it to Dataset based implementation
-        # once Spark has that implementation.
-        sample = sdf.rdd.map(lambda x: float(x[0]))
-        kd = KernelDensity()
-        kd.setSample(sample)
+        bandwidth = float(bw_method)
+        points = [float(i) for i in ind]
+        logStandardDeviationPlusHalfLog2Pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
 
-        assert isinstance(bw_method, (int, float)), "'bw_method' must be set as a scalar number."
+        def normPdf(
+            mean: Column,
+            standardDeviation: Column,
+            logStandardDeviationPlusHalfLog2Pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / standardDeviation
+            logDensity = -0.5 * x1 * x1 - logStandardDeviationPlusHalfLog2Pi
+            return F.exp(logDensity)
 
-        if bw_method is not None:
-            # Match the bandwidth with Spark.
-            kd.setBandwidth(float(bw_method))
-        return kd.estimate(list(map(float, ind)))
+        dataCol = F.col(sdf.columns[0]).cast("double")
+
+        estimated = [
+            F.avg(
+                normPdf(
+                    dataCol,
+                    F.lit(bandwidth),
+                    F.lit(logStandardDeviationPlusHalfLog2Pi),
+                    F.lit(point),
+                )
+            )
+            for point in points
+        ]
+
+        row = sdf.select(F.array(estimated)).first()
+        return row[0]
 
 
 class PandasOnSparkPlotAccessor(PandasObject):
@@ -572,9 +595,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
-        kind = {"density": "kde"}.get(kind, kind)
-
-        if is_remote() and kind in ["hist", "kde"]:
+        if is_remote() and kind == "hist":
             return unsupported_function(class_name="pd.DataFrame", method_name=kind)()
 
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
@@ -1031,9 +1052,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ... })
             >>> df.plot.kde(ind=[1, 2, 3, 4, 5, 6], bw_method=0.3)  # doctest: +SKIP
         """
-        if is_remote():
-            return unsupported_function(class_name="pd.DataFrame", method_name="kde")()
-
         return self(kind="kde", bw_method=bw_method, ind=ind, **kwargs)
 
     density = kde
