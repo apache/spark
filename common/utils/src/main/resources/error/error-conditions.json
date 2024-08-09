@@ -4029,6 +4029,12 @@
     ],
     "sqlState" : "42713"
   },
+  "STATSD_SINK_INVALID_PROTOCOL" : {
+    "message" : [
+      "Invalid StatsD protocol: <protocol>."
+    ],
+    "sqlState" : "KD000"
+  },
   "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
     "message" : [
       "No committed batch found, checkpoint location: <checkpointLocation>. Ensure that the query has run and committed any microbatch before stopping."

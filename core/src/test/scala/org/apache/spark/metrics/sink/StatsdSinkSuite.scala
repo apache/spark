@@ -17,17 +17,21 @@
 
 package org.apache.spark.metrics.sink
 
-import java.net.{DatagramPacket, DatagramSocket}
+import java.io.{BufferedReader, InputStreamReader}
+import java.net.{DatagramPacket, DatagramSocket, ServerSocket}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 import java.util.concurrent.TimeUnit._
 
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.metrics.sink.StatsdSink._
+import org.apache.spark.util.ThreadUtils
+
 
 class StatsdSinkSuite extends SparkFunSuite {
   private val defaultProps = Map(
@@ -47,7 +51,39 @@ class StatsdSinkSuite extends SparkFunSuite {
   private val socketMinRecvBufferSize = 16384 // bytes
   private val socketTimeout = 30000           // milliseconds
 
-  private def withSocketAndSink(testCode: (DatagramSocket, StatsdSink) => Any): Unit = {
+  private def withSocketAndSink(
+    testCode: (StatsdSink, Int => Seq[String]) => Any): Unit = {
+    withSocketAndSinkUDP(testCode)
+    withSocketAndSinkTCP(testCode)
+  }
+
+  private def withSocketAndSinkTCP(
+    testCode: (StatsdSink, Int => Seq[String]) => Any): Unit = {
+    val (socketListeningPort, getClientPackets, closeFunc) =
+      TestTcpServer.startTcpServer(socketTimeout, socketMinRecvBufferSize)
+
+    val props = new Properties
+    defaultProps.foreach(e => props.put(e._1, e._2))
+    props.put(STATSD_KEY_PORT, socketListeningPort)
+    props.put(STATSD_KEY_PROTOCOL, "tcp")
+    props.put(STATSD_KEY_REGEX, "counter|gauge|histogram|timer")
+    val registry = new MetricRegistry
+    val sink = new StatsdSink(props, registry)
+
+    val getReported: Int => Seq[String] = _ => {
+      val receivedLines = getClientPackets()
+      import scala.concurrent.duration._
+      ThreadUtils.awaitResult(receivedLines, 10.seconds)
+    }
+    try {
+      testCode(sink, getReported)
+    } finally {
+      closeFunc()
+    }
+  }
+
+  private def withSocketAndSinkUDP(
+    testCode: (StatsdSink, Int => Seq[String]) => Any): Unit = {
     val socket = new DatagramSocket
 
     // Leave the receive buffer size untouched unless it is too
@@ -64,47 +100,50 @@ class StatsdSinkSuite extends SparkFunSuite {
     props.put(STATSD_KEY_REGEX, "counter|gauge|histogram|timer")
     val registry = new MetricRegistry
     val sink = new StatsdSink(props, registry)
+    val getReported: (Int) => Seq[String] = (expectedNum) => {
+      var metrics: Seq[String] = Seq.empty
+      (1 to expectedNum).foreach { _ =>
+        val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
+        socket.receive(p)
+        val result = new String(p.getData, 0, p.getLength, UTF_8)
+        metrics :+= result
+      }
+      metrics
+    }
     try {
-      testCode(socket, sink)
+      testCode(sink, getReported)
     } finally {
       socket.close()
     }
   }
 
   test("metrics StatsD sink with Counter") {
-    withSocketAndSink { (socket, sink) =>
+    withSocketAndSink { (sink, getReported) =>
       val counter = new Counter
       counter.inc(12)
       sink.registry.register("counter", counter)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
-      socket.receive(p)
-
-      val result = new String(p.getData, 0, p.getLength, UTF_8)
-      assert(result === "spark.counter:12|c", "Counter metric received should match data sent")
+      val result = getReported(1)
+      assert(result.head === "spark.counter:12|c", "Counter metric received should match data sent")
     }
   }
 
   test("metrics StatsD sink with Gauge") {
-    withSocketAndSink { (socket, sink) =>
+    withSocketAndSink { (sink, getReported) =>
       val gauge = new Gauge[Double] {
         override def getValue: Double = 1.23
       }
       sink.registry.register("gauge", gauge)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
-      socket.receive(p)
-
-      val result = new String(p.getData, 0, p.getLength, UTF_8)
-      assert(result === "spark.gauge:1.23|g", "Gauge metric received should match data sent")
+      val result = getReported(1)
+      assert(result.head === "spark.gauge:1.23|g", "Gauge metric received should match data sent")
     }
   }
 
   test("metrics StatsD sink with Histogram") {
-    withSocketAndSink { (socket, sink) =>
-      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
+    withSocketAndSink { (sink, getReported) =>
       val histogram = new Histogram(new UniformReservoir)
       histogram.update(10)
       histogram.update(20)
@@ -126,19 +165,16 @@ class StatsdSinkSuite extends SparkFunSuite {
         "spark.histogram.p999:30.00|ms"
       )
 
-      (1 to expectedResults.size).foreach { i =>
-        socket.receive(p)
-        val result = new String(p.getData, 0, p.getLength, UTF_8)
-        logInfo(s"Received histogram result $i: '$result'")
-        assert(expectedResults.contains(result),
+      getReported(expectedResults.size).zipWithIndex.foreach { result =>
+        logInfo(s"Received histogram result ${result._2}: '${result._1}'")
+        assert(expectedResults.contains(result._1),
           "Histogram metric received should match data sent")
       }
     }
   }
 
   test("metrics StatsD sink with Timer") {
-    withSocketAndSink { (socket, sink) =>
-      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
+    withSocketAndSink { (sink, getReported) =>
       val timer = new Timer()
       timer.update(1, SECONDS)
       timer.update(2, SECONDS)
@@ -165,11 +201,9 @@ class StatsdSinkSuite extends SparkFunSuite {
       // mean rate varies on each test run
       val oneMoreResult = """spark.timer.mean_rate:\d+\.\d\d\|ms"""
 
-      (1 to (expectedResults.size + 1)).foreach { i =>
-        socket.receive(p)
-        val result = new String(p.getData, 0, p.getLength, UTF_8)
-        logInfo(s"Received timer result $i: '$result'")
-        assert(expectedResults.contains(result) || result.matches(oneMoreResult),
+      getReported(expectedResults.size).zipWithIndex.foreach { result =>
+        logInfo(s"Received timer result ${result._2}: '${result._1}'")
+        assert(expectedResults.contains(result._1) || result._1.matches(oneMoreResult),
           "Timer metric received should match data sent")
       }
     }
@@ -177,7 +211,7 @@ class StatsdSinkSuite extends SparkFunSuite {
 
 
   test("metrics StatsD sink with filtered Gauge") {
-    withSocketAndSink { (socket, sink) =>
+    withSocketAndSink { (sink, getReported) =>
       val gauge = new Gauge[Double] {
         override def getValue: Double = 1.23
       }
@@ -192,14 +226,58 @@ class StatsdSinkSuite extends SparkFunSuite {
       sink.registry.register("excluded-metric", gauge)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
-      socket.receive(p)
+      getReported(1)
 
       val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
 
       assert(metricKeys.equals(filteredMetricKeys),
         "Should contain only metrics matches regex filter")
     }
+  }
+
+  test("StatsdSink with invalid protocol") {
+    val props = new Properties
+    props.put("host", "127.0.0.1")
+    props.put("port", "54321")
+    props.put("protocol", "http")
+    val registry = new MetricRegistry
+
+    checkError(
+      exception = intercept[SparkException] {
+        new StatsdSink(props, registry)
+      },
+      errorClass = "STATSD_SINK_INVALID_PROTOCOL",
+      parameters = Map("protocol" -> "http")
+    )
+  }
+}
+
+object TestTcpServer {
+  implicit val executionContext: ExecutionContextExecutor = ExecutionContext.global
+
+  def startTcpServer(socketTimeout: Int,
+    receiveBufferSize: Int): (String, () => Future[Seq[String]], () => Unit) = {
+    val serverSocket = new ServerSocket(0)
+    serverSocket.setSoTimeout(socketTimeout)
+    if (serverSocket.getReceiveBufferSize < receiveBufferSize) {
+      serverSocket.setReceiveBufferSize(receiveBufferSize)
+    }
+    var br: Option[BufferedReader] = None
+    val connectionFuture = Future {
+      val clientSocket = serverSocket.accept()
+      val in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream))
+      br = Some(in)
+      Iterator.continually(in.readLine()).takeWhile(_ != null).toSeq
+    }
+
+    val socketLocalPort = serverSocket.getLocalPort.toString
+    val getClientPackets = () => connectionFuture
+    val closeFunc = () => {
+      br.foreach(_.close)
+      serverSocket.close()
+    }
+
+    (socketLocalPort, getClientPackets, closeFunc)
   }
 }
 
