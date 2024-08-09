@@ -68,22 +68,22 @@ case class PlanWithUnresolvedIdentifier(
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
   }
 
-  /**
-   * A logical plan placeholder which delays CTE resolution
-   * to moment when PlanWithUnresolvedIdentifier gets resolved
-   */
-  case class UnresolvedWithCTERelations(
-     unresolvedPlan: LogicalPlan,
-     cteRelations: Seq[(String, CTERelationDef)])
-    extends UnresolvedLeafNode {
-    final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_WITH_CTE)
-  }
-
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
     copy(identifierExpr, newChildren, planBuilder)
+}
+
+/**
+ * A logical plan placeholder which delays CTE resolution
+ * to moment when PlanWithUnresolvedIdentifier gets resolved
+ */
+case class UnresolvedWithCTERelations(
+   unresolvedPlan: LogicalPlan,
+   cteRelations: Seq[(String, CTERelationDef)])
+  extends UnresolvedLeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_WITH_CTE)
 }
 
 /**
