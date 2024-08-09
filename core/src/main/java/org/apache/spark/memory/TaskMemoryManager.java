@@ -123,6 +123,16 @@ public class TaskMemoryManager {
   private volatile long acquiredButNotUsed = 0L;
 
   /**
+   * Peak off heap memory usage by this task.
+   */
+  private volatile long peakOffHeapMemory = 0L;
+
+  /**
+   * Peak on heap memory usage by this task.
+   */
+  private volatile long peakOnHeapMemory = 0L;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
@@ -202,6 +212,17 @@ public class TaskMemoryManager {
         logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
           requestingConsumer);
       }
+
+      // Consumer will update its used memory after acquireExecutionMemory, so we need to add `got`
+      // to compute current peak
+      long currentPeak = consumers.stream().filter(c -> c.getMode() == mode)
+        .mapToLong(MemoryConsumer::getUsed).sum() + got;
+      if (mode == MemoryMode.OFF_HEAP) {
+        peakOffHeapMemory = Math.max(peakOffHeapMemory, currentPeak);
+      } else {
+        peakOnHeapMemory = Math.max(peakOnHeapMemory, currentPeak);
+      }
+
       return got;
     }
   }
@@ -506,5 +527,20 @@ public class TaskMemoryManager {
    */
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
+  }
+
+  /**
+   * Returns peak task-level off-heap memory usage in bytes.
+   *
+   */
+  public long getPeakOnHeapExecutionMemory() {
+    return peakOnHeapMemory;
+  }
+
+  /**
+   * Returns peak task-level on-heap memory usage in bytes.
+   */
+  public long getPeakOffHeapExecutionMemory() {
+    return peakOffHeapMemory;
   }
 }

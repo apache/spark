@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.internal
 
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.types.{DataType, Metadata}
 
@@ -262,6 +263,27 @@ private[sql] case class CaseWhenOtherwise(
     otherwise: Option[ColumnNode] = None,
     override val origin: Origin = CurrentOrigin.get)
   extends ColumnNode
+
+/**
+ * Invoke an inline user defined function.
+ *
+ * @param function to invoke.
+ * @param arguments to pass into the user defined function.
+ */
+private[sql] case class InvokeInlineUserDefinedFunction(
+    function: UserDefinedFunction,
+    arguments: Seq[ColumnNode],
+    override val origin: Origin = CurrentOrigin.get)
+  extends ColumnNode
+
+// This is a temporary class until we move the actual interfaces
+private[sql] case class UserDefinedFunction(
+    function: AnyRef,
+    resultEncoder: AgnosticEncoder[Any],
+    inputEncoders: Seq[AgnosticEncoder[Any]],
+    name: Option[String],
+    nonNullable: Boolean,
+    deterministic: Boolean)
 
 /**
  * Extension point that allows an implementation to use its column representation to be used in a

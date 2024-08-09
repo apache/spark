@@ -17,13 +17,17 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, AgnosticEncoders}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 
 /**
@@ -48,6 +52,12 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   private def normalizeExpression(e: Expression): Expression = e.transform {
     case a: expressions.Alias =>
       a.copy()(exprId = ExprId(0), a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+    case a: expressions.AttributeReference =>
+      a.withExprId(ExprId(0))
+    case d: analysis.UnresolvedDeserializer =>
+      d.copy(inputAttributes = d.inputAttributes.map(_.withExprId(ExprId(0))))
+    case a: expressions.aggregate.AggregateExpression =>
+      a.copy(resultId = ExprId(0))
   }
 
   test("literal") {
@@ -284,6 +294,78 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
       expressions.UpdateFields(
         analysis.UnresolvedAttribute("struct"),
         Seq(expressions.DropField("col_c"))))
+  }
+
+  private def toAny(a: AgnosticEncoder[_]): AgnosticEncoder[Any] =
+    a.asInstanceOf[AgnosticEncoder[Any]]
+
+  test("udf") {
+    val int2LongSum = new aggregate.TypedSumLong[Int]((i: Int) => i.toLong)
+    val aggregator = UserDefinedFunction(
+      int2LongSum,
+      toAny(AgnosticEncoders.PrimitiveLongEncoder),
+      toAny(AgnosticEncoders.PrimitiveIntEncoder) :: Nil,
+      name = Option("int2LongSum"),
+      nonNullable = false,
+      deterministic = true)
+
+    val bufferEncoder = encoderFor(int2LongSum.bufferEncoder)
+    val outputEncoder = encoderFor(int2LongSum.outputEncoder)
+    val bufferAttrs = bufferEncoder.namedExpressions.map {
+      _.toAttribute.asInstanceOf[expressions.AttributeReference]
+    }
+
+    // Aggregator applied on the entire Dataset.
+    testConversion(
+      InvokeInlineUserDefinedFunction(aggregator, Nil),
+      aggregate.SimpleTypedAggregateExpression(
+        aggregator = int2LongSum.asInstanceOf[Aggregator[Any, Any, Any]],
+        inputDeserializer = None,
+        inputClass = None,
+        inputSchema = None,
+        bufferSerializer = bufferEncoder.namedExpressions,
+        aggBufferAttributes = bufferAttrs,
+        bufferDeserializer = analysis.UnresolvedDeserializer(
+          bufferEncoder.deserializer,
+          bufferAttrs),
+        outputSerializer = outputEncoder.serializer,
+        outputExternalType = LongType,
+        dataType = LongType,
+        nullable = false
+      ).toAggregateExpression())
+
+    // Aggregator applied on an input.
+    testConversion(
+      InvokeInlineUserDefinedFunction(aggregator, UnresolvedAttribute("i_col") :: Nil),
+      aggregate.ScalaAggregator(
+        children = analysis.UnresolvedAttribute("i_col") :: Nil,
+        agg = int2LongSum,
+        inputEncoder = encoderFor(AgnosticEncoders.PrimitiveIntEncoder),
+        bufferEncoder = encoderFor(AgnosticEncoders.PrimitiveLongEncoder),
+        nullable = false,
+        aggregatorName = Option("int2LongSum")).toAggregateExpression())
+
+    // Regular function
+    val concat = (a: String, b: String) => a + b
+    testConversion(
+      InvokeInlineUserDefinedFunction(
+        UserDefinedFunction(
+          function = concat,
+          resultEncoder = toAny(AgnosticEncoders.StringEncoder),
+          AgnosticEncoders.UnboundEncoder :: toAny(AgnosticEncoders.StringEncoder) :: Nil,
+          name = None,
+          nonNullable = true,
+          deterministic = false),
+        Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))),
+      expressions.ScalaUDF(
+        function = concat,
+        dataType = StringType,
+        children = Seq(analysis.UnresolvedAttribute("a"), analysis.UnresolvedAttribute("b")),
+        inputEncoders = Seq(None, Option(encoderFor(Encoders.STRING))),
+        outputEncoder = Option(encoderFor(Encoders.STRING)),
+        udfName = None,
+        nullable = false,
+        udfDeterministic = false))
   }
 
   test("extension") {
