@@ -21,6 +21,7 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -85,6 +86,23 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
   }
 
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof UnsafeRow other)) {
+      return false;
+    } else if (columnsDataType == null) {
+      return this.sizeInBytes == other.sizeInBytes && ByteArrayMethods.arrayEquals(this.baseObject, this.baseOffset, other.baseObject, other.baseOffset, this.sizeInBytes);
+    }
+
+    for (int idx = 0; idx < numFields; ++idx) {
+      int comp = PhysicalDataType.apply(columnsDataType[idx]).ordering().compare(get(idx, columnsDataType[idx]), other.get(idx, columnsDataType[idx]));
+      if (comp != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
@@ -119,7 +137,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   private void assertIndexIsValid(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
-    assert index < numFields : "index (" + index + ") should < " + numFields;
+    assert (columnsDataType != null || index < numFields) : "index (" + index + ") should < " + numFields;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -496,6 +514,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       sizeInBytes
     );
     rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    rowCopy.setColumnsDataType(columnsDataType);
     return rowCopy;
   }
 
@@ -524,6 +544,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       row.baseObject, row.baseOffset, this.baseObject, this.baseOffset, row.sizeInBytes);
     // update the sizeInBytes.
     this.sizeInBytes = row.sizeInBytes;
+    this.columnsDataType = row.columnsDataType;
   }
 
   /**
@@ -554,17 +575,32 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    if (columnsDataType == null) {
+      return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    }
+
+    ArrayList<Expression> exp = new ArrayList<>(columnsDataType.length);
+    for (int i = 0; i < columnsDataType.length; ++i) {
+      exp.add(new Literal(get(i, columnsDataType[i]), columnsDataType[i]));
+    }
+
+    return (int) new Murmur3Hash(scala.jdk.CollectionConverters.ListHasAsScala(exp).asScala().toSeq(), 42).eval(this);
   }
 
-  @Override
-  public boolean equals(Object other) {
-    if (other instanceof UnsafeRow o) {
-      return (sizeInBytes == o.sizeInBytes) &&
-        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-          sizeInBytes);
-    }
-    return false;
+  public static ArrayList<DataType[]> groupingColumnsDataType = new ArrayList<>();
+  private DataType[] columnsDataType;
+
+  public static synchronized int setGroupingColumnsDataType(DataType[] dataTypes) {
+    groupingColumnsDataType.add(dataTypes);
+    return groupingColumnsDataType.size() - 1;
+  }
+
+  public static synchronized DataType[] getGroupingColumnsDataType(int idx) {
+    return groupingColumnsDataType.get(idx);
+  }
+
+  public void setColumnsDataType(DataType[] _columnsDataType) {
+    columnsDataType = (_columnsDataType != null && _columnsDataType.length > 0) ? _columnsDataType : null;
   }
 
   /**

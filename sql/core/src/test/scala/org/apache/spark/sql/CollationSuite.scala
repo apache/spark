@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
@@ -284,23 +284,24 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("aggregates count respects collation") {
-    Seq(
-      ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("utf8_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("utf8_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("utf8_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
-    ).foreach {
-      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
-        checkAnswer(sql(
-          s"""
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+      Seq(
+        ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+        ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+        ("utf8_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("utf8_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+        ("utf8_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+        ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+        ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+        ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+        ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+        ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+      ).foreach {
+        case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+          checkAnswer(sql(
+            s"""
           with t as (
           select collate(col1, '$collationName') as c
           from
@@ -308,10 +309,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
         SELECT COUNT(*), c FROM t GROUP BY c
         """), expected)
+      }
     }
   }
 
-  test("hash agg is not used for non binary collations") {
+  test("hash agg is used for non binary collations") {
     val tableNameNonBinary = "T_NON_BINARY"
     val tableNameBinary = "T_BINARY"
     withTable(tableNameNonBinary) {
@@ -322,14 +324,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
 
         val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
-        assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
-          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.isEmpty)
+        checkAnswer(dfNonBinary, Seq(Row(1, "aaa")))
 
         val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
-        assert(collectFirst(dfBinary.queryExecution.executedPlan) {
-          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.nonEmpty)
+        checkAnswer(dfBinary, Seq(Row(1, "aaa")))
       }
     }
   }
@@ -945,23 +943,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val table = "table_agg"
     // array
     withTable(table) {
-      sql(s"create table $table (a array<string collate utf8_lcase>) using parquet")
-      sql(s"insert into $table values (array('aaa')), (array('AAA'))")
+      sql(s"create table $table (a array<string collate utf8_lcase>, b string) using parquet")
+      sql(s"insert into $table values (array('aaa'), 'aaa'), (array('AAA'), 'aaa')")
       checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("aaa"))))
     }
-    // map doesn't support aggregation
+    // map
     withTable(table) {
       sql(s"create table $table (m map<string collate utf8_lcase, string>) using parquet")
-      val query = s"select distinct m from $table"
-      checkError(
-        exception = intercept[ExtendedAnalysisException](sql(query)),
-        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
-        parameters = Map(
-          "colName" -> "`m`",
-          "dataType" -> toSQLType(MapType(
-            StringType(CollationFactory.collationNameToId("UTF8_LCASE")),
-            StringType))),
-        context = ExpectedContext(query, 0, query.length - 1)
+      sql(s"insert into $table values (map('aaa', 'aaa')), (map('AAA', 'AAA'))")
+      checkAnswer(sql(s"select count(distinct m) from $table"), Seq(Row(2))
       )
     }
     // struct
@@ -1022,6 +1012,82 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
            |select $tableLeft.s.fld from $tableLeft
            |join $tableRight on $tableLeft.s = $tableRight.s
            |""".stripMargin), Seq(Row("aaa")))
+    }
+  }
+
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "")) {
+    for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      val collationSetup = if (collation.isEmpty) "" else "collate " + collation
+
+      test(s"Group by on string $collationSetup ($codeGen)") {
+        val table = "t"
+
+        withTable(table) {
+          withSQLConf(
+            "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $table (a string $collationSetup, b string)")
+            sql(s"insert into $table values ('aaa', 'ccc')")
+            sql(s"insert into $table values ('AAA', 'ccc')")
+            sql(s"insert into $table values ('bbb', 'ccc')")
+            sql(s"insert into $table values ('BBB', 'ccc')")
+            sql(s"insert into $table values ('AAa', 'ccc')")
+            sql(s"insert into $table values ('aAa', 'ccc')")
+
+            val df = sql(s"select count(*) from $table group by a")
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4), Row(2)))
+            }
+
+            val queryPlan = df.queryExecution.executedPlan
+            // confirm that hash aggregate is used instead of sort merge join
+            assert(
+              collectFirst(queryPlan) {
+                case _: ObjectHashAggregateExec => ()
+              }.nonEmpty
+            )
+            assert(
+              collectFirst(queryPlan) {
+                case _: SortAggregateExec => ()
+              }.isEmpty
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("Group by on multiple columns containing collated string") {
+    val table = "t"
+
+    withTable(table) {
+      withSQLConf(
+        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+        sql(s"create table $table (a string collate utf8_lcase, b string, c string)")
+        sql(s"insert into $table values ('aaa', 'bbb', 'ccc')")
+        sql(s"insert into $table values ('AAA', 'bbb', 'ccc')")
+
+        val df = sql(s"select count(*), a, b from $table group by a, b")
+
+        checkAnswer(df, Seq(Row(2, "aaa", "bbb")))
+
+        val queryPlan = df.queryExecution.executedPlan
+        // confirm that hash aggregate is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: ObjectHashAggregateExec => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortAggregateExec => ()
+          }.isEmpty
+        )
+      }
     }
   }
 

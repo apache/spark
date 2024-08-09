@@ -25,6 +25,7 @@ import scala.collection.Iterator;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * An iterator interface used to pull the output from generated function for multiple operators

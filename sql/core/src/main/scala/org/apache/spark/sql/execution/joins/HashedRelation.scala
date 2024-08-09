@@ -231,7 +231,7 @@ private[joins] class UnsafeHashedRelation(
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location  // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode(), null)
     if (loc.isDefined) {
       new Iterator[UnsafeRow] {
         private var _hasNext = true
@@ -252,7 +252,7 @@ private[joins] class UnsafeHashedRelation(
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location  // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode(), null)
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       resultRow
@@ -266,7 +266,7 @@ private[joins] class UnsafeHashedRelation(
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location  // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode(), null)
     if (loc.isDefined) {
       valueRowWithKeyIndex.withNewKeyIndex(loc.getKeyIndex)
       new Iterator[ValueRowWithKeyIndex] {
@@ -288,7 +288,7 @@ private[joins] class UnsafeHashedRelation(
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location  // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode(), null)
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       valueRowWithKeyIndex.update(loc.getKeyIndex, resultRow)
