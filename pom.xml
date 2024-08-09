@@ -329,6 +329,8 @@
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.0.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
+    <!-- Used for SBT build to retrieve the Spark version -->
+    <spark.version>${project.version}</spark.version>
   </properties>
   <repositories>
     <repository>
