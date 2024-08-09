@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.parser;
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, EvalMode, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
-import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
 
 class CastingSyntaxSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -99,5 +99,34 @@ class CastingSyntaxSuite extends AnalysisTest {
     assertEqual(
       "value::int::double",
       Cast(Cast(UnresolvedAttribute("value"), IntegerType), DoubleType))
+  }
+
+  test("try cast triple colons") {
+    assertEqual("'123':::int", Cast(Literal("123"), IntegerType, evalMode = EvalMode.TRY))
+    assertEqual("'123.0':::double", Cast(Literal("123.0"), DoubleType, evalMode = EvalMode.TRY))
+    assertEqual("'123.0' ::: double", Cast(Literal("123.0"), DoubleType, evalMode = EvalMode.TRY))
+    assertEqual("`abc`:::double v", Alias(Cast(UnresolvedAttribute("abc"), DoubleType,
+      evalMode = EvalMode.TRY), "v")())
+    assertEqual("abc.def:::double v",
+      Alias(Cast(UnresolvedAttribute(Seq("abc", "def")), DoubleType,
+        evalMode = EvalMode.TRY), "v")())
+    assertEqual("(a or b) ::: int", Cast(Symbol("a") || Symbol("b"), IntegerType,
+      evalMode = EvalMode.TRY))
+    assertEqual("(a * b) ::: int", Cast(Symbol("a") * Symbol("b"), IntegerType,
+      evalMode = EvalMode.TRY))
+    assertEqual("str.* ::: int", Cast(UnresolvedStar(Some(Seq("str"))), IntegerType,
+      evalMode = EvalMode.TRY))
+    assertEqual(
+      "max(value:::double)",
+      UnresolvedFunction("max",
+        Seq(Cast(UnresolvedAttribute("value"), DoubleType, evalMode = EvalMode.TRY)),
+        isDistinct = false))
+    assertEqual(
+      "cast(value:::int as double)",
+      Cast(Cast(UnresolvedAttribute("value"), IntegerType, evalMode = EvalMode.TRY), DoubleType))
+    assertEqual(
+      "value:::int:::double::string",
+      Cast(Cast(Cast(UnresolvedAttribute("value"), IntegerType, evalMode = EvalMode.TRY),
+        DoubleType, evalMode = EvalMode.TRY), StringType))
   }
 }
