@@ -881,6 +881,11 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
+        # Print the values of environment variables `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
+        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
+        echo "SKIP_RDOC: $SKIP_RDOC"
+        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
