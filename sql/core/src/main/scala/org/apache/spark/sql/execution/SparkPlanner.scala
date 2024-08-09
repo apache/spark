@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.adaptive.LogicalQueryStageStrategy
 import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
+import org.apache.spark.sql.execution.debug.DebugPlanner
 
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies with SQLConfHelper {
@@ -47,7 +48,8 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       JoinSelection ::
       InMemoryScans ::
       SparkScripts ::
-      BasicOperators :: Nil)
+      BasicOperators ::
+      DebugPlanner :: Nil)
 
   /**
    * Override to add extra planning strategies to the planner. These strategies are tried after

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.StringWriter
 import java.util.Collections
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -27,17 +29,22 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.plans.logical.{DebugInlineColumnsCount, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.StringConcat
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, StringConcat}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, VariantType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
+import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.util.{AccumulatorV2, LongAccumulator, Utils}
 
 /**
  * Contains methods for debugging query execution.
@@ -198,6 +205,19 @@ package object debug {
     def debugCodegen(): Unit = {
       debugPrint(codegenString(query.queryExecution.executedPlan))
     }
+
+    /**
+     * Counts the occurrence of values for the specified column combinations and periodically
+     * prints the results to stdout. Results will not have perfect accuracy because it only
+     * maintains the top K values. This is useful for identifying which values are creating skew
+     * in a column.
+     * @param columns The combination of columns to count the value occurrences for
+     */
+    def inlineColumnsCount(columns: Column *): Dataset[_] = {
+      val maxKeys = SQLConf.get.maxInlineColumnCountKeys
+      val plan = DebugInlineColumnsCount(query.logicalPlan, columns.map(_.expr), maxKeys)
+      Dataset.ofRows(query.sparkSession, plan)
+    }
   }
 
   implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
@@ -205,7 +225,6 @@ package object debug {
       debugPrint(codegenString(query))
     }
   }
-
 
   class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
     private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
@@ -294,5 +313,146 @@ package object debug {
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugExec =
       copy(child = newChild)
+  }
+
+  case class DebugInlineColumnsCountExec(
+    child: SparkPlan,
+    sampleColumns: Seq[Expression],
+    maxKeys: Int
+  ) extends UnaryExecNode {
+
+    private val jsonOptions = new JSONOptions(Map.empty[String, String], "UTC")
+
+    private val accumulator = new DebugAccumulator(maxKeys)
+    accumulator.register(
+      session.sparkContext,
+      Some(s"${child.nodeName} top values for ${sampleColumns.mkString(",")}"))
+
+    override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
+      copy(child = newChild)
+
+    override protected def doExecute(): RDD[InternalRow] = {
+      val exprs = bindReferences[Expression](sampleColumns, child.output)
+
+      child.execute().mapPartitions { iter =>
+        iter.map { row =>
+          val sampleVals = exprs.map { expr => valToString(expr.dataType, expr.eval(row)) }
+          accumulator.add(sampleVals.mkString(","))
+          row
+        }
+      }
+    }
+
+    private def valToString(dataType: DataType, value: Any): String = {
+      Option(value).map { v =>
+        dataType match {
+          case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+            Utils.tryWithResource(new StringWriter()) { writer =>
+              val gen = new JacksonGenerator(dataType, writer, jsonOptions)
+
+              dataType match {
+                case _: StructType =>
+                  gen.write(v.asInstanceOf[InternalRow])
+                case _: ArrayType =>
+                  gen.write(v.asInstanceOf[ArrayData])
+                case _: MapType =>
+                  gen.write(v.asInstanceOf[MapData])
+                case _: VariantType =>
+                  gen.write(v.asInstanceOf[VariantVal])
+              }
+
+              gen.flush()
+              writer.toString
+            }
+          case _ => v.toString
+        }
+      }.orNull
+    }
+
+    override def output: Seq[Attribute] = child.output
+  }
+
+  object DebugPlanner extends SparkStrategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      plan match {
+        case DebugInlineColumnsCount(child, sampleColumns, maxKeys) =>
+          DebugInlineColumnsCountExec(planLater(child), sampleColumns, maxKeys) :: Nil
+        case _ => Nil
+      }
+    }
+  }
+
+  class DebugAccumulator(maxKeys: Int) extends AccumulatorV2[String, Map[String, Long]]  {
+    private val keyToCount = mutable.Map.empty[String, Long]
+    private val countToKeys = mutable.TreeMap.empty[Long, mutable.Set[String]]
+
+    /**
+     * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+     * value; for a list accumulator, Nil is zero value.
+     */
+    override def isZero: Boolean = this.synchronized { keyToCount.isEmpty }
+
+    /**
+     * Creates a new copy of this accumulator.
+     */
+    override def copy(): DebugAccumulator = {
+      val newAcc = new DebugAccumulator(maxKeys)
+      newAcc.merge(this)
+      newAcc
+    }
+
+    /**
+     * Resets this accumulator, which is zero value. i.e. call `isZero` must
+     * return true.
+     */
+    override def reset(): Unit = this.synchronized { keyToCount.clear() }
+
+    /**
+     * Takes the inputs and accumulates.
+     */
+    override def add(v: String): Unit = add(v, 1)
+
+    private def add(v: String, add: Long): Unit = this.synchronized {
+      val count = keyToCount.getOrElse(v, 0L) + add
+      keyToCount.put(v, count)
+
+      val keys = countToKeys.getOrElseUpdate(count, mutable.Set[String]())
+      keys.add(v)
+
+      if (keyToCount.size > maxKeys) {
+        dropSmallest()
+      }
+    }
+
+    private def dropSmallest(): Unit = {
+      val keys = countToKeys.head._2
+      val keyToDrop = keys.head
+
+      keys.remove(keyToDrop)
+      keyToCount.remove(keyToDrop)
+
+      if (keys.isEmpty) {
+        countToKeys.remove(countToKeys.head._1)
+      }
+    }
+
+    /**
+     * Merges another same-type accumulator into this one and update its state, i.e. this should be
+     * merge-in-place.
+     */
+    override def merge(other: AccumulatorV2[String, Map[String, Long]]): Unit = this.synchronized {
+      other match {
+        case o: DebugAccumulator => o.keyToCount.foreach { case (k, v) => add(k, v) }
+        case _ =>
+          throw new UnsupportedOperationException(s"Cannot merge with ${other.getClass.getName}")
+      }
+    }
+
+    /**
+     * Defines the current value of this accumulator
+     */
+    override def value: Map[String, Long] = this.synchronized {
+      keyToCount.toMap
+    }
   }
 }
