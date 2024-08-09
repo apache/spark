@@ -686,8 +686,22 @@ private[spark] object Utils
         in.close()
       }
     } else {
-      fs.listStatus(path).foreach { fileStatus =>
-        fetchHcfsFile(fileStatus.getPath(), dest, fs, conf, hadoopConf, fileOverwrite)
+      def fsHasPathCapability: Boolean = {
+        fs.hasPathCapability(path, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
+      }
+      val listStatuses = Try {
+        fs.listStatus(path)
+      }
+      listStatuses match {
+        case Failure(e) =>
+          if (e.isInstanceOf[FileNotFoundException] && fsHasPathCapability) {
+            logInfo(log"Ignoring missing directory ${MDC(PATH, path)} ")
+            logDebug(log"Directory missing ${MDC(PATH, path)} ")
+          } else throw e
+        case Success(ls) =>
+          ls.foreach { fileStatus =>
+            fetchHcfsFile(fileStatus.getPath, dest, fs, conf, hadoopConf, fileOverwrite)
+          }
       }
     }
   }
