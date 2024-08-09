@@ -1025,6 +1025,93 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "")) {
+    for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      val collationSetup = if (collation.isEmpty) "" else "collate " + collation
+
+      test(s"Group by on map containing $collationSetup strings ($codeGen)") {
+        val table = "t"
+
+        withTable(table) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+
+            sql(s"create table $table" +
+              s" (m map<string $collationSetup, string $collationSetup>)")
+            sql(s"insert into $table values (map('aaa', 'AAA'))")
+            sql(s"insert into $table values (map('AAA', 'aaa'))")
+            sql(s"insert into $table values (map('aaa', 'AAA'))")
+            sql(s"insert into $table values (map('bbb', 'BBB'))")
+            sql(s"insert into $table values (map('aAA', 'AaA'))")
+            sql(s"insert into $table values (map('BBb', 'bBB'))")
+            sql(s"insert into $table values (map('aaaa', 'AAA'))")
+
+            val df = sql(s"select count(*) from $table group by m")
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(2), Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4), Row(2), Row(1)))
+            }
+          }
+        }
+      }
+
+      test(s"Group by on map containing structs with $collationSetup strings ($codeGen)") {
+        val table = "t"
+
+        withTable(table) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $table" +
+              s" (m map<struct<fld1: string $collationSetup, fld2: string $collationSetup>, " +
+              s"struct<fld1: string $collationSetup, fld2: string $collationSetup>>)")
+            sql(s"insert into $table values " +
+              s"(map(struct('aaa', 'bbb'), struct('ccc', 'ddd')))")
+            sql(s"insert into $table values " +
+              s"(map(struct('Aaa', 'BBB'), struct('cCC', 'dDd')))")
+            sql(s"insert into $table values " +
+              s"(map(struct('AAA', 'BBb'), struct('cCc', 'DDD')))")
+            sql(s"insert into $table values " +
+              s"(map(struct('aaa', 'bbB'), struct('CCC', 'DDD')))")
+
+            val df = sql(s"select count(*) from $table group by m")
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4)))
+            }
+          }
+        }
+      }
+
+      test(s"Group by on map containing arrays with $collationSetup strings ($codeGen)") {
+        val table = "t"
+
+        withTable(table) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $table " +
+              s"(m map<array<string $collationSetup>, array<string $collationSetup>>)")
+            sql(s"insert into $table values (map(array('aaa', 'bbb'), array('ccc', 'ddd')))")
+            sql(s"insert into $table values (map(array('AAA', 'BbB'), array('Ccc', 'ddD')))")
+            sql(s"insert into $table values (map(array('AAA', 'BbB', 'Ccc'), array('ddD')))")
+            sql(s"insert into $table values (map(array('aAa', 'Bbb'), array('CCC', 'DDD')))")
+            sql(s"insert into $table values (map(array('AAa', 'BBb'), array('cCC', 'DDd')))")
+            sql(s"insert into $table values (map(array('AAA', 'BBB', 'CCC'), array('DDD')))")
+
+            val df = sql(s"select count(*) from $table group by m")
+            if (collation.isEmpty ||
+              CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4), Row(2)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+
   test("Support operations on complex types containing collated strings") {
     checkAnswer(sql("select reverse('abc' collate utf8_lcase)"), Seq(Row("cba")))
     checkAnswer(sql(

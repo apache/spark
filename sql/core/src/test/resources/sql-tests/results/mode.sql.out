@@ -182,15 +182,9 @@ struct<mode(col):map<int,string>>
 -- !query
 SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query schema
-struct<>
+struct<mode() WITHIN GROUP (ORDER BY col DESC):map<int,string>>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_2005",
-  "messageParameters" : {
-    "dataType" : "PhysicalMapType"
-  }
-}
+{1:"a"}
 
 
 -- !query

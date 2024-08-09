@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
@@ -234,10 +234,69 @@ case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalMapType")
-  override private[sql] type InternalType = Any
+  override private[sql] def ordering = interpretedOrdering
+  override private[sql] type InternalType = MapData
   @transient private[sql] lazy val tag = typeTag[InternalType]
+
+  @transient
+  private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
+    private[this] val keyOrdering =
+      PhysicalDataType(keyType).ordering.asInstanceOf[Ordering[Any]]
+    private[this] val valuesOrdering =
+      PhysicalDataType(valueType).ordering.asInstanceOf[Ordering[Any]]
+
+    override def compare(x: MapData, y: MapData): Int = {
+      val lengthX = x.numElements()
+      val lengthY = y.numElements()
+      val keyArrayX = x.keyArray()
+      val valueArrayX = x.valueArray()
+      val keyArrayY = y.keyArray()
+      val valueArrayY = y.valueArray()
+      val minLength = math.min(lengthX, lengthY)
+      var i = 0
+      while (i < minLength) {
+        var comp = compareElements(keyArrayX, keyArrayY, keyType, i, keyOrdering)
+        if (comp != 0) {
+          return comp
+        }
+        comp = compareElements(valueArrayX, valueArrayY, valueType, i, valuesOrdering)
+        if (comp != 0) {
+          return comp
+        }
+
+        i += 1
+      }
+
+      if (lengthX < lengthY) {
+        -1
+      }
+      else if (lengthX > lengthY) {
+        1
+      }
+      else {
+        0
+      }
+    }
+
+    private def compareElements(arrayX: ArrayData, arrayY: ArrayData, dataType: DataType,
+                        position: Int, ordering: Ordering[Any]): Int = {
+      val isNullX = arrayX.isNullAt(position)
+      val isNullY = arrayY.isNullAt(position)
+
+      if (isNullX && isNullY) {
+        0
+      } else if (isNullX) {
+        -1
+      } else if (isNullY) {
+        1
+      } else {
+        ordering.compare(
+          arrayX.get(position, dataType),
+          arrayY.get(position, dataType)
+        )
+      }
+    }
+  }
 }
 
 class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
