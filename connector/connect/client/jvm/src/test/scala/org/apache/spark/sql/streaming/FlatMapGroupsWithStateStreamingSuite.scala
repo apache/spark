@@ -77,7 +77,7 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           checkDataset(
-            spark.table("my_sink").toDF().as[ClickState],
+            spark.table("my_sink").toDF().sort("count").as[ClickState],
             ClickState("c", 1),
             ClickState("b", 2),
             ClickState("a", 3))
@@ -122,7 +122,7 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           checkDataset(
-            spark.table("my_sink").toDF().as[ClickState],
+            spark.table("my_sink").toDF().sort("count").as[ClickState],
             ClickState("c", 1),
             ClickState("b", 3),
             ClickState("a", 5))
@@ -164,7 +164,7 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           checkDataset(
-            spark.table("my_sink").toDF().as[ClickState],
+            spark.table("my_sink").toDF().sort("count").as[ClickState],
             ClickState("c", 1),
             ClickState("b", 2),
             ClickState("a", 3))
@@ -210,7 +210,7 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           checkDataset(
-            spark.table("my_sink").toDF().as[ClickState],
+            spark.table("my_sink").toDF().sort("count").as[ClickState],
             ClickState("c", 1),
             ClickState("b", 3),
             ClickState("a", 5))
