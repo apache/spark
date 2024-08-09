@@ -19,7 +19,7 @@ package org.apache.spark.sql.artifact
 
 import java.io.File
 import java.net.{URI, URL, URLClassLoader}
-import java.nio.file.{Files, Path, Paths, StandardCopyOption}
+import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.jdk.CollectionConverters._
@@ -96,12 +96,19 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
-  protected def moveFile(source: Path, target: Path, allowOverwrite: Boolean = false): Unit = {
+  private def transferFile(
+      source: Path,
+      target: Path,
+      allowOverwrite: Boolean = false,
+      deleteSource: Boolean = true): Unit = {
+    def execute(s: Path, t: Path, opt: CopyOption*): Path =
+      if (deleteSource) Files.move(s, t, opt: _*) else Files.copy(s, t, opt: _*)
+
     Files.createDirectories(target.getParent)
     if (allowOverwrite) {
-      Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+      execute(source, target, StandardCopyOption.REPLACE_EXISTING)
     } else {
-      Files.move(source, target)
+      execute(source, target)
     }
   }
 
@@ -112,12 +119,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * @param remoteRelativePath
    * @param serverLocalStagingPath
    * @param fragment
+   * @param deleteStagedFile
    */
   def addArtifact(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
-      fragment: Option[String]): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
+      fragment: Option[String],
+      deleteStagedFile: Boolean = true
+  ): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
+
     if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
@@ -142,7 +153,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
       // Allow overwriting class files to capture updates to classes.
       // This is required because the client currently sends all the class files in each class file
       // transfer.
-      moveFile(serverLocalStagingPath, target, allowOverwrite = true)
+      transferFile(
+        serverLocalStagingPath,
+        target,
+        allowOverwrite = true,
+        deleteSource = deleteStagedFile)
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, remoteRelativePath)
       // Disallow overwriting with modified version
@@ -155,7 +170,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         throw new RuntimeException(s"Duplicate Artifact: $remoteRelativePath. " +
             "Artifacts cannot be overwritten.")
       }
-      moveFile(serverLocalStagingPath, target)
+      transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 
       // This URI is for Spark file server that starts with "spark://".
       val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
