@@ -1752,9 +1752,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
     }
     withClue("IDENTIFIER as table") {
-      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      val ident = new PlanWithUnresolvedIdentifier(name, _ => testRelation)
       checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
-      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      val ident2 = new PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
       checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
   }

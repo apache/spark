@@ -571,7 +571,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      withIdentClause(ctx.identifierReference(), ident => {
+      withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val tableIdentifier = ident.asTableIdentifier
         if (tableIdentifier.database.isDefined) {
           // Temporary view names should NOT contain database prefix like "database.table"
@@ -585,7 +585,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           visitCommentSpecList(ctx.commentSpec()),
           properties,
           Option(source(ctx.query)),
-          qPlan,
+          otherPlans.head,
           ctx.EXISTS != null,
           ctx.REPLACE != null,
           viewType = viewType)
