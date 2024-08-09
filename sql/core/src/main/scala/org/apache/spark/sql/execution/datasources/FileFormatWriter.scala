@@ -245,7 +245,7 @@ object FileFormatWriter extends Logging {
             jobTrackerID = jobTrackerID,
             sparkStageId = taskContext.stageId(),
             sparkPartitionId = taskContext.partitionId(),
-            sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
+            sparkAttemptNumber = Math.abs(taskContext.taskAttemptId().toInt),
             committer,
             iterator = iter,
             concurrentOutputWriterSpec = concurrentOutputWriterSpec)
