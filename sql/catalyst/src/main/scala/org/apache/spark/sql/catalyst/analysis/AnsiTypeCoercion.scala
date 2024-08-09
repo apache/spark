@@ -198,7 +198,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         Some(a.defaultConcreteType)
 
       case (ArrayType(fromType, _), AbstractArrayType(toType)) =>
-        Some(implicitCast(fromType, toType).map(ArrayType(_, true)).orNull)
+        implicitCast(fromType, toType).map(ArrayType(_, true))
 
       // When the target type is `TypeCollection`, there is another branch to find the
       // "closet convertible data type" below.

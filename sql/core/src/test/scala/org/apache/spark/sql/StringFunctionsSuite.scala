@@ -1299,4 +1299,33 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       e.getCause.getMessage
         .startsWith("URLDecoder: Illegal hex characters in escape (%) pattern - "))
   }
+
+  test("SPARK-49188: concat_ws called on array of arrays of string - invalid cast") {
+    for (enableANSI <- Seq(false, true)) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> enableANSI.toString) {
+        val testTable = "invalidCastTestTable"
+        withTable(testTable) {
+          sql(s"create table $testTable(dat array<string>) using parquet")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select concat_ws(',', collect_list(dat)) FROM $testTable")
+            },
+            errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+            parameters = Map(
+              "sqlExpr" -> """"concat_ws(,, collect_list(dat))"""",
+              "paramIndex" -> "second",
+              "inputSql" -> """"collect_list(dat)"""",
+              "inputType" -> """"ARRAY<ARRAY<STRING>>"""",
+              "requiredType" -> """("ARRAY<STRING>" or "STRING")"""
+            ),
+            context = ExpectedContext(
+              fragment = """concat_ws(',', collect_list(dat))""",
+              start = 7,
+              stop = 39
+            )
+          )
+        }
+      }
+    }
+  }
 }
