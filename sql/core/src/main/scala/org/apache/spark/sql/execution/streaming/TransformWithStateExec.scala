@@ -232,6 +232,7 @@ case class TransformWithStateExec(
       }
 
       override def next(): InternalRow = {
+        assert(hasStarted, "next called before hasNext")
         mappedIterator.next()
       }
     }
@@ -286,9 +287,31 @@ case class TransformWithStateExec(
       new ExpiredTimerInfoImpl(isValid = true, Some(expiryTimestampMs))).map { obj =>
       getOutputRow(obj)
     }
-    processorHandle.deleteTimer(expiryTimestampMs)
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    // See the comment in handleInputRows for an explanation of this wrapper.
+    new Iterator[InternalRow] {
+      var hasStarted = false
+
+      override def hasNext: Boolean = {
+        if (!hasStarted) {
+          hasStarted = true
+          ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+        }
+
+        val hasNext = mappedIterator.hasNext
+        if (!hasNext) {
+          processorHandle.deleteTimer(expiryTimestampMs)
+          ImplicitGroupingKeyTracker.removeImplicitKey()
+        }
+        hasNext
+      }
+
+      override def next(): InternalRow = {
+        assert(hasStarted, "next called before hasNext")
+        mappedIterator.next()
+      }
+    }
   }
 
   private def processTimers(

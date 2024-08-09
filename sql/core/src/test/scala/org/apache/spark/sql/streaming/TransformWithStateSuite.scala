@@ -375,23 +375,28 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         _myValueState.get()
         _myValueState.update(1)
 
-        val iter = inputRows.map { r =>
-          // In the lazy iterator, make some more updates
-          _myValueState.get()
-          _myValueState.update(r)
-          42L
+        // Create a timer (but only once) so that we can test timers have their implicit key set
+        if (!hasSetTimer) {
+            getHandle.registerTimer(0)
+            hasSetTimer = true
         }
 
+        // In both of these cases, we return a lazy iterator that gets/sets state variables.
+        // This is to test that the stateful processor can handle lazy iterators.
+        //
+        // The timer uses a Seq(42L) since when the timer fires, inputRows is empty.
         if (expiredTimerInfo.isValid()) {
-          getHandle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
-          iter
-        } else {
-          // Create a timer so that we can test timers have their implicit key set
-          if (!hasSetTimer) {
-              getHandle.registerTimer(0)
-              hasSetTimer = true
+          Seq(42L).iterator.map { r =>
+            _myValueState.get()
+            _myValueState.update(r)
+            r
           }
-          iter
+        } else {
+          inputRows.map { r =>
+            _myValueState.get()
+            _myValueState.update(r)
+            r
+          }
         }
       }
     }
@@ -405,16 +410,19 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val inputData = MemoryStream[Int]
       val result = inputData
         .toDS()
-        .select(timestamp_seconds($"value"))
-        .as[(Long)]
+        .select(timestamp_seconds($"value").as("timestamp"))
+        .withWatermark("timestamp", "10 seconds")
+        .as[Long]
         .groupByKey(x => x)
         .transformWithState(
           new ProcessorWithLazyIterators(), TimeMode.EventTime(), OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         StartStream(),
-        AddData(inputData, 0, 12),
-        CheckAnswer(42, 42)
+        // Use 12 so that the watermark advances to 2 seconds and causes the timer to fire
+        AddData(inputData, 12),
+        // The 12 is from the input data; the 42 is from the timer
+        CheckAnswer(12, 42)
       )
     }
   }
