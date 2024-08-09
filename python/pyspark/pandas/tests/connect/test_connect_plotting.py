@@ -45,34 +45,10 @@ class ConnectPlottingTests(PandasOnSparkTestUtils, TestUtils, ReusedConnectTestC
             self.psdf1.plot.hist(bins=3)
 
         with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot.kde()
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot.kde(bw_method=3)
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot.density()
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot.density(bw_method=3)
-
-        with self.assertRaises(PandasNotImplementedError):
             self.psdf1.shield.plot.hist()
 
         with self.assertRaises(PandasNotImplementedError):
             self.psdf1.shield.plot.hist(bins=3)
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot.kde()
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot.kde(bw_method=3)
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot.density()
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot.density(bw_method=3)
 
     def test_unsupported_kinds(self):
         with self.assertRaises(PandasNotImplementedError):
@@ -82,34 +58,10 @@ class ConnectPlottingTests(PandasOnSparkTestUtils, TestUtils, ReusedConnectTestC
             self.psdf1.plot(kind="hist", bins=3)
 
         with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot(kind="kde")
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot(kind="kde", bw_method=3)
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot(kind="density")
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.plot(kind="density", bw_method=3)
-
-        with self.assertRaises(PandasNotImplementedError):
             self.psdf1.shield.plot(kind="hist")
 
         with self.assertRaises(PandasNotImplementedError):
             self.psdf1.shield.plot(kind="hist", bins=3)
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot(kind="kde")
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot(kind="kde", bw_method=3)
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot(kind="density")
-
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf1.shield.plot(kind="density", bw_method=3)
 
 
 if __name__ == "__main__":
