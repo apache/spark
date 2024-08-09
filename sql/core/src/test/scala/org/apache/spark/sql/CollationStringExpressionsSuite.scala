@@ -653,7 +653,7 @@ class CollationStringExpressionsSuite
     )
     val testCases = Seq(
       LevenshteinTestCase("kitten", "sitTing", "UTF8_BINARY", None, result = 4),
-      LevenshteinTestCase("kitten", "sitTing", "UTF8_LCASE", None, result = 4),
+      LevenshteinTestCase("kitten", "sitTing", "UTF8_LCASE", None, result = 3),
       LevenshteinTestCase("kitten", "sitTing", "UNICODE", Some(3), result = -1),
       LevenshteinTestCase("kitten", "sitTing", "UNICODE_CI", Some(3), result = -1)
     )
