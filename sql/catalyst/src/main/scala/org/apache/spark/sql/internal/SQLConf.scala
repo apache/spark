@@ -3090,7 +3090,7 @@ object SQLConf {
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "or a NumPy ndarray. " +
         "The following data type is unsupported: " +
-        "ArrayType of TimestampType.")
+        "YearMonthIntervalType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 

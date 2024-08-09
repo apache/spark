@@ -384,7 +384,7 @@ Supported SQL Types
 .. currentmodule:: pyspark.sql.types
 
 Currently, all Spark SQL data types are supported by Arrow-based conversion except
-:class:`ArrayType` of :class:`TimestampType`.
+:class:`YearMonthIntervalType`.
 :class:`MapType` and :class:`ArrayType` of nested :class:`StructType` are only supported
 when using PyArrow 2.0.0 and above.
 

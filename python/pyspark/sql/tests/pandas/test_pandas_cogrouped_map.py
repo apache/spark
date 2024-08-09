@@ -25,7 +25,6 @@ from pyspark.sql.types import (
     LongType,
     StructType,
     StructField,
-    YearMonthIntervalType,
     Row,
 )
 from pyspark.sql.window import Window
@@ -36,6 +35,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    UnsupportedType,
 )
 
 if have_pandas:
@@ -339,10 +339,10 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=lambda l, r: l,
             output_schema=(
-                StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType()))
+                StructType().add("id", LongType()).add("v", ArrayType(UnsupportedType()))
             ),
             errorClass=NotImplementedError,
-            error_message_regex="Invalid return type.*ArrayType.*YearMonthIntervalType",
+            error_message_regex="Invalid return type.*ArrayType.*UnsupportedType",
         )
 
     def test_wrong_args(self):
