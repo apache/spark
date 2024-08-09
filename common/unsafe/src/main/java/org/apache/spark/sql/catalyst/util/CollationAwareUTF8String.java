@@ -319,53 +319,21 @@ public class CollationAwareUTF8String {
       return target;
     }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, search, collationId);
-    UTF8String src = target.makeValid();
+    String targetStr = target.toValidString();
+    String searchStr = search.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(targetStr, searchStr, collationId);
 
-    // Find the first occurrence of the search string.
-    int end = stringSearch.next();
-    if (end == StringSearch.DONE) {
-      // Search string was not found, so string is unchanged.
-      return src;
+    StringBuilder sb = new StringBuilder();
+    int start = 0;
+    int matchStart = stringSearch.first();
+    while (matchStart != StringSearch.DONE) {
+      sb.append(targetStr, start, matchStart);
+      sb.append(replace.toValidString());
+      start = matchStart + stringSearch.getMatchLength();
+      matchStart = stringSearch.next();
     }
-
-    // Initialize byte positions
-    int c = 0;
-    int byteStart = 0; // position in byte
-    int byteEnd = 0; // position in byte
-    while (byteEnd < src.numBytes() && c < end) {
-      byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-      c += 1;
-    }
-
-    // At least one match was found. Estimate space needed for result.
-    // The 16x multiplier here is chosen to match commons-lang3's implementation.
-    int increase = Math.max(0, Math.abs(replace.numBytes() - search.numBytes())) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
-    while (end != StringSearch.DONE) {
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
-      buf.append(replace);
-
-      // Move byteStart to the beginning of the current match
-      byteStart = byteEnd;
-      int cs = c;
-      // Move cs to the end of the current match
-      // This is necessary because the search string may contain 'multi-character' characters
-      while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
-        byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
-        cs += 1;
-      }
-      // Go to next match
-      end = stringSearch.next();
-      // Update byte positions
-      while (byteEnd < src.numBytes() && c < end) {
-        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-        c += 1;
-      }
-    }
-    buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
-      src.numBytes() - byteStart);
-    return buf.build();
+    sb.append(targetStr, start, targetStr.length());
+    return UTF8String.fromString(sb.toString());
   }
 
   /**

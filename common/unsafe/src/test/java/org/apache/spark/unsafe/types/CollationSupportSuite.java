@@ -1128,11 +1128,48 @@ public class CollationSupportSuite {
 
   @Test
   public void testReplace() throws SparkException {
+    // Empty UTF-8 strings.
+    assertStringReplace(false, "", "", "", "UTF8_BINARY", "");
+    assertStringReplace(false, "", "", "", "UTF8_LCASE", "");
+    assertStringReplace(false, "", "", "", "UNICODE", "");
+    assertStringReplace(false, "", "", "", "UNICODE_CI", "");
+    assertStringReplace(false, "abc", "", "", "UTF8_BINARY", "abc");
+    assertStringReplace(false, "abc", "", "", "UTF8_LCASE", "abc");
+    assertStringReplace(false, "abc", "", "", "UNICODE", "abc");
+    assertStringReplace(false, "abc", "", "", "UNICODE_CI", "abc");
+    assertStringReplace(false, "", "x", "", "UTF8_BINARY", "");
+    assertStringReplace(false, "", "x", "", "UTF8_LCASE", "");
+    assertStringReplace(false, "", "x", "", "UNICODE", "");
+    assertStringReplace(false, "", "x", "", "UNICODE_CI", "");
+    assertStringReplace(false, "", "", "x", "UTF8_BINARY", "");
+    assertStringReplace(false, "", "", "x", "UTF8_LCASE", "");
+    assertStringReplace(false, "", "", "x", "UNICODE", "");
+    assertStringReplace(false, "", "", "x", "UNICODE_CI", "");
+    assertStringReplace(false, "", "b", "x", "UTF8_BINARY", "");
+    assertStringReplace(false, "", "b", "x", "UTF8_LCASE", "");
+    assertStringReplace(false, "", "b", "x", "UNICODE", "");
+    assertStringReplace(false, "", "b", "x", "UNICODE_CI", "");
+    assertStringReplace(false, "abc", "b", "", "UTF8_BINARY", "ac");
+    assertStringReplace(false, "abc", "b", "", "UTF8_LCASE", "ac");
+    assertStringReplace(false, "abc", "b", "", "UNICODE", "ac");
+    assertStringReplace(false, "abc", "b", "", "UNICODE_CI", "ac");
+    assertStringReplace(false, "abc", "", "x", "UTF8_BINARY", "abc");
+    assertStringReplace(false, "abc", "", "x", "UTF8_LCASE", "abc");
+    assertStringReplace(false, "abc", "", "x", "UNICODE", "abc");
+    assertStringReplace(false, "abc", "", "x", "UNICODE_CI", "abc");
     // Invalid UTF-8 strings.
     assertStringReplace(true, "0xFF", "0xFF", "0x63", "UTF8_BINARY", "0x63");
     assertStringReplace(true, "0xFF", "0xFF", "0x63", "UTF8_LCASE", "0x63");
     assertStringReplace(true, "0xFF", "0xFF", "0x63", "UNICODE", "0x63");
     assertStringReplace(true, "0xFF", "0xFF", "0x63", "UNICODE_CI", "0x63");
+    assertStringReplace(true, "0xC2", "0xFF", "0x63", "UTF8_BINARY", "0xC2");
+    assertStringReplace(true, "0xC2", "0xFF", "0x63", "UTF8_LCASE", "0x63");
+    assertStringReplace(true, "0xC2", "0xFF", "0x63", "UNICODE", "0x63");
+    assertStringReplace(true, "0xC2", "0xFF", "0x63", "UNICODE_CI", "0x63");
+    assertStringReplace(true, "0xC2 0xFF", "0xFF", "0x63", "UTF8_BINARY", "0xC2 0x63");
+    assertStringReplace(true, "0xC2 0xFF", "0xFF", "0x63", "UTF8_LCASE", "0x63 0x63");
+    assertStringReplace(true, "0xC2 0xFF", "0xFF", "0x63", "UNICODE", "0x63 0x63");
+    assertStringReplace(true, "0xC2 0xFF", "0xFF", "0x63", "UNICODE_CI", "0x63 0x63");
     assertStringReplace(true, "0xC2 0x61", "0x61", "0x63", "UTF8_BINARY", "0xC2 0x63");
     assertStringReplace(true, "0xC2 0x61", "0x41", "0x63", "UTF8_LCASE", "0xEF 0xBF 0xBD 0x63");
     assertStringReplace(true, "0xC2 0x61", "0x61", "0x63", "UNICODE", "0xEF 0xBF 0xBD 0x63");
@@ -1140,8 +1177,8 @@ public class CollationSupportSuite {
     // Surrogate pairs.
     assertStringReplace(false, "a\uD83D\uDE43b", "b", "c", "UTF8_BINARY", "a\uD83D\uDE43c");
     assertStringReplace(false, "a\uD83D\uDE43b", "b", "c", "UTF8_LCASE", "a\uD83D\uDE43c");
-    assertStringReplace(false, "a\uD83D\uDE43b", "b", "c", "UNICODE", "a\uD83D\uDE43bc"); // TODO
-    assertStringReplace(false, "a\uD83D\uDE43b", "b", "c", "UNICODE_CI", "a\uD83D\uDE43bc"); // TODO
+    assertStringReplace(false, "a\uD83D\uDE43b", "b", "c", "UNICODE", "a\uD83D\uDE43c");
+    assertStringReplace(false, "a\uD83D\uDE43b", "b", "c", "UNICODE_CI", "a\uD83D\uDE43c");
     // Basic tests.
     assertStringReplace(false, "r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace");
     assertStringReplace(false, "replace", "pl", "", "UTF8_BINARY", "reace");
