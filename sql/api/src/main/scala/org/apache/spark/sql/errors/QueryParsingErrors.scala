@@ -542,6 +542,24 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def identityColumnUnsupportedDataType(ctx: IdentityColumnContext, dataType: String): Throwable = {
+    new ParseException("IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE", Map("dataType" -> dataType), ctx)
+  }
+
+  def identityColumnIllegalStep(ctx: IdentityColSpecContext): Throwable = {
+    new ParseException("IDENTITY_COLUMNS_ILLEGAL_STEP", Map.empty, ctx)
+  }
+
+  def identityColumnDuplicatedDescriptor(
+      ctx: IdentityColSpecContext,
+      descriptor: String): Throwable = {
+    new ParseException(
+      "IDENTITY_COLUMNS_DUPLICATED_DESCRIPTOR",
+      Map("descriptor" -> descriptor),
+      ctx
+    )
+  }
+
   def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }

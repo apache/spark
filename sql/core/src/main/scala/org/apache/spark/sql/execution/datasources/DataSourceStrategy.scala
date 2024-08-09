@@ -41,7 +41,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoSta
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn,
+  IdentityColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -145,6 +146,11 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "generated columns")
+      }
+
+      if (IdentityColumn.hasIdentityColumns(newSchema)) {
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          tableDesc.identifier, "identity columns")
       }
 
       val newTableDesc = tableDesc.copy(schema = newSchema)
