@@ -19,11 +19,13 @@ package org.apache.spark.sql.types
 import org.apache.spark.annotation.Experimental
 
 @Experimental
-case class VarcharType(length: Int) extends AtomicType {
-  require(length >= 0, "The length of varchar type cannot be negative.")
+case class VarcharType(length: Int) extends StringType(0, Some(length), None)
 
-  override def defaultSize: Int = length
-  override def typeName: String = s"varchar($length)"
-  override def toString: String = s"VarcharType($length)"
-  private[spark] override def asNullable: VarcharType = this
+@Experimental
+case object VarcharType {
+  def apply(collationID: Int, length: Int): CharType = {
+    new CharType(length) {
+      override val collationId: Int = collationID
+    }
+  }
 }
