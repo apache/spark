@@ -70,6 +70,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       stringConcat: StringConcat,
       maxDepth: Int): Unit = {
     if (maxDepth > 0) {
+      // test...
       stringConcat.append(
         s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
       DataType.buildFormattedString(elementType, s"$prefix    |", stringConcat, maxDepth)
