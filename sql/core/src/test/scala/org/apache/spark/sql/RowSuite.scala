@@ -132,7 +132,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkException] {
         rowWithNullValue.getLong(position)
       },
-      errorClass = "COLUMN_VALUE_IS_NULL",
+      errorClass = "ROW_VALUE_IS_NULL",
       parameters = Map("index" -> position.toString)
     )
   }

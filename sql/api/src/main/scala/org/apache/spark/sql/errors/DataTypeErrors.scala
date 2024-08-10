@@ -273,7 +273,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def valueIsNullError(index: Int): Throwable = {
     new SparkException(
-      errorClass = "COLUMN_VALUE_IS_NULL",
+      errorClass = "ROW_VALUE_IS_NULL",
       messageParameters = Map(
         "index" -> index.toString),
       cause = null)

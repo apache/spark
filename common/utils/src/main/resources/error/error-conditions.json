@@ -586,12 +586,6 @@
     ],
     "sqlState" : "42703"
   },
-  "COLUMN_VALUE_IS_NULL" : {
-    "message" : [
-      "Value at index <index> is null."
-    ],
-    "sqlState" : "22000"
-  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
@@ -3751,6 +3745,12 @@
       "More than one row returned by a subquery used as a row."
     ],
     "sqlState" : "21000"
+  },
+  "ROW_VALUE_IS_NULL" : {
+    "message" : [
+      "Found NULL in a row at the index <index>, expected a non-NULL value."
+    ],
+    "sqlState" : "22023"
   },
   "RULE_ID_NOT_FOUND" : {
     "message" : [
