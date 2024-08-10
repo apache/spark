@@ -301,17 +301,32 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
 
   // Because this is only happening on the driver side, there is only
-  // one task modifying and accessing this map at a time
+  // one task modifying and accessing these maps at a time
   private[sql] val columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema] =
     new mutable.HashMap[String, StateStoreColFamilySchema]()
 
+  private val stateVariableInfos: mutable.Map[String, TransformWithStateVariableInfo] =
+    new mutable.HashMap[String, TransformWithStateVariableInfo]()
+
   def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = columnFamilySchemas.toMap
+
+  def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] = stateVariableInfos.toMap
+
+  private def checkIfDuplicateVariableDefined(stateVarName: String): Unit = {
+    if (columnFamilySchemas.contains(stateVarName)) {
+      throw StateStoreErrors.duplicateStateVariableDefined(stateVarName)
+    }
+  }
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getValueStateSchema(stateName, keyExprEnc, valEncoder, false)
+    checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getValueState(stateName, ttlEnabled = false)
+    stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[ValueState[T]]
   }
 
@@ -322,7 +337,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getValueStateSchema(stateName, keyExprEnc, valEncoder, true)
+    checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getValueState(stateName, ttlEnabled = true)
+    stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[ValueState[T]]
   }
 
@@ -330,7 +349,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     verifyStateVarOperations("get_list_state", PRE_INIT)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getListStateSchema(stateName, keyExprEnc, valEncoder, false)
+    checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getListState(stateName, ttlEnabled = false)
+    stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[ListState[T]]
   }
 
@@ -341,7 +364,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     verifyStateVarOperations("get_list_state", PRE_INIT)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getListStateSchema(stateName, keyExprEnc, valEncoder, true)
+    checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getListState(stateName, ttlEnabled = true)
+    stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[ListState[T]]
   }
 
@@ -352,7 +379,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     verifyStateVarOperations("get_map_state", PRE_INIT)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, false)
+    checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getMapState(stateName, ttlEnabled = false)
+    stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[MapState[K, V]]
   }
 
@@ -365,6 +396,9 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, true)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getMapState(stateName, ttlEnabled = true)
+    stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[MapState[K, V]]
   }
 

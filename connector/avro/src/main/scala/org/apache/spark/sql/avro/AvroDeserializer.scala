@@ -141,6 +141,12 @@ private[sql] class AvroDeserializer(
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
+      case (INT, LongType) => (updater, ordinal, value) =>
+        updater.setLong(ordinal, value.asInstanceOf[Int])
+
+      case (INT, DoubleType) => (updater, ordinal, value) =>
+        updater.setDouble(ordinal, value.asInstanceOf[Int])
+
       case (INT, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
         throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
@@ -193,6 +199,9 @@ private[sql] class AvroDeserializer(
 
       case (FLOAT, FloatType) => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[Float])
+
+      case (FLOAT, DoubleType) => (updater, ordinal, value) =>
+        updater.setDouble(ordinal, value.asInstanceOf[Float])
 
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])

@@ -65,6 +65,7 @@ class Column(NamedTuple):
     nullable: bool
     isPartition: bool
     isBucket: bool
+    isCluster: bool
 
 
 class Function(NamedTuple):
@@ -663,6 +664,7 @@ class Catalog:
                     nullable=jcolumn.nullable(),
                     isPartition=jcolumn.isPartition(),
                     isBucket=jcolumn.isBucket(),
+                    isCluster=jcolumn.isCluster(),
                 )
             )
         return columns

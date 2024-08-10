@@ -200,8 +200,7 @@ class RocksDBFileManager(
       case 2 =>
         new StateStoreChangelogWriterV2(fm, changelogFile, codec)
       case _ =>
-        throw new IllegalArgumentException(s"Failed to find changelog writer for " +
-          s"version=$changelogVersion")
+        throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
     }
     changelogWriter
   }
@@ -224,8 +223,7 @@ class RocksDBFileManager(
       case 2 =>
         new StateStoreChangelogReaderV2(fm, changelogFile, codec)
       case _ =>
-        throw new IllegalArgumentException(s"Failed to find changelog reader for " +
-          s"version=$changelogVersion")
+        throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
     }
     changelogReader
   }

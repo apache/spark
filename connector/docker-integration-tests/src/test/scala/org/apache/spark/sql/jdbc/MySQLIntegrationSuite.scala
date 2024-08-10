@@ -351,6 +351,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
     assert(df.schema.fields.head.dataType === ShortType)
   }
+
+  test("SPARK-44638: Char/Varchar in Custom Schema") {
+    val df = spark.read.option("url", jdbcUrl)
+      .option("query", "SELECT c, d from strings")
+      .option("customSchema", "c CHAR(10), d VARCHAR(10)")
+      .format("jdbc")
+      .load()
+    checkAnswer(df, Row("brown     ", "fox"))
+  }
 }
 
 

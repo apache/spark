@@ -356,6 +356,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
+    checkEvaluation(SubstringIndex(
+      Literal("www.apache.org"), Literal("."), Literal.create(null, IntegerType)), null)
   }
 
   test("SPARK-40213: ascii for Latin-1 Supplement characters") {

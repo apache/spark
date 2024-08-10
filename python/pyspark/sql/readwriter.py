@@ -1638,6 +1638,42 @@ class DataFrameWriter(OptionUtils):
         )
         return self
 
+    @overload
+    def clusterBy(self, *cols: str) -> "DataFrameWriter":
+        ...
+
+    @overload
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
+        ...
+
+    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
+        """Clusters the data by the given columns to optimize query performance.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        cols : str or list
+            name of columns
+
+        Examples
+        --------
+        Write a DataFrame into a Parquet file with clustering.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory(prefix="clusterBy") as d:
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}, {"age": 120, "name": "Ruifeng Zheng"}]
+        ...     ).write.clusterBy("name").mode("overwrite").format("parquet").save(d)
+        """
+        from pyspark.sql.classic.column import _to_seq
+
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]  # type: ignore[assignment]
+        assert len(cols) > 0, "clusterBy needs one or more clustering columns."
+        self._jwrite = self._jwrite.clusterBy(cols[0], _to_seq(self._spark._sc, cols[1:]))
+        return self
+
     def save(
         self,
         path: Optional[str] = None,
@@ -2395,6 +2431,15 @@ class DataFrameWriterV2:
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
         self._jwriter.partitionedBy(col, cols)
+        return self
+
+    def clusterBy(self, col: str, *cols: str) -> "DataFrameWriterV2":
+        """
+        Clusters the data by the given columns to optimize query performance.
+        """
+        from pyspark.sql.classic.column import _to_seq
+
+        self._jwriter.clusterBy(col, _to_seq(self._spark._sc, cols))
         return self
 
     def create(self) -> None:

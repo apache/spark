@@ -18,14 +18,16 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.time.Duration
 import java.util.UUID
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -53,6 +55,83 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorWithTTL
+  extends StatefulProcessor[String, String, (String, String)]
+  with Logging {
+  @transient protected var _countState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig(Duration.ofMillis(1000)))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+// Class to test that changing between Value and List State fails
+// between query runs
+class RunningCountListStatefulProcessor
+  extends StatefulProcessor[String, String, (String, String)]
+    with Logging {
+  @transient protected var _countState: ListState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getListState[Long](
+      "countState", Encoders.scalaLong)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    Iterator.empty
+  }
+}
+
+class RunningCountStatefulProcessorInt
+  extends StatefulProcessor[String, String, (String, String)] {
+  @transient protected var _countState: ValueState[Int] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0) + 1
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -811,9 +890,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
-        val metadataPathPostfix = "state/0/default/_metadata"
+        val metadataPathPostfix = "state/0/_stateSchema/default"
         val stateSchemaPath = new Path(checkpointDir.toString,
-          s"$metadataPathPostfix/schema")
+          s"$metadataPathPostfix")
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
@@ -883,6 +962,313 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           },
           StopStream
         )
+      }
+    }
+  }
+
+  test("transformWithState - verify that OperatorStateMetadataV2" +
+    " file is being written correctly") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+
+        val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+
+        // check first 6 columns of the row, and then read the last column of the row separately
+        checkAnswer(
+            df.select(
+              "operatorId", "operatorName", "stateStoreName", "numPartitions", "minBatchId",
+              "maxBatchId"),
+            Seq(Row(0, "transformWithStateExec", "default", 5, 0, 1))
+        )
+        val operatorPropsJson = df.select("operatorProperties").collect().head.getString(0)
+        val operatorProperties = TransformWithStateOperatorProperties.fromJson(operatorPropsJson)
+        assert(operatorProperties.timeMode == "NoTime")
+        assert(operatorProperties.outputMode == "Update")
+        assert(operatorProperties.stateVariables.length == 1)
+        assert(operatorProperties.stateVariables.head.stateName == "countState")
+      }
+    }
+  }
+
+  test("test that invalid schema evolution fails query for column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorInt(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreValueSchemaNotCompatible] {
+            (t: Throwable) => {
+              assert(t.getMessage.contains("Please check number and type of fields."))
+            }
+          }
+        )
+      }
+    }
+  }
+
+  test("test that different outputMode after query restart fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              parameters = Map(
+                "configName" -> "outputMode",
+                "oldConfig" -> "Update",
+                "newConfig" -> "Append")
+            )
+          }
+        )
+      }
+    }
+  }
+
+  test("test that changing between different state variable types fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountListStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
+            checkError(
+              t.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+              parameters = Map(
+                "stateVarName" -> "countState",
+                "newType" -> "ListState",
+                "oldType" -> "ValueState")
+            )
+          }
+        )
+      }
+    }
+  }
+
+  test("test that different timeMode after query restart fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              parameters = Map(
+                "configName" -> "timeMode",
+                "oldConfig" -> "NoTime",
+                "newConfig" -> "ProcessingTime")
+            )
+          }
+        )
+      }
+    }
+  }
+
+  test("test that introducing TTL after restart fails query") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val clock = new StreamManualClock
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          AdvanceManualClock(1 * 1000),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
+            checkError(
+              t.asInstanceOf[SparkUnsupportedOperationException],
+              errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+              parameters = Map(
+                "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
+                "newValueSchema" ->
+                  ("StructType(StructField(value,StructType(StructField(value,LongType,false))," +
+                    "true),StructField(ttlExpirationMs,LongType,true))")
+              )
+            )
+          }
+        )
+      }
+    }
+  }
+
+  test("SPARK-49070: transformWithState - valid initial state plan") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+        val df = createFileStream(srcDir)
+
+        var index = 0
+
+        val q = df.writeStream
+          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            index += 1
+          })
+          .trigger(Trigger.AvailableNow)
+          .start()
+
+        try {
+          assert(q.awaitTermination(streamingTimeout.toMillis))
+
+          val sparkPlan =
+            q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+          val transformWithStateExec = sparkPlan.collect {
+            case p: TransformWithStateExec => p
+          }.head
+
+          assert(!transformWithStateExec.hasInitialState)
+
+          // EnsureRequirements should not apply on the initial state plan
+          val exchange = transformWithStateExec.initialState.collect {
+            case s: ShuffleExchangeExec => s
+          }
+
+          assert(exchange.isEmpty)
+        } finally {
+          q.stop()
+        }
       }
     }
   }

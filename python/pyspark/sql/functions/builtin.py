@@ -29,6 +29,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Sequence,
     Iterable,
     overload,
     Optional,
@@ -59,13 +60,13 @@ from pyspark.sql.utils import (
     has_numpy as _has_numpy,
     try_remote_functions as _try_remote_functions,
     get_active_spark_context as _get_active_spark_context,
+    enum_to_value as _enum_to_value,
 )
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
     from pyspark.sql._typing import (
         ColumnOrName,
-        ColumnOrName_,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
@@ -225,8 +226,8 @@ def lit(col: Any) -> Column:
         if _has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", col).astype(dt).alias(str(col))
-        return _invoke_function("lit", col)
+                return _invoke_function("lit", _enum_to_value(col)).astype(dt).alias(str(col))
+        return _invoke_function("lit", _enum_to_value(col))
 
 
 @_try_remote_functions
@@ -1062,7 +1063,7 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("mode", _to_java_column(col), deterministic)
+    return _invoke_function("mode", _to_java_column(col), _enum_to_value(deterministic))
 
 
 @_try_remote_functions
@@ -2160,8 +2161,9 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     if scale is None:
         return _invoke_function_over_columns("ceil", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)
+        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -2213,8 +2215,9 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     if scale is None:
         return _invoke_function_over_columns("ceiling", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)
+        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -2475,8 +2478,9 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     if scale is None:
         return _invoke_function_over_columns("floor", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)
+        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -5288,6 +5292,7 @@ def width_bucket(
     |                           3|
     +----------------------------+
     """
+    numBucket = _enum_to_value(numBucket)
     numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
     return _invoke_function_over_columns("width_bucket", v, min, max, numBucket)
 
@@ -5582,7 +5587,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     if rsd is None:
         return _invoke_function_over_columns("approx_count_distinct", col)
     else:
-        return _invoke_function("approx_count_distinct", _to_java_column(col), rsd)
+        return _invoke_function("approx_count_distinct", _to_java_column(col), _enum_to_value(rsd))
 
 
 @_try_remote_functions
@@ -5921,7 +5926,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("first", _to_java_column(col), ignorenulls)
+    return _invoke_function("first", _to_java_column(col), _enum_to_value(ignorenulls))
 
 
 @_try_remote_functions
@@ -6194,7 +6199,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("last", _to_java_column(col), ignorenulls)
+    return _invoke_function("last", _to_java_column(col), _enum_to_value(ignorenulls))
 
 
 @_try_remote_functions
@@ -6492,7 +6497,7 @@ def rand(seed: Optional[int] = None) -> Column:
     +---+------------------+
     """
     if seed is not None:
-        return _invoke_function("rand", seed)
+        return _invoke_function("rand", _enum_to_value(seed))
     else:
         return _invoke_function("rand")
 
@@ -6545,7 +6550,7 @@ def randn(seed: Optional[int] = None) -> Column:
     +---+------------------+
     """
     if seed is not None:
-        return _invoke_function("randn", seed)
+        return _invoke_function("randn", _enum_to_value(seed))
     else:
         return _invoke_function("randn")
 
@@ -6601,8 +6606,9 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     if scale is None:
         return _invoke_function_over_columns("round", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)
+        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -6656,8 +6662,9 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     if scale is None:
         return _invoke_function_over_columns("bround", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)
+        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -6704,7 +6711,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("shiftleft", _to_java_column(col), numBits)
+    return _invoke_function("shiftleft", _to_java_column(col), _enum_to_value(numBits))
 
 
 @_try_remote_functions
@@ -6751,7 +6758,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("shiftright", _to_java_column(col), numBits)
+    return _invoke_function("shiftright", _to_java_column(col), _enum_to_value(numBits))
 
 
 @_try_remote_functions
@@ -6799,7 +6806,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("shiftrightunsigned", _to_java_column(col), numBits)
+    return _invoke_function("shiftrightunsigned", _to_java_column(col), _enum_to_value(numBits))
 
 
 @_try_remote_functions
@@ -6868,13 +6875,13 @@ def struct(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+def struct(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
     ...
 
 
 @_try_remote_functions
 def struct(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """Creates a new struct column.
 
@@ -7051,7 +7058,8 @@ def when(condition: Column, value: Any) -> Column:
             errorClass="NOT_COLUMN",
             messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
-    v = value._jc if isinstance(value, Column) else value
+    value = _enum_to_value(value)
+    v = value._jc if isinstance(value, Column) else _enum_to_value(value)
 
     return _invoke_function("when", condition._jc, v)
 
@@ -7118,7 +7126,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     if arg2 is None:
         return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
     else:
-        return _invoke_function("log", arg1, _to_java_column(arg2))
+        return _invoke_function("log", _enum_to_value(arg1), _to_java_column(arg2))
 
 
 @_try_remote_functions
@@ -7214,7 +7222,9 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("conv", _to_java_column(col), fromBase, toBase)
+    return _invoke_function(
+        "conv", _to_java_column(col), _enum_to_value(fromBase), _enum_to_value(toBase)
+    )
 
 
 @_try_remote_functions
@@ -7329,7 +7339,9 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("lag", _to_java_column(col), offset, default)
+    return _invoke_function(
+        "lag", _to_java_column(col), _enum_to_value(offset), _enum_to_value(default)
+    )
 
 
 @_try_remote_functions
@@ -7412,7 +7424,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("lead", _to_java_column(col), offset, default)
+    return _invoke_function(
+        "lead", _to_java_column(col), _enum_to_value(offset), _enum_to_value(default)
+    )
 
 
 @_try_remote_functions
@@ -7488,7 +7502,9 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("nth_value", _to_java_column(col), offset, ignoreNulls)
+    return _invoke_function(
+        "nth_value", _to_java_column(col), _enum_to_value(offset), _enum_to_value(ignoreNulls)
+    )
 
 
 @_try_remote_functions
@@ -7524,8 +7540,11 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     if ignoreNulls is None:
         return _invoke_function_over_columns("any_value", col)
     else:
+        ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns("any_value", col, ignoreNulls)
+        return _invoke_function_over_columns(
+            "any_value", col, ignoreNulls  # type: ignore[arg-type]
+        )
 
 
 @_try_remote_functions
@@ -7572,8 +7591,11 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     if ignoreNulls is None:
         return _invoke_function_over_columns("first_value", col)
     else:
+        ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns("first_value", col, ignoreNulls)
+        return _invoke_function_over_columns(
+            "first_value", col, ignoreNulls  # type: ignore[arg-type]
+        )
 
 
 @_try_remote_functions
@@ -7620,8 +7642,11 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     if ignoreNulls is None:
         return _invoke_function_over_columns("last_value", col)
     else:
+        ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns("last_value", col, ignoreNulls)
+        return _invoke_function_over_columns(
+            "last_value", col, ignoreNulls  # type: ignore[arg-type]
+        )
 
 
 @_try_remote_functions
@@ -7790,7 +7815,7 @@ def ntile(n: int) -> Column:
     |  b|  8|    2|
     +---+---+-----+
     """
-    return _invoke_function("ntile", int(n))
+    return _invoke_function("ntile", int(_enum_to_value(n)))
 
 
 # ---------------------- Date/Timestamp functions ------------------------------
@@ -8002,7 +8027,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("date_format", _to_java_column(date), format)
+    return _invoke_function("date_format", _to_java_column(date), _enum_to_value(format))
 
 
 @_try_remote_functions
@@ -8597,6 +8622,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> df.select(date_add('dt', -1).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 7))]
     """
+    days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_add", start, days)
 
@@ -8654,6 +8680,7 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     |      2015-04-07|
     +----------------+
     """
+    days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("dateadd", start, days)
 
@@ -8692,6 +8719,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> df.select(date_sub('dt', -1).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 9))]
     """
+    days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_sub", start, days)
 
@@ -8819,6 +8847,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     >>> df.select(add_months('dt', -2).alias('prev_month')).collect()
     [Row(prev_month=datetime.date(2015, 2, 8))]
     """
+    months = _enum_to_value(months)
     months = lit(months) if isinstance(months, int) else months
     return _invoke_function_over_columns("add_months", start, months)
 
@@ -8862,7 +8891,7 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function(
-        "months_between", _to_java_column(date1), _to_java_column(date2), roundOff
+        "months_between", _to_java_column(date1), _to_java_column(date2), _enum_to_value(roundOff)
     )
 
 
@@ -8907,7 +8936,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     if format is None:
         return _invoke_function_over_columns("to_date", col)
     else:
-        return _invoke_function("to_date", _to_java_column(col), format)
+        return _invoke_function("to_date", _to_java_column(col), _enum_to_value(format))
 
 
 @_try_remote_functions
@@ -9045,7 +9074,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     if format is None:
         return _invoke_function_over_columns("to_timestamp", col)
     else:
-        return _invoke_function("to_timestamp", _to_java_column(col), format)
+        return _invoke_function("to_timestamp", _to_java_column(col), _enum_to_value(format))
 
 
 @_try_remote_functions
@@ -9301,7 +9330,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("trunc", _to_java_column(date), format)
+    return _invoke_function("trunc", _to_java_column(date), _enum_to_value(format))
 
 
 @_try_remote_functions
@@ -9340,7 +9369,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("date_trunc", format, _to_java_column(timestamp))
+    return _invoke_function("date_trunc", _enum_to_value(format), _to_java_column(timestamp))
 
 
 @_try_remote_functions
@@ -9375,7 +9404,7 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("next_day", _to_java_column(date), dayOfWeek)
+    return _invoke_function("next_day", _to_java_column(date), _enum_to_value(dayOfWeek))
 
 
 @_try_remote_functions
@@ -9443,7 +9472,7 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("from_unixtime", _to_java_column(timestamp), format)
+    return _invoke_function("from_unixtime", _to_java_column(timestamp), _enum_to_value(format))
 
 
 @overload
@@ -9527,7 +9556,7 @@ def unix_timestamp(
 
     if timestamp is None:
         return _invoke_function("unix_timestamp")
-    return _invoke_function("unix_timestamp", _to_java_column(timestamp), format)
+    return _invoke_function("unix_timestamp", _to_java_column(timestamp), _enum_to_value(format))
 
 
 @_try_remote_functions
@@ -9799,7 +9828,7 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 
     return _invoke_function(
         "timestamp_diff",
-        unit,
+        _enum_to_value(unit),
         _to_java_column(start),
         _to_java_column(end),
     )
@@ -9862,7 +9891,7 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
     return _invoke_function(
         "timestamp_add",
-        unit,
+        _enum_to_value(unit),
         _to_java_column(quantity),
         _to_java_column(ts),
     )
@@ -9953,6 +9982,10 @@ def window(
                 errorClass="NOT_STR",
                 messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
             )
+
+    windowDuration = _enum_to_value(windowDuration)
+    slideDuration = _enum_to_value(slideDuration)
+    startTime = _enum_to_value(startTime)
 
     time_col = _to_java_column(timeColumn)
     check_string_field(windowDuration, "windowDuration")
@@ -10084,6 +10117,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
             )
 
     time_col = _to_java_column(timeColumn)
+    gapDuration = _enum_to_value(gapDuration)
     check_field(gapDuration, "gapDuration")
     gap_duration = gapDuration if isinstance(gapDuration, str) else _to_java_column(gapDuration)
     return _invoke_function("session_window", time_col, gap_duration)
@@ -10584,6 +10618,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     java.lang.RuntimeException: My error msg
     ...
     """
+    errMsg = _enum_to_value(errMsg)
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
@@ -10622,6 +10657,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     java.lang.RuntimeException: My error message
     ...
     """
+    errMsg = _enum_to_value(errMsg)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR",
@@ -10947,7 +10983,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
     sc = _get_active_spark_context()
-    return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
+    return _invoke_function("concat_ws", _enum_to_value(sep), _to_seq(sc, cols, _to_java_column))
 
 
 @_try_remote_functions
@@ -10985,7 +11021,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("decode", _to_java_column(col), charset)
+    return _invoke_function("decode", _to_java_column(col), _enum_to_value(charset))
 
 
 @_try_remote_functions
@@ -11023,7 +11059,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("encode", _to_java_column(col), charset)
+    return _invoke_function("encode", _to_java_column(col), _enum_to_value(charset))
 
 
 @_try_remote_functions
@@ -11056,7 +11092,7 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("format_number", _to_java_column(col), d)
+    return _invoke_function("format_number", _to_java_column(col), _enum_to_value(d))
 
 
 @_try_remote_functions
@@ -11090,7 +11126,9 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
     sc = _get_active_spark_context()
-    return _invoke_function("format_string", format, _to_seq(sc, cols, _to_java_column))
+    return _invoke_function(
+        "format_string", _enum_to_value(format), _to_seq(sc, cols, _to_java_column)
+    )
 
 
 @_try_remote_functions
@@ -11129,7 +11167,7 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("instr", _to_java_column(str), substr)
+    return _invoke_function("instr", _to_java_column(str), _enum_to_value(substr))
 
 
 @_try_remote_functions
@@ -11175,11 +11213,13 @@ def overlay(
     >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
     [Row(overlayed='SPARK_COREL')]
     """
+    pos = _enum_to_value(pos)
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_INT_OR_STR",
             messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
+    len = _enum_to_value(len)
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_INT_OR_STR",
@@ -11300,7 +11340,9 @@ def substring(
     >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
     [Row(s='par')]
     """
+    pos = _enum_to_value(pos)
     pos = lit(pos) if isinstance(pos, int) else pos
+    len = _enum_to_value(len)
     len = lit(len) if isinstance(len, int) else len
     return _invoke_function_over_columns("substring", str, pos, len)
 
@@ -11342,7 +11384,9 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("substring_index", _to_java_column(str), delim, count)
+    return _invoke_function(
+        "substring_index", _to_java_column(str), _enum_to_value(delim), _enum_to_value(count)
+    )
 
 
 @_try_remote_functions
@@ -11388,7 +11432,7 @@ def levenshtein(
         return _invoke_function_over_columns("levenshtein", left, right)
     else:
         return _invoke_function(
-            "levenshtein", _to_java_column(left), _to_java_column(right), threshold
+            "levenshtein", _to_java_column(left), _to_java_column(right), _enum_to_value(threshold)
         )
 
 
@@ -11429,7 +11473,9 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("locate", substr, _to_java_column(str), pos)
+    return _invoke_function(
+        "locate", _enum_to_value(substr), _to_java_column(str), _enum_to_value(pos)
+    )
 
 
 @_try_remote_functions
@@ -11464,7 +11510,7 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("lpad", _to_java_column(col), len, pad)
+    return _invoke_function("lpad", _to_java_column(col), _enum_to_value(len), _enum_to_value(pad))
 
 
 @_try_remote_functions
@@ -11499,7 +11545,7 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("rpad", _to_java_column(col), len, pad)
+    return _invoke_function("rpad", _to_java_column(col), _enum_to_value(len), _enum_to_value(pad))
 
 
 @_try_remote_functions
@@ -11559,6 +11605,7 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
     |  ababababab|
     +------------+
     """
+    n = _enum_to_value(n)
     n = lit(n) if isinstance(n, int) else n
     return _invoke_function_over_columns("repeat", col, n)
 
@@ -11653,6 +11700,7 @@ def split(
     |      [, A, B, C]|
     +-----------------+
     """
+    limit = _enum_to_value(limit)
     limit = lit(limit) if isinstance(limit, int) else limit
     return _invoke_function_over_columns("split", str, lit(pattern), limit)
 
@@ -11864,7 +11912,9 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
+    return _invoke_function(
+        "regexp_extract", _to_java_column(str), _enum_to_value(pattern), _enum_to_value(idx)
+    )
 
 
 @_try_remote_functions
@@ -12282,7 +12332,9 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("translate", _to_java_column(srcCol), matching, replace)
+    return _invoke_function(
+        "translate", _to_java_column(srcCol), _enum_to_value(matching), _enum_to_value(replace)
+    )
 
 
 @_try_remote_functions
@@ -13600,7 +13652,7 @@ def collate(col: "ColumnOrName", collation: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("collate", _to_java_column(col), collation)
+    return _invoke_function("collate", _to_java_column(col), _enum_to_value(collation))
 
 
 @_try_remote_functions
@@ -13642,13 +13694,13 @@ def create_map(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+def create_map(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
     ...
 
 
 @_try_remote_functions
 def create_map(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """
     Map function: Creates a new map column from an even number of input columns or
@@ -13809,13 +13861,13 @@ def array(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+def array(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
     ...
 
 
 @_try_remote_functions
 def array(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """
     Collection function: Creates a new array column from the input columns or column names.
@@ -14134,7 +14186,9 @@ def slice(
     |                 [4, 5]|
     +-----------------------+
     """
+    start = _enum_to_value(start)
     start = lit(start) if isinstance(start, int) else start
+    length = _enum_to_value(length)
     length = lit(length) if isinstance(length, int) else length
 
     return _invoke_function_over_columns("slice", x, start, length)
@@ -14236,9 +14290,14 @@ def array_join(
 
     _get_active_spark_context()
     if null_replacement is None:
-        return _invoke_function("array_join", _to_java_column(col), delimiter)
+        return _invoke_function("array_join", _to_java_column(col), _enum_to_value(delimiter))
     else:
-        return _invoke_function("array_join", _to_java_column(col), delimiter, null_replacement)
+        return _invoke_function(
+            "array_join",
+            _to_java_column(col),
+            _enum_to_value(delimiter),
+            _enum_to_value(null_replacement),
+        )
 
 
 @_try_remote_functions
@@ -14722,6 +14781,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     |         NULL|
     +-------------+
     """
+    index = _enum_to_value(index)
     index = lit(index) if isinstance(index, int) else index
 
     return _invoke_function_over_columns("get", col, index)
@@ -15089,6 +15149,7 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     |                    NULL|
     +------------------------+
     """
+    pos = _enum_to_value(pos)
     pos = lit(pos) if isinstance(pos, int) else pos
 
     return _invoke_function_over_columns("array_insert", arr, pos, lit(value))
@@ -16054,7 +16115,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("get_json_object", _to_java_column(col), path)
+    return _invoke_function("get_json_object", _to_java_column(col), _enum_to_value(path))
 
 
 @_try_remote_functions
@@ -16341,7 +16402,9 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("variant_get", _to_java_column(v), path, targetType)
+    return _invoke_function(
+        "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+    )
 
 
 @_try_remote_functions
@@ -16379,7 +16442,9 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("try_variant_get", _to_java_column(v), path, targetType)
+    return _invoke_function(
+        "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+    )
 
 
 @_try_remote_functions
@@ -16589,6 +16654,7 @@ def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] =
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    json = _enum_to_value(json)
     if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR",
@@ -16817,6 +16883,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = N
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    xml = _enum_to_value(xml)
     if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR",
@@ -16937,6 +17004,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    csv = _enum_to_value(csv)
     if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR",
@@ -17441,7 +17509,7 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("sort_array", _to_java_column(col), asc)
+    return _invoke_function("sort_array", _to_java_column(col), _enum_to_value(asc))
 
 
 @_try_remote_functions
@@ -18130,6 +18198,7 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     |   [NULL, NULL, NULL]|
     +---------------------+
     """
+    count = _enum_to_value(count)
     count = lit(count) if isinstance(count, int) else count
 
     return _invoke_function_over_columns("array_repeat", col, count)
@@ -18214,13 +18283,13 @@ def map_concat(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+def map_concat(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
     ...
 
 
 @_try_remote_functions
 def map_concat(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """
     Map function: Returns the union of all given maps.
@@ -20527,7 +20596,10 @@ def hll_union(
 
     if allowDifferentLgConfigK is not None:
         return _invoke_function(
-            "hll_union", _to_java_column(col1), _to_java_column(col2), allowDifferentLgConfigK
+            "hll_union",
+            _to_java_column(col1),
+            _to_java_column(col2),
+            _enum_to_value(allowDifferentLgConfigK),
         )
     else:
         return _invoke_function("hll_union", _to_java_column(col1), _to_java_column(col2))

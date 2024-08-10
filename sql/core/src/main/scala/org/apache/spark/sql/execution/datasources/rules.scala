@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -54,7 +56,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     val ident = unresolved.multipartIdentifier
     val dataSource = DataSource(
       sparkSession,
-      paths = Seq(ident.last),
+      paths = Seq(CatalogUtils.stringToURI(ident.last).toString),
       className = ident.head,
       options = unresolved.options.asScala.toMap)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
@@ -66,12 +68,6 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
-    if (isFileFormat && ident.last.isEmpty) {
-      unresolved.failAnalysis(
-        errorClass = "INVALID_EMPTY_LOCATION",
-        messageParameters = Map("location" -> ident.last))
-    }
-
     dataSource
   }
 
@@ -94,6 +90,11 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
+        case e: SparkIllegalArgumentException if e.getErrorClass != null =>
+          u.failAnalysis(
+            errorClass = e.getErrorClass,
+            messageParameters = e.getMessageParameters.asScala.toMap,
+            cause = e)
         case e: Exception if !e.isInstanceOf[AnalysisException] =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(
@@ -204,6 +205,18 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           tableName, specifiedBucketString, existingBucketString)
       }
 
+      // Check if the specified clustering columns match the existing table.
+      val specifiedClusterBySpec = tableDesc.clusterBySpec
+      val existingClusterBySpec = existingTable.clusterBySpec
+      if (specifiedClusterBySpec != existingClusterBySpec) {
+        val specifiedClusteringString =
+          specifiedClusterBySpec.map(_.toString).getOrElse("")
+        val existingClusteringString =
+          existingClusterBySpec.map(_.toString).getOrElse("")
+        throw QueryCompilationErrors.mismatchedTableClusteringError(
+          tableName, specifiedClusteringString, existingClusteringString)
+      }
+
       val newQuery = if (adjustedColumns != query.output) {
         Project(adjustedColumns, query)
       } else {
@@ -236,10 +249,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
 
         val output = analyzedQuery.output
+
+        val outputByName = HashMap(output.map(o => o.name -> o): _*)
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
-          output.find(_.name == partCol).get
+          outputByName(partCol)
         }
-        val newOutput = output.filterNot(partitionAttrs.contains) ++ partitionAttrs
+        val partitionAttrsSet = HashSet(partitionAttrs: _*)
+        val newOutput = output.filterNot(partitionAttrsSet.contains) ++ partitionAttrs
+
         val reorderedQuery = if (newOutput == output) {
           analyzedQuery
         } else {
@@ -251,12 +268,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
+        val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)
         val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
-          normalizedTable.schema.find(_.name == partCol).get
+          normalizedSchemaByName(partCol)
         }
-
-        val reorderedSchema =
-          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+        val partitionSchemaSet = HashSet(partitionSchema: _*)
+        val reorderedSchema = StructType(
+          normalizedTable.schema.filterNot(partitionSchemaSet.contains) ++ partitionSchema
+        )
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
@@ -325,7 +344,12 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
     }
 
-    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
+    val normalizedProperties = table.properties ++ table.clusterBySpec.map { spec =>
+      ClusterBySpec.toProperty(schema, spec, conf.resolver)
+    }
+
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec,
+      properties = normalizedProperties)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
@@ -343,8 +367,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         messageParameters = Map.empty)
     }
 
+    val normalizedPartitionColsSet = HashSet(normalizedPartitionCols: _*)
     schema
-      .filter(f => normalizedPartitionCols.contains(f.name))
+      .filter(f => normalizedPartitionColsSet.contains(f.name))
       .foreach { field =>
         if (!PartitioningUtils.canPartitionOn(field.dataType)) {
           throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)

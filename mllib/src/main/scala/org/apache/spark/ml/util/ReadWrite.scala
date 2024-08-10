@@ -439,7 +439,7 @@ private[ml] object DefaultParamsWriter {
       extraMetadata: Option[JObject],
       paramMap: Option[JValue]): Unit = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataJson = getMetadataToSave(instance, spark.sparkContext, extraMetadata, paramMap)
+    val metadataJson = getMetadataToSave(instance, spark, extraMetadata, paramMap)
     // Note that we should write single file. If there are more than one row
     // it produces more partitions.
     spark.createDataFrame(Seq(Tuple1(metadataJson))).write.text(metadataPath)
@@ -461,11 +461,29 @@ private[ml] object DefaultParamsWriter {
    *
    * @see [[saveMetadata()]] for details on what this includes.
    */
+  @deprecated("use getMetadataToSave with SparkSession", "4.0.0")
   def getMetadataToSave(
       instance: Params,
       sc: SparkContext,
       extraMetadata: Option[JObject] = None,
-      paramMap: Option[JValue] = None): String = {
+      paramMap: Option[JValue] = None): String =
+    getMetadataToSave(
+      instance,
+      SparkSession.builder().sparkContext(sc).getOrCreate(),
+      extraMetadata,
+      paramMap)
+
+  /**
+   * Helper for [[saveMetadata()]] which extracts the JSON to save.
+   * This is useful for ensemble models which need to save metadata for many sub-models.
+   *
+   * @see [[saveMetadata()]] for details on what this includes.
+   */
+  def getMetadataToSave(
+      instance: Params,
+      spark: SparkSession,
+      extraMetadata: Option[JObject],
+      paramMap: Option[JValue]): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.paramMap.toSeq
@@ -478,7 +496,7 @@ private[ml] object DefaultParamsWriter {
     }.toList)
     val basicMetadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
-      ("sparkVersion" -> sc.version) ~
+      ("sparkVersion" -> spark.version) ~
       ("uid" -> uid) ~
       ("paramMap" -> jsonParams) ~
       ("defaultParamMap" -> jsonDefaultParams)
@@ -491,6 +509,17 @@ private[ml] object DefaultParamsWriter {
     val metadataJson: String = compact(render(metadata))
     metadataJson
   }
+
+  def getMetadataToSave(
+      instance: Params,
+      spark: SparkSession,
+      extraMetadata: Option[JObject]): String =
+    getMetadataToSave(instance, spark, extraMetadata, None)
+
+  def getMetadataToSave(
+      instance: Params,
+      spark: SparkSession): String =
+    getMetadataToSave(instance, spark, None, None)
 }
 
 /**
@@ -670,15 +699,23 @@ private[ml] object DefaultParamsReader {
    * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
+  @deprecated("use loadParamsInstance with SparkSession", "4.0.0")
   def loadParamsInstance[T](path: String, sc: SparkContext): T =
-    loadParamsInstanceReader(path, sc).load(path)
+    loadParamsInstance[T](path, SparkSession.builder().sparkContext(sc).getOrCreate())
+
+  def loadParamsInstance[T](path: String, spark: SparkSession): T =
+    loadParamsInstanceReader(path, spark).load(path)
 
   /**
    * Load a `Params` instance reader from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
-  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+  @deprecated("use loadParamsInstanceReader with SparkSession", "4.0.0")
+  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] =
+    loadParamsInstanceReader[T](path, SparkSession.builder().sparkContext(sc).getOrCreate())
+
+  def loadParamsInstanceReader[T](path: String, spark: SparkSession): MLReader[T] = {
+    val metadata = DefaultParamsReader.loadMetadata(path, spark)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }

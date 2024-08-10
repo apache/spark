@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from enum import Enum
 import inspect
 import functools
 import os
@@ -191,6 +192,11 @@ def to_str(value: Any) -> Optional[str]:
         return value
     else:
         return str(value)
+
+
+def enum_to_value(value: Any) -> Any:
+    """Convert an Enum to its value if it is not None."""
+    return enum_to_value(value.value) if value is not None and isinstance(value, Enum) else value
 
 
 def is_timestamp_ntz_preferred() -> bool:

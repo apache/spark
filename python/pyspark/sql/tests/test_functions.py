@@ -17,6 +17,7 @@
 
 from contextlib import redirect_stdout
 import datetime
+from enum import Enum
 from inspect import getmembers, isfunction
 import io
 from itertools import chain
@@ -1562,6 +1563,35 @@ class FunctionsTestsMixin:
                 errorClass="INVALID_TYPE",
                 messageParameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
             )
+
+    def test_enum_literals(self):
+        class IntEnum(Enum):
+            X = 1
+            Y = 2
+            Z = 3
+
+        id = F.col("id")
+        b = F.col("b")
+
+        cols, expected = list(
+            zip(
+                (F.lit(IntEnum.X), 1),
+                (F.lit([IntEnum.X, IntEnum.Y]), [1, 2]),
+                (F.rand(IntEnum.X), 0.9531453492357947),
+                (F.randn(IntEnum.X), -1.1081822375859998),
+                (F.when(b, IntEnum.X), 1),
+            )
+        )
+
+        result = (
+            self.spark.range(1, 2)
+            .select(id, id.astype("string").alias("s"), id.astype("boolean").alias("b"))
+            .select(*cols)
+            .first()
+        )
+
+        for r, c, e in zip(result, cols, expected):
+            self.assertEqual(r, e, str(c))
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

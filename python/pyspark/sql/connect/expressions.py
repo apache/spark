@@ -77,7 +77,7 @@ from pyspark.sql.connect.types import (
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import current_origin
-from pyspark.sql.utils import is_timestamp_ntz_preferred
+from pyspark.sql.utils import is_timestamp_ntz_preferred, enum_to_value
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
@@ -231,6 +231,7 @@ class LiteralExpression(Expression):
             ),
         )
 
+        value = enum_to_value(value)
         if isinstance(dataType, NullType):
             assert value is None
 
@@ -295,6 +296,7 @@ class LiteralExpression(Expression):
 
     @classmethod
     def _infer_type(cls, value: Any) -> DataType:
+        value = enum_to_value(value)
         if value is None:
             return NullType()
         elif isinstance(value, (bytes, bytearray)):

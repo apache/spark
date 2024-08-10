@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.DecorrelateInnerQuery
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -252,8 +251,42 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
-   * Returns the inner query attributes that are guaranteed to have a single value for each
-   * outer row. Therefore, a scalar subquery is allowed to group-by on these attributes.
+   * Matches an equality 'expr = func(outer)', where 'func(outer)' depends on outer rows or
+   * is a constant.
+   * A scalar subquery is allowed to group-by on 'expr', as they are guaranteed to have exactly
+   * one value for every outer row.
+   * Positive examples:
+   *   - x + 1 = outer(a)
+   *   - cast(x as date) = outer(b)
+   *   - y + z = 100
+   *   - y / 10 = outer(b) + outer(c)
+   * In all of these examples, the left side of the equality will be returned.
+   *
+   * Negative examples:
+   *    - x < outer(b)
+   *    - x = y
+   * In all of these examples, None will be returned.
+   * @param expr
+   * @return
+   */
+  private def getEquivalentToOuter(expr: Expression): Option[Expression] = {
+    val allowConstants =
+      SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
+
+    expr match {
+      case EqualTo(left, x)
+        if ((allowConstants || containsOuter(x)) &&
+          !x.exists(_.isInstanceOf[Attribute])) => Some(left)
+      case EqualTo(x, right)
+        if ((allowConstants || containsOuter(x)) &&
+          !x.exists(_.isInstanceOf[Attribute])) => Some(right)
+      case _ => None
+    }
+  }
+
+  /**
+   * Returns the inner query expressions that are guaranteed to have a single value for each
+   * outer row. Therefore, a scalar subquery is allowed to group-by on these expressions.
    * We can derive these from correlated equality predicates, though we need to take care about
    * propagating this through operators like OUTER JOIN or UNION.
    *
@@ -261,6 +294,7 @@ object SubExprUtils extends PredicateHelper {
    * - x = outer(a) AND y = outer(b)
    * - x = 1
    * - x = outer(a) + 1
+   * - cast(x as date) = current_date() + outer(b)
    *
    * Negative examples:
    * - x <= outer(a)
@@ -274,31 +308,31 @@ object SubExprUtils extends PredicateHelper {
    *   select *, (select count(*) from
    *     (select * from y where y1 = x1 union all select * from y) group by y1) from x;
    */
-  def getCorrelatedEquivalentInnerColumns(plan: LogicalPlan): AttributeSet = {
+  def getCorrelatedEquivalentInnerExpressions(plan: LogicalPlan): ExpressionSet = {
     plan match {
       case Filter(cond, child) =>
-        val correlated = AttributeSet(splitConjunctivePredicates(cond)
+        val equivalentExprs = ExpressionSet(splitConjunctivePredicates(cond)
           .filter(
             SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
             || containsOuter(_))
-          .filter(DecorrelateInnerQuery.canPullUpOverAgg)
-          .flatMap(_.references))
-        correlated ++ getCorrelatedEquivalentInnerColumns(child)
+          .flatMap(getEquivalentToOuter))
+        equivalentExprs ++ getCorrelatedEquivalentInnerExpressions(child)
 
       case Join(left, right, joinType, _, _) =>
          joinType match {
           case _: InnerLike =>
-            AttributeSet(plan.children.flatMap(child => getCorrelatedEquivalentInnerColumns(child)))
-          case LeftOuter => getCorrelatedEquivalentInnerColumns(left)
-          case RightOuter => getCorrelatedEquivalentInnerColumns(right)
-          case FullOuter => AttributeSet.empty
-          case LeftSemi => getCorrelatedEquivalentInnerColumns(left)
-          case LeftAnti => getCorrelatedEquivalentInnerColumns(left)
-          case _ => AttributeSet.empty
+            ExpressionSet(plan.children.flatMap(
+              child => getCorrelatedEquivalentInnerExpressions(child)))
+          case LeftOuter => getCorrelatedEquivalentInnerExpressions(left)
+          case RightOuter => getCorrelatedEquivalentInnerExpressions(right)
+          case FullOuter => ExpressionSet().empty
+          case LeftSemi => getCorrelatedEquivalentInnerExpressions(left)
+          case LeftAnti => getCorrelatedEquivalentInnerExpressions(left)
+          case _ => ExpressionSet().empty
         }
 
-      case _: Union => AttributeSet.empty
-      case Except(left, right, _) => getCorrelatedEquivalentInnerColumns(left)
+      case _: Union => ExpressionSet().empty
+      case Except(left, _, _) => getCorrelatedEquivalentInnerExpressions(left)
 
       case
         _: Aggregate |
@@ -318,9 +352,10 @@ object SubExprUtils extends PredicateHelper {
         _: WithCTE |
         _: Range |
         _: SubqueryAlias =>
-        AttributeSet(plan.children.flatMap(child => getCorrelatedEquivalentInnerColumns(child)))
+        ExpressionSet(plan.children.flatMap(child =>
+          getCorrelatedEquivalentInnerExpressions(child)))
 
-      case _ => AttributeSet.empty
+      case _ => ExpressionSet().empty
     }
   }
 }

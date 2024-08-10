@@ -2522,10 +2522,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
+  def invalidLocationError(
+      location: String,
+      errorClass: String,
+      cause: Throwable = null): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_EMPTY_LOCATION",
-      messageParameters = Map("location" -> location))
+      errorClass = errorClass,
+      messageParameters = Map("location" -> location),
+      cause = cause)
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
@@ -2606,6 +2610,33 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       messageParameters = Map("version" -> version.toString),
       cause = null)
+  }
+
+  def invalidChangeLogReaderVersion(version: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",
+      messageParameters = Map("version" -> version.toString),
+      cause = null
+    )
+  }
+
+  def invalidChangeLogWriterVersion(version: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_WRITER_VERSION",
+      messageParameters = Map("version" -> version.toString),
+      cause = null
+    )
+  }
+
+  def notEnoughMemoryToLoadStore(
+      stateStoreId: String,
+      stateStoreProviderName: String,
+      e: Throwable): Throwable = {
+    new SparkException(
+      errorClass = s"CANNOT_LOAD_STATE_STORE.${stateStoreProviderName}_OUT_OF_MEMORY",
+      messageParameters = Map("stateStoreId" -> stateStoreId),
+      cause = e
+    )
   }
 
   def cannotLoadStore(e: Throwable): Throwable = {

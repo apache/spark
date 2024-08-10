@@ -32,6 +32,7 @@ from typing import (
 from pyspark.sql.column import Column as ParentColumn
 from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
 from pyspark.sql.types import DataType
+from pyspark.sql.utils import enum_to_value
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
@@ -69,6 +70,7 @@ def _bin_op(
     other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     reverse: bool = False,
 ) -> ParentColumn:
+    other = enum_to_value(other)
     if other is None or isinstance(
         other,
         (
@@ -351,6 +353,9 @@ class Column(ParentColumn):
     def substr(
         self, startPos: Union[int, ParentColumn], length: Union[int, ParentColumn]
     ) -> ParentColumn:
+        startPos = enum_to_value(startPos)
+        length = enum_to_value(length)
+
         if type(startPos) != type(length):
             raise PySparkTypeError(
                 errorClass="NOT_SAME_TYPE",
@@ -373,6 +378,7 @@ class Column(ParentColumn):
         return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
     def __eq__(self, other: Any) -> ParentColumn:  # type: ignore[override]
+        other = enum_to_value(other)
         if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):

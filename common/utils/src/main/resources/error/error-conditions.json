@@ -471,6 +471,20 @@
     ],
     "sqlState" : "0A000"
   },
+  "CLUSTERING_COLUMNS_MISMATCH" : {
+    "message" : [
+      "Specified clustering does not match that of the existing table <tableName>.",
+      "Specified clustering columns: [<specifiedClusteringString>].",
+      "Existing clustering columns: [<existingClusteringString>]."
+    ],
+    "sqlState" : "42P10"
+  },
+  "CLUSTERING_NOT_SUPPORTED" : {
+    "message" : [
+      "'<operation>' does not support clustering."
+    ],
+    "sqlState" : "42000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -2489,6 +2503,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOCATION" : {
+    "message" : [
+      "The location name cannot be an invalid URI, but `<location>` was given."
+    ],
+    "sqlState" : "42K05"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -2598,6 +2618,11 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "BOOLEAN" : {
+        "message" : [
+          "expects a boolean literal, but got <invalidValue>."
+        ]
+      },
       "CHARSET" : {
         "message" : [
           "expects one of the <charsets>, but got <charset>."
@@ -2608,9 +2633,24 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "DOUBLE" : {
+        "message" : [
+          "expects an double literal, but got <invalidValue>."
+        ]
+      },
+      "INTEGER" : {
+        "message" : [
+          "expects an integer literal, but got <invalidValue>."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Expects `length` greater than or equal to 0, but got <length>."
+        ]
+      },
+      "LONG" : {
+        "message" : [
+          "expects a long literal, but got <invalidValue>."
         ]
       },
       "NULL" : {
@@ -2631,6 +2671,11 @@
       "START" : {
         "message" : [
           "Expects a positive or a negative value for `start`, but got 0."
+        ]
+      },
+      "STRING" : {
+        "message" : [
+          "expects a string literal, but got <invalidValue>."
         ]
       },
       "ZERO_INDEX" : {
@@ -3166,6 +3211,12 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_WINDOW_SPECIFICATION" : {
+    "message" : [
+      "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
+    ],
+    "sqlState" : "42P20"
+  },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify time travel in both the time travel clause and options."
@@ -3605,7 +3656,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."
     ],
     "sqlState" : "42K0G"
   },
@@ -3647,8 +3698,8 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the routine <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
+      "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
+      "Choose a different name, drop or replace the existing <existingRoutineType>, or add the IF NOT EXISTS clause to tolerate a pre-existing <newRoutineType>."
     ],
     "sqlState" : "42723"
   },
@@ -3789,6 +3840,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
+    "message" : [
+      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
+    ],
+    "sqlState" : "42802"
+  },
   "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
     "message" : [
       "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
@@ -3844,9 +3901,21 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INVALID_CONFIG_AFTER_RESTART" : {
+    "message" : [
+      "Cannot change <configName> from <oldConfig> to <newConfig> between restarts. Please set <configName> to <oldConfig>, or restart with a new checkpoint directory."
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_INVALID_PROVIDER" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
+  },
+  "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
+    "message" : [
+      "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
     ],
     "sqlState" : "42K06"
   },
@@ -3948,6 +4017,14 @@
       "The options <options> cannot be specified together. Please specify the one."
     ],
     "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_OPERATOR_METADATA" : {
+    "message" : [
+      "Failed to read the operator metadata for checkpointLocation=<checkpointLocation> and batchId=<batchId>.",
+      "Either the file does not exist, or the file is corrupted.",
+      "Rerun the streaming query to construct the operator metadata, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
   },
   "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
     "message" : [
@@ -4191,6 +4268,12 @@
       "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
+  },
+  "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
+    "message" : [
+      "Unknown primitive type with id <id> was found in a variant value."
+    ],
+    "sqlState" : "22023"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -5295,11 +5378,6 @@
     "message" : [
       "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
       "Try moving this class out of its parent class."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1004" : {
-    "message" : [
-      "Window specification <windowName> is not defined in the WINDOW clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_1005" : {

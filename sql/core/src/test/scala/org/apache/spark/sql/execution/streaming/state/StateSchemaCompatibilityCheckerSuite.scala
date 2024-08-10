@@ -275,7 +275,8 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       val schemaFilePath = Some(new Path(stateSchemaDir,
         s"${batchId}_${UUID.randomUUID().toString}"))
       val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-        schemaFilePath = schemaFilePath)
+        oldSchemaFilePath = schemaFilePath,
+        newSchemaFilePath = schemaFilePath)
       checker.createSchemaFile(storeColFamilySchema,
         SchemaHelper.SchemaWriter.createSchemaWriter(stateSchemaVersion))
       val stateSchema = checker.readSchemaFile()
@@ -359,6 +360,14 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     }
   }
 
+  private def getNewSchemaPath(stateSchemaDir: Path, stateSchemaVersion: Int): Option[Path] = {
+    if (stateSchemaVersion == 3) {
+      Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
+    } else {
+      None
+    }
+  }
+
   private def verifyException(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
@@ -373,9 +382,9 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
       -> formatValidationForValue.toString)
 
+    val stateSchemaDir = stateSchemaDirPath(stateInfo)
     Seq(2, 3).foreach { stateSchemaVersion =>
       val schemaFilePath = if (stateSchemaVersion == 3) {
-        val stateSchemaDir = stateSchemaDirPath(stateInfo)
         Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
       } else {
         None
@@ -384,10 +393,13 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
         oldKeySchema, oldValueSchema,
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
+      val newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion)
       val result = Try(
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
           oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-          schemaFilePath = schemaFilePath, extraOptions = extraOptions)
+          oldSchemaFilePath = schemaFilePath,
+          newSchemaFilePath = newSchemaFilePath,
+          extraOptions = extraOptions)
       ).toEither.fold(Some(_), _ => None)
 
       val ex = if (result.isDefined) {
@@ -399,7 +411,12 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
             keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
           StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
             newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-            schemaFilePath = schemaFilePath, extraOptions = extraOptions)
+            extraOptions = extraOptions,
+            oldSchemaFilePath = stateSchemaVersion match {
+                case 3 => newSchemaFilePath
+                case _ => None
+            },
+            newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion))
         }
       }
 
@@ -433,9 +450,9 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
       -> formatValidationForValue.toString)
 
+    val stateSchemaDir = stateSchemaDirPath(stateInfo)
     Seq(2, 3).foreach { stateSchemaVersion =>
       val schemaFilePath = if (stateSchemaVersion == 3) {
-        val stateSchemaDir = stateSchemaDirPath(stateInfo)
         Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
       } else {
         None
@@ -446,14 +463,18 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-        schemaFilePath = schemaFilePath, extraOptions = extraOptions)
+        oldSchemaFilePath = schemaFilePath,
+        newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
+        extraOptions = extraOptions)
 
       val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
         newKeySchema, newValueSchema,
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-        schemaFilePath = schemaFilePath, extraOptions = extraOptions)
+        oldSchemaFilePath = schemaFilePath,
+        newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
+        extraOptions = extraOptions)
     }
   }
 }

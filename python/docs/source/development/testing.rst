@@ -69,7 +69,7 @@ Running Tests for Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to test the changes in Protobuf definitions, for example, at
-`spark/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/connect/common/src/main/protobuf/spark/connect>`_,
+`spark/sql/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/sql/connect/common/src/main/protobuf/spark/connect>`_,
 you should regenerate Python Protobuf client first by running ``dev/connect-gen-protos.sh``.
 
 

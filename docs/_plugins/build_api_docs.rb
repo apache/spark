@@ -194,7 +194,12 @@ end
 
 def build_error_docs
   print_header "Building error docs."
-  system("python '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+
+  if !system("which python3 >/dev/null 2>&1")
+    raise("Missing python3 in your path, stopping error doc generation")
+  end
+
+  system("python3 '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
 

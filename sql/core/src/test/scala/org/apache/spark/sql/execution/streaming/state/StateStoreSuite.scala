@@ -50,6 +50,38 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+// MaintenanceErrorOnCertainPartitionsProvider is a test-only provider that throws an
+// exception during maintenance for partitions 0 and 1 (these are arbitrary choices). It is
+// used to test that an exception in a single provider's maintenance does not affect other
+// providers that do not experience exceptions.
+class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStoreProvider {
+  private var id: StateStoreId = null
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
+    id = stateStoreId
+
+    super.init(
+      stateStoreId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies,
+      storeConfs, hadoopConf, useMultipleValuesPerKey)
+  }
+
+  override def doMaintenance(): Unit = {
+    if (id.partitionId == 0 || id.partitionId == 1) {
+      throw new RuntimeException("Intentional maintenance failure")
+    }
+    super.doMaintenance()
+  }
+}
+
 class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   import FakeStateStoreProviderWithMaintenanceError._
   private var id: StateStoreId = null
@@ -1578,42 +1610,57 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  test("SPARK-44438: maintenance task should be shutdown on error") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
+  test("SPARK-48997: maintenance threads with exceptions unload only themselves") {
     val sqlConf = getDefaultSQLConf(
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
     )
     // Make maintenance interval small so that maintenance task is called right after scheduling.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
-    // Use the `FakeStateStoreProviderWithMaintenanceError` to run the test
-    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
-      classOf[FakeStateStoreProviderWithMaintenanceError].getName)
+    // Use the `MaintenanceErrorOnCertainPartitionsProvider` to run the test
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[MaintenanceErrorOnCertainPartitionsProvider].getName
+    )
 
-    quietly {
-      withSpark(new SparkContext(conf)) { sc =>
-        withCoordinatorRef(sc) { _ =>
-          FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.set(false)
-          val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
-          val storeConf = StateStoreConf(sqlConf)
+    val conf = new SparkConf().setMaster("local").setAppName("test")
 
-          // get the state store and kick off the maintenance task
-          StateStore.get(storeId, null, null,
-            NoPrefixKeyStateEncoderSpec(keySchema), 0, useColumnFamilies = false,
-            storeConf, sc.hadoopConfiguration)
+    withSpark(new SparkContext(conf)) { sc =>
+      withCoordinatorRef(sc) { _ =>
+        // 0 and 1's maintenance will fail
+        val provider0Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 0), UUID.randomUUID)
+        val provider1Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 1), UUID.randomUUID)
+        val provider2Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 2), UUID.randomUUID)
 
-          eventually(timeout(30.seconds)) {
-            assert(!StateStore.isMaintenanceRunning)
-          }
+        // Create provider 2 first to start the maintenance task + pool
+        StateStore.get(
+          provider2Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          // SPARK-45002: The maintenance task thread failure should not invoke the
-          // SparkUncaughtExceptionHandler which could lead to the executor process
-          // getting killed.
-          assert(!FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.get)
+        // The following 2 calls to `get` will cause the associated maintenance to fail
+        StateStore.get(
+          provider0Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          StateStore.stop()
+        StateStore.get(
+          provider1Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
+
+        // Wait for the maintenance task for all the providers to run: it should happen relatively
+        // quickly since the maintenance interval is small.
+        eventually(timeout(5.seconds)) {
+          assert(!StateStore.isLoaded(provider0Id))
+          assert(!StateStore.isLoaded(provider1Id))
+          assert(StateStore.isLoaded(provider2Id))
         }
       }
     }

@@ -32,7 +32,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
     val interpreter = SqlScriptingInterpreter()
     val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody)
+    val executionPlan = interpreter.buildExecutionPlan(compoundBody, spark)
     val result = executionPlan.flatMap {
       case statement: SingleStatementExec =>
         if (statement.isExecuted) {
@@ -213,5 +213,153 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row] // drop var - implicit
     )
     verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("if") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   SELECT 42;
+        | END IF;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if nested") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   IF 2=1 THEN
+        |     SELECT 41;
+        |   ELSE
+        |     SELECT 42;
+        |   END IF;
+        | END IF;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if else going in if") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=1
+        | THEN
+        |   SELECT 42;
+        | ELSE
+        |   SELECT 43;
+        | END IF;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if else if going in else if") {
+    val commands =
+      """
+        |BEGIN
+        |  IF 1=2
+        |  THEN
+        |    SELECT 42;
+        |  ELSE IF 1=1
+        |  THEN
+        |    SELECT 43;
+        |  ELSE
+        |    SELECT 44;
+        |  END IF;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if else going in else") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=2
+        | THEN
+        |   SELECT 42;
+        | ELSE
+        |   SELECT 43;
+        | END IF;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if else if going in else") {
+    val commands =
+      """
+        |BEGIN
+        |  IF 1=2
+        |  THEN
+        |    SELECT 42;
+        |  ELSE IF 1=3
+        |  THEN
+        |    SELECT 43;
+        |  ELSE
+        |    SELECT 44;
+        |  END IF;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(Seq(Row(44)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |IF (SELECT COUNT(*) > 2 FROM t) THEN
+          |   SELECT 42;
+          | ELSE
+          |   SELECT 43;
+          | END IF;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("if else if with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  IF (SELECT COUNT(*) > 2 FROM t) THEN
+          |    SELECT 42;
+          |  ELSE IF (SELECT COUNT(*) > 1 FROM t) THEN
+          |    SELECT 43;
+          |  ELSE
+          |    SELECT 44;
+          |  END IF;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
   }
 }

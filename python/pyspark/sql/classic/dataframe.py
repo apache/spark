@@ -1226,14 +1226,24 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
         # if subset length is greater than 1, it must be a sequence of str
-        if len(subset) > 1:
-            assert all(isinstance(c, str) for c in subset)
-
         if not subset:
             jdf = self._jdf.dropDuplicates()
         elif len(subset) == 1 and isinstance(subset[0], list):
-            jdf = self._jdf.dropDuplicates(self._jseq(subset[0]))
+            item = subset[0]
+            for c in item:
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
+            jdf = self._jdf.dropDuplicates(self._jseq(item))
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
