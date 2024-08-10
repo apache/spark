@@ -55,21 +55,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   lazy private val hadoopConf = session.sparkContext.hadoopConfiguration
 
-  private def withProjectAndFilter(
-      project: Seq[NamedExpression],
-      filters: Seq[Expression],
-      scan: LeafExecNode,
-      needsUnsafeConversion: Boolean): SparkPlan = {
-    val filterCondition = filters.reduceLeftOption(And)
-    val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
-
-    if (withFilter.output != project || needsUnsafeConversion) {
-      ProjectExec(project, withFilter)
-    } else {
-      withFilter
-    }
-  }
-
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }

@@ -196,7 +196,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c@ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) if c.resolved =>
+    case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) if c.resolved =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -205,7 +205,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c@ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -446,8 +446,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "REFRESH FUNCTION")
       }
 
-    case CreateFunction
-      (ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
+    case CreateFunction(
+        ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
       CreateFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         className,
