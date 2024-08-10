@@ -321,6 +321,9 @@ trait Row extends Serializable {
    */
   def getSeq[T](i: Int): Seq[T] = {
     getAs[scala.collection.Seq[T]](i) match {
+      // SPARK-49178: When the type of `Seq[T]` is `mutable.ArraySeq[T]`,
+      // rewrap `mutable.ArraySeq[T].array` as `immutable.ArraySeq[T]`
+      // to avoid a collection copy.
       case seq: mutable.ArraySeq[T] =>
         seq.array.toImmutableArraySeq.asInstanceOf[Seq[T]]
       case other if other != null => other.toSeq
