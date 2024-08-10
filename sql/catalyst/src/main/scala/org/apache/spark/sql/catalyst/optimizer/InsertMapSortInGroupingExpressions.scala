@@ -60,8 +60,9 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
           val inserted = insertMapSortRecursively(expr)
           if (expr.ne(inserted)) {
             exprToMapSort.getOrElseUpdate(
-                expr.canonicalized, Alias(inserted, "_groupingmapsort")())
-              .toAttribute
+              expr.canonicalized,
+              Alias(inserted, "_groupingmapsort")()
+            ).toAttribute
           } else {
             expr
           }

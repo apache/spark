@@ -295,6 +295,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
+      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
+      // so the grouping keys can only be attribute and literal which makes
+      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
       InsertMapSortInGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
