@@ -134,11 +134,9 @@ object RowSetUtils {
         TColumn.binaryVal(new TBinaryColumn(values, nulls))
 
       case _ =>
-        var i = 0
         val rowSize = rows.length
         val values = new java.util.ArrayList[String](rowSize)
-        while (i < rowSize) {
-          val row = rows(i)
+        rows.zipWithIndex.foreach { case (row, i) =>
           nulls.set(i, row.isNullAt(ordinal))
           val value = if (row.isNullAt(ordinal)) {
             ""
@@ -146,7 +144,6 @@ object RowSetUtils {
             toHiveString((row.get(ordinal), typ), nested = true, timeFormatters, binaryFormatter)
           }
           values.add(value)
-          i += 1
         }
         TColumn.stringVal(new TStringColumn(values, nulls))
     }
