@@ -219,6 +219,7 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive boolean.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getBoolean(i: Int): Boolean = getAnyValAs[Boolean](i)
 
@@ -226,6 +227,7 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive byte.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getByte(i: Int): Byte = getAnyValAs[Byte](i)
 
@@ -233,6 +235,7 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive short.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getShort(i: Int): Short = getAnyValAs[Short](i)
 
@@ -240,6 +243,7 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive int.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getInt(i: Int): Int = getAnyValAs[Int](i)
 
@@ -247,6 +251,7 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive long.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getLong(i: Int): Long = getAnyValAs[Long](i)
 
@@ -255,6 +260,7 @@ trait Row extends Serializable {
    * Throws an exception if the type mismatches or if the value is null.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getFloat(i: Int): Float = getAnyValAs[Float](i)
 
@@ -262,6 +268,7 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive double.
    *
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   def getDouble(i: Int): Double = getAnyValAs[Double](i)
 
@@ -516,6 +523,7 @@ trait Row extends Serializable {
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws ClassCastException when data type does not match.
+   * @throws SparkException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
     if (isNullAt(i)) throw DataTypeErrors.valueIsNullError(i)
