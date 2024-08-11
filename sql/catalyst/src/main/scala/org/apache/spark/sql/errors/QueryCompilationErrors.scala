@@ -1593,10 +1593,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedForV2TablesError("SHOW CREATE TABLE AS SERDE")
   }
 
-  def showColumnsNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("SHOW COLUMNS")
-  }
-
   def repairTableNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("MSCK REPAIR TABLE")
   }
