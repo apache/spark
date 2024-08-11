@@ -70,6 +70,10 @@ do
   cur_arg=$arg
 done
 
+if [ -n "${SPARK_REMOTE}" ]; then
+  connect_shell=true
+fi
+
 function main() {
   if $connect_shell; then
      export SPARK_SUBMIT_OPTS

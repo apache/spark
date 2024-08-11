@@ -67,14 +67,12 @@ Spark session available as 'spark'.
           p._1.startsWith("spark.") &&
             p._2.nonEmpty &&
             // Don't include spark.remote that we manually set later.
-            !p._1.startsWith("spark.remote") &&
-            // We use Driver class path in spark-shell. Exclude it.
-            !p._1.startsWith("spark.driver.extraClassPath"))
+            !p._1.startsWith("spark.remote"))
         .toMap
 
     val remoteString: Option[String] =
       Option(System.getProperty("spark.remote")) // Set from Spark Submit
-        .orElse(sys.env.get("SPARK_REMOTE"))
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
 
     if (remoteString.exists(_.startsWith("local"))) {
       server = Some {
@@ -85,6 +83,7 @@ Spark session available as 'spark'.
         val pb = new ProcessBuilder(args: _*)
         // So don't exclude spark-sql jar in classpath
         pb.environment().put("SPARK_CONNECT_SHELL", "0")
+        pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
         pb.start()
       }
       // Let the server start. We will directly request to set the configurations
