@@ -2379,6 +2379,8 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      checkAnswer(sql(s"SHOW COLUMNS FROM $t IN testcat.ns1.ns2"), Seq(Row("id"), Row("data")))
+      checkAnswer(sql(s"SHOW COLUMNS in $t"), Seq(Row("id"), Row("data")))
       checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
     }
   }
