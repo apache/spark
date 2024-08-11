@@ -1940,6 +1940,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_BOOLEAN_STATEMENT" : {
+    "message" : [
+      "Boolean statement is expected in the condition, but <invalidStatement> was found."
+    ],
+    "sqlState" : "22546"
+  },
   "INVALID_BOUNDARY" : {
     "message" : [
       "The boundary <boundary> is invalid: <invalidValue>."
