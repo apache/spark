@@ -320,8 +320,15 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getSeq[T](i: Int): Seq[T] = {
-    val res = getAs[scala.collection.Seq[T]](i)
-    if (res != null) res.toSeq else null
+    getAs[scala.collection.Seq[T]](i) match {
+      // SPARK-49178: When the type of `Seq[T]` is `mutable.ArraySeq[T]`,
+      // rewrap `mutable.ArraySeq[T].array` as `immutable.ArraySeq[T]`
+      // to avoid a collection copy.
+      case seq: mutable.ArraySeq[T] =>
+        seq.array.toImmutableArraySeq.asInstanceOf[Seq[T]]
+      case other if other != null => other.toSeq
+      case _ => null
+    }
   }
 
   /**
