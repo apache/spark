@@ -620,7 +620,9 @@ object SparkConnectClient {
      * Configure the builder using the env SPARK_REMOTE environment variable.
      */
     def loadFromEnvironment(): Builder = {
-      sys.env.get(SparkConnectClient.SPARK_REMOTE).foreach(connectionString)
+      Option(System.getProperty("spark.remote")) // Set from Spark Submit
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+        .foreach(connectionString)
       this
     }
 
