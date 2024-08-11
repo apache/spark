@@ -135,6 +135,7 @@ object RowSetUtils {
 
       case _ =>
         var i = 0
+        val rowSize = rows.length
         val values = new java.util.ArrayList[String](rowSize)
         rows.foreach { row =>
           nulls.set(i, row.isNullAt(ordinal))
