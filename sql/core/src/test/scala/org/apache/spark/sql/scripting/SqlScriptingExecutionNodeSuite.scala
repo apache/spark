@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.test.SharedSparkSession
-
-import scala.collection.mutable
 
 /**
  * Unit tests for execution nodes from SqlScriptingExecutionNode.scala.
