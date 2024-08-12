@@ -577,16 +577,18 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "body1", "lbl", "con1"))
   }
 
-  test("searched case - enter first body") {
+  test("searched case - enter first WHEN clause") {
     val iter = new CompoundBodyExec(Seq(
       new SearchedCaseStatementExec(
         conditions = Seq(
-          TestIfElseCondition(condVal = true, description = "con1")
+          TestIfElseCondition(condVal = true, description = "con1"),
+          TestIfElseCondition(condVal = false, description = "con2")
         ),
         conditionalBodies = Seq(
-          new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
+          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
         ),
-        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body2")))),
+        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body3")))),
         session = spark
       )
     )).getTreeIterator
@@ -609,5 +611,62 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body2"))
+  }
+
+  test("searched case - enter second WHEN clause") {
+    val iter = new CompoundBodyExec(Seq(
+      new SearchedCaseStatementExec(
+        conditions = Seq(
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = true, description = "con2")
+        ),
+        conditionalBodies = Seq(
+          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
+          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = Some(new CompoundBodyExec(Seq(TestLeafStatement("body3")))),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body2"))
+  }
+
+  test("searched case - without else (successful check)") {
+    val iter = new CompoundBodyExec(Seq(
+      new SearchedCaseStatementExec(
+        conditions = Seq(
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = true, description = "con2")
+        ),
+        conditionalBodies = Seq(
+          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
+          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = None,
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body2"))
+  }
+
+  test("searched case - without else (unsuccessful checks)") {
+    val iter = new CompoundBodyExec(Seq(
+      new SearchedCaseStatementExec(
+        conditions = Seq(
+          TestIfElseCondition(condVal = false, description = "con1"),
+          TestIfElseCondition(condVal = false, description = "con2")
+        ),
+        conditionalBodies = Seq(
+          new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
+          new CompoundBodyExec(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = None,
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2"))
   }
 }
