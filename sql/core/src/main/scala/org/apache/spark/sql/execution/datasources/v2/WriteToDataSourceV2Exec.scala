@@ -330,13 +330,12 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def write: Write
 
   override val customMetrics: Map[String, SQLMetric] =
-    write.supportedCustomMetrics().map { customMetric =>
-      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-    }.toMap
+    SQLMetrics.createV2CustomMetrics(sparkContext, write)
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(write.toBatch)
     refreshCache()
+    SQLMetrics.postV2DriverMetrics(sparkContext, write, metrics)
     writtenRows
   }
 }
@@ -355,7 +354,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
 
-  override lazy val metrics = customMetrics
+  override lazy val metrics: Map[String, SQLMetric] = customMetrics
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {

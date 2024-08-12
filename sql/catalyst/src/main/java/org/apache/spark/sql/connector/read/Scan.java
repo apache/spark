@@ -21,8 +21,7 @@ import java.util.Map;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.metric.CustomMetric;
-import org.apache.spark.sql.connector.metric.CustomTaskMetric;
+import org.apache.spark.sql.connector.metric.SupportCustomMetrics;
 import org.apache.spark.sql.connector.read.streaming.ContinuousStream;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
@@ -43,7 +42,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability;
  * @since 3.0.0
  */
 @Evolving
-public interface Scan {
+public interface Scan extends SupportCustomMetrics {
 
   /**
    * Returns the actual schema of this data source scan, which may be different from the physical
@@ -113,25 +112,6 @@ public interface Scan {
   default ContinuousStream toContinuousStream(String checkpointLocation) {
     throw new SparkUnsupportedOperationException(
       "_LEGACY_ERROR_TEMP_3149", Map.of("description", description()));
-  }
-
-  /**
-   * Returns an array of supported custom metrics with name and description.
-   * By default it returns empty array.
-   */
-  default CustomMetric[] supportedCustomMetrics() {
-    return new CustomMetric[]{};
-  }
-
-  /**
-   * Returns an array of custom metrics which are collected with values at the driver side only.
-   * Note that these metrics must be included in the supported custom metrics reported by
-   * `supportedCustomMetrics`.
-   *
-   * @since 3.4.0
-   */
-  default CustomTaskMetric[] reportDriverMetrics() {
-    return new CustomTaskMetric[]{};
   }
 
   /**

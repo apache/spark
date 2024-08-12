@@ -26,11 +26,13 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.sql.connector.metric.{CustomMetric, SupportCustomMetrics}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 import org.apache.spark.util.AccumulatorContext.internOption
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on
@@ -150,6 +152,25 @@ object SQLMetrics {
     val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
     acc.register(sc, name = metricsCache.get(customMetric.description()), countFailedValues = false)
     acc
+  }
+
+  def createV2CustomMetrics(
+    sc: SparkContext, supportCustomMetrics: SupportCustomMetrics): Map[String, SQLMetric] = {
+    supportCustomMetrics.supportedCustomMetrics().map { customMetric =>
+      customMetric.name() -> SQLMetrics.createV2CustomMetric(sc, customMetric)
+    }.toMap
+  }
+
+  def postV2DriverMetrics(sc: SparkContext, supportCustomMetrics: SupportCustomMetrics,
+    metrics: Map[String, SQLMetric]): Unit = {
+    val driveSQLMetrics = supportCustomMetrics.reportDriverMetrics().map(customTaskMetric => {
+      val metric = metrics(customTaskMetric.name())
+      metric.set(customTaskMetric.value())
+      metric
+    })
+    val executionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sc, executionId,
+      driveSQLMetrics.toImmutableArraySeq)
   }
 
   /**

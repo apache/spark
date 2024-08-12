@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -193,6 +194,27 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
       df2.writeTo("test").overwrite(lit(true))
       checkAnswer(session.read.table("test"), Row(2, "y") :: Nil)
 
+    } finally {
+      SparkSession.setActiveSession(spark)
+      SparkSession.setDefaultSession(spark)
+    }
+  }
+
+  test("SPARK-49210: report driver metrics from fallback write") {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    try {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+        .getOrCreate()
+      val df = session.createDataFrame(Seq((1, "p1"), (2, "p2"), (3, "p2")))
+      df.write.partitionBy("_2").mode("append").format(v2Format).saveAsTable("test")
+      val statusStore = session.sharedState.statusStore
+      val execId = statusStore.executionsList()
+        .find(x => x.physicalPlanDescription.contains("AppendData")).get.executionId
+      val metrics = statusStore.executionMetrics(execId)
+      assert(metrics.head._2 == "2")
     } finally {
       SparkSession.setActiveSession(spark)
       SparkSession.setDefaultSession(spark)
@@ -376,6 +398,8 @@ class InMemoryTableWithV1Fallback(
     }
 
     override def build(): V1Write = new V1Write {
+      var writtenPartitionsCount: Long = 0L
+
       override def toInsertableRelation: InsertableRelation = {
         (data: DataFrame, overwrite: Boolean) => {
           assert(!overwrite, "V1 write fallbacks cannot be called with overwrite=true")
@@ -389,7 +413,16 @@ class InMemoryTableWithV1Fallback(
               dataMap.put(partition, elements.toImmutableArraySeq)
             }
           }
+          writtenPartitionsCount = dataMap.size
         }
+      }
+
+      override def supportedCustomMetrics(): Array[CustomMetric] = {
+        Array(new WrittenPartitionDriverMetric)
+      }
+
+      override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+        Array(new WrittenPartitionDriverTaskMetric(writtenPartitionsCount))
       }
     }
   }
@@ -451,4 +484,15 @@ object OnlyOnceOptimizerRule extends Rule[LogicalPlan] {
         l.copy(data = l.data.drop(1))
     }
   }
+}
+
+class WrittenPartitionDriverMetric extends CustomMetric {
+  override def name(): String = "number_of_written_partitions"
+  override def description(): String = "Simple custom driver metrics: number of written partitions"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = taskMetrics.sum.toString
+}
+
+class WrittenPartitionDriverTaskMetric(value : Long) extends CustomTaskMetric {
+  override def name(): String = "number_of_written_partitions"
+  override def value(): Long = value
 }

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.sources.InsertableRelation
 
 /**
@@ -62,9 +63,15 @@ sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
   def refreshCache: () => Unit
   def write: V1Write
 
+  protected val customMetrics: Map[String, SQLMetric] =
+    SQLMetrics.createV2CustomMetrics(sparkContext, write)
+
+  override lazy val metrics: Map[String, SQLMetric] = customMetrics
+
   override def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV1(write.toInsertableRelation)
     refreshCache()
+    SQLMetrics.postV2DriverMetrics(sparkContext, write, metrics)
     writtenRows
   }
 }
