@@ -196,8 +196,7 @@ class AstBuilder extends DataTypeAstBuilder
       case _ =>
     }
 
-    beginLabelCtx.
-      map(_.multipartIdentifier().getText)
+    beginLabelCtx.map(_.multipartIdentifier().getText)
       .getOrElse(java.util.UUID.randomUUID.toString).toLowerCase(Locale.ROOT)
   }
 

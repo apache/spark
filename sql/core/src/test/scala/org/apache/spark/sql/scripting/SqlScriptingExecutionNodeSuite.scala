@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.test.SharedSparkSession
@@ -42,7 +42,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       isInternal = false)
 
   case class DummyLogicalPlan() extends LeafNode {
-    override def output: Seq[Nothing] = Seq.empty
+    override def output: Seq[Attribute] = Seq.empty
   }
 
   case class TestWhileCondition(
