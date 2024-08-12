@@ -697,7 +697,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-35680: format negative month intervals") {
+  test("SPARK-49208: format negative month intervals") {
     import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0' MONTH"),
