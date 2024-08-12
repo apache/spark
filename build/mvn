@@ -111,36 +111,36 @@ function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 install_mvn() {
   local MVN_VERSION=`grep "<maven.version>" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
   MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
-  if [ ! -f "$MVN_BIN" ]; then
-    MVN_BIN="$(command -v mvn)"
-    if [ "$MVN_BIN" ]; then
-      local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
-    fi
-    if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
-      local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
-      local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
-      local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
-      local MIRROR_URL_QUERY="?action=download"
+  if [ -f "$MVN_BIN" ]; then
+    return
+  fi
+  MVN_BIN="$(command -v mvn)"
+  if [ "$MVN_BIN" ]; then
+    local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
+  fi
+  if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
+    local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
+    local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
+    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
+    local MIRROR_URL_QUERY="?action=download"
 
-      if [ $(command -v curl) ]; then
-        if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
-          # Fall back to archive.apache.org for older Maven
-          echo "Falling back to archive.apache.org to download Maven"
-          APACHE_MIRROR="https://archive.apache.org/dist"
-          MIRROR_URL_QUERY=""
-        fi
+    if [ $(command -v curl) ]; then
+      if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
+        # Fall back to archive.apache.org for older Maven
+        echo "Falling back to archive.apache.org to download Maven"
+        APACHE_MIRROR="https://archive.apache.org/dist"
+        MIRROR_URL_QUERY=""
       fi
-
-      install_app \
-        "${APACHE_MIRROR}" \
-        "${FILE_PATH}" \
-        "${MIRROR_URL_QUERY}" \
-        "sha512" \
-        "${MVN_TARBALL}" \
-        "apache-maven-${MVN_VERSION}/bin/mvn"
-
-      MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
     fi
+
+    install_app \
+      "${APACHE_MIRROR}" \
+      "${FILE_PATH}" \
+      "${MIRROR_URL_QUERY}" \
+      "sha512" \
+      "${MVN_TARBALL}"
+
+    MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
   fi
 }
 
