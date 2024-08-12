@@ -869,7 +869,11 @@ object FunctionRegistry {
 
     // Avro
     expression[FromAvro]("from_avro"),
-    expression[ToAvro]("to_avro")
+    expression[ToAvro]("to_avro"),
+
+    // Protobuf
+    expression[FromProtobuf]("from_protobuf"),
+    expression[ToProtobuf]("to_protobuf")
   )
 
   val builtin: SimpleFunctionRegistry = {
