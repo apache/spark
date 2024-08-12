@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
-import java.util
+import java.{util => jutil}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -3398,8 +3398,8 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
       ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    val newProps = new util.HashMap[String, String]
+      properties: jutil.Map[String, String]): Table = {
+    val newProps = new jutil.HashMap[String, String]
     newProps.putAll(properties)
     newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
     newProps.put(TableCatalog.PROP_IS_MANAGED_LOCATION, "true")
