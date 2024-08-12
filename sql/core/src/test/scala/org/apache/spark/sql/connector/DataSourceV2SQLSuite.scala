@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
+import java.util
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -35,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -3340,9 +3341,26 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-49099: Switch current schema with custom spark_catalog") {
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
     withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryCatalog].getName) {
       sql("CREATE DATABASE test_db")
       sql("USE test_db")
+    }
+  }
+
+  test("SPARK-49183: custom spark_catalog generates location for managed tables") {
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[SimpleDelegatingCatalog].getName) {
+      withTable("t") {
+        sql(s"CREATE TABLE t (i INT) USING $v2Format")
+        val table = catalog(SESSION_CATALOG_NAME).asTableCatalog
+          .loadTable(Identifier.of(Array("default"), "t"))
+        assert(!table.properties().containsKey(TableCatalog.PROP_EXTERNAL))
+      }
     }
   }
 
@@ -3373,4 +3391,18 @@ class FakeV2Provider extends SimpleTableProvider {
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
   override def useNullableQuerySchema(): Boolean = false
+}
+
+class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val newProps = new util.HashMap[String, String]
+    newProps.putAll(properties)
+    newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
+    newProps.put(TableCatalog.PROP_IS_MANAGED_LOCATION, "true")
+    super.createTable(ident, columns, partitions, newProps)
+  }
 }
