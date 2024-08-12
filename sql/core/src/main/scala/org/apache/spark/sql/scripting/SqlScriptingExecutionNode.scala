@@ -221,7 +221,7 @@ class CompoundBodyExec(
         statement.reset() // Clear all flags and result
         handler.reset()
         returnHere = curr
-        curr = Some(handler.getHandlerBody)
+        curr = Some(handler.body)
       }
     }
     statement
@@ -240,7 +240,7 @@ class CompoundBodyExec(
       stopIteration = true
       // If label of the block matches the label of the leave statement,
       // mark the leave statement as used
-      if (label.getOrElse("").equals(leave.getLabel)) {
+      if (label.getOrElse("").equals(leave.label)) {
         leave.used = true
       }
     }
@@ -314,11 +314,9 @@ class CompoundBodyExec(
     }
 }
 
-class ErrorHandlerExec(body: CompoundBodyExec) extends NonLeafStatementExec {
+class ErrorHandlerExec(val body: CompoundBodyExec) extends NonLeafStatementExec {
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
-
-  def getHandlerBody: CompoundBodyExec = body
 
   override def reset(): Unit = body.reset()
 }
@@ -331,8 +329,6 @@ class ErrorHandlerExec(body: CompoundBodyExec) extends NonLeafStatementExec {
 class LeaveStatementExec(val label: String) extends LeafStatementExec {
 
   var used: Boolean = false
-
-  def getLabel: String = label
 
   override def execute(session: SparkSession): Unit = ()
 
