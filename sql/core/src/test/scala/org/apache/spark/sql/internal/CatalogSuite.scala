@@ -824,7 +824,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(table.properties().get("comment").equals(description))
       assert(table.properties().get("path").equals(dir.getAbsolutePath))
       assert(table.properties().get("external").equals("true"))
-      assert(table.properties().get("location").equals("file:" + dir.getAbsolutePath))
+      assert(table.properties().get("location").equals("file://" + dir.getAbsolutePath))
     }
   }
 

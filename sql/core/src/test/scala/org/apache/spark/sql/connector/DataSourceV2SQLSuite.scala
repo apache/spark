@@ -442,7 +442,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:/tmp/foo")
+        assert(location === "file:///tmp/foo")
       }
     }
   }
@@ -459,7 +459,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:/tmp/foo")
+        assert(location === "file:///tmp/foo")
       }
     }
   }
@@ -2105,15 +2105,10 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("REPLACE TABLE: v1 table") {
-    val e = intercept[AnalysisException] {
-      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
-    }
-    checkError(
-      exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      sqlState = "0A000",
-      parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
-        "operation" -> "REPLACE TABLE"))
+    sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    val v2Catalog = catalog("spark_catalog").asTableCatalog
+    val table = v2Catalog.loadTable(Identifier.of(Array("default"), "tbl"))
+    assert(table.properties().get(TableCatalog.PROP_PROVIDER) == classOf[SimpleScanSource].getName)
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
