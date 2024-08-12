@@ -1246,7 +1246,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
       table.map {
-        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) =>
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog)
+          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
           if (isStreaming) {
             if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
               throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
