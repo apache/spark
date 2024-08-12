@@ -240,4 +240,13 @@ private[spark] object SchemaUtils {
     }
     field
   }
+
+  /**
+   * Get schema field type.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def getSchemaFieldType(schema: StructType, colName: String): DataType = {
+    getSchemaField(schema, colName).dataType
+  }
 }

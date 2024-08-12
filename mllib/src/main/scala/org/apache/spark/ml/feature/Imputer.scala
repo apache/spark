@@ -90,8 +90,8 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
     require(inputColNames.length == outputColNames.length, s"inputCols(${inputColNames.length})" +
       s" and outputCols(${outputColNames.length}) should have the same length")
     val outputFields = inputColNames.zip(outputColNames).map { case (inputCol, outputCol) =>
-      val inputField = schema(inputCol)
-      SchemaUtils.checkNumericType(schema, inputCol)
+      val inputField = SchemaUtils.getSchemaField(schema, inputCol)
+      SchemaUtils.checkNumericType(inputField.dataType, inputCol, "")
       StructField(outputCol, inputField.dataType, inputField.nullable)
     }
     StructType(schema ++ outputFields)
@@ -175,7 +175,11 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
       case Imputer.median =>
         // Function approxQuantile will ignore null automatically.
         // For a column only containing null, approxQuantile will return an empty array.
-        dataset.select(cols.toImmutableArraySeq: _*)
+        val quantileColNames = Array.tabulate(inputColumns.length)(index => s"c_$index")
+        val quantileDataset = dataset.select(inputColumns.zipWithIndex.map {
+          case (colName, index) => col(colName).alias(quantileColNames(index))
+        }.toImmutableArraySeq: _*)
+        quantileDataset.select(cols.toImmutableArraySeq: _*)
           .stat.approxQuantile(inputColumns, Array(0.5), $(relativeError))
           .map(_.headOption.getOrElse(Double.NaN))
 
@@ -271,7 +275,7 @@ class ImputerModel private[ml] (
 
     val newCols = inputColumns.map { inputCol =>
       val surrogate = surrogates(inputCol)
-      val inputType = dataset.schema(inputCol).dataType
+      val inputType = SchemaUtils.getSchemaFieldType(dataset.schema, inputCol)
       val ic = col(inputCol).cast(DoubleType)
       when(ic.isNull, surrogate)
         .when(ic === $(missingValue), surrogate)
