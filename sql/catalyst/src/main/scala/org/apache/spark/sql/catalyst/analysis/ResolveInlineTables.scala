@@ -21,12 +21,16 @@ import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.catalyst.expressions.EvalHelper
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[ResolvedInlineTable]].
  */
 object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-     EvaluateUnresolvedInlineTable.evaluate(plan)
+    plan.resolveOperatorsWithPruning(AlwaysProcess.fn, ruleId) {
+      case table: UnresolvedInlineTable if table.expressionsResolved =>
+        EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(table)
+    }
   }
 }

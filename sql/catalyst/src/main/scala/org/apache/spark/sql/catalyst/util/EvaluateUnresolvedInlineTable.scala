@@ -20,7 +20,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
 import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId}
@@ -37,13 +36,22 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   with AliasHelper with EvalHelper with CastSupport {
 
   def evaluate(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(AlwaysProcess.fn) {
+    traversePlanAndEvalUnresolvedInlineTable(plan)
+  }
+
+  def traversePlanAndEvalUnresolvedInlineTable(plan: LogicalPlan): LogicalPlan = {
+    plan match {
       case table: UnresolvedInlineTable if table.expressionsResolved =>
-        validateInputDimension(table)
-        validateInputEvaluable(table)
-        val resolvedTable = findCommonTypesAndCast(table)
-        earlyEvalIfPossible(resolvedTable)
+        evaluateUnresolvedInlineTable(table)
+      case _ => plan.mapChildren(traversePlanAndEvalUnresolvedInlineTable)
     }
+  }
+
+  def evaluateUnresolvedInlineTable(table: UnresolvedInlineTable): LogicalPlan = {
+    validateInputDimension(table)
+    validateInputEvaluable(table)
+    val resolvedTable = findCommonTypesAndCast(table)
+    earlyEvalIfPossible(resolvedTable)
   }
 
   /**
