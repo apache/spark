@@ -425,7 +425,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case ShowFunctions(
-    ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
+        ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
       ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
 
     case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
