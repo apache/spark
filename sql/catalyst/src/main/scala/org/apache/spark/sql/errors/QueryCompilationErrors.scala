@@ -204,9 +204,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def invalidStringParameter(
-                              functionName: String,
-                              parameter: String,
-                              invalidValue: Expression): Throwable = {
+      functionName: String,
+      parameter: String,
+      invalidValue: Expression): Throwable = {
     invalidParameter("STRING", functionName, parameter, invalidValue)
   }
 
@@ -3737,7 +3737,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty
     )
   }
-  
+
   def cannotConvertProtobufTypeToSqlTypeError(
       protobufColumn: String,
       sqlColumn: Seq[String],
