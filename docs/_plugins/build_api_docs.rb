@@ -157,6 +157,7 @@ def build_python_docs
   mkdir_p "api/python"
 
   puts "cp -r ../python/docs/build/html/. api/python"
+  rm_r("../python/docs/build/html/_sources")
   cp_r("../python/docs/build/html/.", "api/python")
 end
 
@@ -203,7 +204,9 @@ def build_error_docs
   || raise("Error doc generation failed")
 end
 
-build_error_docs
+if not (ENV['SKIP_ERRORDOC'] == '1')
+  build_error_docs
+end
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')
