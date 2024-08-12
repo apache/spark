@@ -1127,7 +1127,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
 class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
     """
-    Serializer used by Python worker to evaluate UDF for transformWithStateInPandasSerializer.
+    Serializer used by Python worker to evaluate UDF for
+    :meth:`pyspark.sql.GroupedData.transformWithStateInPandasSerializer`.
 
     Parameters
     ----------

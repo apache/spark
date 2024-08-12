@@ -91,7 +91,7 @@ class StatefulProcessorHandle:
         """
         Function to create new or return existing single value state variable of given type.
         The user must ensure to call this function only within the `init()` method of the
-        StatefulProcessor.
+        :class:`StatefulProcessor`.
 
         Parameters
         ----------

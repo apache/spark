@@ -373,16 +373,16 @@ class PandasGroupedOpsMixin:
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
-        requires protobuf as a dependency to transmit state messages/data. We allow the user to act
-        on per-group set of input rows along with keyed state and the user can choose to
-        output/return 0 or more rows.
+        requires protobuf, pandas and pyarrow as dependencies to process input/state data. We
+        allow the user to act on per-group set of input rows along with keyed state and the user
+        can choose to output/return 0 or more rows.
 
         For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
         in each trigger and the user's state/state variables will be stored persistently across
         invocations.
 
         The `statefulProcessor` should be a Python class that implements the interface defined in
-        pyspark.sql.streaming.stateful_processor.StatefulProcessor.
+        :class:`StatefulProcessor`.
 
         The `outputStructType` should be a :class:`StructType` describing the schema of all
         elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
@@ -417,6 +417,7 @@ class PandasGroupedOpsMixin:
         >>> from pyspark.sql.functions import col, split
         >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
         >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
+        ...
         >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
         ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
         ... # Below is a simple example of a stateful processor that counts the number of violations
@@ -456,10 +457,29 @@ class PandasGroupedOpsMixin:
         ...
         ...     def close(self) -> None:
         ...         pass
-        ...
+
+        Input DataFrame:
+        +---+-----------+
+        | id|temperature|
+        +---+-----------+
+        |  0|        123|
+        |  0|         23|
+        |  1|         33|
+        |  1|        188|
+        |  1|         88|
+        +---+-----------+
+
         >>> df.groupBy("value").transformWithStateInPandas(statefulProcessor =
         ...     SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
         ...     timeMode="None") # doctest: +SKIP
+
+        Output DataFrame:
+        +---+-----+
+        | id|count|
+        +---+-----+
+        |  0|    2|
+        |  1|    3|
+        +---+-----+
 
         Notes
         -----
