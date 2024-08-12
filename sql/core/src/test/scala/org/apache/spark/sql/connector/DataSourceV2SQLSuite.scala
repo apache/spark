@@ -27,9 +27,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, ColumnStat, CommandResult, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -49,6 +50,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -3627,6 +3629,24 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("builtin source") {
+    val fullTablename = "testcat3.default.t"
+    withTable(fullTablename) {
+      sql(
+        "CREATE TABLE " + fullTablename + " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
+      sql("select * from " + fullTablename)
+    }
+    val fullTablename2 = "spark_catalog.default.t"
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTable(fullTablename2) {
+        sql("CREATE TABLE " + fullTablename2 +
+          " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
+        sql("select * from " + fullTablename2)
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3662,3 +3682,52 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
     super.createTable(ident, columns, partitions, newProps)
   }
 }
+
+
+class V2CatalogSupportBuiltinDataSource extends DelegatingCatalogExtension {
+  override def name: String = "testcat3"
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val newProps = new util.HashMap[String, String]
+    newProps.putAll(properties)
+    newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
+    newProps.put(TableCatalog.PROP_EXTERNAL, "true")
+    super.createTable(ident, columns, partitions, newProps)
+  }
+
+  val delegateCatalog = {
+    val catalog = new InMemoryCatalog()
+    catalog.initialize(name, CaseInsensitiveStringMap.empty())
+    super.setDelegateCatalog(catalog)
+    catalog
+  }
+
+  override def loadTable(ident: Identifier): Table = {
+    val superTable = super.loadTable(ident)
+    val tableIdent = {
+      TableIdentifier(ident.name(), Some(ident.namespace().head), Some(name))
+    }
+    val uri = CatalogUtils.stringToURI(superTable.properties().get(TableCatalog.PROP_LOCATION))
+    val sparkTable = CatalogTable(
+      tableIdent,
+      tableType = CatalogTableType.EXTERNAL,
+      storage = CatalogStorageFormat.empty.copy(
+        locationUri = Some(uri),
+        properties = superTable.properties().asScala.toMap
+      ),
+      schema = superTable.schema(),
+      provider = Some(superTable.properties().get(TableCatalog.PROP_PROVIDER)),
+      tracksPartitionsInCatalog = false
+    )
+    // scalastyle:off classforname
+    Class.forName("org.apache.spark.sql.connector.catalog.V1Table")
+      .getDeclaredConstructor(classOf[CatalogTable]).newInstance(sparkTable)
+      .asInstanceOf[Table]
+    // scalastyle:on classforname
+  }
+}
+
