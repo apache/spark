@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import java.{util => jutil}
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
-import java.{util => jutil}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
