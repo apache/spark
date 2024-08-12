@@ -86,7 +86,6 @@ Spark session available as 'spark'.
           remoteString.get) ++ configs.flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
         val pb = new ProcessBuilder(args: _*)
         // So don't exclude spark-sql jar in classpath
-        pb.environment().put("SPARK_CONNECT_SHELL", "0")
         pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
         pb.start()
       }
