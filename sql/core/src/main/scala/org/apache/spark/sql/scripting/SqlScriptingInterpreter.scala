@@ -154,7 +154,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val sqlState = statement.errorState.getOrElse(throw statement.rethrow.get)
 
         // SQLWARNING and NOT FOUND are not considered as errors.
-        if (!sqlState.startsWith("01") || !sqlState.startsWith("02")) {
+        if (!sqlState.startsWith("01") && !sqlState.startsWith("02")) {
           // Throw the error for SQLEXCEPTION.
           throw statement.rethrow.get
         }
