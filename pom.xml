@@ -231,7 +231,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.1</kubernetes-client.version>
+    <kubernetes-client.version>6.13.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
