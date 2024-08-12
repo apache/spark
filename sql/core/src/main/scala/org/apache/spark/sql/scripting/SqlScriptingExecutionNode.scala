@@ -203,11 +203,13 @@ class CompoundBodyExec(
    */
   private def getHandler(condition: String): Option[ErrorHandlerExec] = {
     conditionHandlerMap.get(condition)
-      .orElse(conditionHandlerMap.get("NOT FOUND") match {
-        case Some(handler) if condition.startsWith("02") => Some(handler)
-        case _ => None
-      })
-      .orElse(conditionHandlerMap.get("SQLEXCEPTION"))
+      .orElse{
+        conditionHandlerMap.get("NOT FOUND") match {
+          // If NOT FOUND handler is defined, use it only for errors with class '02'.
+          case Some(handler) if condition.startsWith("02") => Some(handler)
+          case _ => None
+      }}
+      .orElse{conditionHandlerMap.get("SQLEXCEPTION")}
   }
 
   /**
