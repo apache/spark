@@ -3629,7 +3629,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("builtin source") {
+  test("SPARK-49211: V2 Catalog can also support built-in data sources") {
     val fullTablename = "testcat3.default.t"
     withTable(fullTablename) {
       sql(
