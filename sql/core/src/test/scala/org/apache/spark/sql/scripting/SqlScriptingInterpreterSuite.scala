@@ -368,7 +368,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("cif") {
+  test("searched case") {
     val commands =
       """
         |BEGIN
@@ -382,34 +382,33 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("cif nested") {
+  test("searched case nested") {
     val commands =
       """
         |BEGIN
         | CASE
-        |   WHEN 1 = 2 THEN
-        |     SELECT 42;
-        |   WHEN 1 IN (1,2,3) THEN
-        |     SELECT 43;
-        |   WHEN (SELECT * FROM t) THEN
-        |     SELECT * FROM b;
+        |   WHEN 1=1 THEN
+        |   CASE
+        |    WHEN 2=1 THEN
+        |     SELECT 41;
         |   ELSE
-        |     SELECT 3;
+        |     SELECT 42;
+        |   END CASE;
         | END CASE;
         |END
         |""".stripMargin
-    val expected = Seq(Seq(Row(43)))
+    val expected = Seq(Seq(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
 
-  test("cif else going in if") {
+  test("searched case second case") {
     val commands =
       """
         |BEGIN
-        | CASE (SELECT 2)
-        |   WHEN 1 THEN
+        | CASE
+        |   WHEN 1 = (SELECT 2) THEN
         |     SELECT 1;
-        |   WHEN 2 THEN
+        |   WHEN 2 = 2 THEN
         |     SELECT 42;
         |   WHEN (SELECT * FROM t) THEN
         |     SELECT * FROM b;
@@ -420,14 +419,14 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("cif else if going in else if") {
+  test("searched case going in else") {
     val commands =
       """
         |BEGIN
-        | CASE 1
-        |   WHEN 2 THEN
+        | CASE
+        |   WHEN 2 = 1 THEN
         |     SELECT 1;
-        |   WHEN 3 THEN
+        |   WHEN 3 IN (1,2) THEN
         |     SELECT 2;
         |   ELSE
         |     SELECT 43;
@@ -438,7 +437,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("cif with count") {
+  test("searched case with count") {
     withTable("t") {
       val commands =
         """
@@ -460,7 +459,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("cif else if with count") {
+  test("searched case else with count") {
     withTable("t") {
       val commands =
         """
@@ -480,6 +479,123 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("simple case") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case nested") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |   CASE 2
+        |    WHEN (SELECT 3) THEN
+        |     SELECT 41;
+        |   ELSE
+        |     SELECT 42;
+        |   END CASE;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case second case") {
+    val commands =
+      """
+        |BEGIN
+        | CASE (SELECT 2)
+        |   WHEN 1 THEN
+        |     SELECT 1;
+        |   WHEN 2 THEN
+        |     SELECT 42;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case going in else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 2 THEN
+        |     SELECT 1;
+        |   WHEN 3 THEN
+        |     SELECT 2;
+        |   ELSE
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |CASE (SELECT COUNT(*) FROM t)
+          | WHEN 1 THEN
+          |   SELECT 41;
+          | WHEN 2 THEN
+          |   SELECT 42;
+          | ELSE
+          |   SELECT 43;
+          | END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(42)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("simple case else with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  CASE (SELECT COUNT(*) FROM t)
+          |   WHEN 1 THEN
+          |     SELECT 42;
+          |   WHEN 3 THEN
+          |     SELECT 43;
+          |   ELSE
+          |     SELECT 44;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(44)))
       verifySqlScriptResult(commands, expected)
     }
   }
