@@ -28,10 +28,6 @@ class SeriesPlotPlotlyParityTests(
     def test_hist_plot(self):
         super().test_hist_plot()
 
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
-    def test_kde_plot(self):
-        super().test_kde_plot()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.plot.test_parity_series_plot_plotly import *  # noqa: F401
