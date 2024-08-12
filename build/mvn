@@ -39,21 +39,18 @@ _CALLING_DIR="$(pwd)"
 _COMPILE_JVM_OPTS="-Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m"
 
 # Installs any application tarball given a URL, the expected tarball name,
-# and, optionally, a checkable binary path to determine if the binary has
-# already been installed. Arguments:
+# and, optionally. Arguments:
 # 1 - Mirror host
 # 2 - URL path on host
 # 3 - URL query string
 # 4 - checksum suffix
 # 5 - Tarball Name
-# 6 - Checkable Binary
 install_app() {
   local mirror_host="$1"
   local url_path="$2"
   local url_query="$3"
   local checksum_suffix="$4"
   local local_tarball="${_DIR}/$5"
-  local binary="${_DIR}/$6"
   local remote_tarball="${mirror_host}/${url_path}${url_query}"
   local local_checksum="${local_tarball}.${checksum_suffix}"
   local remote_checksum="https://archive.apache.org/dist/${url_path}.${checksum_suffix}"
@@ -61,51 +58,49 @@ install_app() {
   local curl_opts="--retry 3 --retry-all-errors --silent --show-error -L"
   local wget_opts="--no-verbose"
 
-  if [ ! -f "$binary" ]; then
-    # check if we already have the tarball
-    # check if we have curl installed
-    # download application
-    if [ ! -f "${local_tarball}" -a "$(command -v curl)" ]; then
-      echo "exec: curl ${curl_opts} ${remote_tarball}" 1>&2
-      curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
-      if [ ! -z "${checksum_suffix}" ]; then
-        echo "exec: curl ${curl_opts} ${remote_checksum}" 1>&2
-        curl ${curl_opts} "${remote_checksum}" > "${local_checksum}"
-      fi
+  # check if we already have the tarball
+  # check if we have curl installed
+  # download application
+  if [ ! -f "${local_tarball}" -a "$(command -v curl)" ]; then
+    echo "exec: curl ${curl_opts} ${remote_tarball}" 1>&2
+    curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
+    if [ ! -z "${checksum_suffix}" ]; then
+      echo "exec: curl ${curl_opts} ${remote_checksum}" 1>&2
+      curl ${curl_opts} "${remote_checksum}" > "${local_checksum}"
     fi
-    # if the file still doesn't exist, lets try `wget` and cross our fingers
-    if [ ! -f "${local_tarball}" -a "$(command -v wget)" ]; then
-      echo "exec: wget ${wget_opts} ${remote_tarball}" 1>&2
-      wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
-      if [ ! -z "${checksum_suffix}" ]; then
-        echo "exec: wget ${wget_opts} ${remote_checksum}" 1>&2
-        wget ${wget_opts} -O "${local_checksum}" "${remote_checksum}"
-      fi
-    fi
-    # if both were unsuccessful, exit
-    if [ ! -f "${local_tarball}" ]; then
-      echo -n "ERROR: Cannot download ${remote_tarball} with cURL or wget; please install manually and try again."
-      exit 2
-    fi
-    # Checksum may not have been specified; don't check if doesn't exist
-    if [ "$(command -v shasum)" ]; then
-      if [ -f "${local_checksum}" ]; then
-        echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
-        # Assuming SHA512 here for now
-        echo "Verifying checksum from ${local_checksum}" 1>&2
-        if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
-          echo "Bad checksum from ${remote_checksum}"
-          exit 2
-        fi
-      fi
-    else
-      echo "Skipping checksum because shasum is not installed." 1>&2
-    fi
-
-    cd "${_DIR}" && tar -xzf "${local_tarball}"
-    rm -rf "${local_tarball}"
-    rm -f "${local_checksum}"
   fi
+  # if the file still doesn't exist, lets try `wget` and cross our fingers
+  if [ ! -f "${local_tarball}" -a "$(command -v wget)" ]; then
+    echo "exec: wget ${wget_opts} ${remote_tarball}" 1>&2
+    wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
+    if [ ! -z "${checksum_suffix}" ]; then
+      echo "exec: wget ${wget_opts} ${remote_checksum}" 1>&2
+      wget ${wget_opts} -O "${local_checksum}" "${remote_checksum}"
+    fi
+  fi
+  # if both were unsuccessful, exit
+  if [ ! -f "${local_tarball}" ]; then
+    echo -n "ERROR: Cannot download ${remote_tarball} with cURL or wget; please install manually and try again."
+    exit 2
+  fi
+  # Checksum may not have been specified; don't check if doesn't exist
+  if [ "$(command -v shasum)" ]; then
+    if [ -f "${local_checksum}" ]; then
+      echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
+      # Assuming SHA512 here for now
+      echo "Verifying checksum from ${local_checksum}" 1>&2
+      if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
+        echo "Bad checksum from ${remote_checksum}"
+        exit 2
+      fi
+    fi
+  else
+    echo "Skipping checksum because shasum is not installed." 1>&2
+  fi
+
+  cd "${_DIR}" && tar -xzf "${local_tarball}"
+  rm -rf "${local_tarball}"
+  rm -f "${local_checksum}"
 }
 
 # See simple version normalization: http://stackoverflow.com/questions/16989598/bash-comparing-version-numbers
@@ -115,34 +110,37 @@ function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 # install maven under the build/ folder if needed.
 install_mvn() {
   local MVN_VERSION=`grep "<maven.version>" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
-  MVN_BIN="$(command -v mvn)"
-  if [ "$MVN_BIN" ]; then
-    local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
-  fi
-  if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
-    local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
-    local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
-    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
-    local MIRROR_URL_QUERY="?action=download"
-
-    if [ $(command -v curl) ]; then
-      if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
-        # Fall back to archive.apache.org for older Maven
-        echo "Falling back to archive.apache.org to download Maven"
-        APACHE_MIRROR="https://archive.apache.org/dist"
-        MIRROR_URL_QUERY=""
-      fi
+  MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
+  if [ ! -f "$MVN_BIN" ]; then
+    MVN_BIN="$(command -v mvn)"
+    if [ "$MVN_BIN" ]; then
+      local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
     fi
+    if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
+      local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
+      local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
+      local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
+      local MIRROR_URL_QUERY="?action=download"
 
-    install_app \
-      "${APACHE_MIRROR}" \
-      "${FILE_PATH}" \
-      "${MIRROR_URL_QUERY}" \
-      "sha512" \
-      "${MVN_TARBALL}" \
-      "apache-maven-${MVN_VERSION}/bin/mvn"
+      if [ $(command -v curl) ]; then
+        if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
+          # Fall back to archive.apache.org for older Maven
+          echo "Falling back to archive.apache.org to download Maven"
+          APACHE_MIRROR="https://archive.apache.org/dist"
+          MIRROR_URL_QUERY=""
+        fi
+      fi
 
-    MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
+      install_app \
+        "${APACHE_MIRROR}" \
+        "${FILE_PATH}" \
+        "${MIRROR_URL_QUERY}" \
+        "sha512" \
+        "${MVN_TARBALL}" \
+        "apache-maven-${MVN_VERSION}/bin/mvn"
+
+      MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
+    fi
   fi
 }
 
