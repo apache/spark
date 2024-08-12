@@ -1299,17 +1299,116 @@ public class CollationSupportSuite {
     assertLocate("Σ", "Σ", 1, "UNICODE_CI", 1);
   }
 
-  private void assertSubstringIndex(String string, String delimiter, Integer count,
-        String collationName, String expected) throws SparkException {
+  /**
+   * Verify the behaviour of the `SubstringIndex` collation support class.
+   */
+
+  private void assertSubstringIndex(String string, String delimiter, int count,
+      String collationName, String expected) throws SparkException {
     UTF8String str = UTF8String.fromString(string);
     UTF8String delim = UTF8String.fromString(delimiter);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected,
-      CollationSupport.SubstringIndex.exec(str, delim, count, collationId).toString());
+    UTF8String result = CollationSupport.SubstringIndex.exec(str, delim, count, collationId);
+    assertEquals(UTF8String.fromString(expected), result);
   }
 
   @Test
   public void testSubstringIndex() throws SparkException {
+    // Empty strings.
+    assertSubstringIndex("", "", 0, "UTF8_BINARY", "");
+    assertSubstringIndex("", "", 0, "UTF8_LCASE", "");
+    assertSubstringIndex("", "", 0, "UNICODE", "");
+    assertSubstringIndex("", "", 0, "UNICODE_CI", "");
+    assertSubstringIndex("", "", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("", "", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("", "", 1, "UNICODE", "");
+    assertSubstringIndex("", "", 1, "UNICODE_CI", "");
+    assertSubstringIndex("", "", -1, "UTF8_BINARY", "");
+    assertSubstringIndex("", "", -1, "UTF8_LCASE", "");
+    assertSubstringIndex("", "", -1, "UNICODE", "");
+    assertSubstringIndex("", "", -1, "UNICODE_CI", "");
+    assertSubstringIndex("", "x", 0, "UTF8_BINARY", "");
+    assertSubstringIndex("", "x", 0, "UTF8_LCASE", "");
+    assertSubstringIndex("", "x", 0, "UNICODE", "");
+    assertSubstringIndex("", "x", 0, "UNICODE_CI", "");
+    assertSubstringIndex("", "x", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("", "x", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("", "x", 1, "UNICODE", "");
+    assertSubstringIndex("", "x", 1, "UNICODE_CI", "");
+    assertSubstringIndex("", "x", -1, "UTF8_BINARY", "");
+    assertSubstringIndex("", "x", -1, "UTF8_LCASE", "");
+    assertSubstringIndex("", "x", -1, "UNICODE", "");
+    assertSubstringIndex("", "x", -1, "UNICODE_CI", "");
+    assertSubstringIndex("abc", "", 0, "UTF8_BINARY", "");
+    assertSubstringIndex("abc", "", 0, "UTF8_LCASE", "");
+    assertSubstringIndex("abc", "", 0, "UNICODE", "");
+    assertSubstringIndex("abc", "", 0, "UNICODE_CI", "");
+    assertSubstringIndex("abc", "", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("abc", "", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("abc", "", 1, "UNICODE", "");
+    assertSubstringIndex("abc", "", 1, "UNICODE_CI", "");
+    assertSubstringIndex("abc", "", -1, "UTF8_BINARY", "");
+    assertSubstringIndex("abc", "", -1, "UTF8_LCASE", "");
+    assertSubstringIndex("abc", "", -1, "UNICODE", "");
+    assertSubstringIndex("abc", "", -1, "UNICODE_CI", "");
+    // Basic tests.
+    assertSubstringIndex("axbxc", "a", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("axbxc", "a", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("axbxc", "a", 1, "UNICODE", "");
+    assertSubstringIndex("axbxc", "a", 1, "UNICODE_CI", "");
+    assertSubstringIndex("axbxc", "x", 1, "UTF8_BINARY", "a");
+    assertSubstringIndex("axbxc", "x", 1, "UTF8_LCASE", "a");
+    assertSubstringIndex("axbxc", "x", 1, "UNICODE", "a");
+    assertSubstringIndex("axbxc", "x", 1, "UNICODE_CI", "a");
+    assertSubstringIndex("axbxc", "b", 1, "UTF8_BINARY", "ax");
+    assertSubstringIndex("axbxc", "b", 1, "UTF8_LCASE", "ax");
+    assertSubstringIndex("axbxc", "b", 1, "UNICODE", "ax");
+    assertSubstringIndex("axbxc", "b", 1, "UNICODE_CI", "ax");
+    assertSubstringIndex("axbxc", "x", 2, "UTF8_BINARY", "axb");
+    assertSubstringIndex("axbxc", "x", 2, "UTF8_LCASE", "axb");
+    assertSubstringIndex("axbxc", "x", 2, "UNICODE", "axb");
+    assertSubstringIndex("axbxc", "x", 2, "UNICODE_CI", "axb");
+    assertSubstringIndex("axbxc", "c", 1, "UTF8_BINARY", "axbx");
+    assertSubstringIndex("axbxc", "c", 1, "UTF8_LCASE", "axbx");
+    assertSubstringIndex("axbxc", "c", 1, "UNICODE", "axbx");
+    assertSubstringIndex("axbxc", "c", 1, "UNICODE_CI", "axbx");
+    assertSubstringIndex("axbxc", "x", 3, "UTF8_BINARY", "axbxc");
+    assertSubstringIndex("axbxc", "x", 3, "UTF8_LCASE", "axbxc");
+    assertSubstringIndex("axbxc", "x", 3, "UNICODE", "axbxc");
+    assertSubstringIndex("axbxc", "x", 3, "UNICODE_CI", "axbxc");
+    assertSubstringIndex("axbxc", "d", 1, "UTF8_BINARY", "axbxc");
+    assertSubstringIndex("axbxc", "d", 1, "UTF8_LCASE", "axbxc");
+    assertSubstringIndex("axbxc", "d", 1, "UNICODE", "axbxc");
+    assertSubstringIndex("axbxc", "d", 1, "UNICODE_CI", "axbxc");
+    assertSubstringIndex("axbxc", "c", -1, "UTF8_BINARY", "");
+    assertSubstringIndex("axbxc", "c", -1, "UTF8_LCASE", "");
+    assertSubstringIndex("axbxc", "c", -1, "UNICODE", "");
+    assertSubstringIndex("axbxc", "c", -1, "UNICODE_CI", "");
+    assertSubstringIndex("axbxc", "x", -1, "UTF8_BINARY", "c");
+    assertSubstringIndex("axbxc", "x", -1, "UTF8_LCASE", "c");
+    assertSubstringIndex("axbxc", "x", -1, "UNICODE", "c");
+    assertSubstringIndex("axbxc", "x", -1, "UNICODE_CI", "c");
+    assertSubstringIndex("axbxc", "b", -1, "UTF8_BINARY", "xc");
+    assertSubstringIndex("axbxc", "b", -1, "UTF8_LCASE", "xc");
+    assertSubstringIndex("axbxc", "b", -1, "UNICODE", "xc");
+    assertSubstringIndex("axbxc", "b", -1, "UNICODE_CI", "xc");
+    assertSubstringIndex("axbxc", "x", -2, "UTF8_BINARY", "bxc");
+    assertSubstringIndex("axbxc", "x", -2, "UTF8_LCASE", "bxc");
+    assertSubstringIndex("axbxc", "x", -2, "UNICODE", "bxc");
+    assertSubstringIndex("axbxc", "x", -2, "UNICODE_CI", "bxc");
+    assertSubstringIndex("axbxc", "a", -1, "UTF8_BINARY", "xbxc");
+    assertSubstringIndex("axbxc", "a", -1, "UTF8_LCASE", "xbxc");
+    assertSubstringIndex("axbxc", "a", -1, "UNICODE", "xbxc");
+    assertSubstringIndex("axbxc", "a", -1, "UNICODE_CI", "xbxc");
+    assertSubstringIndex("axbxc", "x", -3, "UTF8_BINARY", "axbxc");
+    assertSubstringIndex("axbxc", "x", -3, "UTF8_LCASE", "axbxc");
+    assertSubstringIndex("axbxc", "x", -3, "UNICODE", "axbxc");
+    assertSubstringIndex("axbxc", "x", -3, "UNICODE_CI", "axbxc");
+    assertSubstringIndex("axbxc", "d", -1, "UTF8_BINARY", "axbxc");
+    assertSubstringIndex("axbxc", "d", -1, "UTF8_LCASE", "axbxc");
+    assertSubstringIndex("axbxc", "d", -1, "UNICODE", "axbxc");
+    assertSubstringIndex("axbxc", "d", -1, "UNICODE_CI", "axbxc");
+    // Advanced tests.
     assertSubstringIndex("wwwgapachegorg", "g", -3, "UTF8_BINARY", "apachegorg");
     assertSubstringIndex("www||apache||org", "||", 2, "UTF8_BINARY", "www||apache");
     assertSubstringIndex("aaaaaaaaaa", "aa", 2, "UTF8_BINARY", "a");
@@ -1368,8 +1467,9 @@ public class CollationSupportSuite {
     assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE_CI", "test大千世界");
     assertSubstringIndex("test大千世界大千世界", "千", 2, "UNICODE_CI", "test大千世界大");
     assertSubstringIndex("www||APACHE||org", "||", 2, "UNICODE_CI", "www||APACHE");
-    assertSubstringIndex("abİo12", "i̇o", 1, "UNICODE_CI", "ab");
-    assertSubstringIndex("abİo12", "i̇o", -1, "UNICODE_CI", "12");
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertSubstringIndex("abİo12", "i\u0307o", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abİo12", "i\u0307o", -1, "UNICODE_CI", "12");
     assertSubstringIndex("abi̇o12", "İo", 1, "UNICODE_CI", "ab");
     assertSubstringIndex("abi̇o12", "İo", -1, "UNICODE_CI", "12");
     assertSubstringIndex("ai̇bi̇o12", "İo", 1, "UNICODE_CI", "ai̇b");
@@ -1377,36 +1477,36 @@ public class CollationSupportSuite {
     assertSubstringIndex("ai̇bi̇o12i̇o", "İo", -1, "UNICODE_CI", "");
     assertSubstringIndex("ai̇bi̇o12i̇o", "İo", -2, "UNICODE_CI", "12i̇o");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UNICODE_CI", "İo12İoi̇o");
-    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i\u0307o", -4, "UNICODE_CI", "İo12İoi̇o");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UNICODE_CI", "i̇o12i̇oİo");
-    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i\u0307o", -4, "UNICODE_CI", "i̇o12i̇oİo");
     assertSubstringIndex("abi̇12", "i", 1, "UNICODE_CI", "abi̇12");
     assertSubstringIndex("abi̇12", "\u0307", 1, "UNICODE_CI", "abi̇12");
     assertSubstringIndex("abi̇12", "İ", 1, "UNICODE_CI", "ab");
     assertSubstringIndex("abİ12", "i", 1, "UNICODE_CI", "abİ12");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UNICODE_CI", "İo12İoi̇o");
-    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i\u0307o", -4, "UNICODE_CI", "İo12İoi̇o");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UNICODE_CI", "i̇o12i̇oİo");
-    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i\u0307o", -4, "UNICODE_CI", "i̇o12i̇oİo");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", 3, "UNICODE_CI", "ai̇bi̇oİo12");
-    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", 3, "UNICODE_CI", "ai̇bi̇oİo12");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i\u0307o", 3, "UNICODE_CI", "ai̇bi̇oİo12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UNICODE_CI", "ai̇bİoi̇o12");
-    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UNICODE_CI", "ai̇bİoi̇o12");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i\u0307o", 3, "UNICODE_CI", "ai̇bİoi̇o12");
     assertSubstringIndex("abi̇12", "i", 1, "UTF8_LCASE", "ab"); // != UNICODE_CI
     assertSubstringIndex("abi̇12", "\u0307", 1, "UTF8_LCASE", "abi"); // != UNICODE_CI
     assertSubstringIndex("abi̇12", "İ", 1, "UTF8_LCASE", "ab");
     assertSubstringIndex("abİ12", "i", 1, "UTF8_LCASE", "abİ12");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UTF8_LCASE", "İo12İoi̇o");
-    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UTF8_LCASE", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i\u0307o", -4, "UTF8_LCASE", "İo12İoi̇o");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UTF8_LCASE", "i̇o12i̇oİo");
-    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UTF8_LCASE", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i\u0307o", -4, "UTF8_LCASE", "i̇o12i̇oİo");
     assertSubstringIndex("bİoi̇o12i̇o", "\u0307oi", 1, "UTF8_LCASE", "bİoi̇o12i̇o");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", 3, "UTF8_LCASE", "ai̇bi̇oİo12");
-    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", 3, "UTF8_LCASE", "ai̇bi̇oİo12");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i\u0307o", 3, "UTF8_LCASE", "ai̇bi̇oİo12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UTF8_LCASE", "ai̇bİoi̇o12");
-    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UTF8_LCASE", "ai̇bİoi̇o12");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i\u0307o", 3, "UTF8_LCASE", "ai̇bİoi̇o12");
     assertSubstringIndex("bİoi̇o12i̇o", "\u0307oi", 1, "UTF8_LCASE", "bİoi̇o12i̇o");
-    // Greek sigmas.
+    // Conditional case mapping (e.g. Greek sigmas).
     assertSubstringIndex("σ", "σ", 1, "UTF8_BINARY", "");
     assertSubstringIndex("σ", "ς", 1, "UTF8_BINARY", "σ");
     assertSubstringIndex("σ", "Σ", 1, "UTF8_BINARY", "σ");
@@ -1443,7 +1543,63 @@ public class CollationSupportSuite {
     assertSubstringIndex("Σ", "σ", 1, "UNICODE_CI", "");
     assertSubstringIndex("Σ", "ς", 1, "UNICODE_CI", "");
     assertSubstringIndex("Σ", "Σ", 1, "UNICODE_CI", "");
-
+    // Surrogate pairs.
+    assertSubstringIndex("a🙃b🙃c", "a", 1, "UTF8_BINARY", "");
+    assertSubstringIndex("a🙃b🙃c", "a", 1, "UTF8_LCASE", "");
+    assertSubstringIndex("a🙃b🙃c", "a", 1, "UNICODE", "");
+    assertSubstringIndex("a🙃b🙃c", "a", 1, "UNICODE_CI", "");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 1, "UTF8_BINARY", "a");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 1, "UTF8_LCASE", "a");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 1, "UNICODE", "a");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 1, "UNICODE_CI", "a");
+    assertSubstringIndex("a🙃b🙃c", "b", 1, "UTF8_BINARY", "a🙃");
+    assertSubstringIndex("a🙃b🙃c", "b", 1, "UTF8_LCASE", "a🙃");
+    assertSubstringIndex("a🙃b🙃c", "b", 1, "UNICODE", "a🙃");
+    assertSubstringIndex("a🙃b🙃c", "b", 1, "UNICODE_CI", "a🙃");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 2, "UTF8_BINARY", "a🙃b");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 2, "UTF8_LCASE", "a🙃b");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 2, "UNICODE", "a🙃b");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 2, "UNICODE_CI", "a🙃b");
+    assertSubstringIndex("a🙃b🙃c", "c", 1, "UTF8_BINARY", "a🙃b🙃");
+    assertSubstringIndex("a🙃b🙃c", "c", 1, "UTF8_LCASE", "a🙃b🙃");
+    assertSubstringIndex("a🙃b🙃c", "c", 1, "UNICODE", "a🙃b🙃");
+    assertSubstringIndex("a🙃b🙃c", "c", 1, "UNICODE_CI", "a🙃b🙃");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 3, "UTF8_BINARY", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 3, "UTF8_LCASE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 3, "UNICODE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", 3, "UNICODE_CI", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", 1, "UTF8_BINARY", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", 1, "UTF8_LCASE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", 1, "UNICODE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", 1, "UNICODE_CI", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "c", -1, "UTF8_BINARY", "");
+    assertSubstringIndex("a🙃b🙃c", "c", -1, "UTF8_LCASE", "");
+    assertSubstringIndex("a🙃b🙃c", "c", -1, "UNICODE", "");
+    assertSubstringIndex("a🙃b🙃c", "c", -1, "UNICODE_CI", "");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -1, "UTF8_BINARY", "c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -1, "UTF8_LCASE", "c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -1, "UNICODE", "c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -1, "UNICODE_CI", "c");
+    assertSubstringIndex("a🙃b🙃c", "b", -1, "UTF8_BINARY", "🙃c");
+    assertSubstringIndex("a🙃b🙃c", "b", -1, "UTF8_LCASE", "🙃c");
+    assertSubstringIndex("a🙃b🙃c", "b", -1, "UNICODE", "🙃c");
+    assertSubstringIndex("a🙃b🙃c", "b", -1, "UNICODE_CI", "🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -2, "UTF8_BINARY", "b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -2, "UTF8_LCASE", "b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -2, "UNICODE", "b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -2, "UNICODE_CI", "b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "a", -1, "UTF8_BINARY", "🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "a", -1, "UTF8_LCASE", "🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "a", -1, "UNICODE", "🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "a", -1, "UNICODE_CI", "🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -3, "UTF8_BINARY", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -3, "UTF8_LCASE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -3, "UNICODE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "🙃", -3, "UNICODE_CI", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", -1, "UTF8_BINARY", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", -1, "UTF8_LCASE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", -1, "UNICODE", "a🙃b🙃c");
+    assertSubstringIndex("a🙃b🙃c", "d", -1, "UNICODE_CI", "a🙃b🙃c");
   }
 
   private void assertStringTrim(
