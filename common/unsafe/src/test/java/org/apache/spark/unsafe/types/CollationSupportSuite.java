@@ -1094,95 +1094,161 @@ public class CollationSupportSuite {
     assertFindInSet("Σ", UTF8String.fromString("Σ"), "UNICODE_CI", 1);
   }
 
-  private void assertReplace(String source, String search, String replace, String collationName,
-        String expected) throws SparkException {
+  /**
+   * Verify the behaviour of the `StringReplace` collation support class.
+   */
+
+  private void assertStringReplace(String source, String search, String replace,
+      String collationName, String expected) throws SparkException {
     UTF8String src = UTF8String.fromString(source);
     UTF8String sear = UTF8String.fromString(search);
     UTF8String repl = UTF8String.fromString(replace);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.StringReplace
-      .exec(src, sear, repl, collationId).toString());
+    UTF8String result = CollationSupport.StringReplace.exec(src, sear, repl, collationId);
+    assertEquals(UTF8String.fromString(expected), result);
   }
 
   @Test
-  public void testReplace() throws SparkException {
-    assertReplace("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace");
-    assertReplace("replace", "pl", "", "UTF8_BINARY", "reace");
-    assertReplace("repl世ace", "Pl", "", "UTF8_BINARY", "repl世ace");
-    assertReplace("replace", "", "123", "UTF8_BINARY", "replace");
-    assertReplace("abcabc", "b", "12", "UTF8_BINARY", "a12ca12c");
-    assertReplace("abcdabcd", "bc", "", "UTF8_BINARY", "adad");
-    assertReplace("r世eplace", "pl", "xx", "UTF8_LCASE", "r世exxace");
-    assertReplace("repl世ace", "PL", "AB", "UTF8_LCASE", "reAB世ace");
-    assertReplace("Replace", "", "123", "UTF8_LCASE", "Replace");
-    assertReplace("re世place", "世", "x", "UTF8_LCASE", "rexplace");
-    assertReplace("abcaBc", "B", "12", "UTF8_LCASE", "a12ca12c");
-    assertReplace("AbcdabCd", "Bc", "", "UTF8_LCASE", "Adad");
-    assertReplace("re世place", "plx", "123", "UNICODE", "re世place");
-    assertReplace("世Replace", "re", "", "UNICODE", "世Replace");
-    assertReplace("replace世", "", "123", "UNICODE", "replace世");
-    assertReplace("aBc世abc", "b", "12", "UNICODE", "aBc世a12c");
-    assertReplace("abcdabcd", "bc", "", "UNICODE", "adad");
-    assertReplace("replace", "plx", "123", "UNICODE_CI", "replace");
-    assertReplace("Replace", "re", "", "UNICODE_CI", "place");
-    assertReplace("replace", "", "123", "UNICODE_CI", "replace");
-    assertReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
-    assertReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
-    assertReplace("abi̇12", "i", "X", "UNICODE_CI", "abi̇12");
-    assertReplace("abi̇12", "\u0307", "X", "UNICODE_CI", "abi̇12");
-    assertReplace("abi̇12", "İ", "X", "UNICODE_CI", "abX12");
-    assertReplace("abİ12", "i", "X", "UNICODE_CI", "abİ12");
-    assertReplace("İi̇İi̇İi̇", "i̇", "x", "UNICODE_CI", "xxxxxx");
-    assertReplace("İi̇İi̇İi̇", "i", "x", "UNICODE_CI", "İi̇İi̇İi̇");
-    assertReplace("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx");
-    assertReplace("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy");
-    assertReplace("abi̇12", "i", "X", "UTF8_LCASE", "abX\u030712"); // != UNICODE_CI
-    assertReplace("abi̇12", "\u0307", "X", "UTF8_LCASE", "abiX12"); // != UNICODE_CI
-    assertReplace("abi̇12", "İ", "X", "UTF8_LCASE", "abX12");
-    assertReplace("abİ12", "i", "X", "UTF8_LCASE", "abİ12");
-    assertReplace("İi̇İi̇İi̇", "i̇", "x", "UTF8_LCASE", "xxxxxx");
-    assertReplace("İi̇İi̇İi̇", "i", "x", "UTF8_LCASE",
+  public void testStringReplace() throws SparkException {
+    // Empty strings.
+    assertStringReplace("", "", "", "UTF8_BINARY", "");
+    assertStringReplace("", "", "", "UTF8_LCASE", "");
+    assertStringReplace("", "", "", "UNICODE", "");
+    assertStringReplace("", "", "", "UNICODE_CI", "");
+    assertStringReplace("abc", "", "", "UTF8_BINARY", "abc");
+    assertStringReplace("abc", "", "", "UTF8_LCASE", "abc");
+    assertStringReplace("abc", "", "", "UNICODE", "abc");
+    assertStringReplace("abc", "", "", "UNICODE_CI", "abc");
+    assertStringReplace("", "x", "", "UTF8_BINARY", "");
+    assertStringReplace("", "x", "", "UTF8_LCASE", "");
+    assertStringReplace("", "x", "", "UNICODE", "");
+    assertStringReplace("", "x", "", "UNICODE_CI", "");
+    assertStringReplace("", "", "x", "UTF8_BINARY", "");
+    assertStringReplace("", "", "x", "UTF8_LCASE", "");
+    assertStringReplace("", "", "x", "UNICODE", "");
+    assertStringReplace("", "", "x", "UNICODE_CI", "");
+    assertStringReplace("", "b", "x", "UTF8_BINARY", "");
+    assertStringReplace("", "b", "x", "UTF8_LCASE", "");
+    assertStringReplace("", "b", "x", "UNICODE", "");
+    assertStringReplace("", "b", "x", "UNICODE_CI", "");
+    assertStringReplace("abc", "b", "", "UTF8_BINARY", "ac");
+    assertStringReplace("abc", "b", "", "UTF8_LCASE", "ac");
+    assertStringReplace("abc", "b", "", "UNICODE", "ac");
+    assertStringReplace("abc", "b", "", "UNICODE_CI", "ac");
+    assertStringReplace("abc", "", "x", "UTF8_BINARY", "abc");
+    assertStringReplace("abc", "", "x", "UTF8_LCASE", "abc");
+    assertStringReplace("abc", "", "x", "UNICODE", "abc");
+    assertStringReplace("abc", "", "x", "UNICODE_CI", "abc");
+    // Basic tests.
+    assertStringReplace("replace", "pl", "", "UTF8_BINARY", "reace");
+    assertStringReplace("replace", "pl", "", "UTF8_LCASE", "reace");
+    assertStringReplace("replace", "pl", "", "UNICODE", "reace");
+    assertStringReplace("replace", "pl", "", "UNICODE_CI", "reace");
+    assertStringReplace("replace", "", "123", "UTF8_BINARY", "replace");
+    assertStringReplace("replace", "", "123", "UTF8_LCASE", "replace");
+    assertStringReplace("replace", "", "123", "UNICODE", "replace");
+    assertStringReplace("replace", "", "123", "UNICODE_CI", "replace");
+    assertStringReplace("abcabc", "b", "12", "UTF8_BINARY", "a12ca12c");
+    assertStringReplace("abcabc", "b", "12", "UTF8_LCASE", "a12ca12c");
+    assertStringReplace("abcabc", "b", "12", "UNICODE", "a12ca12c");
+    assertStringReplace("abcabc", "b", "12", "UNICODE_CI", "a12ca12c");
+    assertStringReplace("replace", "plx", "123", "UTF8_BINARY", "replace");
+    assertStringReplace("replace", "plx", "123", "UTF8_LCASE", "replace");
+    assertStringReplace("replace", "plx", "123", "UNICODE", "replace");
+    assertStringReplace("replace", "plx", "123", "UNICODE_CI", "replace");
+    assertStringReplace("Replace", "re", "", "UTF8_BINARY", "Replace");
+    assertStringReplace("Replace", "re", "", "UTF8_LCASE", "place");
+    assertStringReplace("Replace", "re", "", "UNICODE", "Replace");
+    assertStringReplace("Replace", "re", "", "UNICODE_CI", "place");
+    assertStringReplace("abcdabcd", "Bc", "", "UTF8_BINARY", "abcdabcd");
+    assertStringReplace("abcdabcd", "Bc", "", "UTF8_LCASE", "adad");
+    assertStringReplace("abcdabcd", "Bc", "", "UNICODE", "abcdabcd");
+    assertStringReplace("abcdabcd", "Bc", "", "UNICODE_CI", "adad");
+    assertStringReplace("AbcdabCd", "Bc", "", "UTF8_BINARY", "AbcdabCd");
+    assertStringReplace("AbcdabCd", "Bc", "", "UTF8_LCASE", "Adad");
+    assertStringReplace("AbcdabCd", "Bc", "", "UNICODE", "AbcdabCd");
+    assertStringReplace("AbcdabCd", "Bc", "", "UNICODE_CI", "Adad");
+    // Advanced tests.
+    assertStringReplace("abcdabcd", "bc", "", "UTF8_BINARY", "adad");
+    assertStringReplace("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace");
+    assertStringReplace("世Replace", "re", "", "UTF8_BINARY", "世Replace");
+    assertStringReplace("r世eplace", "pl", "xx", "UTF8_LCASE", "r世exxace");
+    assertStringReplace("repl世ace", "PL", "AB", "UTF8_LCASE", "reAB世ace");
+    assertStringReplace("re世place", "世", "x", "UTF8_LCASE", "rexplace");
+    assertStringReplace("re世place", "plx", "123", "UNICODE", "re世place");
+    assertStringReplace("replace世", "", "123", "UNICODE", "replace世");
+    assertStringReplace("aBc世abc", "b", "12", "UNICODE", "aBc世a12c");
+    assertStringReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
+    assertStringReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
+    assertStringReplace("repl世ace", "Pl", "", "UNICODE_CI", "re世ace");
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringReplace("abi̇12", "i", "X", "UNICODE_CI", "abi̇12");
+    assertStringReplace("abi̇12", "\u0307", "X", "UNICODE_CI", "abi̇12");
+    assertStringReplace("abi̇12", "İ", "X", "UNICODE_CI", "abX12");
+    assertStringReplace("abİ12", "i", "X", "UNICODE_CI", "abİ12");
+    assertStringReplace("İi̇İi̇İi̇", "i\u0307", "x", "UNICODE_CI", "xxxxxx");
+    assertStringReplace("İi̇İi̇İi̇", "i", "x", "UNICODE_CI", "İi̇İi̇İi̇");
+    assertStringReplace("abİo12i̇o", "i\u0307o", "xx", "UNICODE_CI", "abxx12xx");
+    assertStringReplace("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy");
+    assertStringReplace("abi̇12", "i", "X", "UTF8_LCASE", "abX\u030712"); // != UNICODE_CI
+    assertStringReplace("abi̇12", "\u0307", "X", "UTF8_LCASE", "abiX12"); // != UNICODE_CI
+    assertStringReplace("abi̇12", "İ", "X", "UTF8_LCASE", "abX12");
+    assertStringReplace("abİ12", "i", "X", "UTF8_LCASE", "abİ12");
+    assertStringReplace("İi̇İi̇İi̇", "i\u0307", "x", "UTF8_LCASE", "xxxxxx");
+    assertStringReplace("İi̇İi̇İi̇", "i", "x", "UTF8_LCASE",
       "İx\u0307İx\u0307İx\u0307"); // != UNICODE_CI
-    assertReplace("abİo12i̇o", "i̇o", "xx", "UTF8_LCASE", "abxx12xx");
-    assertReplace("abi̇o12i̇o", "İo", "yy", "UTF8_LCASE", "abyy12yy");
-    // Greek sigmas.
-    assertReplace("σ", "σ", "x", "UTF8_BINARY", "x");
-    assertReplace("σ", "ς", "x", "UTF8_BINARY", "σ");
-    assertReplace("σ", "Σ", "x", "UTF8_BINARY", "σ");
-    assertReplace("ς", "σ", "x", "UTF8_BINARY", "ς");
-    assertReplace("ς", "ς", "x", "UTF8_BINARY", "x");
-    assertReplace("ς", "Σ", "x", "UTF8_BINARY", "ς");
-    assertReplace("Σ", "σ", "x", "UTF8_BINARY", "Σ");
-    assertReplace("Σ", "ς", "x", "UTF8_BINARY", "Σ");
-    assertReplace("Σ", "Σ", "x", "UTF8_BINARY", "x");
-    assertReplace("σ", "σ", "x", "UTF8_LCASE", "x");
-    assertReplace("σ", "ς", "x", "UTF8_LCASE", "x");
-    assertReplace("σ", "Σ", "x", "UTF8_LCASE", "x");
-    assertReplace("ς", "σ", "x", "UTF8_LCASE", "x");
-    assertReplace("ς", "ς", "x", "UTF8_LCASE", "x");
-    assertReplace("ς", "Σ", "x", "UTF8_LCASE", "x");
-    assertReplace("Σ", "σ", "x", "UTF8_LCASE", "x");
-    assertReplace("Σ", "ς", "x", "UTF8_LCASE", "x");
-    assertReplace("Σ", "Σ", "x", "UTF8_LCASE", "x");
-    assertReplace("σ", "σ", "x", "UNICODE", "x");
-    assertReplace("σ", "ς", "x", "UNICODE", "σ");
-    assertReplace("σ", "Σ", "x", "UNICODE", "σ");
-    assertReplace("ς", "σ", "x", "UNICODE", "ς");
-    assertReplace("ς", "ς", "x", "UNICODE", "x");
-    assertReplace("ς", "Σ", "x", "UNICODE", "ς");
-    assertReplace("Σ", "σ", "x", "UNICODE", "Σ");
-    assertReplace("Σ", "ς", "x", "UNICODE", "Σ");
-    assertReplace("Σ", "Σ", "x", "UNICODE", "x");
-    assertReplace("σ", "σ", "x", "UNICODE_CI", "x");
-    assertReplace("σ", "ς", "x", "UNICODE_CI", "x");
-    assertReplace("σ", "Σ", "x", "UNICODE_CI", "x");
-    assertReplace("ς", "σ", "x", "UNICODE_CI", "x");
-    assertReplace("ς", "ς", "x", "UNICODE_CI", "x");
-    assertReplace("ς", "Σ", "x", "UNICODE_CI", "x");
-    assertReplace("Σ", "σ", "x", "UNICODE_CI", "x");
-    assertReplace("Σ", "ς", "x", "UNICODE_CI", "x");
-    assertReplace("Σ", "Σ", "x", "UNICODE_CI", "x");
-
+    assertStringReplace("abİo12i̇o", "i\u0307o", "xx", "UTF8_LCASE", "abxx12xx");
+    assertStringReplace("abi̇o12i̇o", "İo", "yy", "UTF8_LCASE", "abyy12yy");
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStringReplace("σ", "σ", "x", "UTF8_BINARY", "x");
+    assertStringReplace("σ", "ς", "x", "UTF8_BINARY", "σ");
+    assertStringReplace("σ", "Σ", "x", "UTF8_BINARY", "σ");
+    assertStringReplace("ς", "σ", "x", "UTF8_BINARY", "ς");
+    assertStringReplace("ς", "ς", "x", "UTF8_BINARY", "x");
+    assertStringReplace("ς", "Σ", "x", "UTF8_BINARY", "ς");
+    assertStringReplace("Σ", "σ", "x", "UTF8_BINARY", "Σ");
+    assertStringReplace("Σ", "ς", "x", "UTF8_BINARY", "Σ");
+    assertStringReplace("Σ", "Σ", "x", "UTF8_BINARY", "x");
+    assertStringReplace("σ", "σ", "x", "UTF8_LCASE", "x");
+    assertStringReplace("σ", "ς", "x", "UTF8_LCASE", "x");
+    assertStringReplace("σ", "Σ", "x", "UTF8_LCASE", "x");
+    assertStringReplace("ς", "σ", "x", "UTF8_LCASE", "x");
+    assertStringReplace("ς", "ς", "x", "UTF8_LCASE", "x");
+    assertStringReplace("ς", "Σ", "x", "UTF8_LCASE", "x");
+    assertStringReplace("Σ", "σ", "x", "UTF8_LCASE", "x");
+    assertStringReplace("Σ", "ς", "x", "UTF8_LCASE", "x");
+    assertStringReplace("Σ", "Σ", "x", "UTF8_LCASE", "x");
+    assertStringReplace("σ", "σ", "x", "UNICODE", "x");
+    assertStringReplace("σ", "ς", "x", "UNICODE", "σ");
+    assertStringReplace("σ", "Σ", "x", "UNICODE", "σ");
+    assertStringReplace("ς", "σ", "x", "UNICODE", "ς");
+    assertStringReplace("ς", "ς", "x", "UNICODE", "x");
+    assertStringReplace("ς", "Σ", "x", "UNICODE", "ς");
+    assertStringReplace("Σ", "σ", "x", "UNICODE", "Σ");
+    assertStringReplace("Σ", "ς", "x", "UNICODE", "Σ");
+    assertStringReplace("Σ", "Σ", "x", "UNICODE", "x");
+    assertStringReplace("σ", "σ", "x", "UNICODE_CI", "x");
+    assertStringReplace("σ", "ς", "x", "UNICODE_CI", "x");
+    assertStringReplace("σ", "Σ", "x", "UNICODE_CI", "x");
+    assertStringReplace("ς", "σ", "x", "UNICODE_CI", "x");
+    assertStringReplace("ς", "ς", "x", "UNICODE_CI", "x");
+    assertStringReplace("ς", "Σ", "x", "UNICODE_CI", "x");
+    assertStringReplace("Σ", "σ", "x", "UNICODE_CI", "x");
+    assertStringReplace("Σ", "ς", "x", "UNICODE_CI", "x");
+    assertStringReplace("Σ", "Σ", "x", "UNICODE_CI", "x");
+    // Surrogate pairs.
+    assertStringReplace("a🙃b", "a", "x", "UTF8_BINARY", "x🙃b");
+    assertStringReplace("a🙃b", "b", "x", "UTF8_BINARY", "a🙃x");
+    assertStringReplace("a🙃b", "🙃", "x", "UTF8_BINARY", "axb");
+    assertStringReplace("a🙃b", "b", "c", "UTF8_LCASE", "a🙃c");
+    assertStringReplace("a🙃b", "b", "x", "UTF8_LCASE", "a🙃x");
+    assertStringReplace("a🙃b", "🙃", "x", "UTF8_LCASE", "axb");
+    assertStringReplace("a🙃b", "b", "c", "UNICODE", "a🙃c");
+    assertStringReplace("a🙃b", "b", "x", "UNICODE", "a🙃x");
+    assertStringReplace("a🙃b", "🙃", "x", "UNICODE", "axb");
+    assertStringReplace("a🙃b", "b", "c", "UNICODE_CI", "a🙃c");
+    assertStringReplace("a🙃b", "b", "x", "UNICODE_CI", "a🙃x");
+    assertStringReplace("a🙃b", "🙃", "x", "UNICODE_CI", "axb");
   }
 
   private void assertLocate(String substring, String string, Integer start, String collationName,

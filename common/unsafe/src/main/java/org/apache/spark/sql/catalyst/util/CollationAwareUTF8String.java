@@ -302,114 +302,82 @@ public class CollationAwareUTF8String {
     return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
-  /*
+  /**
    * Performs string replacement for ICU collations by searching for instances of the search
-   * string in the `src` string, with respect to the specified collation, and then replacing
+   * string in the `target` string, with respect to the specified collation, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
    * @param collationId the collation ID to use for string search
    * @return the position of the first occurrence of `match` in `set`
    */
-  public static UTF8String replace(final UTF8String src, final UTF8String search,
+  public static UTF8String replace(final UTF8String target, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(src, search, collationId);
+    String targetStr = target.toValidString();
+    String searchStr = search.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(targetStr, searchStr, collationId);
 
-    // Find the first occurrence of the search string.
-    int end = stringSearch.next();
-    if (end == StringSearch.DONE) {
-      // Search string was not found, so string is unchanged.
-      return src;
+    StringBuilder sb = new StringBuilder();
+    int start = 0;
+    int matchStart = stringSearch.first();
+    while (matchStart != StringSearch.DONE) {
+      sb.append(targetStr, start, matchStart);
+      sb.append(replace.toValidString());
+      start = matchStart + stringSearch.getMatchLength();
+      matchStart = stringSearch.next();
     }
-
-    // Initialize byte positions
-    int c = 0;
-    int byteStart = 0; // position in byte
-    int byteEnd = 0; // position in byte
-    while (byteEnd < src.numBytes() && c < end) {
-      byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-      c += 1;
-    }
-
-    // At least one match was found. Estimate space needed for result.
-    // The 16x multiplier here is chosen to match commons-lang3's implementation.
-    int increase = Math.max(0, Math.abs(replace.numBytes() - search.numBytes())) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
-    while (end != StringSearch.DONE) {
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
-      buf.append(replace);
-
-      // Move byteStart to the beginning of the current match
-      byteStart = byteEnd;
-      int cs = c;
-      // Move cs to the end of the current match
-      // This is necessary because the search string may contain 'multi-character' characters
-      while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
-        byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
-        cs += 1;
-      }
-      // Go to next match
-      end = stringSearch.next();
-      // Update byte positions
-      while (byteEnd < src.numBytes() && c < end) {
-        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-        c += 1;
-      }
-    }
-    buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
-      src.numBytes() - byteStart);
-    return buf.build();
+    sb.append(targetStr, start, targetStr.length());
+    return UTF8String.fromString(sb.toString());
   }
 
-  /*
+  /**
    * Performs string replacement for UTF8_LCASE collation by searching for instances of the search
-   * string in the src string, with respect to lowercased string versions, and then replacing
+   * string in the target string, with respect to lowercased string versions, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
-   * @param collationId the collation ID to use for string search
    * @return the position of the first occurrence of `match` in `set`
    */
-  public static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
+  public static UTF8String lowercaseReplace(final UTF8String target, final UTF8String search,
       final UTF8String replace) {
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
     UTF8String lowercaseSearch = lowerCaseCodePoints(search);
 
     int start = 0;
-    int end = lowercaseFind(src, lowercaseSearch, start);
+    int end = lowercaseFind(target, lowercaseSearch, start);
     if (end == -1) {
       // Search string was not found, so string is unchanged.
-      return src;
+      return target;
     }
 
     // At least one match was found. Estimate space needed for result.
     // The 16x multiplier here is chosen to match commons-lang3's implementation.
     int increase = Math.max(0, replace.numBytes() - search.numBytes()) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
+    final UTF8StringBuilder buf = new UTF8StringBuilder(target.numBytes() + increase);
     while (end != -1) {
-      buf.append(src.substring(start, end));
+      buf.append(target.substring(start, end));
       buf.append(replace);
       // Update character positions
-      start = end + lowercaseMatchLengthFrom(src, lowercaseSearch, end);
-      end = lowercaseFind(src, lowercaseSearch, start);
+      start = end + lowercaseMatchLengthFrom(target, lowercaseSearch, end);
+      end = lowercaseFind(target, lowercaseSearch, start);
     }
-    buf.append(src.substring(start, src.numChars()));
+    buf.append(target.substring(start, target.numChars()));
     return buf.build();
   }
 
