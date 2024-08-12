@@ -1278,7 +1278,7 @@ public class CollationAwareUTF8String {
     if (delimiter.numBytes() == 0) return new UTF8String[] { string };
     if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
     List<UTF8String> strings = new ArrayList<>();
-    String target = string.toString(), pattern = delimiter.toString();
+    String target = string.toValidString(), pattern = delimiter.toValidString();
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
     int start = 0, end;
     while ((end = stringSearch.next()) != StringSearch.DONE) {
