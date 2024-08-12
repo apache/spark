@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.{util => ju}
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -24,7 +26,8 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -186,8 +189,14 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     }
 
     var outputFields = schema.fields
+
+    val sparkSession = SparkSession.getDefaultSession.get
+    val transformDataset = sparkSession.createDataFrame(
+      new ju.ArrayList[Row](), schema = schema
+    )
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
-      SchemaUtils.checkNumericType(schema, inputColName)
+      val colType = transformDataset.col(inputColName).expr.dataType
+      SchemaUtils.checkNumericType(colType, inputColName, "")
       require(!schema.fieldNames.contains(outputColName),
         s"Output column $outputColName already exists.")
       val attr = NominalAttribute.defaultAttr.withName(outputColName)
@@ -201,13 +210,18 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     transformSchema(dataset.schema, logging = true)
     val bucketizer = new Bucketizer(uid).setHandleInvalid($(handleInvalid))
     if (isSet(inputCols)) {
+      val quantileColNames = Array.tabulate($(inputCols).length)(index => s"c_$index")
+      val quantileDataset = dataset.select($(inputCols).zipWithIndex.map {
+        case (colName, index) => col(colName).alias(quantileColNames(index))
+      }.toImmutableArraySeq: _*)
+
       val splitsArray = if (isSet(numBucketsArray)) {
         val probArrayPerCol = $(numBucketsArray).map { numOfBuckets =>
           (0 to numOfBuckets).map(_.toDouble / numOfBuckets).toArray
         }
 
         val probabilityArray = probArrayPerCol.flatten.sorted.distinct
-        val splitsArrayRaw = dataset.stat.approxQuantile($(inputCols),
+        val splitsArrayRaw = quantileDataset.stat.approxQuantile(quantileColNames,
           probabilityArray, $(relativeError))
 
         splitsArrayRaw.zip(probArrayPerCol).map { case (splits, probs) =>
@@ -222,12 +236,13 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
           }
         }
       } else {
-        dataset.stat.approxQuantile($(inputCols),
+        quantileDataset.stat.approxQuantile(quantileColNames,
           (0 to $(numBuckets)).map(_.toDouble / $(numBuckets)).toArray, $(relativeError))
       }
       bucketizer.setSplitsArray(splitsArray.map(getDistinctSplits))
     } else {
-      val splits = dataset.stat.approxQuantile($(inputCol),
+      val quantileDataset = dataset.select(col($(inputCol)).alias("c_0"))
+      val splits = quantileDataset.stat.approxQuantile("c_0",
         (0 to $(numBuckets)).map(_.toDouble / $(numBuckets)).toArray, $(relativeError))
       bucketizer.setSplits(getDistinctSplits(splits))
     }
