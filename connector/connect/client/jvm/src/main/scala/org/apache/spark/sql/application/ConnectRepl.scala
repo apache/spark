@@ -25,7 +25,11 @@ import scala.util.control.NonFatal
 
 import ammonite.compiler.CodeClassWrapper
 import ammonite.compiler.iface.CodeWrapper
-import ammonite.util.{Bind, Imports, Name, Util}
+import ammonite.interp.{Interpreter, Watchable}
+import ammonite.main.Defaults
+import ammonite.repl.Repl
+import ammonite.util.{Bind, Imports, Name, PredefInfo, Ref, Res, Util}
+import ammonite.util.Util.newLine
 
 import org.apache.spark.SparkBuildInfo.spark_version
 import org.apache.spark.annotation.DeveloperApi
@@ -136,14 +140,64 @@ Spark session available as 'spark'.
         |""".stripMargin
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
-    val main = ammonite.Main(
+    val main = new ammonite.Main(
       welcomeBanner = Option(splash),
       predefCode = predefCode,
       replCodeWrapper = ExtendedCodeClassWrapper,
       scriptCodeWrapper = ExtendedCodeClassWrapper,
       inputStream = inputStream,
       outputStream = outputStream,
-      errorStream = errorStream)
+      errorStream = errorStream) {
+
+      override def instantiateRepl(replArgs: IndexedSeq[Bind[_]] = Vector.empty)
+          : Either[(Res.Failure, Seq[(Watchable.Path, Long)]), Repl] = {
+        loadedPredefFile.map { predefFileInfoOpt =>
+          val augmentedImports =
+            if (defaultPredef) Defaults.replImports ++ Interpreter.predefImports
+            else Imports()
+
+          val argString = replArgs.zipWithIndex
+            .map { case (b, idx) =>
+              s"""
+        val ${b.name} = ammonite
+          .repl
+          .ReplBridge
+          .value
+          .Internal
+          .replArgs($idx)
+          .value
+          .asInstanceOf[${b.typeName.value}]
+        """
+            }
+            .mkString(newLine)
+
+          new Repl(
+            this.inputStream,
+            this.outputStream,
+            this.errorStream,
+            storage = storageBackend,
+            baseImports = augmentedImports,
+            basePredefs = Seq(PredefInfo(Name("ArgsPredef"), argString, false, None)),
+            customPredefs = predefFileInfoOpt.toSeq ++ Seq(
+              PredefInfo(Name("CodePredef"), this.predefCode, false, Some(wd / "(console)"))),
+            wd = wd,
+            welcomeBanner = welcomeBanner,
+            replArgs = replArgs,
+            initialColors = colors,
+            replCodeWrapper = replCodeWrapper,
+            scriptCodeWrapper = scriptCodeWrapper,
+            alreadyLoadedDependencies = alreadyLoadedDependencies,
+            importHooks = importHooks,
+            compilerBuilder = compilerBuilder,
+            parser = parser(),
+            initialClassLoader = initialClassLoader,
+            classPathWhitelist = classPathWhitelist,
+            warnings = warnings) {
+            override val prompt = Ref("scala> ")
+          }
+        }
+      }
+    }
     try {
       if (semaphore.nonEmpty) {
         // Used for testing.
