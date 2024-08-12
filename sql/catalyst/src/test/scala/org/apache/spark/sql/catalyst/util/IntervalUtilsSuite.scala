@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DayTimeIntervalType
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -552,8 +553,18 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-34615: period to months") {
+    import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
     assert(periodToMonths(Period.ZERO) === 0)
     assert(periodToMonths(Period.of(0, -1, 0)) === -1)
+    assert(periodToMonths(Period.of(0, -11, 0)) === -11)
+    assert(periodToMonths(Period.of(0, -12, 0)) === -12)
+    assert(periodToMonths(Period.of(0, -13, 0)) === -13)
+    assert(periodToMonths(Period.of(0, 11, 0), YM.YEAR) === 0)
+    assert(periodToMonths(Period.of(0, -11, 0), YM.YEAR) === 0)
+    assert(periodToMonths(Period.of(0, 12, 0), YM.YEAR) === 12)
+    assert(periodToMonths(Period.of(0, -12, 0), YM.YEAR) === -12)
+    assert(periodToMonths(Period.of(0, 13, 0), YM.YEAR) === 12)
+    assert(periodToMonths(Period.of(0, -13, 0), YM.YEAR) === -12)
     assert(periodToMonths(Period.of(-1, 0, 10)) === -12) // ignore days
     assert(periodToMonths(Period.of(178956970, 7, 0)) === Int.MaxValue)
     assert(periodToMonths(Period.of(-178956970, -8, 123)) === Int.MinValue)
@@ -637,11 +648,12 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format year-month intervals") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
       -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
       11 -> ("0-11", "INTERVAL '0-11' YEAR TO MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-1-0' YEAR TO MONTH"),
+      12 -> ("1-0", "INTERVAL '1-0' YEAR TO MONTH"),
       -13 -> ("-1-1", "INTERVAL '-1-1' YEAR TO MONTH"),
       13 -> ("1-1", "INTERVAL '1-1' YEAR TO MONTH"),
       -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
@@ -651,6 +663,21 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === ansiIntervalStr)
       assert(toYearMonthIntervalString(months, HIVE_STYLE, YEAR, MONTH) === hiveIntervalStr)
+    }
+  }
+
+  test("SPARK-49208 format year-month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0' MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
+      11 -> ("0-11", "INTERVAL '11' MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
+      12 -> ("1-0", "INTERVAL '12' MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
     }
   }
 
@@ -793,12 +820,13 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35771: Format year-month intervals using type fields") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 ->
         ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
       -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '-11' MONTH"),
       11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
+      -12 -> ("INTERVAL '-1-0' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-12' MONTH"),
+      12 -> ("INTERVAL '1-0' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '12' MONTH"),
       -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-13' MONTH"),
       13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '13' MONTH"),
       -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),

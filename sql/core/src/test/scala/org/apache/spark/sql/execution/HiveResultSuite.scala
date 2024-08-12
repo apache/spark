@@ -119,6 +119,37 @@ class HiveResultSuite extends SharedSparkSession {
     assert(hiveResultString(plan2) === Seq("[-10-1]"))
   }
 
+  test("SPARK-49208: negative month intervals") {
+    import org.apache.spark.sql.types.YearMonthIntervalType
+    import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+
+    Seq(
+      "0-0" -> (11, YM.YEAR, YM.YEAR),
+      "0-0" -> (-11, YM.YEAR, YM.YEAR),
+      "0-11" -> (11, YM.YEAR, YM.MONTH),
+      "-0-11" -> (-11, YM.YEAR, YM.MONTH),
+      "0-11" -> (11, YM.MONTH, YM.MONTH),
+      "-0-11" -> (-11, YM.MONTH, YM.MONTH),
+      "1-0" -> (12, YM.YEAR, YM.YEAR),
+      "-1-0" -> (-12, YM.YEAR, YM.YEAR),
+      "1-0" -> (12, YM.YEAR, YM.MONTH),
+      "-1-0" -> (-12, YM.YEAR, YM.MONTH),
+      "1-0" -> (12, YM.MONTH, YM.MONTH),
+      "-1-0" -> (-12, YM.MONTH, YM.MONTH),
+      "1-0" -> (13, YM.YEAR, YM.YEAR),
+      "-1-0" -> (-13, YM.YEAR, YM.YEAR),
+      "1-1" -> (13, YM.YEAR, YM.MONTH),
+      "-1-1" -> (-13, YM.YEAR, YM.MONTH),
+      "1-1" -> (13, YM.MONTH, YM.MONTH),
+      "-1-1" -> (-13, YM.MONTH, YM.MONTH)
+    ).foreach { case (hiveString, (months, startField, endField)) =>
+      assert(toHiveString((Period.ofMonths(months), YearMonthIntervalType(startField, endField)),
+        false,
+        getTimeFormatters,
+        getBinaryFormatter) === hiveString)
+    }
+  }
+
   test("SPARK-34984, SPARK-35016: day-time interval formatting in hive result") {
     val df = Seq(Duration.ofDays(5).plusMillis(10)).toDF("i")
     val plan1 = df.queryExecution.executedPlan
