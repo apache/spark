@@ -161,25 +161,19 @@ case class FlatMapGroupsInPandasWithState(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
 }
 
-object TransformWithStateInPandas {
-  def apply(functionExpr: Expression,
-      groupingAttributes: Seq[Attribute],
-      outputAttrs: Seq[Attribute],
-      outputMode: OutputMode,
-      timeMode: TimeMode,
-      child: LogicalPlan): TransformWithStateInPandas = {
-
-    new TransformWithStateInPandas(
-      functionExpr,
-      groupingAttributes,
-      outputAttrs,
-      outputMode,
-      timeMode,
-      child = child
-    )
-  }
-}
-
+/**
+ * Invokes methods defined in the stateful processor used in arbitrary state API v2. We allow the
+ * user to act on per-group set of input rows along with keyed state and the user can choose to
+ * output/return 0 or more rows. For a streaming dataframe, we will repeatedly invoke the interface
+ * methods for new rows in each trigger and the user's state/state variables will be stored
+ * persistently across invocations.
+ * @param functionExpr function called on each group
+ * @param groupingAttributes used to group the data
+ * @param outputAttrs used to define the output rows
+ * @param outputMode defines the output mode for the statefulProcessor
+ * @param timeMode the time mode semantics of the stateful processor for timers and TTL.
+ * @param child logical plan of the underlying data
+ */
 case class TransformWithStateInPandas(
     functionExpr: Expression,
     groupingAttributes: Seq[Attribute],

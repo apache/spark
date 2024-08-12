@@ -54,9 +54,9 @@ class TransformWithStateInPandasPythonRunner(
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType)
   extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
-    with PythonArrowInput[InType]
-    with BasicPythonArrowOutput
-    with Logging {
+  with PythonArrowInput[InType]
+  with BasicPythonArrowOutput
+  with Logging {
 
   private val sqlConf = SQLConf.get
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch

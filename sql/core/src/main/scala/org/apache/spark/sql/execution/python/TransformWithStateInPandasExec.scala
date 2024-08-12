@@ -77,11 +77,13 @@ case class TransformWithStateInPandasExec(
   private val groupingKeyExprEncoder = ExpressionEncoder(groupingKeySchema)
     .resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
-  /** The keys that may have a watermark attribute. */
+  // The keys that may have a watermark attribute.
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
+  // Each state variable has its own schema, this is a dummy one.
   protected val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
 
+  // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -97,6 +99,7 @@ case class TransformWithStateInPandasExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    // TODO(SPARK-49212): Implement schema evolution support
     List.empty
   }
 
