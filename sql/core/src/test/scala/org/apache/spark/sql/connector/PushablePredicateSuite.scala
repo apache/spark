@@ -25,6 +25,13 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class PushablePredicateSuite extends QueryTest with SharedSparkSession {
 
+  test("PushablePredicate None returned - flag on") {
+    withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "true") {
+      val pushable = PushablePredicate.unapply(Literal.create("string"))
+      assert(!pushable.isDefined)
+    }
+  }
+
   test("PushablePredicate success - flag on") {
     withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "true") {
       val pushable = PushablePredicate.unapply(Literal.create(true))

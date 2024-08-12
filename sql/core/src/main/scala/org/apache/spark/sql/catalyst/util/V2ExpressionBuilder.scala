@@ -29,7 +29,6 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTru
 import org.apache.spark.sql.execution.datasources.PushableExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
-import org.apache.spark.util.Utils
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -56,12 +55,6 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         translated
       }
-
-      // for testing purposes we still want to assert on initial
-      // result of build - no matter the SQLConf
-      translated.foreach(t => assert(Utils.isTesting &&
-        t.isInstanceOf[V2Predicate],
-        s"Predicate expected but found, ${t.describe()}"))
 
       modifiedExprOpt.map { v =>
         assert(v.isInstanceOf[V2Predicate])

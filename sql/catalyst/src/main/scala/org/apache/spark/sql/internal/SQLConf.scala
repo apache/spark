@@ -1492,7 +1492,7 @@ object SQLConf {
       .internal()
       .doc("Enable skipping assert when expression in not translated to predicate.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(!Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
