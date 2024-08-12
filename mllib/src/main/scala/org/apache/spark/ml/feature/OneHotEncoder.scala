@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.{util => ju}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -27,7 +29,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -88,11 +90,18 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
         s"output columns ${outputColNames.length}.")
 
+    val sparkSession = SparkSession.getDefaultSession.get
+    val transformDataset = sparkSession.createDataFrame(
+      new ju.ArrayList[Row](), schema = schema
+    )
     // Input columns must be NumericType.
-    inputColNames.foreach(SchemaUtils.checkNumericType(schema, _))
+    inputColNames.foreach { colName =>
+      val dataType = transformDataset.col(colName).expr.dataType
+      SchemaUtils.checkNumericType(dataType, colName, "")
+    }
 
     // Prepares output columns with proper attributes by examining input columns.
-    val inputFields = inputColNames.map(schema(_))
+    val inputFields = inputColNames.map(SchemaUtils.getSchemaField(schema, _))
 
     val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
       OneHotEncoderCommon.transformOutputColumnSchema(
