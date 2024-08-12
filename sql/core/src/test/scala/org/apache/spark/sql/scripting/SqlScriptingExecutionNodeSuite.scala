@@ -139,7 +139,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("if else if - enter body of the ELSE IF clause") {
-    val iter = new TestBody(Seq(
+    val iter = TestBody(Seq(
       new IfElseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),

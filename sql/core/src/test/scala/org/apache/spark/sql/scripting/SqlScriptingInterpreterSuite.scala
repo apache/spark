@@ -131,7 +131,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
     val expected = Seq(
       Array.empty[Row], // declare var
       Array.empty[Row], // set var
-      Array(Row(2)), // select
+      Array(Row(2)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -148,7 +148,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
     val expected = Seq(
       Array.empty[Row], // declare var
       Array.empty[Row], // set var
-      Array(Row(2)), // select
+      Array(Row(2)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -179,7 +179,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(2)), // select
       Array.empty[Row], // declare var
       Array.empty[Row], // set var
-      Array(Row(4)), // select
+      Array(Row(4)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -225,7 +225,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array.empty[Row], // declare var
       Array.empty[Row], // set var
       Array(Row(2)), // select
-      Array.empty[Row], // drop var - explicit
+      Array.empty[Row] // drop var - explicit
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -281,7 +281,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(-1)),   // select flag
       Array.empty[Row], // set flag
       Array(Row(4)),    // select
-      Array(Row(1)),    // select
+      Array(Row(1))     // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -321,7 +321,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(5)),    // select
       Array(Row(6)),    // select
       Array(Row(7)),    // select
-      Array(Row(1)),    // select
+      Array(Row(1))     // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -361,7 +361,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(5)),    // select
       Array(Row(6)),    // select
       Array(Row(7)),    // select
-      Array(Row(1)),    // select
+      Array(Row(1))     // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -392,7 +392,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(3)),    // select
       Array(Row(-1)),   // select flag
       Array.empty[Row], // set flag
-      Array(Row(1)),    // select flag from the outer body
+      Array(Row(1))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -430,7 +430,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array.empty[Row], // set flag
                         // skip select 5
                         // skip select 6
-      Array(Row(1)),    // select flag from the outer body
+      Array(Row(1))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -457,7 +457,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(-1)),   // select flag
       Array.empty[Row], // set flag
       Array(Row(3)),    // select
-      Array(Row(1)),    // select
+      Array(Row(1))     // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
