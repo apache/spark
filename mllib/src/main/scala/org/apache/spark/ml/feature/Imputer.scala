@@ -91,7 +91,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
       s" and outputCols(${outputColNames.length}) should have the same length")
     val outputFields = inputColNames.zip(outputColNames).map { case (inputCol, outputCol) =>
       val inputField = SchemaUtils.getSchemaField(schema, inputCol)
-      SchemaUtils.checkNumericType(inputField.dataType, inputCol, "")
+      SchemaUtils.checkNumericType(schema, inputCol)
       StructField(outputCol, inputField.dataType, inputField.nullable)
     }
     StructType(schema ++ outputFields)
@@ -179,8 +179,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         val quantileDataset = dataset.select(inputColumns.zipWithIndex.map {
           case (colName, index) => col(colName).alias(quantileColNames(index))
         }.toImmutableArraySeq: _*)
-        quantileDataset.select(cols.toImmutableArraySeq: _*)
-          .stat.approxQuantile(inputColumns, Array(0.5), $(relativeError))
+        quantileDataset
+          .stat.approxQuantile(quantileColNames, Array(0.5), $(relativeError))
           .map(_.headOption.getOrElse(Double.NaN))
 
       case Imputer.mode =>

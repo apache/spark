@@ -192,10 +192,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol, splits),
       Seq(outputCols, splitsArray))
 
-    val sparkSession = SparkSession.getDefaultSession.get
-    val transformDataset = sparkSession.createDataFrame(
-      new ju.ArrayList[Row](), schema = schema
-    )
     if (isSet(inputCols)) {
       require(getInputCols.length == getOutputCols.length &&
         getInputCols.length == getSplitsArray.length, s"Bucketizer $this has mismatched Params " +
@@ -205,15 +201,13 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
       var transformedSchema = schema
       $(inputCols).zip($(outputCols)).zipWithIndex.foreach { case ((inputCol, outputCol), idx) =>
-        val colType = transformDataset.col(inputCol).expr.dataType
-        SchemaUtils.checkNumericType(colType, inputCol, "")
+        SchemaUtils.checkNumericType(schema, inputCol)
         transformedSchema = SchemaUtils.appendColumn(transformedSchema,
           prepOutputField($(splitsArray)(idx), outputCol))
       }
       transformedSchema
     } else {
-      val colType = transformDataset.col($(inputCol)).expr.dataType
-      SchemaUtils.checkNumericType(colType, $(inputCol), "")
+      SchemaUtils.checkNumericType(schema, $(inputCol))
       SchemaUtils.appendColumn(schema, prepOutputField($(splits), $(outputCol)))
     }
   }
