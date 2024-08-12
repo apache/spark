@@ -232,7 +232,7 @@ case class TransformWithStateExec(
       }
 
       override def next(): InternalRow = {
-        assert(hasStarted, "next called before hasNext")
+        assert(hasStarted, "next() called on handleInputRows iterator before hasNext()")
         mappedIterator.next()
       }
     }
@@ -308,7 +308,7 @@ case class TransformWithStateExec(
       }
 
       override def next(): InternalRow = {
-        assert(hasStarted, "next called before hasNext")
+        assert(hasStarted, "next() called on handleTimerRows iterator before hasNext()")
         mappedIterator.next()
       }
     }
