@@ -44,42 +44,11 @@ Scala REPL options, Spark Classic only:
 # through spark.driver.extraClassPath is not automatically propagated.
 SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
 
-# In order to start Spark Connect shell, we should identify if spark.remote
-# or --remote is set. Spark Connect does not support loading configurations
-# yet.
-connect_shell=false
-cur_arg="$0"
-for arg in "${@:1}"
-do
-  # --conf spark.remote=... or -c spark.remote=...
-  if [[ $cur_arg == "--conf" || $cur_arg == "-c" ]]; then
-    if [[ $arg == "spark.remote"* ]]; then
-      connect_shell=true
-    fi
-  fi
-
-  # --conf=spark.remote=... or -c=spark.remote=...
-  if [[ $arg == "--conf=spark.remote"* || $arg == "-c=spark.remote"* ]]; then
-    connect_shell=true
-  fi
-
-  # --remote= or --remote
-  if [[ $arg == "--remote"* ]]; then
-    connect_shell=true
-  fi
-  cur_arg=$arg
-done
-
-if [ -n "${SPARK_REMOTE}" ]; then
-  connect_shell=true
-fi
-
 function main() {
-  if $connect_shell; then
-     export SPARK_SUBMIT_OPTS
-     export SPARK_CONNECT_SHELL=1
-     "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.sql.application.ConnectRepl --name "Connect shell" "$@"
-  elif $cygwin; then
+  export SPARK_SCALA_SHELL=1
+  # In case of Spark Connect shell, the main class (and resource) is replaced in
+  # SparkSubmitCommandBuilder.
+  if $cygwin; then
     # Workaround for issue involving JLine and Cygwin
     # (see http://sourceforge.net/p/jline/bugs/40/).
     # If you're using the Mintty terminal emulator in Cygwin, may need to set the
