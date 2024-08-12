@@ -40,157 +40,214 @@ public class CollationSupportSuite {
     {"UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"};
 
   /**
-   * Collation-aware UTF8String comparison.
+   * Collation-aware UTF8String comparison and equality check.
    */
 
-  private void assertStringCompare(String s1, String s2, String collationName, int expected)
+  private void assertCompare(String s1, String s2, String collationName, int expected)
       throws SparkException {
     UTF8String l = UTF8String.fromString(s1);
     UTF8String r = UTF8String.fromString(s2);
+    // Test the comparator, which is the most general way to compare strings with collations.
     int compare = CollationFactory.fetchCollation(collationName).comparator.compare(l, r);
     assertEquals(Integer.signum(expected), Integer.signum(compare));
+    // Test the equals function, which may be faster than the comparator for equality checks.
+    boolean equals = CollationFactory.fetchCollation(collationName).equalsFunction.apply(l ,r);
+    assertEquals(expected == 0, equals);
   }
 
   @Test
   public void testCompare() throws SparkException {
     for (String collationName: testSupportedCollations) {
-      // Edge cases
-      assertStringCompare("", "", collationName, 0);
-      assertStringCompare("a", "", collationName, 1);
-      assertStringCompare("", "a", collationName, -1);
-      // Basic tests
-      assertStringCompare("a", "a", collationName, 0);
-      assertStringCompare("a", "b", collationName, -1);
-      assertStringCompare("b", "a", collationName, 1);
-      assertStringCompare("A", "A", collationName, 0);
-      assertStringCompare("A", "B", collationName, -1);
-      assertStringCompare("B", "A", collationName, 1);
-      assertStringCompare("aa", "a", collationName, 1);
-      assertStringCompare("b", "bb", collationName, -1);
-      assertStringCompare("abc", "a", collationName, 1);
-      assertStringCompare("abc", "b", collationName, -1);
-      assertStringCompare("abc", "ab", collationName, 1);
-      assertStringCompare("abc", "abc", collationName, 0);
-      // ASCII strings
-      assertStringCompare("aaaa", "aaa", collationName, 1);
-      assertStringCompare("hello", "world", collationName, -1);
-      assertStringCompare("Spark", "Spark", collationName, 0);
-      // Non-ASCII strings
-      assertStringCompare("ü", "ü", collationName, 0);
-      assertStringCompare("ü", "", collationName, 1);
-      assertStringCompare("", "ü", collationName, -1);
-      assertStringCompare("äü", "äü", collationName, 0);
-      assertStringCompare("äxx", "äx", collationName, 1);
-      assertStringCompare("a", "ä", collationName, -1);
+      // Empty strings.
+      assertCompare("", "", collationName, 0);
+      assertCompare("a", "", collationName, 1);
+      assertCompare("", "a", collationName, -1);
+      // Basic tests.
+      assertCompare("a", "a", collationName, 0);
+      assertCompare("a", "b", collationName, -1);
+      assertCompare("b", "a", collationName, 1);
+      assertCompare("A", "A", collationName, 0);
+      assertCompare("A", "B", collationName, -1);
+      assertCompare("B", "A", collationName, 1);
+      assertCompare("aa", "a", collationName, 1);
+      assertCompare("b", "bb", collationName, -1);
+      assertCompare("abc", "a", collationName, 1);
+      assertCompare("abc", "b", collationName, -1);
+      assertCompare("abc", "ab", collationName, 1);
+      assertCompare("abc", "abc", collationName, 0);
+      assertCompare("aaaa", "aaa", collationName, 1);
+      assertCompare("hello", "world", collationName, -1);
+      assertCompare("Spark", "Spark", collationName, 0);
+      assertCompare("ü", "ü", collationName, 0);
+      assertCompare("ü", "", collationName, 1);
+      assertCompare("", "ü", collationName, -1);
+      assertCompare("äü", "äü", collationName, 0);
+      assertCompare("äxx", "äx", collationName, 1);
+      assertCompare("a", "ä", collationName, -1);
     }
-    // Non-ASCII strings
-    assertStringCompare("äü", "bü", "UTF8_BINARY", 1);
-    assertStringCompare("bxx", "bü", "UTF8_BINARY", -1);
-    assertStringCompare("äü", "bü", "UTF8_LCASE", 1);
-    assertStringCompare("bxx", "bü", "UTF8_LCASE", -1);
-    assertStringCompare("äü", "bü", "UNICODE", -1);
-    assertStringCompare("bxx", "bü", "UNICODE", 1);
-    assertStringCompare("äü", "bü", "UNICODE_CI", -1);
-    assertStringCompare("bxx", "bü", "UNICODE_CI", 1);
-    // Case variation
-    assertStringCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
-    assertStringCompare("ABCD", "abcd", "UTF8_LCASE", 0);
-    assertStringCompare("AbcD", "aBCd", "UNICODE", 1);
-    assertStringCompare("abcd", "ABCD", "UNICODE_CI", 0);
-    // Accent variation
-    assertStringCompare("aBćD", "ABĆD", "UTF8_BINARY", 1);
-    assertStringCompare("AbCδ", "ABCΔ", "UTF8_LCASE", 0);
-    assertStringCompare("äBCd", "ÄBCD", "UNICODE", -1);
-    assertStringCompare("Ab́cD", "AB́CD", "UNICODE_CI", 0);
-    // Case-variable character length
-    assertStringCompare("i\u0307", "İ", "UTF8_BINARY", -1);
-    assertStringCompare("İ", "i\u0307", "UTF8_BINARY", 1);
-    assertStringCompare("i\u0307", "İ", "UTF8_LCASE", 0);
-    assertStringCompare("İ", "i\u0307", "UTF8_LCASE", 0);
-    assertStringCompare("i\u0307", "İ", "UNICODE", -1);
-    assertStringCompare("İ", "i\u0307", "UNICODE", 1);
-    assertStringCompare("i\u0307", "İ", "UNICODE_CI", 0);
-    assertStringCompare("İ", "i\u0307", "UNICODE_CI", 0);
-    assertStringCompare("i\u0307İ", "i\u0307İ", "UTF8_LCASE", 0);
-    assertStringCompare("i\u0307İ", "İi\u0307", "UTF8_LCASE", 0);
-    assertStringCompare("İi\u0307", "i\u0307İ", "UTF8_LCASE", 0);
-    assertStringCompare("İi\u0307", "İi\u0307", "UTF8_LCASE", 0);
-    assertStringCompare("i\u0307İ", "i\u0307İ", "UNICODE_CI", 0);
-    assertStringCompare("i\u0307İ", "İi\u0307", "UNICODE_CI", 0);
-    assertStringCompare("İi\u0307", "i\u0307İ", "UNICODE_CI", 0);
-    assertStringCompare("İi\u0307", "İi\u0307", "UNICODE_CI", 0);
-    // Conditional case mapping
-    assertStringCompare("ς", "σ", "UTF8_BINARY", -1);
-    assertStringCompare("ς", "Σ", "UTF8_BINARY", 1);
-    assertStringCompare("σ", "Σ", "UTF8_BINARY", 1);
-    assertStringCompare("ς", "σ", "UTF8_LCASE", 0);
-    assertStringCompare("ς", "Σ", "UTF8_LCASE", 0);
-    assertStringCompare("σ", "Σ", "UTF8_LCASE", 0);
-    assertStringCompare("ς", "σ", "UNICODE", 1);
-    assertStringCompare("ς", "Σ", "UNICODE", 1);
-    assertStringCompare("σ", "Σ", "UNICODE", -1);
-    assertStringCompare("ς", "σ", "UNICODE_CI", 0);
-    assertStringCompare("ς", "Σ", "UNICODE_CI", 0);
-    assertStringCompare("σ", "Σ", "UNICODE_CI", 0);
+    // Advanced tests.
+    assertCompare("äü", "bü", "UTF8_BINARY", 1);
+    assertCompare("bxx", "bü", "UTF8_BINARY", -1);
+    assertCompare("äü", "bü", "UTF8_LCASE", 1);
+    assertCompare("bxx", "bü", "UTF8_LCASE", -1);
+    assertCompare("äü", "bü", "UNICODE", -1);
+    assertCompare("bxx", "bü", "UNICODE", 1);
+    assertCompare("äü", "bü", "UNICODE_CI", -1);
+    assertCompare("bxx", "bü", "UNICODE_CI", 1);
+    // Case variation.
+    assertCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
+    assertCompare("ABCD", "abcd", "UTF8_LCASE", 0);
+    assertCompare("AbcD", "aBCd", "UNICODE", 1);
+    assertCompare("abcd", "ABCD", "UNICODE_CI", 0);
+    // Accent variation.
+    assertCompare("aBćD", "ABĆD", "UTF8_BINARY", 1);
+    assertCompare("AbCδ", "ABCΔ", "UTF8_LCASE", 0);
+    assertCompare("äBCd", "ÄBCD", "UNICODE", -1);
+    assertCompare("Ab́cD", "AB́CD", "UNICODE_CI", 0);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertCompare("i\u0307", "İ", "UTF8_BINARY", -1);
+    assertCompare("İ", "i\u0307", "UTF8_BINARY", 1);
+    assertCompare("i\u0307", "İ", "UTF8_LCASE", 0);
+    assertCompare("İ", "i\u0307", "UTF8_LCASE", 0);
+    assertCompare("i\u0307", "İ", "UNICODE", -1);
+    assertCompare("İ", "i\u0307", "UNICODE", 1);
+    assertCompare("i\u0307", "İ", "UNICODE_CI", 0);
+    assertCompare("İ", "i\u0307", "UNICODE_CI", 0);
+    assertCompare("i\u0307İ", "i\u0307İ", "UTF8_LCASE", 0);
+    assertCompare("i\u0307İ", "İi\u0307", "UTF8_LCASE", 0);
+    assertCompare("İi\u0307", "i\u0307İ", "UTF8_LCASE", 0);
+    assertCompare("İi\u0307", "İi\u0307", "UTF8_LCASE", 0);
+    assertCompare("i\u0307İ", "i\u0307İ", "UNICODE_CI", 0);
+    assertCompare("i\u0307İ", "İi\u0307", "UNICODE_CI", 0);
+    assertCompare("İi\u0307", "i\u0307İ", "UNICODE_CI", 0);
+    assertCompare("İi\u0307", "İi\u0307", "UNICODE_CI", 0);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertCompare("ς", "σ", "UTF8_BINARY", -1);
+    assertCompare("ς", "Σ", "UTF8_BINARY", 1);
+    assertCompare("σ", "Σ", "UTF8_BINARY", 1);
+    assertCompare("ς", "σ", "UTF8_LCASE", 0);
+    assertCompare("ς", "Σ", "UTF8_LCASE", 0);
+    assertCompare("σ", "Σ", "UTF8_LCASE", 0);
+    assertCompare("ς", "σ", "UNICODE", 1);
+    assertCompare("ς", "Σ", "UNICODE", 1);
+    assertCompare("σ", "Σ", "UNICODE", -1);
+    assertCompare("ς", "σ", "UNICODE_CI", 0);
+    assertCompare("ς", "Σ", "UNICODE_CI", 0);
+    assertCompare("σ", "Σ", "UNICODE_CI", 0);
+    // Surrogate pairs.
+    assertCompare("a🙃b🙃c", "aaaaa", "UTF8_BINARY", 1);
+    assertCompare("a🙃b🙃c", "aaaaa", "UTF8_LCASE", 1);
+    assertCompare("a🙃b🙃c", "aaaaa", "UNICODE", -1); // != UTF8_BINARY
+    assertCompare("a🙃b🙃c", "aaaaa", "UNICODE_CI", -1); // != UTF8_LCASE
+    assertCompare("a🙃b🙃c", "a🙃b🙃c", "UTF8_BINARY", 0);
+    assertCompare("a🙃b🙃c", "a🙃b🙃c", "UTF8_LCASE", 0);
+    assertCompare("a🙃b🙃c", "a🙃b🙃c", "UNICODE", 0);
+    assertCompare("a🙃b🙃c", "a🙃b🙃c", "UNICODE_CI", 0);
+    assertCompare("a🙃b🙃c", "a🙃b🙃d", "UTF8_BINARY", -1);
+    assertCompare("a🙃b🙃c", "a🙃b🙃d", "UTF8_LCASE", -1);
+    assertCompare("a🙃b🙃c", "a🙃b🙃d", "UNICODE", -1);
+    assertCompare("a🙃b🙃c", "a🙃b🙃d", "UNICODE_CI", -1);
     // Maximum code point.
     int maxCodePoint = Character.MAX_CODE_POINT;
     String maxCodePointStr = new String(Character.toChars(maxCodePoint));
     for (int i = 0; i < maxCodePoint && Character.isValidCodePoint(i); ++i) {
-      assertStringCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_BINARY", -1);
-      assertStringCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_LCASE", -1);
+      assertCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_BINARY", -1);
+      assertCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_LCASE", -1);
     }
     // Minimum code point.
     int minCodePoint = Character.MIN_CODE_POINT;
     String minCodePointStr = new String(Character.toChars(minCodePoint));
     for (int i = minCodePoint + 1; i <= maxCodePoint && Character.isValidCodePoint(i); ++i) {
-      assertStringCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_BINARY", 1);
-      assertStringCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_LCASE", 1);
+      assertCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_BINARY", 1);
+      assertCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_LCASE", 1);
     }
   }
 
-  private void assertLowerCaseCodePoints(UTF8String target, UTF8String expected,
-      Boolean useCodePoints) {
+  /**
+   * Collation-aware UTF8String lowercase conversion.
+   */
+
+  private void assertLowerCaseCodePoints(String string, String expected, Boolean useCodePoints) {
+    UTF8String str = UTF8String.fromString(string);
     if (useCodePoints) {
-      assertEquals(expected, CollationAwareUTF8String.lowerCaseCodePoints(target));
+      UTF8String result = CollationAwareUTF8String.lowerCaseCodePoints(str);
+      assertEquals(UTF8String.fromString(expected), result);
     } else {
-      assertEquals(expected, target.toLowerCase());
+      UTF8String result = str.toLowerCase();
+      assertEquals(UTF8String.fromString(expected), result);
     }
   }
 
   @Test
   public void testLowerCaseCodePoints() {
-    // Edge cases
-    assertLowerCaseCodePoints(UTF8String.fromString(""), UTF8String.fromString(""), false);
-    assertLowerCaseCodePoints(UTF8String.fromString(""), UTF8String.fromString(""), true);
-    // Basic tests
-    assertLowerCaseCodePoints(UTF8String.fromString("abcd"), UTF8String.fromString("abcd"), false);
-    assertLowerCaseCodePoints(UTF8String.fromString("AbCd"), UTF8String.fromString("abcd"), false);
-    assertLowerCaseCodePoints(UTF8String.fromString("abcd"), UTF8String.fromString("abcd"), true);
-    assertLowerCaseCodePoints(UTF8String.fromString("aBcD"), UTF8String.fromString("abcd"), true);
-    // Accent variation
-    assertLowerCaseCodePoints(UTF8String.fromString("AbĆd"), UTF8String.fromString("abćd"), false);
-    assertLowerCaseCodePoints(UTF8String.fromString("aBcΔ"), UTF8String.fromString("abcδ"), true);
-    // Case-variable character length
-    assertLowerCaseCodePoints(
-      UTF8String.fromString("İoDiNe"), UTF8String.fromString("i̇odine"), false);
-    assertLowerCaseCodePoints(
-      UTF8String.fromString("Abi̇o12"), UTF8String.fromString("abi̇o12"), false);
-    assertLowerCaseCodePoints(
-      UTF8String.fromString("İodInE"), UTF8String.fromString("i̇odine"), true);
-    assertLowerCaseCodePoints(
-      UTF8String.fromString("aBi̇o12"), UTF8String.fromString("abi̇o12"), true);
-    // Conditional case mapping
-    assertLowerCaseCodePoints(
-      UTF8String.fromString("ΘΑΛΑΣΣΙΝΟΣ"), UTF8String.fromString("θαλασσινος"), false);
-    assertLowerCaseCodePoints(
-      UTF8String.fromString("ΘΑΛΑΣΣΙΝΟΣ"), UTF8String.fromString("θαλασσινοσ"), true);
-    // Surrogate pairs are treated as invalid UTF8 sequences
-    assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
-      {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\uFFFD\uFFFD"), false);
-    assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
-      {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD"), true); // != Java toLowerCase
+    // Empty strings.
+    assertLowerCaseCodePoints("", "", false);
+    assertLowerCaseCodePoints("", "", true);
+    // Basic tests.
+    assertLowerCaseCodePoints("xyz", "xyz", false);
+    assertLowerCaseCodePoints("xyz", "xyz", true);
+    assertLowerCaseCodePoints("abcd", "abcd", false);
+    assertLowerCaseCodePoints("abcd", "abcd", true);
+    // Advanced tests.
+    assertLowerCaseCodePoints("你好", "你好", false);
+    assertLowerCaseCodePoints("你好", "你好", true);
+    assertLowerCaseCodePoints("Γειά", "γειά", false);
+    assertLowerCaseCodePoints("Γειά", "γειά", true);
+    assertLowerCaseCodePoints("Здраво", "здраво", false);
+    assertLowerCaseCodePoints("Здраво", "здраво", true);
+    // Case variation.
+    assertLowerCaseCodePoints("xYz", "xyz", false);
+    assertLowerCaseCodePoints("xYz", "xyz", true);
+    assertLowerCaseCodePoints("AbCd", "abcd", false);
+    assertLowerCaseCodePoints("aBcD", "abcd", true);
+    // Accent variation.
+    assertLowerCaseCodePoints("äbć", "äbć", false);
+    assertLowerCaseCodePoints("äbć", "äbć", true);
+    assertLowerCaseCodePoints("AbĆd", "abćd", false);
+    assertLowerCaseCodePoints("aBcΔ", "abcδ", true);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertLowerCaseCodePoints("i\u0307", "i\u0307", false);
+    assertLowerCaseCodePoints("i\u0307", "i\u0307", true);
+    assertLowerCaseCodePoints("I\u0307", "i\u0307", false);
+    assertLowerCaseCodePoints("I\u0307", "i\u0307", true);
+    assertLowerCaseCodePoints("İ", "i\u0307", false);
+    assertLowerCaseCodePoints("İ", "i\u0307", true);
+    assertLowerCaseCodePoints("İİİ", "i\u0307i\u0307i\u0307", false);
+    assertLowerCaseCodePoints("İİİ", "i\u0307i\u0307i\u0307", true);
+    assertLowerCaseCodePoints("İiIi\u0307", "i\u0307iii\u0307", false);
+    assertLowerCaseCodePoints("İiIi\u0307", "i\u0307iii\u0307", true);
+    assertLowerCaseCodePoints("İoDiNe", "i\u0307odine", false);
+    assertLowerCaseCodePoints("İodInE", "i\u0307odine", true);
+    assertLowerCaseCodePoints("Abi\u0307o12", "abi\u0307o12", false);
+    assertLowerCaseCodePoints("aBi\u0307o12", "abi\u0307o12", true);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertLowerCaseCodePoints("ς", "ς", false);
+    assertLowerCaseCodePoints("ς", "σ", true);
+    assertLowerCaseCodePoints("σ", "σ", false);
+    assertLowerCaseCodePoints("σ", "σ", true);
+    assertLowerCaseCodePoints("Σ", "σ", false);
+    assertLowerCaseCodePoints("Σ", "σ", true);
+    assertLowerCaseCodePoints("ςΑΛΑΤΑ", "ςαλατα", false);
+    assertLowerCaseCodePoints("ςΑΛΑΤΑ", "σαλατα", true);
+    assertLowerCaseCodePoints("σΑΛΑΤΑ", "σαλατα", false);
+    assertLowerCaseCodePoints("σΑΛΑΤΑ", "σαλατα", true);
+    assertLowerCaseCodePoints("ΣΑΛΑΤΑ", "σαλατα", false);
+    assertLowerCaseCodePoints("ΣΑΛΑΤΑ", "σαλατα", true);
+    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟς", "θαλασσινος", false);
+    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟς", "θαλασσινοσ", true);
+    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟσ", "θαλασσινοσ", false);
+    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟσ", "θαλασσινοσ", true);
+    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", false);
+    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινοσ", true);
+    // Surrogate pairs.
+    assertLowerCaseCodePoints("a🙃b🙃c", "a🙃b🙃c", false);
+    assertLowerCaseCodePoints("a🙃b🙃c", "a🙃b🙃c", true);
+    assertLowerCaseCodePoints("😀😆😃😄😄😆", "😀😆😃😄😄😆", false);
+    assertLowerCaseCodePoints("😀😆😃😄😄😆", "😀😆😃😄😄😆", true);
+    assertLowerCaseCodePoints("𐐅", "𐐭", false);
+    assertLowerCaseCodePoints("𐐅", "𐐭", true);
+    assertLowerCaseCodePoints("𝔸", "𝔸", false);
+    assertLowerCaseCodePoints("𝔸", "𝔸", true);
   }
 
   /**
