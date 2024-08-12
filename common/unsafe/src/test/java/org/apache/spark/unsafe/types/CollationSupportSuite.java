@@ -956,106 +956,169 @@ public class CollationSupportSuite {
     assertStringInstr("Σ", "Σ", "UNICODE_CI", 1);
   }
 
+  /**
+   * Verify the behaviour of the `FindInSet` collation support class.
+   */
+
   private void assertFindInSet(String word, UTF8String set, String collationName,
-      Integer expected) throws SparkException {
+      int expected) throws SparkException {
     UTF8String w = UTF8String.fromString(word);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.FindInSet.exec(w, set, collationId));
+    int result = CollationSupport.FindInSet.exec(w, set, collationId);
+    assertEquals(expected, result);
   }
 
   @Test
   public void testFindInSet() throws SparkException {
-    assertFindInSet("AB", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
-    assertFindInSet("abc", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 1);
-    assertFindInSet("def", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 5);
-    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    // Empty strings.
+    assertFindInSet("", UTF8String.fromString(""), "UTF8_BINARY", 1);
+    assertFindInSet("", UTF8String.fromString(""), "UTF8_LCASE", 1);
+    assertFindInSet("", UTF8String.fromString(""), "UNICODE", 1);
+    assertFindInSet("", UTF8String.fromString(""), "UNICODE_CI", 1);
     assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
-    assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UTF8_BINARY", 1);
-    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UTF8_BINARY", 6);
-    assertFindInSet("", UTF8String.fromString("abc"), "UTF8_BINARY", 0);
-    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
-    assertFindInSet("c", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 4);
-    assertFindInSet("AB", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 3);
-    assertFindInSet("AbC", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 1);
-    assertFindInSet("abcd", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
-    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
-    assertFindInSet("XX", UTF8String.fromString("xx"), "UTF8_LCASE", 1);
     assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
+    assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UTF8_BINARY", 1);
     assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UTF8_LCASE", 1);
-    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UTF8_LCASE", 6);
-    assertFindInSet("", UTF8String.fromString("abc"), "UTF8_LCASE", 0);
-    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UTF8_LCASE", 4);
-    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
-    assertFindInSet("ab", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 3);
-    assertFindInSet("Ab", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
-    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
     assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UNICODE", 1);
-    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UNICODE", 6);
-    assertFindInSet("", UTF8String.fromString("abc"), "UNICODE", 0);
-    assertFindInSet("xx", UTF8String.fromString("xx"), "UNICODE", 1);
-    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE", 0);
-    assertFindInSet("大", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE", 5);
-    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
-    assertFindInSet("C", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 4);
-    assertFindInSet("DeF", UTF8String.fromString("abc,b,ab,c,dEf"), "UNICODE_CI", 5);
-    assertFindInSet("DEFG", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
     assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UNICODE_CI", 1);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UTF8_BINARY", 6);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UTF8_LCASE", 6);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UNICODE", 6);
     assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UNICODE_CI", 6);
+    assertFindInSet("", UTF8String.fromString("abc"), "UTF8_BINARY", 0);
+    assertFindInSet("", UTF8String.fromString("abc"), "UTF8_LCASE", 0);
+    assertFindInSet("", UTF8String.fromString("abc"), "UNICODE", 0);
     assertFindInSet("", UTF8String.fromString("abc"), "UNICODE_CI", 0);
-    assertFindInSet("XX", UTF8String.fromString("xx"), "UNICODE_CI", 1);
-    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE_CI", 4);
-    assertFindInSet("界x", UTF8String.fromString("test,大千,界Xx,世,界X,大,千,世界"), "UNICODE_CI", 5);
+    // Basic tests.
+    assertFindInSet("xx", UTF8String.fromString("xx"), "UTF8_BINARY", 1);
+    assertFindInSet("xx", UTF8String.fromString("xx"), "UTF8_LCASE", 1);
+    assertFindInSet("xx", UTF8String.fromString("xx"), "UNICODE", 1);
+    assertFindInSet("xx", UTF8String.fromString("xx"), "UNICODE_CI", 1);
+    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
+    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
+    assertFindInSet("abc", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 1);
+    assertFindInSet("abc", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 1);
+    assertFindInSet("abc", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 1);
+    assertFindInSet("abc", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 1);
+    assertFindInSet("abcd", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("abcd", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
+    assertFindInSet("abcd", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("abcd", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
+    assertFindInSet("def", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 5);
+    assertFindInSet("def", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 5);
+    assertFindInSet("def", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 5);
+    assertFindInSet("def", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 5);
+    assertFindInSet("xyz", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("xyz", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
+    assertFindInSet("xyz", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("xyz", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
+    assertFindInSet("Ab", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("Ab", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 3);
+    assertFindInSet("Ab", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("Ab", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 3);
+    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
+    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
+    assertFindInSet("C", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("C", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 4);
+    assertFindInSet("C", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("C", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 4);
+    // Advanced tests.
+    assertFindInSet("大", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UTF8_BINARY", 5);
+    assertFindInSet("大", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UTF8_LCASE", 5);
+    assertFindInSet("大", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE", 5);
     assertFindInSet("大", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE_CI", 5);
-    assertFindInSet("i̇", UTF8String.fromString("İ"), "UNICODE_CI", 1);
-    assertFindInSet("i", UTF8String.fromString("İ"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("i̇"), "UNICODE_CI", 1);
-    assertFindInSet("i", UTF8String.fromString("i̇"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("İ,"), "UNICODE_CI", 1);
-    assertFindInSet("i", UTF8String.fromString("İ,"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("i̇,"), "UNICODE_CI", 1);
-    assertFindInSet("i", UTF8String.fromString("i̇,"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,İ"), "UNICODE_CI", 2);
-    assertFindInSet("i", UTF8String.fromString("ab,İ"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,i̇"), "UNICODE_CI", 2);
-    assertFindInSet("i", UTF8String.fromString("ab,i̇"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,İ,12"), "UNICODE_CI", 2);
-    assertFindInSet("i", UTF8String.fromString("ab,İ,12"), "UNICODE_CI", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,i̇,12"), "UNICODE_CI", 2);
-    assertFindInSet("i", UTF8String.fromString("ab,i̇,12"), "UNICODE_CI", 0);
-    assertFindInSet("i̇o", UTF8String.fromString("ab,İo,12"), "UNICODE_CI", 2);
-    assertFindInSet("İo", UTF8String.fromString("ab,i̇o,12"), "UNICODE_CI", 2);
-    assertFindInSet("i̇", UTF8String.fromString("İ"), "UTF8_LCASE", 1);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UTF8_BINARY", 0);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UTF8_LCASE", 4);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE", 0);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE_CI", 4);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,界Xx,世,界X,大,千,世界"), "UTF8_BINARY", 0);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,界Xx,世,界X,大,千,世界"), "UTF8_LCASE", 5);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,界Xx,世,界X,大,千,世界"), "UNICODE", 0);
+    assertFindInSet("界x", UTF8String.fromString("test,大千,界Xx,世,界X,大,千,世界"), "UNICODE_CI", 5);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertFindInSet("i\u0307", UTF8String.fromString("İ"), "UTF8_BINARY", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ"), "UTF8_LCASE", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ"), "UNICODE", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ"), "UNICODE_CI", 1);
+    assertFindInSet("i", UTF8String.fromString("İ"), "UTF8_BINARY", 0);
     assertFindInSet("i", UTF8String.fromString("İ"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("i̇"), "UTF8_LCASE", 1);
-    assertFindInSet("i", UTF8String.fromString("i̇"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("İ,"), "UTF8_LCASE", 1);
+    assertFindInSet("i", UTF8String.fromString("İ"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("İ"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307"), "UTF8_BINARY", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307"), "UTF8_LCASE", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307"), "UNICODE", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307"), "UNICODE_CI", 1);
+    assertFindInSet("i", UTF8String.fromString("i\u0307"), "UTF8_BINARY", 0);
+    assertFindInSet("i", UTF8String.fromString("i\u0307"), "UTF8_LCASE", 0);
+    assertFindInSet("i", UTF8String.fromString("i\u0307"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("i\u0307"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ,"), "UTF8_BINARY", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ,"), "UTF8_LCASE", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ,"), "UNICODE", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("İ,"), "UNICODE_CI", 1);
+    assertFindInSet("i", UTF8String.fromString("İ,"), "UTF8_BINARY", 0);
     assertFindInSet("i", UTF8String.fromString("İ,"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("i̇,"), "UTF8_LCASE", 1);
-    assertFindInSet("i", UTF8String.fromString("i̇,"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,İ"), "UTF8_LCASE", 2);
+    assertFindInSet("i", UTF8String.fromString("İ,"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("İ,"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307,"), "UTF8_BINARY", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307,"), "UTF8_LCASE", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307,"), "UNICODE", 1);
+    assertFindInSet("i\u0307", UTF8String.fromString("i\u0307,"), "UNICODE_CI", 1);
+    assertFindInSet("i", UTF8String.fromString("i\u0307,"), "UTF8_BINARY", 0);
+    assertFindInSet("i", UTF8String.fromString("i\u0307,"), "UTF8_LCASE", 0);
+    assertFindInSet("i", UTF8String.fromString("i\u0307,"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("i\u0307,"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ"), "UTF8_BINARY", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ"), "UTF8_LCASE", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ"), "UNICODE", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ"), "UNICODE_CI", 2);
+    assertFindInSet("i", UTF8String.fromString("ab,İ"), "UTF8_BINARY", 0);
     assertFindInSet("i", UTF8String.fromString("ab,İ"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,i̇"), "UTF8_LCASE", 2);
-    assertFindInSet("i", UTF8String.fromString("ab,i̇"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,İ,12"), "UTF8_LCASE", 2);
+    assertFindInSet("i", UTF8String.fromString("ab,İ"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,İ"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307"), "UTF8_BINARY", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307"), "UTF8_LCASE", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307"), "UNICODE", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307"), "UNICODE_CI", 2);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307"), "UTF8_BINARY", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307"), "UTF8_LCASE", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307"), "UNICODE_CI", 0);
+    assertFindInSet("İ", UTF8String.fromString("ab,i\u0307"), "UTF8_BINARY", 0);
+    assertFindInSet("İ", UTF8String.fromString("ab,i\u0307"), "UTF8_LCASE", 2);
+    assertFindInSet("İ", UTF8String.fromString("ab,i\u0307"), "UNICODE", 0);
+    assertFindInSet("İ", UTF8String.fromString("ab,i\u0307"), "UNICODE_CI", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ,12"), "UTF8_BINARY", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ,12"), "UTF8_LCASE", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ,12"), "UNICODE", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,İ,12"), "UNICODE_CI", 2);
+    assertFindInSet("i", UTF8String.fromString("ab,İ,12"), "UTF8_BINARY", 0);
     assertFindInSet("i", UTF8String.fromString("ab,İ,12"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇", UTF8String.fromString("ab,i̇,12"), "UTF8_LCASE", 2);
-    assertFindInSet("i", UTF8String.fromString("ab,i̇,12"), "UTF8_LCASE", 0);
-    assertFindInSet("i̇o", UTF8String.fromString("ab,İo,12"), "UTF8_LCASE", 2);
-    assertFindInSet("İo", UTF8String.fromString("ab,i̇o,12"), "UTF8_LCASE", 2);
-    // Invalid UTF8 strings
-    assertFindInSet("C", UTF8String.fromBytes(
-      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
-      "UTF8_BINARY", 3);
-    assertFindInSet("c", UTF8String.fromBytes(
-      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
-      "UTF8_LCASE", 2);
-    assertFindInSet("C", UTF8String.fromBytes(
-      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
-      "UNICODE", 2);
-    assertFindInSet("c", UTF8String.fromBytes(
-      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
-      "UNICODE_CI", 2);
-    // Greek sigmas.
+    assertFindInSet("i", UTF8String.fromString("ab,İ,12"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,İ,12"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307,12"), "UTF8_BINARY", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307,12"), "UTF8_LCASE", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307,12"), "UNICODE", 2);
+    assertFindInSet("i\u0307", UTF8String.fromString("ab,i\u0307,12"), "UNICODE_CI", 2);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307,12"), "UTF8_BINARY", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307,12"), "UTF8_LCASE", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307,12"), "UNICODE", 0);
+    assertFindInSet("i", UTF8String.fromString("ab,i\u0307,12"), "UNICODE_CI", 0);
+    assertFindInSet("i\u0307o", UTF8String.fromString("ab,İo,12"), "UTF8_BINARY", 0);
+    assertFindInSet("i\u0307o", UTF8String.fromString("ab,İo,12"), "UTF8_LCASE", 2);
+    assertFindInSet("i\u0307o", UTF8String.fromString("ab,İo,12"), "UNICODE", 0);
+    assertFindInSet("i\u0307o", UTF8String.fromString("ab,İo,12"), "UNICODE_CI", 2);
+    assertFindInSet("İo", UTF8String.fromString("ab,i\u0307o,12"), "UTF8_BINARY", 0);
+    assertFindInSet("İo", UTF8String.fromString("ab,i\u0307o,12"), "UTF8_LCASE", 2);
+    assertFindInSet("İo", UTF8String.fromString("ab,i\u0307o,12"), "UNICODE", 0);
+    assertFindInSet("İo", UTF8String.fromString("ab,i\u0307o,12"), "UNICODE_CI", 2);
+    // Conditional case mapping (e.g. Greek sigmas).
     assertFindInSet("σ", UTF8String.fromString("σ"), "UTF8_BINARY", 1);
     assertFindInSet("σ", UTF8String.fromString("ς"), "UTF8_BINARY", 0);
     assertFindInSet("σ", UTF8String.fromString("Σ"), "UTF8_BINARY", 0);
@@ -1092,6 +1155,72 @@ public class CollationSupportSuite {
     assertFindInSet("Σ", UTF8String.fromString("σ"), "UNICODE_CI", 1);
     assertFindInSet("Σ", UTF8String.fromString("ς"), "UNICODE_CI", 1);
     assertFindInSet("Σ", UTF8String.fromString("Σ"), "UNICODE_CI", 1);
+    // Surrogate pairs.
+    assertFindInSet("a", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_BINARY", 0);
+    assertFindInSet("a", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_LCASE", 0);
+    assertFindInSet("a", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE", 0);
+    assertFindInSet("a", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE_CI", 0);
+    assertFindInSet("a🙃", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_BINARY", 1);
+    assertFindInSet("a🙃", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_LCASE", 1);
+    assertFindInSet("a🙃", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE", 1);
+    assertFindInSet("a🙃", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE_CI", 1);
+    assertFindInSet("b", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_BINARY", 2);
+    assertFindInSet("b", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_LCASE", 2);
+    assertFindInSet("b", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE", 2);
+    assertFindInSet("b", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE_CI", 2);
+    assertFindInSet("🙃c", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_BINARY", 3);
+    assertFindInSet("🙃c", UTF8String.fromString("a🙃,b,🙃c"), "UTF8_LCASE", 3);
+    assertFindInSet("🙃c", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE", 3);
+    assertFindInSet("🙃c", UTF8String.fromString("a🙃,b,🙃c"), "UNICODE_CI", 3);
+    assertFindInSet("😄😆", UTF8String.fromString("😀😆,😃😄"), "UTF8_BINARY", 0);
+    assertFindInSet("😄😆", UTF8String.fromString("😀😆,😃😄"), "UTF8_LCASE", 0);
+    assertFindInSet("😄😆", UTF8String.fromString("😀😆,😃😄"), "UNICODE", 0);
+    assertFindInSet("😄😆", UTF8String.fromString("😀😆,😃😄"), "UNICODE_CI", 0);
+    assertFindInSet("😀😆", UTF8String.fromString("😀😆,😃😄"), "UTF8_BINARY", 1);
+    assertFindInSet("😀😆", UTF8String.fromString("😀😆,😃😄"), "UTF8_LCASE", 1);
+    assertFindInSet("😀😆", UTF8String.fromString("😀😆,😃😄"), "UNICODE", 1);
+    assertFindInSet("😀😆", UTF8String.fromString("😀😆,😃😄"), "UNICODE_CI", 1);
+    assertFindInSet("😃😄", UTF8String.fromString("😀😆,😃😄"), "UTF8_BINARY", 2);
+    assertFindInSet("😃😄", UTF8String.fromString("😀😆,😃😄"), "UTF8_LCASE", 2);
+    assertFindInSet("😃😄", UTF8String.fromString("😀😆,😃😄"), "UNICODE", 2);
+    assertFindInSet("😃😄", UTF8String.fromString("😀😆,😃😄"), "UNICODE_CI", 2);
+    assertFindInSet("x", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_BINARY", 0);
+    assertFindInSet("x", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_LCASE", 0);
+    assertFindInSet("x", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE", 0);
+    assertFindInSet("x", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE_CI", 0);
+    assertFindInSet("a", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_BINARY", 1);
+    assertFindInSet("a", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_LCASE", 1);
+    assertFindInSet("a", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE", 1);
+    assertFindInSet("a", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE_CI", 1);
+    assertFindInSet("A", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_BINARY", 0);
+    assertFindInSet("A", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_LCASE", 1);
+    assertFindInSet("A", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE", 0);
+    assertFindInSet("A", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE_CI", 1);
+    assertFindInSet("𝔸", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_BINARY", 3);
+    assertFindInSet("𝔸", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_LCASE", 3);
+    assertFindInSet("𝔸", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE", 3);
+    assertFindInSet("𝔸", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE_CI", 1);
+    assertFindInSet("𐐅", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_BINARY", 2);
+    assertFindInSet("𐐅", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_LCASE", 2);
+    assertFindInSet("𐐅", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE", 2);
+    assertFindInSet("𐐅", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE_CI", 2);
+    assertFindInSet("𐐭", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_BINARY", 0);
+    assertFindInSet("𐐭", UTF8String.fromString("a,𐐅,𝔸"), "UTF8_LCASE", 2);
+    assertFindInSet("𐐭", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE", 0);
+    assertFindInSet("𐐭", UTF8String.fromString("a,𐐅,𝔸"), "UNICODE_CI", 2);
+    // Invalid UTF8 strings
+    assertFindInSet("C", UTF8String.fromBytes(
+      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
+      "UTF8_BINARY", 3);
+    assertFindInSet("c", UTF8String.fromBytes(
+      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
+      "UTF8_LCASE", 2);
+    assertFindInSet("C", UTF8String.fromBytes(
+      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
+      "UNICODE", 2);
+    assertFindInSet("c", UTF8String.fromBytes(
+      new byte[] { 0x41, (byte) 0xC2, 0x2C, 0x42, 0x2C, 0x43, 0x2C, 0x43, 0x2C, 0x56 }),
+      "UNICODE_CI", 2);
   }
 
   private void assertReplace(String source, String search, String replace, String collationName,
