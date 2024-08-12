@@ -29,7 +29,7 @@ import org.json4s.{JArray, JBool, JDecimal, JDouble, JField, JLong, JNull, JObje
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkDateTimeUtils, TimestampFormatter, UDTUtils}
@@ -221,6 +221,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getBoolean(i: Int): Boolean = getAnyValAs[Boolean](i)
 
   /**
@@ -229,6 +230,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getByte(i: Int): Byte = getAnyValAs[Byte](i)
 
   /**
@@ -237,6 +239,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getShort(i: Int): Short = getAnyValAs[Short](i)
 
   /**
@@ -245,6 +248,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getInt(i: Int): Int = getAnyValAs[Int](i)
 
   /**
@@ -253,6 +257,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getLong(i: Int): Long = getAnyValAs[Long](i)
 
   /**
@@ -262,6 +267,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getFloat(i: Int): Float = getAnyValAs[Float](i)
 
   /**
@@ -270,6 +276,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   def getDouble(i: Int): Double = getAnyValAs[Double](i)
 
   /**
@@ -525,6 +532,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws org.apache.spark.SparkException when value is null.
    */
+  @throws[SparkException]
   private def getAnyValAs[T <: AnyVal](i: Int): T =
     if (isNullAt(i)) throw DataTypeErrors.valueIsNullError(i)
     else getAs[T](i)
