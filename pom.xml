@@ -183,7 +183,6 @@
     <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.17.1</commons-codec.version>
@@ -583,10 +582,6 @@
           <exclusion>
             <groupId>com.sun.xml.fastinfoset</groupId>
             <artifactId>FastInfoset</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.glassfish.jaxb</groupId>
-            <artifactId>txw2</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.jvnet.staxex</groupId>
@@ -1024,11 +1019,6 @@
         <groupId>org.apache.ws.xmlschema</groupId>
         <artifactId>xmlschema-core</artifactId>
         <version>${ws.xmlschema.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.glassfish.jaxb</groupId>
-        <artifactId>txw2</artifactId>
-        <version>${org.glassfish.jaxb.txw2.version}</version>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
