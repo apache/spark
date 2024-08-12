@@ -26,7 +26,6 @@ from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import DoubleType
-from pyspark.sql.utils import is_remote
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
