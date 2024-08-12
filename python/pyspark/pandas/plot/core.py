@@ -474,27 +474,27 @@ class KdePlotBase(NumericPlotBase):
 
         bandwidth = float(bw_method)
         points = [float(i) for i in ind]
-        logStandardDeviationPlusHalfLog2Pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
 
-        def normPdf(
+        def norm_pdf(
             mean: Column,
-            standardDeviation: Column,
-            logStandardDeviationPlusHalfLog2Pi: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
             x: Column,
         ) -> Column:
             x0 = x - mean
-            x1 = x0 / standardDeviation
-            logDensity = -0.5 * x1 * x1 - logStandardDeviationPlusHalfLog2Pi
-            return F.exp(logDensity)
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
 
         dataCol = F.col(sdf.columns[0]).cast("double")
 
         estimated = [
             F.avg(
-                normPdf(
+                norm_pdf(
                     dataCol,
                     F.lit(bandwidth),
-                    F.lit(logStandardDeviationPlusHalfLog2Pi),
+                    F.lit(log_std_plus_half_log2_pi),
                     F.lit(point),
                 )
             )
