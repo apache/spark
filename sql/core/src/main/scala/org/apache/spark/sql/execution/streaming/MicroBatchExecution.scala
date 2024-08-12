@@ -280,7 +280,6 @@ class MicroBatchExecution(
     // intentionally
     state.set(TERMINATED)
     if (queryExecutionThread.isAlive) {
-      StreamExecution.removeColumnFamilySchemas(id)
       sparkSession.sparkContext.cancelJobGroup(runId.toString,
         s"Query $prettyIdString was stopped")
       interruptAndAwaitExecutionThreadTermination()
@@ -837,8 +836,14 @@ class MicroBatchExecution(
         offsetLog.offsetSeqMetadataForBatchId(execCtx.batchId - 1),
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
-        execCtx.previousContext.isEmpty)
+        execCtx.previousContext.isEmpty,
+        getColumnFamilySchemas)
+
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
+      // fetch the columnFamilySchemas from IncrementalExecution
+      if (execCtx.previousContext.isEmpty) {
+        updateColumnFamilySchemas(execCtx.executionPlan.getColumnFamilySchemas)
+      }
     }
 
     markMicroBatchExecutionStart(execCtx)

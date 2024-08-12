@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
@@ -37,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateStoreColFamilySchema}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -57,7 +59,8 @@ class IncrementalExecution(
     val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
     val offsetSeqMetadata: OffsetSeqMetadata,
     val watermarkPropagator: WatermarkPropagator,
-    val isFirstBatch: Boolean)
+    val isFirstBatch: Boolean,
+    val columnFamilySchemas: Map[String, StateStoreColFamilySchema] = Map.empty)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
@@ -90,6 +93,24 @@ class IncrementalExecution(
    * for all operators other than TransformWithState.
    */
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
+
+  // This map is populated on the first batch of each run
+  private val colFamilySchemas:
+    mutable.Map[String, StateStoreColFamilySchema] =
+      mutable.HashMap.empty[String, StateStoreColFamilySchema]
+
+  def updateColumnFamilySchemas(
+      newSchemas: Map[String, StateStoreColFamilySchema]): Unit = {
+    newSchemas.foreach { case (name, schema) =>
+      colFamilySchemas.put(name, schema)
+    }
+  }
+
+  // this getter is used to fetch the column family schemas from StreamExecution
+  // and cache the schemas there
+  def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = {
+    colFamilySchemas.toMap
+  }
 
   /**
    * See [SPARK-18339]
@@ -131,7 +152,7 @@ class IncrementalExecution(
       statefulOperatorId.getAndIncrement(),
       currentBatchId,
       numStateStores,
-      colFamilySchemas = StreamExecution.getColumnFamilySchemas(queryId))
+      colFamilySchemas = columnFamilySchemas)
   }
 
   sealed trait SparkPlanPartialRule {
@@ -250,8 +271,7 @@ class IncrementalExecution(
             val columnFamilySchemas = newSchemas.map { case schema =>
               schema.colFamilyName -> schema
             }.toMap
-            StreamExecution.updateColumnFamilySchemas(
-              queryId, columnFamilySchemas)
+            updateColumnFamilySchemas(columnFamilySchemas)
             val stateInfo = tws.getStateInfo
             tws.copy(stateInfo = Some(
               stateInfo.copy(colFamilySchemas = columnFamilySchemas)))

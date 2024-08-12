@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
+import scala.collection.mutable
 import scala.collection.mutable.{Map => MutableMap}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -106,6 +107,21 @@ abstract class StreamExecution(
    * once, since the field's value may change at any time.
    */
   @volatile var committedOffsets = new StreamProgress
+
+  private val columnFamilySchemas:
+    mutable.Map[String, StateStoreColFamilySchema] =
+      mutable.HashMap.empty[String, StateStoreColFamilySchema]
+
+  def updateColumnFamilySchemas(
+      newSchemas: Map[String, StateStoreColFamilySchema]): Unit = {
+    newSchemas.foreach { case (name, schema) =>
+      columnFamilySchemas.put(name, schema)
+    }
+  }
+
+  def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = {
+    columnFamilySchemas.toMap
+  }
 
   /**
    * Get the latest execution context .
@@ -401,8 +417,6 @@ abstract class StreamExecution(
       try {
         stopSources()
         cleanup()
-        // Evict column family schemas from StreamExecution map
-        StreamExecution.removeColumnFamilySchemas(id)
         state.set(TERMINATED)
         getLatestExecutionContext().currentStatus =
           status.copy(isTriggerActive = false, isDataAvailable = false)
@@ -705,24 +719,6 @@ object StreamExecution {
   val PROXY_ERROR = (
     "py4j.protocol.Py4JJavaError: An error occurred while calling" +
       s"((.|\\r\\n|\\r|\\n)*)(${IO_EXCEPTION_NAMES.mkString("|")})").r
-
-  private val columnFamilySchemas:
-    ConcurrentHashMap[UUID, Map[String, StateStoreColFamilySchema]] = new ConcurrentHashMap
-
-  def updateColumnFamilySchemas(
-      queryId: UUID,
-      newSchemas: Map[String, StateStoreColFamilySchema]): Unit = {
-    columnFamilySchemas.put(queryId, newSchemas)
-  }
-
-  def getColumnFamilySchemas(
-      queryId: UUID): Map[String, StateStoreColFamilySchema] = {
-    columnFamilySchemas.get(queryId)
-  }
-
-  def removeColumnFamilySchemas(queryId: UUID): Unit = {
-    columnFamilySchemas.remove(queryId)
-  }
 
   @scala.annotation.tailrec
   def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = {
