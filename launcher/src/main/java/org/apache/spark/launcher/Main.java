@@ -114,7 +114,7 @@ class Main {
       boolean printLaunchCommand) throws IOException, IllegalArgumentException {
     List<String> cmd = builder.buildCommand(env);
     if (printLaunchCommand) {
-      System.err.println("Spark Command: " + join(" ", cmd));
+      System.err.println("Spark Command: " + join(" ", redactCommandLineArgs(cmd)));
       System.err.println("========================================");
     }
     return cmd;
