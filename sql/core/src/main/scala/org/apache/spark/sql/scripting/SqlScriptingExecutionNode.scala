@@ -55,9 +55,6 @@ trait LeafStatementExec extends CompoundStatementExec {
   /** Error state of the statement. */
   var errorState: Option[String] = None
 
-  /** Error raised during statement execution. */
-  var error: Option[SparkThrowable] = None
-
   /** Throwable to rethrow after the statement execution if the error is not handled. */
   var rethrow: Option[Throwable] = None
 
@@ -168,7 +165,6 @@ class SingleStatementExec(
       case e: SparkThrowable =>
         raisedError = true
         errorState = Some(e.getSqlState)
-        error = Some(e)
         e match {
           case throwable: Throwable =>
             rethrow = Some(throwable)
@@ -253,7 +249,12 @@ class CompoundBodyExec(
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
   private var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
-  private var stopIteration: Boolean = false  // hard stop iteration flag
+
+  // Flag to stop the iteration of the current begin/end block.
+  // It is set to true when non-consumed leave statement is encountered.
+  private var stopIteration: Boolean = false
+
+  // Statement to return to after handling the error with continue handler.
   private var returnHere: Option[CompoundStatementExec] = None
 
   def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
