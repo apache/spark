@@ -55,6 +55,7 @@ from pyspark.testing.sqlutils import (
     ExamplePointUDT,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 from pyspark.loose_version import LooseVersion
 
@@ -700,8 +701,8 @@ class ArrowTestsMixin:
 
                 self.check_error(
                     exception=pe.exception,
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                    message_parameters={"data_type": "IntegerType()"},
+                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    messageParameters={"data_type": "IntegerType()"},
                 )
 
     def test_createDataFrame_does_not_modify_input(self):
@@ -1204,8 +1205,13 @@ class ArrowTestsMixin:
                 self.spark.sql("select 1/0").toPandas()
 
     def test_toArrow_error(self):
-        with self.assertRaises(ArithmeticException):
-            self.spark.sql("select 1/0").toArrow()
+        with self.sql_conf(
+            {
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            with self.assertRaises(ArithmeticException):
+                self.spark.sql("select 1/0").toArrow()
 
     def test_toPandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
@@ -1551,15 +1557,26 @@ class ArrowTestsMixin:
 
         self.assertTrue(t.equals(expected))
 
-    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
     def test_arrow_map_timestamp_nulls_round_trip(self):
+        origin_schema = pa.schema([("map", pa.map_(pa.string(), pa.timestamp("us", tz="UTC")))])
         origin = pa.table(
             [[dict(ts=datetime.datetime(2023, 1, 1, 8, 0, 0)), None]],
-            schema=pa.schema([("map", pa.map_(pa.string(), pa.timestamp("us", tz="UTC")))]),
+            schema=origin_schema,
         )
         df = self.spark.createDataFrame(origin)
         t = df.toArrow()
-        self.assertTrue(origin.equals(t))
+
+        # SPARK-48302: PyArrow versions before 17.0.0 replaced nulls with empty lists when
+        # reconstructing MapArray columns to localize timestamps
+        if LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+            expected = origin
+        else:
+            expected = pa.table(
+                [[dict(ts=datetime.datetime(2023, 1, 1, 8, 0, 0)), []]],
+                schema=origin_schema,
+            )
+
+        self.assertTrue(t.equals(expected))
 
     def test_createDataFrame_udt(self):
         for arrow_enabled in [True, False]:

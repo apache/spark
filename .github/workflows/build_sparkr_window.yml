@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-name: "Build / SparkR-only (master, 4.3.3, windows-2019)"
+name: "Build / SparkR-only (master, 4.4.1, windows-2022)"
 
 on:
   schedule:
@@ -25,7 +25,7 @@ on:
 jobs:
   build:
     name: "Build module: sparkr"
-    runs-on: windows-2019
+    runs-on: windows-2022
     timeout-minutes: 300
     if: github.repository == 'apache/spark'
     steps:
@@ -50,10 +50,10 @@ jobs:
       with:
         distribution: zulu
         java-version: 17
-    - name: Install R 4.3.3
+    - name: Install R 4.4.1
       uses: r-lib/actions/setup-r@v2
       with:
-        r-version: 4.3.3
+        r-version: 4.4.1
     - name: Install R dependencies
       run: |
         Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'xml2'), repos='https://cloud.r-project.org/')"

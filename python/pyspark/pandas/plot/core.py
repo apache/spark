@@ -16,13 +16,15 @@
 #
 
 import importlib
+import math
 
 import pandas as pd
 import numpy as np
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
+from pyspark.sql.utils import is_remote
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -463,22 +465,44 @@ class KdePlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
-        from pyspark.mllib.stat import KernelDensity
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
 
-        # 'sdf' is a Spark DataFrame that selects one column.
+        assert ind is not None, "'ind' must be a scalar array."
 
-        # Using RDD is slow so we might have to change it to Dataset based implementation
-        # once Spark has that implementation.
-        sample = sdf.rdd.map(lambda x: float(x[0]))
-        kd = KernelDensity()
-        kd.setSample(sample)
+        bandwidth = float(bw_method)
+        points = [float(i) for i in ind]
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
 
-        assert isinstance(bw_method, (int, float)), "'bw_method' must be set as a scalar number."
+        def norm_pdf(
+            mean: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
 
-        if bw_method is not None:
-            # Match the bandwidth with Spark.
-            kd.setBandwidth(float(bw_method))
-        return kd.estimate(list(map(float, ind)))
+        dataCol = F.col(sdf.columns[0]).cast("double")
+
+        estimated = [
+            F.avg(
+                norm_pdf(
+                    dataCol,
+                    F.lit(bandwidth),
+                    F.lit(log_std_plus_half_log2_pi),
+                    F.lit(point),
+                )
+            )
+            for point in points
+        ]
+
+        row = sdf.select(F.array(estimated)).first()
+        return row[0]
 
 
 class PandasOnSparkPlotAccessor(PandasObject):
@@ -571,10 +595,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
+        if is_remote() and kind == "hist":
+            return unsupported_function(class_name="pd.DataFrame", method_name=kind)()
+
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
-        kind = {"density": "kde"}.get(kind, kind)
         if hasattr(plot_backend, "plot_pandas_on_spark"):
             # use if there's pandas-on-Spark specific method.
             return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
@@ -948,6 +974,9 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.from_pandas(df)
             >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
         """
+        if is_remote():
+            return unsupported_function(class_name="pd.DataFrame", method_name="hist")()
+
         return self(kind="hist", bins=bins, **kwds)
 
     def kde(self, bw_method=None, ind=None, **kwargs):
@@ -1065,7 +1094,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
-            ...                        freq='M'))
+            ...                        freq='ME'))
             >>> df.sales.plot.area()  # doctest: +SKIP
 
         For DataFrame
@@ -1077,7 +1106,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
-            ...                        freq='M'))
+            ...                        freq='ME'))
             >>> df.plot.area()  # doctest: +SKIP
         """
         from pyspark.pandas import DataFrame, Series

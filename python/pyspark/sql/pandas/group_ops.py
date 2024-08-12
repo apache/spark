@@ -101,8 +101,8 @@ class PandasGroupedOpsMixin:
             )
         ):
             raise PySparkTypeError(
-                error_class="INVALID_UDF_EVAL_TYPE",
-                message_parameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
+                errorClass="INVALID_UDF_EVAL_TYPE",
+                messageParameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
             )
 
         warnings.warn(

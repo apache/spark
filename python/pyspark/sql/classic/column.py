@@ -35,7 +35,7 @@ from pyspark.sql.column import Column as ParentColumn
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import with_origin_to_class
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, enum_to_value
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -52,7 +52,7 @@ def _create_column_from_literal(
     from py4j.java_gateway import JVMView
 
     sc = get_active_spark_context()
-    return cast(JVMView, sc._jvm).functions.lit(literal)
+    return cast(JVMView, sc._jvm).functions.lit(enum_to_value(literal))
 
 
 def _create_column_from_name(name: str) -> "JavaObject":
@@ -69,8 +69,8 @@ def _to_java_column(col: "ColumnOrName") -> "JavaObject":
         jcol = _create_column_from_name(col)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
         )
     return jcol
 
@@ -163,7 +163,7 @@ def _bin_op(
     other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
 ) -> ParentColumn:
     """Create a method for given binary operator"""
-    jc = other._jc if isinstance(other, ParentColumn) else other
+    jc = other._jc if isinstance(other, ParentColumn) else enum_to_value(other)
     njc = getattr(self._jc, name)(jc)
     return Column(njc)
 
@@ -309,12 +309,16 @@ class Column(ParentColumn):
     def __and__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("and", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("and", self, lit(other))
 
     def __or__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("or", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("or", self, lit(other))
 
     def __invert__(self) -> ParentColumn:
         return _func_op("not", self)
@@ -322,18 +326,22 @@ class Column(ParentColumn):
     def __rand__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("and", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("and", self, lit(other))
 
     def __ror__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("or", self, other)
+        from pyspark.sql.functions import lit
+
+        return _bin_op("or", self, lit(other))
 
     # container operators
     def __contains__(self, item: Any) -> None:
         raise PySparkValueError(
-            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
-            message_parameters={},
+            errorClass="CANNOT_APPLY_IN_FOR_COLUMN",
+            messageParameters={},
         )
 
     # bitwise operators
@@ -375,14 +383,14 @@ class Column(ParentColumn):
     def withField(self, fieldName: str, col: ParentColumn) -> ParentColumn:
         if not isinstance(fieldName, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
             )
 
         if not isinstance(col, Column):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN",
-                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
 
         return Column(self._jc.withField(fieldName, col._jc))
@@ -395,8 +403,8 @@ class Column(ParentColumn):
     def __getattr__(self, item: Any) -> ParentColumn:
         if item.startswith("__"):
             raise PySparkAttributeError(
-                error_class="CANNOT_ACCESS_TO_DUNDER",
-                message_parameters={},
+                errorClass="CANNOT_ACCESS_TO_DUNDER",
+                messageParameters={},
             )
         return self[item]
 
@@ -404,8 +412,8 @@ class Column(ParentColumn):
         if isinstance(k, slice):
             if k.step is not None:
                 raise PySparkValueError(
-                    error_class="SLICE_WITH_STEP",
-                    message_parameters={},
+                    errorClass="SLICE_WITH_STEP",
+                    messageParameters={},
                 )
             return self.substr(k.start, k.stop)
         else:
@@ -413,7 +421,7 @@ class Column(ParentColumn):
 
     def __iter__(self) -> None:
         raise PySparkTypeError(
-            error_class="NOT_ITERABLE", message_parameters={"objectName": "Column"}
+            errorClass="NOT_ITERABLE", messageParameters={"objectName": "Column"}
         )
 
     # string methods
@@ -433,24 +441,27 @@ class Column(ParentColumn):
         return _bin_op("endsWith", self, other)
 
     def like(self: ParentColumn, other: str) -> ParentColumn:
-        njc = getattr(self._jc, "like")(other)
+        njc = getattr(self._jc, "like")(enum_to_value(other))
         return Column(njc)
 
     def rlike(self: ParentColumn, other: str) -> ParentColumn:
-        njc = getattr(self._jc, "rlike")(other)
+        njc = getattr(self._jc, "rlike")(enum_to_value(other))
         return Column(njc)
 
     def ilike(self: ParentColumn, other: str) -> ParentColumn:
-        njc = getattr(self._jc, "ilike")(other)
+        njc = getattr(self._jc, "ilike")(enum_to_value(other))
         return Column(njc)
 
     def substr(
         self, startPos: Union[int, ParentColumn], length: Union[int, ParentColumn]
     ) -> ParentColumn:
+        startPos = enum_to_value(startPos)
+        length = enum_to_value(length)
+
         if type(startPos) != type(length):
             raise PySparkTypeError(
-                error_class="NOT_SAME_TYPE",
-                message_parameters={
+                errorClass="NOT_SAME_TYPE",
+                messageParameters={
                     "arg_name1": "startPos",
                     "arg_name2": "length",
                     "arg_type1": type(startPos).__name__,
@@ -463,8 +474,8 @@ class Column(ParentColumn):
             jc = self._jc.substr(startPos._jc, cast(ParentColumn, length)._jc)
         else:
             raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_INT",
-                message_parameters={"arg_name": "startPos", "arg_type": type(startPos).__name__},
+                errorClass="NOT_COLUMN_OR_INT",
+                messageParameters={"arg_name": "startPos", "arg_type": type(startPos).__name__},
             )
         return Column(jc)
 
@@ -522,8 +533,8 @@ class Column(ParentColumn):
         else:
             if metadata is not None:
                 raise PySparkValueError(
-                    error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
-                    message_parameters={"arg_name": "metadata"},
+                    errorClass="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+                    messageParameters={"arg_name": "metadata"},
                 )
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
@@ -541,8 +552,8 @@ class Column(ParentColumn):
             jc = self._jc.cast(jdt)
         else:
             raise PySparkTypeError(
-                error_class="NOT_DATATYPE_OR_STR",
-                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_DATATYPE_OR_STR",
+                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
             )
         return Column(jc)
 
@@ -557,8 +568,8 @@ class Column(ParentColumn):
             jc = self._jc.try_cast(jdt)
         else:
             raise PySparkTypeError(
-                error_class="NOT_DATATYPE_OR_STR",
-                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_DATATYPE_OR_STR",
+                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
             )
         return Column(jc)
 
@@ -575,15 +586,15 @@ class Column(ParentColumn):
     def when(self, condition: ParentColumn, value: Any) -> ParentColumn:
         if not isinstance(condition, Column):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN",
-                message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
             )
-        v = value._jc if isinstance(value, Column) else value
+        v = value._jc if isinstance(value, Column) else enum_to_value(value)
         jc = self._jc.when(condition._jc, v)
         return Column(jc)
 
     def otherwise(self, value: Any) -> ParentColumn:
-        v = value._jc if isinstance(value, Column) else value
+        v = value._jc if isinstance(value, Column) else enum_to_value(value)
         jc = self._jc.otherwise(v)
         return Column(jc)
 
@@ -592,16 +603,16 @@ class Column(ParentColumn):
 
         if not isinstance(window, WindowSpec):
             raise PySparkTypeError(
-                error_class="NOT_WINDOWSPEC",
-                message_parameters={"arg_name": "window", "arg_type": type(window).__name__},
+                errorClass="NOT_WINDOWSPEC",
+                messageParameters={"arg_name": "window", "arg_type": type(window).__name__},
             )
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
     def __nonzero__(self) -> None:
         raise PySparkValueError(
-            error_class="CANNOT_CONVERT_COLUMN_INTO_BOOL",
-            message_parameters={},
+            errorClass="CANNOT_CONVERT_COLUMN_INTO_BOOL",
+            messageParameters={},
         )
 
     __bool__ = __nonzero__

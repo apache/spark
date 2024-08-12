@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.ValueState
 
@@ -39,14 +38,13 @@ class ValueStateImpl[S](
     valEncoder: Encoder[S])
   extends ValueState[S] with Logging {
 
-  private val keySerializer = keyExprEnc.createSerializer()
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
+  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
 
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -74,8 +72,7 @@ class ValueStateImpl[S](
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
     val encodedValue = stateTypesEncoder.encodeValue(newState)
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+    store.put(stateTypesEncoder.encodeGroupingKey(),
       encodedValue, stateName)
   }
 

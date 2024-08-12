@@ -1390,8 +1390,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case _: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logWarning(s"Exception occurred while rebuilding log path ${attempt.logPath} - " +
-            "trying again...")
+          logWarning(log"Exception occurred while rebuilding log path " +
+            log"${MDC(LogKeys.PATH, attempt.logPath)} - trying again...")
           retried = true
 
         case e: Exception =>

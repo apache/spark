@@ -55,9 +55,9 @@ from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
+    AnalysisException,
     PySparkValueError,
     PySparkPicklingError,
-    IllegalArgumentException,
 )
 
 if TYPE_CHECKING:
@@ -682,7 +682,7 @@ class Deduplicate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
-        column_names: Optional[List[str]] = None,
+        column_names: Optional[Sequence[str]] = None,
         within_watermark: bool = False,
     ) -> None:
         super().__init__(child)
@@ -887,9 +887,9 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise IllegalArgumentException(
-                error_class="UNSUPPORTED_JOIN_TYPE",
-                message_parameters={"join_type": how},
+            raise AnalysisException(
+                errorClass="UNSUPPORTED_JOIN_TYPE",
+                messageParameters={"join_type": how},
             )
         self.how = join_type
 
@@ -1056,8 +1056,8 @@ class SetOperation(LogicalPlan):
             plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
             raise PySparkValueError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"operation": self.set_op},
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": self.set_op},
             )
 
         plan.set_op.is_all = self.is_all
@@ -1655,6 +1655,7 @@ class WriteOperation(LogicalPlan):
         self.mode: Optional[str] = None
         self.sort_cols: List[str] = []
         self.partitioning_cols: List[str] = []
+        self.clustering_cols: List[str] = []
         self.options: Dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
@@ -1668,6 +1669,7 @@ class WriteOperation(LogicalPlan):
             plan.write_operation.source = self.source
         plan.write_operation.sort_column_names.extend(self.sort_cols)
         plan.write_operation.partitioning_columns.extend(self.partitioning_cols)
+        plan.write_operation.clustering_columns.extend(self.clustering_cols)
 
         if self.num_buckets > 0:
             plan.write_operation.bucket_by.bucket_column_names.extend(self.bucket_cols)
@@ -1693,8 +1695,8 @@ class WriteOperation(LogicalPlan):
                     )
                 else:
                     raise PySparkValueError(
-                        error_class="UNSUPPORTED_OPERATION",
-                        message_parameters={"operation": tsm},
+                        errorClass="UNSUPPORTED_OPERATION",
+                        messageParameters={"operation": tsm},
                     )
         elif self.path is not None:
             plan.write_operation.path = self.path
@@ -1711,8 +1713,8 @@ class WriteOperation(LogicalPlan):
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
             else:
                 raise PySparkValueError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": self.mode},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": self.mode},
                 )
         return plan
 
@@ -1727,6 +1729,7 @@ class WriteOperation(LogicalPlan):
             f"mode='{self.mode}' "
             f"sort_cols='{self.sort_cols}' "
             f"partitioning_cols='{self.partitioning_cols}' "
+            f"clustering_cols='{self.clustering_cols}' "
             f"num_buckets='{self.num_buckets}' "
             f"bucket_cols='{self.bucket_cols}' "
             f"options='{self.options}'>"
@@ -1741,6 +1744,7 @@ class WriteOperation(LogicalPlan):
             f"mode: '{self.mode}' <br />"
             f"sort_cols: '{self.sort_cols}' <br />"
             f"partitioning_cols: '{self.partitioning_cols}' <br />"
+            f"clustering_cols: '{self.clustering_cols}' <br />"
             f"num_buckets: '{self.num_buckets}' <br />"
             f"bucket_cols: '{self.bucket_cols}' <br />"
             f"options: '{self.options}'<br />"
@@ -1754,6 +1758,7 @@ class WriteOperationV2(LogicalPlan):
         self.table_name: Optional[str] = table_name
         self.provider: Optional[str] = None
         self.partitioning_columns: List[Column] = []
+        self.clustering_columns: List[str] = []
         self.options: dict[str, Optional[str]] = {}
         self.table_properties: dict[str, Optional[str]] = {}
         self.mode: Optional[str] = None
@@ -1771,6 +1776,7 @@ class WriteOperationV2(LogicalPlan):
         plan.write_operation_v2.partitioning_columns.extend(
             [c.to_plan(session) for c in self.partitioning_columns]
         )
+        plan.write_operation_v2.clustering_columns.extend(self.clustering_columns)
 
         for k in self.options:
             if self.options[k] is None:
@@ -1804,8 +1810,8 @@ class WriteOperationV2(LogicalPlan):
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
                 raise PySparkValueError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": self.mode},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": self.mode},
                 )
         return plan
 
@@ -2352,8 +2358,8 @@ class PythonUDTF:
             udtf.command = CloudPickleSerializer().dumps(self._func)
         except pickle.PicklingError:
             raise PySparkPicklingError(
-                error_class="UDTF_SERIALIZATION_ERROR",
-                message_parameters={
+                errorClass="UDTF_SERIALIZATION_ERROR",
+                messageParameters={
                     "name": self._name,
                     "message": "Please check the stack trace and "
                     "make sure the function is serializable.",

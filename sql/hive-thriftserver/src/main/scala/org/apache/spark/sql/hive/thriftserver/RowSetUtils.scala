@@ -76,11 +76,12 @@ object RowSetUtils {
     val tRowSet = new TRowSet(startRowOffSet, new java.util.ArrayList[TRow](rowSize))
     var i = 0
     val columnSize = schema.length
+    val columns = new java.util.ArrayList[TColumn](columnSize)
     while (i < columnSize) {
-      val tColumn = toTColumn(rows, i, schema(i), timeFormatters, binaryFormatter)
-      tRowSet.addToColumns(tColumn)
+      columns.add(i, toTColumn(rows, i, schema(i), timeFormatters, binaryFormatter))
       i += 1
     }
+    tRowSet.setColumns(columns)
     tRowSet
   }
 
@@ -136,8 +137,7 @@ object RowSetUtils {
         var i = 0
         val rowSize = rows.length
         val values = new java.util.ArrayList[String](rowSize)
-        while (i < rowSize) {
-          val row = rows(i)
+        rows.foreach { row =>
           nulls.set(i, row.isNullAt(ordinal))
           val value = if (row.isNullAt(ordinal)) {
             ""

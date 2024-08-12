@@ -144,8 +144,8 @@ def fail_on_stopiteration(f: Callable) -> Callable:
             return f(*args, **kwargs)
         except StopIteration as exc:
             raise PySparkRuntimeError(
-                error_class="STOP_ITERATION_OCCURRED",
-                message_parameters={
+                errorClass="STOP_ITERATION_OCCURRED",
+                messageParameters={
                     "exc": str(exc),
                 },
             )
@@ -721,8 +721,8 @@ def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) ->
                 sock.close()
                 sock = None
     raise PySparkRuntimeError(
-        error_class="CANNOT_OPEN_SOCKET",
-        message_parameters={
+        errorClass="CANNOT_OPEN_SOCKET",
+        messageParameters={
             "errors": str(errors),
         },
     )
@@ -739,8 +739,8 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
     if reply != "ok":
         conn.close()
         raise PySparkRuntimeError(
-            error_class="UNEXPECTED_RESPONSE_FROM_SERVER",
-            message_parameters={},
+            errorClass="UNEXPECTED_RESPONSE_FROM_SERVER",
+            messageParameters={},
         )
 
 

@@ -218,7 +218,6 @@ com.google.crypto.tink:tink
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.jamesmurty.utils:java-xmlbuilder
-com.jolbox:bonecp
 com.ning:compress-lzf
 com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
@@ -268,6 +267,7 @@ io.fabric8:kubernetes-model-scheduling
 io.fabric8:kubernetes-model-storageclass
 io.fabric8:zjsonpatch
 io.github.java-diff-utils:java-diff-utils
+io.jsonwebtoken:jjwt-api
 io.netty:netty-all
 io.netty:netty-buffer
 io.netty:netty-codec

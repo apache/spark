@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.util.SparkClassUtils
 
@@ -58,7 +58,8 @@ object UDTRegistration extends Serializable with Logging {
    */
   def register(userClass: String, udtClass: String): Unit = {
     if (udtMap.contains(userClass)) {
-      logWarning(s"Cannot register UDT for ${userClass}, which is already registered.")
+      logWarning(log"Cannot register UDT for ${MDC(LogKeys.CLASS_NAME, userClass)}, " +
+        log"which is already registered.")
     } else {
       // When register UDT with class name, we can't check if the UDT class is an UserDefinedType,
       // or not. The check is deferred.

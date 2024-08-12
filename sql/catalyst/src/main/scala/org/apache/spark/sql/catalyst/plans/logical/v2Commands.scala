@@ -64,10 +64,11 @@ trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with CTEInChild
     table.skipSchemaResolution || (query.output.size == table.output.size &&
       query.output.zip(table.output).forall {
         case (inAttr, outAttr) =>
+          val inType = CharVarcharUtils.getRawType(inAttr.metadata).getOrElse(inAttr.dataType)
           val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
           // names and types must match, nullability must be compatible
           inAttr.name == outAttr.name &&
-            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
+            DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
             (outAttr.nullable || !inAttr.nullable)
       })
   }

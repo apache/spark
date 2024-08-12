@@ -17,7 +17,7 @@
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.util.Locale
 
 import scala.io.Source
@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.25.1"
+  val protoVersion = "3.25.3"
   // GRPC version used for Spark Connect.
   val grpcVersion = "1.62.2"
 }
@@ -332,7 +332,8 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.api.python",
         "org.apache.spark.network",
         "org.apache.spark.deploy",
-        "org.apache.spark.util.collection"
+        "org.apache.spark.util.collection",
+        "org.apache.spark.sql.scripting"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     ),
@@ -396,7 +397,10 @@ object SparkBuild extends PomBuild {
   enable(PySparkAssembly.settings)(assembly)
 
   /* Enable unidoc only for the root spark project */
-  enable(Unidoc.settings)(spark)
+  enable(SparkUnidoc.settings)(spark)
+
+  /* Enable unidoc only for the root spark connect client project */
+  enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -1325,7 +1329,7 @@ object Volcano {
   )
 }
 
-object Unidoc {
+trait SharedUnidocSettings {
 
   import BuildCommons._
   import sbtunidoc.BaseUnidocPlugin
@@ -1336,7 +1340,7 @@ object Unidoc {
   import sbtunidoc.JavaUnidocPlugin.autoImport._
   import sbtunidoc.ScalaUnidocPlugin.autoImport._
 
-  private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+  protected def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
@@ -1361,7 +1365,6 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
       .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
@@ -1380,18 +1383,11 @@ object Unidoc {
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
-  lazy val settings = BaseUnidocPlugin.projectSettings ++
+  lazy val baseSettings = BaseUnidocPlugin.projectSettings ++
                       ScalaUnidocPlugin.projectSettings ++
                       JavaUnidocPlugin.projectSettings ++
                       Seq (
     publish := {},
-
-    (ScalaUnidoc / unidoc / unidocProjectFilter) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
-    (JavaUnidoc / unidoc / unidocProjectFilter) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1447,6 +1443,54 @@ object Unidoc {
   )
 }
 
+object SparkUnidoc extends SharedUnidocSettings {
+
+  import BuildCommons._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
+
+  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    super.ignoreUndocumentedPackages(packages)
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+  }
+
+  lazy val settings = baseSettings ++ Seq(
+    (ScalaUnidoc / unidoc / unidocProjectFilter) :=
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+    (JavaUnidoc / unidoc / unidocProjectFilter) :=
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+  )
+}
+
+object SparkConnectClientUnidoc extends SharedUnidocSettings {
+
+  import BuildCommons._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
+
+  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    super.ignoreUndocumentedPackages(packages)
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/application")))
+  }
+
+  lazy val settings = baseSettings ++ Seq(
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+  )
+}
+
 object Checkstyle {
   lazy val settings = Seq(
     checkstyleSeverityLevel := CheckstyleSeverityLevel.Error,
@@ -1459,6 +1503,7 @@ object Checkstyle {
 }
 
 object CopyDependencies {
+  import scala.sys.process.Process
 
   val copyDeps = TaskKey[Unit]("copyDeps", "Copies needed dependencies to the build directory.")
   val destPath = (Compile / crossTarget) { _ / "jars"}
@@ -1489,12 +1534,11 @@ object CopyDependencies {
           if (jar.getName.contains("spark-connect-common") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
+          } else if (jar.getName.contains("connect-client-jvm")) {
+            // Do not place Spark Connect client jars as it is not built-in.
           } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (jar.getName.contains("connect-client-jvm") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect-client-jvm")) {
-            Files.copy(fidClient.toPath, destJar.toPath)
           } else if (jar.getName.contains("spark-protobuf") &&
             !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
             Files.copy(fidProtobuf.toPath, destJar.toPath)
@@ -1502,6 +1546,33 @@ object CopyDependencies {
             Files.copy(jar.toPath(), destJar.toPath())
           }
         }
+
+      // Here we get the full classpathes required for Spark Connect client including
+      // ammonite, and exclude all spark-* jars. After that, we add the shaded Spark
+      // Connect cleint assembly manually.
+      if (moduleName.value.contains("assembly")) {
+        val replClasspathes = (LocalProject("connect-client-jvm") / Compile / dependencyClasspath)
+          .value.map(_.data).filter(_.isFile())
+        val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
+          "scala.binary.version").asInstanceOf[String]
+        val sparkVer = SbtPomKeys.effectivePom.value.getProperties.get(
+          "spark.version").asInstanceOf[String]
+        val destDir = new File(dest, "connect-repl").toPath
+        Files.createDirectories(destDir)
+
+        val sourceAssemblyJar = Paths.get(
+          BuildCommons.sparkHome.getAbsolutePath, "connector", "connect", "client",
+          "jvm", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jvm-assembly-$sparkVer.jar")
+        val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jvm-assembly-$sparkVer.jar")
+        Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
+
+        replClasspathes.foreach { f =>
+          val destFile = Paths.get(destDir.toString, f.getName)
+          if (!f.getName.startsWith("spark-")) {
+            Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
+          }
+        }
+      }
     },
     (Compile / packageBin / crossTarget) := destPath.value,
     (Compile / packageBin) := (Compile / packageBin).dependsOn(copyDeps).value
@@ -1555,7 +1626,6 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.enabled=false",
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
-    (Test / javaOptions) += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",

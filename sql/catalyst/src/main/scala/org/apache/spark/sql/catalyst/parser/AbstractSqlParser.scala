@@ -91,6 +91,19 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     }
   }
 
+  /** Creates [[CompoundBody]] for a given SQL script string. */
+  override def parseScript(sqlScriptText: String): CompoundBody = parse(sqlScriptText) { parser =>
+    val ctx = parser.compoundOrSingleStatement()
+    withErrorHandling(ctx, Some(sqlScriptText)) {
+      astBuilder.visitCompoundOrSingleStatement(ctx) match {
+        case body: CompoundBody => body
+        case _ =>
+          val position = Origin(None, None)
+          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlScriptText, position)
+      }
+    }
+  }
+
   def withErrorHandling[T](ctx: ParserRuleContext, sqlText: Option[String])(toResult: => T): T = {
     withOrigin(ctx, sqlText) {
       try {

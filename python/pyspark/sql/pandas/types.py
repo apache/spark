@@ -143,8 +143,8 @@ def to_arrow_type(
         field_names = dt.names
         if error_on_duplicated_field_names_in_struct and len(set(field_names)) != len(field_names):
             raise UnsupportedOperationException(
-                error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                message_parameters={"field_names": str(field_names)},
+                errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                messageParameters={"field_names": str(field_names)},
             )
         fields = [
             pa.field(
@@ -171,8 +171,8 @@ def to_arrow_type(
         arrow_type = pa.struct(fields)
     else:
         raise PySparkTypeError(
-            error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-            message_parameters={"data_type": str(dt)},
+            errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            messageParameters={"data_type": str(dt)},
         )
     return arrow_type
 
@@ -263,8 +263,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         if LooseVersion(pa.__version__) < LooseVersion("14.0.0"):
             # PyArrow versions before 14.0.0 do not support casting FixedSizeListArray to ListArray
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                message_parameters={"data_type": str(at)},
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": str(at)},
             )
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_large_list(at):
@@ -291,8 +291,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = NullType()
     else:
         raise PySparkTypeError(
-            error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-            message_parameters={"data_type": str(at)},
+            errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            messageParameters={"data_type": str(at)},
         )
     return spark_type
 
@@ -397,12 +397,20 @@ def _check_arrow_array_timestamps_localize(
             return a
 
         mt: MapType = cast(MapType, dt)
-        # TODO(SPARK-48302): Do not replace nulls in MapArray with empty lists
-        return pa.MapArray.from_arrays(
-            a.offsets,
-            _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
-            _check_arrow_array_timestamps_localize(a.items, mt.valueType, truncate, timezone),
-        )
+
+        params = {
+            "offsets": a.offsets,
+            "keys": _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
+            "items": _check_arrow_array_timestamps_localize(
+                a.items, mt.valueType, truncate, timezone
+            ),
+        }
+        # SPARK-48302: PyArrow added support for mask argument to pa.MapArray.from_arrays in
+        # version 17.0.0
+        if a.null_count and LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+            params["mask"] = a.is_null()
+
+        return pa.MapArray.from_arrays(**params)
     if types.is_struct(a.type):
         # Return the StructArray as-is if it contains no nested fields or timestamps
         if all(
@@ -880,8 +888,8 @@ def _create_converter_to_pandas(
 
             if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
                 raise UnsupportedOperationException(
-                    error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                    message_parameters={"field_names": str(field_names)},
+                    errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                    messageParameters={"field_names": str(field_names)},
                 )
 
             dedup_field_names = _dedup_names(field_names)
@@ -962,8 +970,8 @@ def _create_converter_to_pandas(
 
             else:
                 raise PySparkValueError(
-                    error_class="UNKNOWN_VALUE_FOR",
-                    message_parameters={"var": str(_struct_in_pandas)},
+                    errorClass="UNKNOWN_VALUE_FOR",
+                    messageParameters={"var": str(_struct_in_pandas)},
                 )
 
         elif isinstance(dt, TimestampType):
@@ -1024,7 +1032,7 @@ def _create_converter_to_pandas(
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 
@@ -1177,8 +1185,8 @@ def _create_converter_from_pandas(
 
             if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
                 raise UnsupportedOperationException(
-                    error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                    message_parameters={"field_names": str(field_names)},
+                    errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                    messageParameters={"field_names": str(field_names)},
                 )
 
             dedup_field_names = _dedup_names(field_names)

@@ -38,6 +38,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -1885,7 +1887,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.dropDuplicates
+        DataFrame.dropDuplicates : Remove duplicate rows from this DataFrame.
 
         Examples
         --------
@@ -2949,7 +2951,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.summary
+        DataFrame.summary : Computes summary statistics for numeric and string columns.
         """
         ...
 
@@ -3020,7 +3022,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.display
+        DataFrame.describe : Computes basic statistics for numeric and string columns.
         """
         ...
 
@@ -3788,7 +3790,7 @@ class DataFrame:
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":
         """
-        Create multi-dimensional aggregation for the current `class`:DataFrame using the specified
+        Create multi-dimensional aggregation for the current :class:`DataFrame` using the specified
         grouping sets, so we can run aggregation on them.
 
         .. versionadded:: 4.0.0
@@ -3871,7 +3873,7 @@ class DataFrame:
 
         See Also
         --------
-        GroupedData
+        DataFrame.rollup : Compute hierarchical summaries at multiple levels.
         """
         ...
 
@@ -4568,7 +4570,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -4584,6 +4586,9 @@ class DataFrame:
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
         Parameters
         ----------
@@ -4616,7 +4621,7 @@ class DataFrame:
 
         Deduplicate values on 'name' and 'height' columns.
 
-        >>> df.dropDuplicates(['name', 'height']).show()
+        >>> df.dropDuplicates('name', 'height').show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4626,7 +4631,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
@@ -4642,6 +4647,9 @@ class DataFrame:
         Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
+
+         .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
          Parameters
          ----------
@@ -4672,7 +4680,7 @@ class DataFrame:
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
         """
         ...
 
@@ -5412,7 +5420,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnsRenamed`
+        DataFrame.withColumnsRenamed
 
         Examples
         --------
@@ -5472,7 +5480,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnRenamed`
+        DataFrame.withColumnRenamed
 
         Examples
         --------
@@ -5929,11 +5937,17 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def drop_duplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
         """
         ...
 
@@ -5969,6 +5983,45 @@ class DataFrame:
         >>> df.writeTo(                              # doctest: +SKIP
         ...     "catalog.db.table"
         ... ).partitionedBy("col").createOrReplace()
+        """
+        ...
+
+    @dispatch_df_method
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        """
+        Merges a set of updates, insertions, and deletions based on a source table into
+        a target table.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        table : str
+            Target table name to merge into.
+        condition : :class:`Column`
+            The condition that determines whether a row in the target table matches one in the
+            source DataFrame.
+
+        Returns
+        -------
+        :class:`MergeIntoWriter`
+            MergeIntoWriter to use further to specify how to merge the source DataFrame
+            into the target table.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import expr
+        >>> source = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["id", "name"])
+        >>> (source.mergeInto("target", "id")  # doctest: +SKIP
+        ...     .whenMatched().update({ "name": source.name })
+        ...     .whenNotMatched().insertAll()
+        ...     .whenNotMatchedBySource().delete()
+        ...     .merge())
+
+        Notes
+        -----
+        This method does not support streaming queries.
         """
         ...
 
@@ -6134,6 +6187,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
+        DataFrame.mapInArrow
         """
         ...
 
@@ -6210,7 +6264,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
-        pyspark.sql.DataFrame.mapInPandas
+        DataFrame.mapInPandas
         """
         ...
 
@@ -6266,6 +6320,31 @@ class DataFrame:
            age   name
         0    2  Alice
         1    5    Bob
+        """
+        ...
+
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        """
+        Returns a QueryExecution object after the query was executed.
+
+        The queryExecution method allows to introspect information about the actual
+        query execution after the successful execution. Accessing this member before
+        the query execution will return None.
+
+        If the same DataFrame is executed multiple times, the execution info will be
+        overwritten by the latest operation.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        An instance of QueryExecution or None when the value is not set yet.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
         """
         ...
 

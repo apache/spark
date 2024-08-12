@@ -29,8 +29,8 @@ class CollectTopKSuite extends MLTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val sqlContext = spark.sqlContext
-    import sqlContext.implicits._
+    val session = spark
+    import session.implicits._
     dataFrame = Seq(
       (0, 3, 54f),
       (0, 4, 44f),

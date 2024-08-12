@@ -367,17 +367,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
   test("UDAF custom Aggregator - case class as input types") {
     val session: SparkSession = spark
     import session.implicits._
-    val agg = new Aggregator[UdafTestInput, (Long, Long), Long] {
-      override def zero: (Long, Long) = (0L, 0L)
-      override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
-        (b._1 + a.id, b._2 + a.extra)
-      override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
-        (b1._1 + b2._1, b1._2 + b2._2)
-      override def finish(reduction: (Long, Long)): Long = reduction._1 + reduction._2
-      override def bufferEncoder: Encoder[(Long, Long)] =
-        Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
-      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
-    }
+    val agg = new CompleteUdafTestInputAggregator()
     spark.udf.register("agg", udaf(agg))
     val result = spark
       .range(10)
@@ -388,6 +378,66 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
       .head()
     assert(result == 135) // 45 + 90
   }
+
+  test("UDAF custom Aggregator - toColumn") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val aggCol = new CompleteUdafTestInputAggregator().toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).as[UdafTestInput]
+
+    assert(ds.select(aggCol).head() == 135) // 45 + 90
+    assert(ds.agg(aggCol).head().getLong(0) == 135) // 45 + 90
+  }
+
+  test("UDAF custom Aggregator - multiple extends - toColumn") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val aggCol = new CompleteGrandChildUdafTestInputAggregator().toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).as[UdafTestInput]
+
+    assert(ds.select(aggCol).head() == 540) // (45 + 90) * 4
+    assert(ds.agg(aggCol).head().getLong(0) == 540) // (45 + 90) * 4
+  }
 }
 
 case class UdafTestInput(id: Long, extra: Long)
+
+// An Aggregator that takes [[UdafTestInput]] as input.
+final class CompleteUdafTestInputAggregator
+    extends Aggregator[UdafTestInput, (Long, Long), Long] {
+  override def zero: (Long, Long) = (0L, 0L)
+  override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
+    (b._1 + a.id, b._2 + a.extra)
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+    (b1._1 + b2._1, b1._2 + b2._2)
+  override def finish(reduction: (Long, Long)): Long = reduction._1 + reduction._2
+  override def bufferEncoder: Encoder[(Long, Long)] =
+    Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+// Same as [[CompleteUdafTestInputAggregator]] but the input type is not defined.
+abstract class IncompleteUdafTestInputAggregator[T] extends Aggregator[T, (Long, Long), Long] {
+  override def zero: (Long, Long) = (0L, 0L)
+  override def reduce(b: (Long, Long), a: T): (Long, Long) // Incomplete!
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+    (b1._1 + b2._1, b1._2 + b2._2)
+  override def finish(reduction: (Long, Long)): Long = reduction._1 + reduction._2
+  override def bufferEncoder: Encoder[(Long, Long)] =
+    Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+// A layer over [[IncompleteUdafTestInputAggregator]] but the input type is still not defined.
+abstract class IncompleteChildUdafTestInputAggregator[T]
+    extends IncompleteUdafTestInputAggregator[T] {
+  override def finish(reduction: (Long, Long)): Long = (reduction._1 + reduction._2) * 2
+}
+
+// Another layer that finally defines the input type.
+final class CompleteGrandChildUdafTestInputAggregator
+    extends IncompleteChildUdafTestInputAggregator[UdafTestInput] {
+  override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
+    (b._1 + a.id, b._2 + a.extra)
+  override def finish(reduction: (Long, Long)): Long = (reduction._1 + reduction._2) * 4
+}

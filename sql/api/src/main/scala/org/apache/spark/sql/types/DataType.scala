@@ -148,7 +148,8 @@ object DataType {
         try {
           fallbackParser(schema)
         } catch {
-          case NonFatal(_) =>
+          case NonFatal(suppressed) =>
+            e.addSuppressed(suppressed)
             if (e.isInstanceOf[SparkThrowable]) {
               throw e
             }
@@ -223,7 +224,7 @@ object DataType {
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
       assertValidTypeForCollations(fieldPath, "array", collationsMap)
-      val elementType = parseDataType(t, fieldPath + ".element", collationsMap)
+      val elementType = parseDataType(t, appendFieldToPath(fieldPath, "element"), collationsMap)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -232,8 +233,8 @@ object DataType {
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
       assertValidTypeForCollations(fieldPath, "map", collationsMap)
-      val keyType = parseDataType(k, fieldPath + ".key", collationsMap)
-      val valueType = parseDataType(v, fieldPath + ".value", collationsMap)
+      val keyType = parseDataType(k, appendFieldToPath(fieldPath, "key"), collationsMap)
+      val valueType = parseDataType(v, appendFieldToPath(fieldPath, "value"), collationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(
@@ -302,6 +303,13 @@ object DataType {
         errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
         messageParameters = Map("jsonType" -> fieldType))
     }
+  }
+
+  /**
+   * Appends a field name to a given path, using a dot separator if the path is not empty.
+   */
+  private def appendFieldToPath(basePath: String, fieldName: String): String = {
+    if (basePath.isEmpty) fieldName else s"$basePath.$fieldName"
   }
 
   /**
@@ -402,6 +410,41 @@ object DataType {
             (ignoreName || fromField.name == toField.name) &&
               (toField.nullable || !fromField.nullable) &&
               equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Check if `from` is equal to `to` type except for collations, which are checked to be
+   * compatible so that data of type `from` can be interpreted as of type `to`.
+   */
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: DataType,
+      to: DataType): Boolean = {
+    (from, to) match {
+      // String types with possibly different collations are compatible.
+      case (_: StringType, _: StringType) => true
+
+      case (ArrayType(fromElement, fromContainsNull), ArrayType(toElement, toContainsNull)) =>
+        (fromContainsNull == toContainsNull) &&
+          equalsIgnoreCompatibleCollation(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fromContainsNull),
+          MapType(toKey, toValue, toContainsNull)) =>
+        fromContainsNull == toContainsNull &&
+          // Map keys cannot change collation.
+          fromKey == toKey &&
+          equalsIgnoreCompatibleCollation(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+            fromField.name == toField.name &&
+              fromField.nullable == toField.nullable &&
+              fromField.metadata == toField.metadata &&
+              equalsIgnoreCompatibleCollation(fromField.dataType, toField.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

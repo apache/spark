@@ -911,6 +911,10 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
   def withNewPlan(newPlan: LogicalPlan): WithCTE = {
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
   }
+
+  override def maxRows: Option[Long] = plan.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = plan.maxRowsPerPartition
 }
 
 /**
@@ -1993,6 +1997,16 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
  * This is used to allow such commands in the subquery-related checks.
  */
 trait SupportsSubquery extends LogicalPlan
+
+/**
+ * Trait that logical plans can extend to check whether it can allow non-deterministic
+ * expressions and pass the CheckAnalysis rule.
+ */
+trait SupportsNonDeterministicExpression extends LogicalPlan {
+
+  /** Returns whether it allows non-deterministic expressions. */
+  def allowNonDeterministicExpression: Boolean
+}
 
 /**
  * Collect arbitrary (named) metrics from a dataset. As soon as the query reaches a completion

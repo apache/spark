@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
+import org.apache.spark.internal.config
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -373,7 +374,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     val numEdgePartitions = 4
     assert(defaultParallelism != numEdgePartitions)
     val conf = new org.apache.spark.SparkConf()
-      .set("spark.default.parallelism", defaultParallelism.toString)
+      .set(config.DEFAULT_PARALLELISM.key, defaultParallelism.toString)
     val sc = new SparkContext("local", "test", conf)
     try {
       val edges = sc.parallelize((1 to n).map(x => (x: VertexId, 0: VertexId)),

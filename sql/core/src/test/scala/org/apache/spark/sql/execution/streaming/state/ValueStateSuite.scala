@@ -387,6 +387,33 @@ class ValueStateSuite extends StateVariableSuiteBase {
       }
     }
   }
+
+  test("Value state TTL with non-primitive type") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.product[TestClass].asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: ValueStateImplWithTTL[POJOTestClass] =
+        handle.getValueState[POJOTestClass]("testState",
+        Encoders.bean(classOf[POJOTestClass]), ttlConfig)
+          .asInstanceOf[ValueStateImplWithTTL[POJOTestClass]]
+      ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
+      testState.update(new POJOTestClass("n1", 1))
+      assert(testState.get() === new POJOTestClass("n1", 1))
+      assert(testState.getWithoutEnforcingTTL().get === new POJOTestClass("n1", 1))
+
+      val ttlExpirationMs = timestampMs + 60000
+      val ttlValue = testState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      val ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
+    }
+  }
 }
 
 /**
@@ -410,6 +437,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
 
   import StateStoreTestsHelper._
 
+  // dummy schema for initializing rocksdb provider
   protected def schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   protected def schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 

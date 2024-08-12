@@ -169,11 +169,12 @@ private[sql] class SharedState(
     wrapped
   }
 
+  val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
+
   /**
    * A manager for global temporary views.
    */
   lazy val globalTempViewManager: GlobalTempViewManager = {
-    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw QueryExecutionErrors.databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB)
     }

@@ -25,16 +25,16 @@ class SeriesPlotMatplotlibParityTests(
     SeriesPlotMatplotlibTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
     @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
+    def test_empty_hist(self):
+        super().test_empty_hist()
+
+    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_hist(self):
         super().test_hist()
 
     @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_hist_plot(self):
         super().test_hist_plot()
-
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
-    def test_kde_plot(self):
-        super().test_kde_plot()
 
     @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_single_value_hist(self):

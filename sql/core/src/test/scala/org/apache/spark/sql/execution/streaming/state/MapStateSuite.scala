@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{BinaryType, StructType}
  * operators such as transformWithState
  */
 class MapStateSuite extends StateVariableSuiteBase {
-  // Overwrite Key schema as MapState use composite key
+  // dummy schema for initializing rocksdb provider
   override def schemaForKeyRow: StructType = new StructType()
     .add("key", BinaryType)
     .add("userKey", BinaryType)
@@ -253,6 +253,36 @@ class MapStateSuite extends StateVariableSuiteBase {
           matchPVals = true
         )
       }
+    }
+  }
+
+  test("Map state with TTL with non-primitive types") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: MapStateImplWithTTL[POJOTestClass, TestClass] =
+        handle.getMapState[POJOTestClass, TestClass]("testState",
+          Encoders.bean(classOf[POJOTestClass]),
+          Encoders.product[TestClass], ttlConfig)
+          .asInstanceOf[MapStateImplWithTTL[POJOTestClass, TestClass]]
+
+      ImplicitGroupingKeyTracker.setImplicitKey("testKey")
+      testState.updateValue(new POJOTestClass("k1", 1), TestClass(1L, "v1"))
+      assert(testState.getValue(new POJOTestClass("k1", 1)) === TestClass(1L, "v1"))
+      assert(testState.getWithoutEnforcingTTL(
+        new POJOTestClass("k1", 1)).get === TestClass(1L, "v1"))
+
+      val ttlExpirationMs = timestampMs + 60000
+      val ttlValue = testState.getTTLValue(new POJOTestClass("k1", 1))
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      val ttlStateValueIterator = testState.getKeyValuesInTTLState().map(_._2)
+      assert(ttlStateValueIterator.hasNext)
     }
   }
 }

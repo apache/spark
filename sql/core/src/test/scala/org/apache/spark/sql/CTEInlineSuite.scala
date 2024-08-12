@@ -703,6 +703,17 @@ abstract class CTEInlineSuiteBase
       checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 83, 96))
     }
   }
+
+  test("SPARK-48307: not-inlined CTE references sibling") {
+    val df = sql(
+      """
+        |WITH
+        |v1 AS (SELECT 1 col),
+        |v2 AS (SELECT col, rand() FROM v1)
+        |SELECT l.col FROM v2 l JOIN v2 r ON l.col = r.col
+        |""".stripMargin)
+    checkAnswer(df, Row(1))
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

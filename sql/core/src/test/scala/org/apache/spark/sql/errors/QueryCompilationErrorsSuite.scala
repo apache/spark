@@ -878,37 +878,6 @@ class QueryCompilationErrorsSuite
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 
-  test("SPARK-47102: the collation feature is off without collate builder call") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "CREATE TABLE t(col STRING COLLATE UNICODE_CI) USING parquet",
-        "CREATE TABLE t(col STRING COLLATE UNKNOWN_COLLATION_STRING) USING parquet",
-        "SELECT 'aaa' COLLATE UNICODE_CI",
-        "select collation('aaa')"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          errorClass = "UNSUPPORTED_FEATURE.COLLATION")
-      }
-    }
-  }
-
-  test("SPARK-47102: the collation feature is off with collate builder call") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "SELECT collate('aaa', 'UNICODE_CI')",
-        "SELECT collate('aaa', 'UNKNOWN_COLLATION_STRING')"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-          parameters = Map.empty,
-          context = ExpectedContext(
-            fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1))
-      }
-    }
-  }
-
   test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
     val converter = new SparkToParquetSchemaConverter
     val dummyDataType = new DataType {
@@ -925,6 +894,37 @@ class QueryCompilationErrorsSuite
       errorClass = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
     )
+  }
+
+  test("SPARK-48556: Ensure UNRESOLVED_COLUMN is thrown when query has grouping expressions " +
+      "with invalid column name") {
+    case class UnresolvedDummyColumnTest(query: String, pos: Int)
+
+    withTable("t1") {
+      sql("create table t1(a int, b int) using parquet")
+      val tests = Seq(
+        UnresolvedDummyColumnTest("select grouping(a), dummy from t1 group by a with rollup", 20),
+        UnresolvedDummyColumnTest("select dummy, grouping(a) from t1 group by a with rollup", 7),
+        UnresolvedDummyColumnTest(
+          "select a, case when grouping(a) = 1 then 0 else b end, count(dummy) from t1 " +
+            "group by 1 with rollup",
+          61),
+        UnresolvedDummyColumnTest(
+          "select a, max(dummy), case when grouping(a) = 1 then 0 else b end " +
+            "from t1 group by 1 with rollup",
+          14)
+      )
+      tests.foreach(test => {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(test.query)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map("objectName" -> "`dummy`", "proposal" -> "`a`, `b`"),
+          context = ExpectedContext(fragment = "dummy", start = test.pos, stop = test.pos + 4)
+        )
+      })
+    }
   }
 }
 

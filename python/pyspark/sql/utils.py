@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from enum import Enum
 import inspect
 import functools
 import os
 from typing import (
     Any,
     Callable,
+    Dict,
     Optional,
     List,
     Sequence,
@@ -27,7 +29,6 @@ from typing import (
     cast,
     TypeVar,
     Union,
-    Type,
 )
 
 # For backward compatibility.
@@ -53,11 +54,11 @@ if TYPE_CHECKING:
         JavaClass,
         JavaGateway,
         JavaObject,
+        JVMView,
     )
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -72,7 +73,7 @@ except ImportError:
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
-def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
+def to_java_array(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
     """
     Convert python list to java type array
 
@@ -91,6 +92,14 @@ def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> 
     return jarray
 
 
+def to_scala_map(jvm: "JVMView", dic: Dict) -> "JavaObject":
+    """
+    Convert a dict into a Scala Map.
+    """
+    assert jvm is not None
+    return jvm.PythonUtils.toScalaMap(dic)
+
+
 def require_test_compiled() -> None:
     """Raise Exception if test classes are not compiled"""
     import os
@@ -101,8 +110,8 @@ def require_test_compiled() -> None:
 
     if len(paths) == 0:
         raise PySparkRuntimeError(
-            error_class="TEST_CLASS_NOT_COMPILED",
-            message_parameters={"test_class_path": test_class_path},
+            errorClass="TEST_CLASS_NOT_COMPILED",
+            messageParameters={"test_class_path": test_class_path},
         )
 
 
@@ -183,6 +192,11 @@ def to_str(value: Any) -> Optional[str]:
         return value
     else:
         return str(value)
+
+
+def enum_to_value(value: Any) -> Any:
+    """Convert an Enum to its value if it is not None."""
+    return enum_to_value(value.value) if value is not None and isinstance(value, Enum) else value
 
 
 def is_timestamp_ntz_preferred() -> bool:
@@ -298,8 +312,8 @@ def get_active_spark_context() -> "SparkContext":
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
         raise PySparkRuntimeError(
-            error_class="SESSION_OR_CONTEXT_NOT_EXISTS",
-            message_parameters={},
+            errorClass="SESSION_OR_CONTEXT_NOT_EXISTS",
+            messageParameters={},
         )
     return sc
 
@@ -340,8 +354,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
                 return getattr(ClassicDataFrame, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"DataFrame.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -367,8 +381,8 @@ def dispatch_col_method(f: FuncT) -> FuncT:
                 return getattr(ClassicColumn, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"Column.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -392,8 +406,8 @@ def dispatch_window_method(f: FuncT) -> FuncT:
             return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"Window.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"Window.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -415,17 +429,6 @@ def pyspark_column_op(
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_window_class() -> Type["Window"]:
-    from pyspark.sql.window import Window as PySparkWindow
-
-    if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
-
-        return ConnectWindow
-    else:
-        return PySparkWindow
 
 
 def get_lit_sql_str(val: str) -> str:

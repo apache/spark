@@ -32,7 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{config, Logging, MDC}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -707,7 +707,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def defaultParallelism(): Int = {
-    conf.getInt("spark.default.parallelism", math.max(totalCoreCount.get(), 2))
+    conf.getInt(config.DEFAULT_PARALLELISM.key, math.max(totalCoreCount.get(), 2))
   }
 
   /**

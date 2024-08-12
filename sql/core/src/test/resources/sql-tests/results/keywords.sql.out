@@ -20,6 +20,7 @@ AS	false
 ASC	false
 AT	false
 AUTHORIZATION	false
+BEGIN	false
 BETWEEN	false
 BIGINT	false
 BINARY	false
@@ -31,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALLED	false
 CASCADE	false
 CASE	false
 CAST	false
@@ -57,6 +59,7 @@ COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
 CONSTRAINT	false
+CONTAINS	false
 COST	false
 CREATE	false
 CROSS	false
@@ -83,10 +86,12 @@ DECIMAL	false
 DECLARE	false
 DEFAULT	false
 DEFINED	false
+DEFINER	false
 DELETE	false
 DELIMITED	false
 DESC	false
 DESCRIBE	false
+DETERMINISTIC	false
 DFS	false
 DIRECTORIES	false
 DIRECTORY	false
@@ -146,6 +151,7 @@ INDEX	false
 INDEXES	false
 INNER	false
 INPATH	false
+INPUT	false
 INPUTFORMAT	false
 INSERT	false
 INT	false
@@ -153,10 +159,12 @@ INTEGER	false
 INTERSECT	false
 INTERVAL	false
 INTO	false
+INVOKER	false
 IS	false
 ITEMS	false
 JOIN	false
 KEYS	false
+LANGUAGE	false
 LAST	false
 LATERAL	false
 LAZY	false
@@ -184,6 +192,7 @@ MILLISECONDS	false
 MINUS	false
 MINUTE	false
 MINUTES	false
+MODIFIES	false
 MONTH	false
 MONTHS	false
 MSCK	false
@@ -194,6 +203,7 @@ NANOSECOND	false
 NANOSECONDS	false
 NATURAL	false
 NO	false
+NONE	false
 NOT	false
 NULL	false
 NULLS	false
@@ -228,6 +238,7 @@ PURGE	false
 QUARTER	false
 QUERY	false
 RANGE	false
+READS	false
 REAL	false
 RECORDREADER	false
 RECORDWRITER	false
@@ -242,6 +253,8 @@ REPLACE	false
 RESET	false
 RESPECT	false
 RESTRICT	false
+RETURN	false
+RETURNS	false
 REVOKE	false
 RIGHT	false
 ROLE	false
@@ -254,6 +267,7 @@ SCHEMA	false
 SCHEMAS	false
 SECOND	false
 SECONDS	false
+SECURITY	false
 SELECT	false
 SEMI	false
 SEPARATED	false
@@ -271,6 +285,8 @@ SOME	false
 SORT	false
 SORTED	false
 SOURCE	false
+SPECIFIC	false
+SQL	false
 START	false
 STATISTICS	false
 STORED	false

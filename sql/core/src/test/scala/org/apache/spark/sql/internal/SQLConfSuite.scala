@@ -502,7 +502,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-47765: set collation") {
-    Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
+    Seq("UNICODE", "UNICODE_CI", "utf8_lcase", "utf8_binary").foreach { collation =>
       sql(s"set collation $collation")
       assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
     }
@@ -514,16 +514,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
       parameters = Map(
         "confValue" -> "UNICODE_C",
-        "confName" -> "spark.sql.session.collation.default"
+        "confName" -> "spark.sql.session.collation.default",
+        "proposals" -> "UNICODE"
       ))
-
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI")),
-        errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-        parameters = Map.empty
-      )
-    }
   }
 
   test("SPARK-43028: config not found error") {

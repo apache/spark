@@ -76,7 +76,7 @@ class HiveSharedStateSuite extends SparkFunSuite {
     assert(client.getConf("hive.metastore.warehouse.dir", "") === qualifiedWHPath,
       "session level conf should be passed to catalog")
 
-    assert(state.globalTempViewManager.database === tmpDb)
+    assert(state.globalTempDB === tmpDb)
 
    val ss2 =
      builder.config("spark.foo", "bar2222").config(WAREHOUSE_PATH.key, invalidPath).getOrCreate()

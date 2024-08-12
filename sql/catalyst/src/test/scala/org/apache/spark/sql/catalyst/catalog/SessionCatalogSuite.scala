@@ -229,7 +229,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get database should throw exception when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getDatabaseMetadata("db_that_does_not_exist")
       }
     }
@@ -283,7 +283,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop database when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
       }
       catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = true, cascade = false)
@@ -295,7 +295,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.setCurrentDatabase("db1")
       assert(catalog.getCurrentDatabase == "db1")
       catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
       }
       catalog.setCurrentDatabase("default")
@@ -321,7 +321,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter database should throw exception when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.alterDatabase(newDb("unknown_db"))
       }
     }
@@ -332,7 +332,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.getCurrentDatabase == "default")
       catalog.setCurrentDatabase("db2")
       assert(catalog.getCurrentDatabase == "db2")
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.setCurrentDatabase("deebo")
       }
       catalog.createDatabase(newDb("deebo"), ignoreIfExists = false)
@@ -370,10 +370,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("create table when database does not exist") {
     withBasicCatalog { catalog =>
       // Creating table in non-existent database should always fail
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = false)
       }
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = true)
       }
       // Table already exists
@@ -419,11 +419,11 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("drop table when database/table does not exist") {
     withBasicCatalog { catalog =>
       // Should always throw exception when the database does not exist
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
           purge = false)
       }
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
           purge = false)
       }
@@ -494,7 +494,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("rename table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.renameTable(TableIdentifier("tbl1", Some("unknown_db")), TableIdentifier("tbl2"))
       }
       intercept[NoSuchTableException] {
@@ -543,7 +543,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.alterTable(newTable("tbl1", "unknown_db"))
       }
       intercept[NoSuchTableException] {
@@ -608,7 +608,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getTableMetadata(TableIdentifier("tbl1", Some("unknown_db")))
       }
       intercept[NoSuchTableException] {
@@ -856,7 +856,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl4"),
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))))
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listTables("unknown_db")
       }
     }
@@ -876,7 +876,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl2", Some("db2"))))
       assert(catalog.listTables("db2", "*1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl1", Some("db2"))))
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listTables("unknown_db", "*")
       }
     }
@@ -933,17 +933,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view1", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view2", tempTable, overrideIfExists = false)
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*").toSet ==
+      assert(catalog.listTables(catalog.globalTempDatabase, "*").toSet ==
         Set(TableIdentifier("temp_view1"),
           TableIdentifier("temp_view4"),
-          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
-          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*temp_view1").toSet ==
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempDatabase))))
+      assert(catalog.listTables(catalog.globalTempDatabase, "*temp_view1").toSet ==
         Set(TableIdentifier("temp_view1"),
-          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "global*").toSet ==
-        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
-          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase))))
+      assert(catalog.listTables(catalog.globalTempDatabase, "global*").toSet ==
+        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempDatabase))))
     }
   }
 
@@ -970,7 +970,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("create partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createPartitions(
           TableIdentifier("tbl1", Some("unknown_db")), Seq(), ignoreIfExists = false)
       }
@@ -1077,7 +1077,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropPartitions(
           TableIdentifier("tbl1", Some("unknown_db")),
           Seq(),
@@ -1177,7 +1177,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get partition when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("unknown_db")), part1.spec)
       }
       intercept[NoSuchTableException] {
@@ -1258,7 +1258,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("rename partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("unknown_db")), Seq(part1.spec), Seq(part2.spec))
       }
@@ -1349,7 +1349,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("unknown_db")), Seq(part1))
       }
       intercept[NoSuchTableException] {
@@ -1497,7 +1497,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("list partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listPartitions(TableIdentifier("tbl1", Some("unknown_db")))
       }
       intercept[NoSuchTableException] {
@@ -1544,7 +1544,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("create function when database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createFunction(
           newFunc("func5", Some("does_not_exist")), ignoreIfExists = false)
       }
@@ -1583,7 +1583,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }
       checkError(e,
         errorClass = "ROUTINE_ALREADY_EXISTS",
-        parameters = Map("routineName" -> "`temp1`"))
+        parameters = Map("routineName" -> "`temp1`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"))
       // Temporary function is overridden
       catalog.registerFunction(
         newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))
@@ -1687,7 +1689,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop function when database/function does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropFunction(
           FunctionIdentifier("something", Some("unknown_db")), ignoreIfNotExists = false)
       }
@@ -1746,7 +1748,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get function when database/function does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("unknown_db")))
       }
       intercept[NoSuchFunctionException] {
@@ -1799,7 +1801,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("list functions when database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listFunctions("unknown_db", "func*")
       }
     }
@@ -1906,9 +1908,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.getCachedTable(qualifiedName1) != null)
 
       createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10), false)
-      val qualifiedName2 = QualifiedTableName(catalog.globalTempViewManager.database, "tbl2")
+      val qualifiedName2 = QualifiedTableName(catalog.globalTempDatabase, "tbl2")
       catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
-      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempViewManager.database)))
+      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempDatabase)))
       assert(catalog.getCachedTable(qualifiedName2) != null)
     }
   }

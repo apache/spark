@@ -228,6 +228,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
+
+      conn.prepareStatement("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('amy', 10000, 1000, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('alex', 12000, 1200, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('cathy', 8000, 1200, 0.15)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('abc')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('a a a')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "(null)").executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -367,6 +389,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     } else {
       assert(offsets.nonEmpty)
     }
+  }
+
+  test("null value for option exception") {
+    val df = spark.read
+      .option("pushDownOffset", null)
+      .table("h2.test.employee")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.collect()
+      },
+      errorClass = "NULL_DATA_SOURCE_OPTION",
+      parameters = Map(
+        "option" -> "pushDownOffset")
+    )
   }
 
   test("simple scan with OFFSET") {
@@ -1244,7 +1280,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    val df16 = spark.table("h2.test.employee")
+    val df16 = spark.table("h2.test.employee_bonus")
       .filter(sin($"bonus") < -0.08)
       .filter(sinh($"bonus") > 200)
       .filter(cos($"bonus") > 0.9)
@@ -1252,17 +1288,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(tan($"bonus") < -0.08)
       .filter(tanh($"bonus") === 1)
       .filter(cot($"bonus") < -11)
-      .filter(asin($"bonus") > 0.1)
-      .filter(acos($"bonus") > 1.4)
+      .filter(asin($"factor") > 0.13)
+      .filter(acos($"factor") < 1.47)
       .filter(atan($"bonus") > 1.4)
       .filter(atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
-      "BONUS IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, COS(BONUS) > 0.9, " +
-      "COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, COT(BONUS) < -11.0, " +
-      "ASIN(BONUS) > 0.1, ACOS(BONUS) > 1.4, ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
-      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+      "BONUS IS NOT NULL, FACTOR IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
+      "COS(BONUS) > 0.9, COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
+      "COT(BONUS) < -11.0, ASIN(FACTOR) > 0.13, ACOS(FACTOR) < 1.47, ATAN(BONUS) > 1.4, " +
+      "(ATAN2(BONUS, BONUS)) > 0.7],")
+    checkAnswer(df16, Seq(Row("cathy", 8000, 1200, 0.15)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
     val df17 = sql(
@@ -1278,6 +1314,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df17,
       "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
+  }
+
+  test("SPARK-48943: arguments for asin and acos are invalid (< -1 || > 1) in H2") {
+    val df1 = spark.table("h2.test.employee").filter(acos($"bonus") > 1.4)
+    val e1 = intercept[SparkException] {
+      checkAnswer(df1, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e1.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e1.getCause.getMessage.contains("Invalid value")
+      && e1.getCause.getMessage.contains("ACOS"))
+
+    val df2 = spark.table("h2.test.employee").filter(asin($"bonus") > 0.1)
+    val e2 = intercept[SparkException] {
+      checkAnswer(df2, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e2.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e2.getCause.getMessage.contains("Invalid value")
+      && e2.getCause.getMessage.contains("ASIN"))
   }
 
   test("SPARK-38432: escape the single quote, _ and % for DS V2 pushdown") {
@@ -1723,7 +1777,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false), Row("test", "binary1", false)))
+        Row("test", "datetime", false), Row("test", "binary1", false),
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
@@ -3031,5 +3087,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
     val explained = getNormalizedExplain(df, FormattedMode)
     assert(explained.contains("External engine query:"))
+  }
+
+  test("Test not nullSafeEqual") {
+    val df = sql("SELECT str FROM h2.test.strings_with_nulls WHERE NOT str <=> 'abc'")
+    val rows = df.collect()
+
+    assert(rows.length == 2)
+    assert(rows.contains(Row(null)))
+    assert(rows.contains(Row("a a a")))
   }
 }

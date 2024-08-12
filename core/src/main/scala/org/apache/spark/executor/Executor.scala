@@ -83,7 +83,7 @@ private[spark] class Executor(
   extends Logging {
 
   logInfo(log"Starting executor ID ${LogMDC(LogKeys.EXECUTOR_ID, executorId)}" +
-    log" on host ${LogMDC(HOST_NAME, executorHostname)}")
+    log" on host ${LogMDC(HOST, executorHostname)}")
   logInfo(log"OS info ${LogMDC(OS_NAME, System.getProperty("os.name"))}," +
     log" ${LogMDC(OS_VERSION, System.getProperty("os.version"))}, " +
     log"${LogMDC(OS_ARCH, System.getProperty("os.arch"))}")
@@ -706,6 +706,8 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(TimeUnit.NANOSECONDS.toMillis(
           afterSerializationNs - beforeSerializationNs))
+        task.metrics.setPeakOnHeapExecutionMemory(taskMemoryManager.getPeakOnHeapExecutionMemory)
+        task.metrics.setPeakOffHeapExecutionMemory(taskMemoryManager.getPeakOffHeapExecutionMemory)
         // Expose task metrics using the Dropwizard metrics system.
         // Update task metrics counters
         executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
@@ -1041,9 +1043,8 @@ private[spark] class Executor(
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
-            throw SparkException.internalError(
-              s"Killing executor JVM because killed task $taskId could not be stopped within " +
-                s"$killTimeoutMs ms.", category = "EXECUTOR")
+            throw new KilledByTaskReaperException(s"Killing executor JVM because killed task " +
+              s"$taskId could not be stopped within $killTimeoutMs ms.")
           }
         }
       } finally {
@@ -1328,3 +1329,5 @@ private[spark] object Executor {
     }
   }
 }
+
+class KilledByTaskReaperException(message: String) extends SparkException(message)

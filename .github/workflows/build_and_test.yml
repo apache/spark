@@ -213,6 +213,8 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
+      # GitHub Actions' default miniconda to use in pip packaging test.
+      CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       NOLINT_ON_COMPILE: true
@@ -341,7 +343,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./dev/infra/
           push: true
@@ -400,6 +402,8 @@ jobs:
       PYTHON_TO_TEST: 'python3.11'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
+      # GitHub Actions' default miniconda to use in pip packaging test.
+      CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
@@ -445,10 +449,7 @@ jobs:
           pyspark-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
@@ -463,19 +464,12 @@ jobs:
           echo $py
           $py -m pip list
         done
-    - name: Install Conda for pip packaging test
-      if: contains(matrix.modules, 'pyspark-errors')
-      run: |
-        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
-        bash miniconda.sh -b -p $HOME/miniconda
-        rm miniconda.sh
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$PATH:$HOME/miniconda/bin
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
@@ -561,10 +555,7 @@ jobs:
         restore-keys: |
           sparkr-coursier-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -615,7 +606,7 @@ jobs:
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
       with:
-        input: connector/connect/common/src/main
+        input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
     - name: Install Python 3.9
       uses: actions/setup-python@v5
@@ -688,10 +679,7 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -705,6 +693,11 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
+    - name: Scala structured logging check
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.9 ./dev/structured_logging_style.py
+        fi
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
@@ -834,10 +827,7 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -880,17 +870,23 @@ jobs:
         bundle install
     - name: Run documentation build
       run: |
-        # We need this link because the jekyll build calls `python`.
-        ln -s "$(which python3.9)" "/usr/local/bin/python"
+        # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
+        ln -s "$(which python3.9)" "/usr/local/bin/python3"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
-        cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
+        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
+        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
+        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
+        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
+        echo "SKIP_RDOC: $SKIP_RDOC"
+        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
@@ -1136,11 +1132,10 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
           if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-3.4' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.9.0/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

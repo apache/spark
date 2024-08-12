@@ -92,7 +92,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
                   logInfo("There is nothing to roll.")
               }
             case _ =>
-              logWarning("This plugin expects " +
+              logWarning(log"This plugin expects " +
                 log"${MDC(CLASS_NAME, classOf[KubernetesClusterSchedulerBackend].getSimpleName)}.")
           }
         } catch {

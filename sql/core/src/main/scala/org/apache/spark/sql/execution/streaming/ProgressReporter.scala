@@ -352,8 +352,9 @@ abstract class ProgressContext(
           metrics = sourceMetrics
         )
       }
-      logInfo(s"Extracting source progress metrics for source=${source.toString} took " +
-        s"duration_ms=$duration")
+      logInfo(log"Extracting source progress metrics for source=" +
+        log"${MDC(LogKeys.SOURCE, source.toString)} " +
+        log"took duration_ms=${MDC(LogKeys.DURATION, duration)}")
       result
     }
   }
@@ -368,8 +369,8 @@ abstract class ProgressContext(
 
       SinkProgress(sink.toString, sinkOutput, sinkMetrics)
     }
-    logInfo(s"Extracting sink progress metrics for sink=${sink.toString} took " +
-      s"duration_ms=$duration")
+    logInfo(log"Extracting sink progress metrics for sink=${MDC(LogKeys.SINK, sink.toString)} " +
+      log"took duration_ms=${MDC(LogKeys.DURATION, duration)}")
     result
   }
 

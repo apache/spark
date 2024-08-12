@@ -126,7 +126,7 @@ class SeriesAsTypeMixin:
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype("bool"), pser.astype("bool"))
         self.assert_eq(psser.astype("?"), pser.astype("?"))
-        self.assert_eq(psser.astype(np.unicode_), pser.astype(np.unicode_))
+        self.assert_eq(psser.astype(np.str_), pser.astype(np.str_))
         self.assert_eq(psser.astype("str"), pser.astype("str"))
         self.assert_eq(psser.astype("U"), pser.astype("U"))
 

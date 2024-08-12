@@ -1067,7 +1067,7 @@ class DataFrameSuite extends QueryTest
       )
       assert(df.getRows(10, 20) === expectedAnswer)
     }
-    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "UTF8") {
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "UTF-8") {
       val expectedAnswer = Seq(
         Seq("_1", "_2"),
         Seq("12", "ABC."),

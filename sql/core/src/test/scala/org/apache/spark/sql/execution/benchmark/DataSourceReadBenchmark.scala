@@ -169,6 +169,12 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           spark.sql(s"select $query from jsonTable").noop()
         }
 
+        sqlBenchmark.addCase("SQL Json with UnsafeRow") { _ =>
+          withSQLConf(SQLConf.JSON_USE_UNSAFE_ROW.key -> "true") {
+            spark.sql(s"select $query from jsonTable").noop()
+          }
+        }
+
         withParquetVersions { version =>
           sqlBenchmark.addCase(s"SQL Parquet Vectorized: DataPage$version") { _ =>
             spark.sql(s"select $query from parquet${version}Table").noop()

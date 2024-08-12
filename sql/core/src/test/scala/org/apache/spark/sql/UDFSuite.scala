@@ -1211,4 +1211,11 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-47927: ScalaUDF null handling") {
+    val f = udf[Int, Int](_ + 1)
+    val df = Seq(Some(1), None).toDF("c")
+      .select(f($"c").as("f"), f($"f"))
+    checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
+  }
 }

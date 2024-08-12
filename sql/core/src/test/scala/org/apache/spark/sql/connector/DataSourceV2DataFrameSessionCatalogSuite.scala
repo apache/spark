@@ -84,7 +84,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
       spark.range(20).write.format(v2Format).option("path", "/abc").saveAsTable(t1)
       val cat = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val tableInfo = cat.loadTable(Identifier.of(Array("default"), t1))
-      assert(tableInfo.properties().get("location") === "file:/abc")
+      assert(tableInfo.properties().get("location") === "file:///abc")
       assert(tableInfo.properties().get("provider") === v2Format)
     }
   }
@@ -110,7 +110,14 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
+        val provider = Option(properties.get("provider"))
+
+        val schema = CatalogV2Util.applySchemaChanges(
+          table.schema,
+          changes,
+          provider,
+          "ALTER TABLE"
+        )
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {

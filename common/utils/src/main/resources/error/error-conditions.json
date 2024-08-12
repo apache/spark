@@ -90,6 +90,11 @@
         "message" : [
           "The input argument `tolerance` must be a constant."
         ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -98,6 +103,13 @@
     "message" : [
       "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer.",
       "To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ],
+    "sqlState" : "22KD3"
+  },
+  "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE" : {
+    "message" : [
+      "Cannot call the <functionName> SQL function because the Avro data source is not loaded.",
+      "Please restart your job or session with the 'spark-avro' package loaded, such as by using the --packages argument on the command line, and then retry your query or command again."
     ],
     "sqlState" : "22KD3"
   },
@@ -118,6 +130,12 @@
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
     ],
     "sqlState" : "42KDE"
+  },
+  "CANNOT_ALTER_COLLATION_BUCKET_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN cannot change collation of type/subtypes of bucket columns, but found the bucket column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
   },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
@@ -218,6 +236,11 @@
           "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
         ]
       },
+      "CANNOT_READ_MISSING_SNAPSHOT_FILE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
       "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
         "message" : [
           "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
@@ -231,6 +254,31 @@
       "CANNOT_READ_STREAMING_STATE_FILE" : {
         "message" : [
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
+      "INVALID_CHANGE_LOG_READER_VERSION" : {
+        "message" : [
+          "The change log reader version cannot be <version>."
+        ]
+      },
+      "INVALID_CHANGE_LOG_WRITER_VERSION" : {
+        "message" : [
+          "The change log writer version cannot be <version>."
+        ]
+      },
+      "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load RocksDB state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
+      "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
+        "message" : [
+          "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
         ]
       },
       "UNCATEGORIZED" : {
@@ -443,6 +491,20 @@
     ],
     "sqlState" : "0A000"
   },
+  "CLUSTERING_COLUMNS_MISMATCH" : {
+    "message" : [
+      "Specified clustering does not match that of the existing table <tableName>.",
+      "Specified clustering columns: [<specifiedClusteringString>].",
+      "Existing clustering columns: [<existingClusteringString>]."
+    ],
+    "sqlState" : "42P10"
+  },
+  "CLUSTERING_NOT_SUPPORTED" : {
+    "message" : [
+      "'<operation>' does not support clustering."
+    ],
+    "sqlState" : "42000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -469,7 +531,7 @@
   },
   "COLLATION_INVALID_NAME" : {
     "message" : [
-      "The value <collationName> does not represent a correct collation name."
+      "The value <collationName> does not represent a correct collation name. Suggested valid collation names: [<proposals>]."
     ],
     "sqlState" : "42704"
   },
@@ -486,7 +548,7 @@
     "subClass" : {
       "EXPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
+          "Error occurred due to the mismatch between explicit collations: [<explicitTypes>]. Decide on a single explicit collation and remove others."
         ]
       },
       "IMPLICIT" : {
@@ -582,6 +644,17 @@
       "Please make sure only one streaming job runs on a specific checkpoint location at a time."
     ],
     "sqlState" : "40000"
+  },
+  "CONFLICTING_PARTITION_COLUMN_NAMES" : {
+    "message" : [
+      "Conflicting partition column names detected:",
+      "<distinctPartColLists>",
+      "For partitioned table directories, data files should only live in leaf directories.",
+      "And directories at the same level should have the same partition column name.",
+      "Please check the following directories for unexpected files or inconsistent partition column names:",
+      "<suspiciousPaths>"
+    ],
+    "sqlState" : "KD009"
   },
   "CONNECT" : {
     "message" : [
@@ -926,6 +999,16 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
+      "UNSUPPORTED_UDF_INPUT_TYPE" : {
+        "message" : [
+          "UDFs do not support '<dataType>' as an input data type."
+        ]
+      },
+      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
+        "message" : [
+          "UDFs do not support '<dataType>' as an output data type."
+        ]
+      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1053,7 +1136,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+      "Call to routine <routineName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
@@ -1089,6 +1172,12 @@
       "Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ],
     "sqlState" : "42704"
+  },
+  "END_LABEL_WITHOUT_BEGIN_LABEL" : {
+    "message" : [
+      "End label <endLabel> can not exist without begin label."
+    ],
+    "sqlState" : "42K0L"
   },
   "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
     "message" : [
@@ -1247,6 +1336,11 @@
       "LIST_NAMESPACES" : {
         "message" : [
           "List namespaces."
+        ]
+      },
+      "LOAD_TABLE" : {
+        "message" : [
+          "Load the table <tableName>."
         ]
       },
       "NAMESPACE_EXISTS" : {
@@ -1866,6 +1960,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_BOOLEAN_STATEMENT" : {
+    "message" : [
+      "Boolean statement is expected in the condition, but <invalidStatement> was found."
+    ],
+    "sqlState" : "22546"
+  },
   "INVALID_BOUNDARY" : {
     "message" : [
       "The boundary <boundary> is invalid: <invalidValue>."
@@ -1921,7 +2021,7 @@
     "subClass" : {
       "DEFAULT_COLLATION" : {
         "message" : [
-          "Cannot resolve the given default collation."
+          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
         ]
       },
       "TIME_ZONE" : {
@@ -2347,6 +2447,12 @@
     },
     "sqlState" : "42K0K"
   },
+  "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
       "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
@@ -2433,6 +2539,12 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "INVALID_LOCATION" : {
+    "message" : [
+      "The location name cannot be an invalid URI, but `<location>` was given."
+    ],
+    "sqlState" : "42K05"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
@@ -2543,9 +2655,14 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "BOOLEAN" : {
+        "message" : [
+          "expects a boolean literal, but got <invalidValue>."
+        ]
+      },
       "CHARSET" : {
         "message" : [
-          "expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got <charset>."
+          "expects one of the <charsets>, but got <charset>."
         ]
       },
       "DATETIME_UNIT" : {
@@ -2553,9 +2670,24 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "DOUBLE" : {
+        "message" : [
+          "expects an double literal, but got <invalidValue>."
+        ]
+      },
+      "INTEGER" : {
+        "message" : [
+          "expects an integer literal, but got <invalidValue>."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Expects `length` greater than or equal to 0, but got <length>."
+        ]
+      },
+      "LONG" : {
+        "message" : [
+          "expects a long literal, but got <invalidValue>."
         ]
       },
       "NULL" : {
@@ -2576,6 +2708,11 @@
       "START" : {
         "message" : [
           "Expects a positive or a negative value for `start`, but got 0."
+        ]
+      },
+      "STRING" : {
+        "message" : [
+          "expects a string literal, but got <invalidValue>."
         ]
       },
       "ZERO_INDEX" : {
@@ -2880,6 +3017,30 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_UTF8_STRING" : {
+    "message" : [
+      "Invalid UTF8 byte sequence found in string: <str>."
+    ],
+    "sqlState" : "22029"
+  },
+  "INVALID_VARIABLE_DECLARATION" : {
+    "message" : [
+      "Invalid variable declaration."
+    ],
+    "subClass" : {
+      "NOT_ALLOWED_IN_SCOPE" : {
+        "message" : [
+          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+        ]
+      },
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+        ]
+      }
+    },
+    "sqlState" : "42K0M"
+  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."
@@ -2892,18 +3053,35 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_FROM_PARQUET" : {
+    "message" : [
+      "Invalid variant."
+    ],
+    "subClass" : {
+      "MISSING_FIELD" : {
+        "message" : [
+          "Missing <field> field."
+        ]
+      },
+      "NULLABLE_OR_NOT_BINARY_FIELD" : {
+        "message" : [
+          "The <field> must be a non-nullable binary."
+        ]
+      },
+      "WRONG_NUM_FIELDS" : {
+        "message" : [
+          "Variant column must contain exactly two fields."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_VARIANT_GET_PATH" : {
     "message" : [
       "The path `<path>` is not a valid variant extraction path in `<functionName>`.",
       "A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
     ],
     "sqlState" : "22023"
-  },
-  "INVALID_VIEW_TEXT" : {
-    "message" : [
-      "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
-    ],
-    "sqlState" : "XX000"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
@@ -2959,6 +3137,12 @@
     ],
     "sqlState" : "54006"
   },
+  "LABELS_MISMATCH" : {
+    "message" : [
+      "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -2976,6 +3160,12 @@
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
     ],
     "sqlState" : "42710"
+  },
+  "MALFORMED_CHARACTER_CODING" : {
+    "message" : [
+      "Invalid value found when performing <function> with <charset>"
+    ],
+    "sqlState" : "22000"
   },
   "MALFORMED_CSV_RECORD" : {
     "message" : [
@@ -3057,6 +3247,12 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MISSING_WINDOW_SPECIFICATION" : {
+    "message" : [
+      "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
+    ],
+    "sqlState" : "42P20"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3317,6 +3513,12 @@
     ],
     "sqlState" : "42000"
   },
+  "NULL_DATA_SOURCE_OPTION" : {
+    "message" : [
+      "Data source read/write option <option> cannot have null value."
+    ],
+    "sqlState" : "22024"
+  },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."
@@ -3377,6 +3579,24 @@
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "PARQUET_TYPE_ILLEGAL" : {
+    "message" : [
+      "Illegal Parquet type: <parquetType>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_RECOGNIZED" : {
+    "message" : [
+      "Unrecognized Parquet type: <field>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_SUPPORTED" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
+    ],
+    "sqlState" : "42846"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
@@ -3491,7 +3711,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."
     ],
     "sqlState" : "42K0G"
   },
@@ -3521,7 +3741,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
+      "Cannot invoke routine <routineName> because the parameter named <parameterName> is required, but the routine call did not supply a value. Please update the routine call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -3533,8 +3753,8 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the routine <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
+      "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
+      "Choose a different name, drop or replace the existing <existingRoutineType>, or add the IF NOT EXISTS clause to tolerate a pre-existing <newRoutineType>."
     ],
     "sqlState" : "42723"
   },
@@ -3675,6 +3895,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
+    "message" : [
+      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
+    ],
+    "sqlState" : "42802"
+  },
   "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
     "message" : [
       "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
@@ -3699,6 +3925,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+    "message" : [
+      "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
@@ -3718,17 +3950,58 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INVALID_CONFIG_AFTER_RESTART" : {
+    "message" : [
+      "Cannot change <configName> from <oldConfig> to <newConfig> between restarts. Please set <configName> to <oldConfig>, or restart with a new checkpoint directory."
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_INVALID_PROVIDER" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
+    "message" : [
+      "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
+    ],
+    "sqlState" : "42K06"
+  },
+  "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
+    "message" : [
+      "The streaming query failed to validate written state for key row.",
+      "The following reasons may cause this:",
+      "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
+      "2. Corrupt checkpoint files",
+      "3. The query changed in an incompatible way between restarts",
+      "For the first case, use a new checkpoint directory or use the original Spark version",
+      "to process the streaming state. Retrieved error_message=<errorMsg>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided key schema does not match existing state key schema.",
+      "Please check number and type of fields.",
+      "Existing key_schema=<storedKeySchema> and new key_schema=<newKeySchema>.",
+      "If you want to force running the query without schema validation, please set spark.sql.streaming.stateStore.stateSchemaCheck to false.",
+      "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.SupportsFineGrainedReplay.",
+      "Therefore, it does not support option snapshotStartBatchId or readChangeFeed in state data source."
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
@@ -3747,6 +4020,28 @@
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
+    "message" : [
+      "The streaming query failed to validate written state for value row.",
+      "The following reasons may cause this:",
+      "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
+      "2. Corrupt checkpoint files",
+      "3. The query changed in an incompatible way between restarts",
+      "For the first case, use a new checkpoint directory or use the original Spark version",
+      "to process the streaming state. Retrieved error_message=<errorMsg>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided value schema does not match existing state value schema.",
+      "Please check number and type of fields.",
+      "Existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>.",
+      "If you want to force running the query without schema validation, please set spark.sql.streaming.stateStore.stateSchemaCheck to false.",
+      "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
@@ -3771,6 +4066,14 @@
       "The options <options> cannot be specified together. Please specify the one."
     ],
     "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_OPERATOR_METADATA" : {
+    "message" : [
+      "Failed to read the operator metadata for checkpointLocation=<checkpointLocation> and batchId=<batchId>.",
+      "Either the file does not exist, or the file is corrupted.",
+      "Rerun the streaming query to construct the operator metadata, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
   },
   "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
     "message" : [
@@ -4005,7 +4308,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke routine <routineName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -4014,6 +4317,12 @@
       "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
+  },
+  "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
+    "message" : [
+      "Unknown primitive type with id <id> was found in a variant value."
+    ],
+    "sqlState" : "22023"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -4047,7 +4356,7 @@
   },
   "UNRECOGNIZED_PARAMETER_NAME" : {
     "message" : [
-      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
+      "Cannot invoke routine <routineName> because the routine call included a named argument reference for the argument named <argumentName>, but this routine does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
     ],
     "sqlState" : "4274K"
   },
@@ -4143,12 +4452,6 @@
       "Cannot resolve variable <variableName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
-  },
-  "UNSET_NONEXISTENT_PROPERTIES" : {
-    "message" : [
-      "Attempted to unset non-existent properties [<properties>] in table <table>."
-    ],
-    "sqlState" : "42K0J"
   },
   "UNSUPPORTED_ADD_FILE" : {
     "message" : [
@@ -4391,6 +4694,11 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
+      "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
+        "message" : [
+          "Lambda function with Python UDF <funcName> in a higher order function."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
@@ -4630,6 +4938,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
@@ -5113,11 +5427,6 @@
     "message" : [
       "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
       "Try moving this class out of its parent class."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1004" : {
-    "message" : [
-      "Window specification <windowName> is not defined in the WINDOW clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_1005" : {
@@ -5627,21 +5936,6 @@
       "createTableColumnTypes option column <col> not found in schema <schema>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1172" : {
-    "message" : [
-      "Parquet type not yet supported: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1173" : {
-    "message" : [
-      "Illegal Parquet type: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1174" : {
-    "message" : [
-      "Unrecognized Parquet type: <field>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -6105,11 +6399,6 @@
   "_LEGACY_ERROR_TEMP_1316" : {
     "message" : [
       "Invalid partition transformation: <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1319" : {
-    "message" : [
-      "Invalid join type in joinWith: <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1320" : {
@@ -8089,16 +8378,6 @@
   "_LEGACY_ERROR_TEMP_3215" : {
     "message" : [
       "Expected a Boolean type expression in replaceNullWithFalse, but got the type <dataType> in <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3216" : {
-    "message" : [
-      "Unsupported join type '<typ>'. Supported join types include: <supported>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3217" : {
-    "message" : [
-      "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
     ]
   },
   "_LEGACY_ERROR_TEMP_3218" : {

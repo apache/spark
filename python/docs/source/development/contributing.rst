@@ -279,8 +279,8 @@ Throw with arbitrary error message:
 .. code-block:: python
 
   class PySparkTestError(PySparkException):
-      def __init__(self, error_class: str, message_parameters: Dict[str, str]):
-          super().__init__(error_class=error_class, message_parameters=message_parameters)
+      def __init__(self, errorClass: str, messageParameters: Dict[str, str]):
+          super().__init__(errorClass=errorClass, messageParameters=messageParameters)
   
       def getMessageParameters(self) -> Optional[Dict[str, str]]:
           return super().getMessageParameters()

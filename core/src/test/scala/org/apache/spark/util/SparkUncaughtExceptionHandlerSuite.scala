@@ -22,6 +22,7 @@ import java.io.File
 import scala.util.Try
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.executor.{ExecutorExitCode, KilledByTaskReaperException}
 
 class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
 
@@ -33,6 +34,8 @@ class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
     (ThrowableTypes.RuntimeException, false, 0),
     (ThrowableTypes.OutOfMemoryError, true, SparkExitCode.OOM),
     (ThrowableTypes.OutOfMemoryError, false, SparkExitCode.OOM),
+    (ThrowableTypes.KilledByTaskReaperException, true, ExecutorExitCode.KILLED_BY_TASK_REAPER),
+    (ThrowableTypes.KilledByTaskReaperException, false, 0),
     (ThrowableTypes.SparkFatalRuntimeException, true, SparkExitCode.UNCAUGHT_EXCEPTION),
     (ThrowableTypes.SparkFatalRuntimeException, false, 0),
     (ThrowableTypes.SparkFatalOutOfMemoryError, true, SparkExitCode.OOM),
@@ -64,6 +67,8 @@ object ThrowableTypes extends Enumeration {
 
   val RuntimeException = ThrowableTypesVal("RuntimeException", new RuntimeException)
   val OutOfMemoryError = ThrowableTypesVal("OutOfMemoryError", new OutOfMemoryError)
+  val KilledByTaskReaperException = ThrowableTypesVal("KilledByTaskReaperException",
+    new KilledByTaskReaperException("dummy message"))
   val SparkFatalRuntimeException = ThrowableTypesVal("SparkFatalException(RuntimeException)",
     new SparkFatalException(new RuntimeException))
   val SparkFatalOutOfMemoryError = ThrowableTypesVal("SparkFatalException(OutOfMemoryError)",

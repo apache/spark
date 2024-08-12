@@ -150,6 +150,8 @@ abstract class AbstractCommandBuilder {
         "common/sketch",
         "common/tags",
         "common/unsafe",
+        "sql/connect/common",
+        "sql/connect/server",
         "core",
         "examples",
         "graphx",
@@ -170,6 +172,11 @@ abstract class AbstractCommandBuilder {
             "assembly.");
         }
         for (String project : projects) {
+          // Do not use locally compiled class files for Spark server because it should use shaded
+          // dependencies.
+          if (project.equals("sql/connect/server") || project.equals("sql/connect/common")) {
+            continue;
+          }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
         }
@@ -199,7 +206,27 @@ abstract class AbstractCommandBuilder {
           addToClassPath(cp, f.toString());
         }
       }
-      addToClassPath(cp, join(File.separator, jarsDir, "*"));
+      boolean isConnectShell = "1".equals(getenv("SPARK_CONNECT_SHELL"));
+      if (isConnectShell) {
+        for (File f: new File(jarsDir).listFiles()) {
+          // Exclude Spark Classic SQL and Spark Connect server jars
+          // if we're in Spark Connect Shell. Also exclude Spark SQL API and
+          // Spark Connect Common which Spark Connect client shades.
+          // Then, we add the Spark Connect shell and its dependencies in connect-repl
+          // See also SPARK-48936.
+          if (f.isDirectory() && f.getName().equals("connect-repl")) {
+            addToClassPath(cp, join(File.separator, f.toString(), "*"));
+          } else if (
+              !f.getName().startsWith("spark-sql_") &&
+              !f.getName().startsWith("spark-connect_") &&
+              !f.getName().startsWith("spark-sql-api_") &&
+              !f.getName().startsWith("spark-connect-common_")) {
+            addToClassPath(cp, f.toString());
+          }
+        }
+      } else {
+        addToClassPath(cp, join(File.separator, jarsDir, "*"));
+      }
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));

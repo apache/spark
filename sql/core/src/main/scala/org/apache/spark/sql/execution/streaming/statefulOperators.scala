@@ -23,6 +23,9 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -70,6 +73,20 @@ trait StatefulOperator extends SparkPlan {
       throw new IllegalStateException("State location not present for execution")
     }
   }
+
+  def metadataFilePath(): Path = {
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation, getStateInfo.operatorId.toString)
+    new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
+  }
+
+  // Function used to record state schema for the first time and validate it against proposed
+  // schema changes in the future. Runs as part of a planning rule on the driver.
+  // Returns the schema file path for operators that write this to the metadata file,
+  // otherwise None
+  def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult]
 }
 
 /**
@@ -132,6 +149,8 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    */
   def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = Some(inputWatermarkMs)
 
+  def operatorStateMetadataVersion: Int = 1
+
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
@@ -146,6 +165,20 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics
+
+  def stateSchemaFilePath(storeName: Option[String] = None): Path = {
+    def stateInfo = getStateInfo
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation,
+        s"${stateInfo.operatorId.toString}")
+    storeName match {
+      case Some(storeName) =>
+        val storeNamePath = new Path(stateCheckpointPath, storeName)
+        new Path(new Path(storeNamePath, "_metadata"), "schema")
+      case None =>
+        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+    }
+  }
 
   /**
    * Get the progress made by this stateful operator after execution. This should be called in
@@ -180,7 +213,8 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 
   /** Metadata of this stateful operator and its states stores. */
-  def operatorStateMetadata(): OperatorStateMetadata = {
+  def operatorStateMetadata(
+      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -241,6 +275,10 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   /** Name to output in [[StreamingOperatorProgress]] to identify operator type */
   def shortName: String = "defaultName"
+
+  def validateNewMetadata(
+      oldMetadata: OperatorStateMetadata,
+      newMetadata: OperatorStateMetadata): Unit = {}
 
   /**
    * Should the MicroBatchExecution run another batch based on this stateful operator and the
@@ -424,6 +462,15 @@ case class StateStoreRestoreExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      keyExpressions.toStructType, stateManager.getStateValueSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
+      hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -485,6 +532,16 @@ case class StateStoreSaveExec(
 
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
+
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      keyExpressions.toStructType, stateManager.getStateValueSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
+      hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -690,6 +747,15 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion))
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -771,6 +837,15 @@ case class SessionWindowStateStoreSaveExec(
 
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
+
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion))
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -873,7 +948,8 @@ case class SessionWindowStateStoreSaveExec(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
-  override def operatorStateMetadata(): OperatorStateMetadata = {
+  override def operatorStateMetadata(
+      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo = Array(StateStoreMetadataV1(
@@ -1079,6 +1155,16 @@ case class StreamingDeduplicateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
+
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      keyExpressions.toStructType, schemaForValueRow))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion,
+      extraOptions = extraOptionOnStateStore))
+  }
 }
 
 object StreamingDeduplicateExec {
@@ -1149,6 +1235,16 @@ case class StreamingDeduplicateWithinWatermarkExec(
   }
 
   override def shortName: String = "dedupeWithinWatermark"
+
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      keyExpressions.toStructType, schemaForValueRow))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion,
+      extraOptions = extraOptionOnStateStore))
+  }
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)

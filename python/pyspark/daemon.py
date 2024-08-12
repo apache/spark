@@ -30,7 +30,7 @@ from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
-if len(sys.argv) > 1:
+if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
     import importlib
 
     worker_module = importlib.import_module(sys.argv[1])
