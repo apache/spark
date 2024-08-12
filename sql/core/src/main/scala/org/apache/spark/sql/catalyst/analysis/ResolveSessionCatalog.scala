@@ -244,7 +244,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ShowTablesCommand(Some(db), pattern, output)
 
     case ShowTableExtended(
-      ResolvedV1Database(db),
+        ResolvedV1Database(db),
         pattern,
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
         output) =>
