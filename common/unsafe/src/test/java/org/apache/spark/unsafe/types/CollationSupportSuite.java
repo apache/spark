@@ -858,8 +858,12 @@ public class CollationSupportSuite {
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
   }
 
-  private void assertStringInstr(String string, String substring, String collationName,
-          Integer expected) throws SparkException {
+  /**
+   * Verify the behaviour of the `StringInstr` collation support class.
+   */
+
+  private void assertStringInstr(String string, String substring,
+      String collationName, int expected) throws SparkException {
     UTF8String str = UTF8String.fromString(string);
     UTF8String substr = UTF8String.fromString(substring);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -868,56 +872,85 @@ public class CollationSupportSuite {
 
   @Test
   public void testStringInstr() throws SparkException {
-    assertStringInstr("aaads", "Aa", "UTF8_BINARY", 0);
-    assertStringInstr("aaaDs", "de", "UTF8_BINARY", 0);
-    assertStringInstr("aaads", "ds", "UTF8_BINARY", 4);
-    assertStringInstr("xxxx", "", "UTF8_BINARY", 1);
-    assertStringInstr("", "xxxx", "UTF8_BINARY", 0);
-    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_BINARY", 5);
-    assertStringInstr("test大千世界X大千世界", "界X", "UTF8_BINARY", 8);
-    assertStringInstr("aaads", "Aa", "UTF8_LCASE", 1);
-    assertStringInstr("aaaDs", "de", "UTF8_LCASE", 0);
-    assertStringInstr("aaaDs", "ds", "UTF8_LCASE", 4);
-    assertStringInstr("xxxx", "", "UTF8_LCASE", 1);
-    assertStringInstr("", "xxxx", "UTF8_LCASE", 0);
-    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_LCASE", 5);
-    assertStringInstr("test大千世界X大千世界", "界x", "UTF8_LCASE", 8);
-    assertStringInstr("aaads", "Aa", "UNICODE", 0);
+    // Empty strings.
+    assertStringInstr("", "", "UTF8_BINARY", 1);
+    assertStringInstr("", "", "UTF8_LCASE", 1);
+    assertStringInstr("", "", "UNICODE_CI", 1);
+    assertStringInstr("", "", "UNICODE", 1);
+    assertStringInstr("a", "", "UTF8_BINARY", 1);
+    assertStringInstr("a", "", "UTF8_LCASE", 1);
+    assertStringInstr("a", "", "UNICODE", 1);
+    assertStringInstr("a", "", "UNICODE_CI", 1);
+    assertStringInstr("", "x", "UTF8_BINARY", 0);
+    assertStringInstr("", "x", "UTF8_LCASE", 0);
+    assertStringInstr("", "x", "UNICODE", 0);
+    assertStringInstr("", "x", "UNICODE_CI", 0);
+    // Basic tests.
+    assertStringInstr("aaads", "aa", "UTF8_BINARY", 1);
+    assertStringInstr("aaads", "aa", "UTF8_LCASE", 1);
     assertStringInstr("aaads", "aa", "UNICODE", 1);
-    assertStringInstr("aaads", "de", "UNICODE", 0);
-    assertStringInstr("xxxx", "", "UNICODE", 1);
-    assertStringInstr("", "xxxx", "UNICODE", 0);
-    assertStringInstr("test大千世界X大千世界", "界x", "UNICODE", 0);
+    assertStringInstr("aaads", "aa", "UNICODE_CI", 1);
+    assertStringInstr("aaads", "ds", "UTF8_BINARY", 4);
+    assertStringInstr("aaads", "ds", "UTF8_LCASE", 4);
+    assertStringInstr("aaads", "ds", "UNICODE", 4);
+    assertStringInstr("aaads", "ds", "UNICODE_CI", 4);
+    assertStringInstr("aaads", "Aa", "UTF8_BINARY", 0);
+    assertStringInstr("aaads", "Aa", "UTF8_LCASE", 1);
+    assertStringInstr("aaads", "Aa", "UNICODE", 0);
+    assertStringInstr("aaads", "Aa", "UNICODE_CI", 1);
+    assertStringInstr("aaaDs", "de", "UTF8_BINARY", 0);
+    assertStringInstr("aaaDs", "de", "UTF8_LCASE", 0);
+    assertStringInstr("aaaDs", "de", "UNICODE", 0);
+    assertStringInstr("aaaDs", "de", "UNICODE_CI", 0);
+    assertStringInstr("aaaDs", "ds", "UTF8_BINARY", 0);
+    assertStringInstr("aaaDs", "ds", "UTF8_LCASE", 4);
+    assertStringInstr("aaaDs", "ds", "UNICODE", 0);
+    assertStringInstr("aaaDs", "ds", "UNICODE_CI", 4);
+    assertStringInstr("aaadS", "Ds", "UTF8_BINARY", 0);
+    assertStringInstr("aaadS", "Ds", "UTF8_LCASE", 4);
+    assertStringInstr("aaadS", "Ds", "UNICODE", 0);
+    assertStringInstr("aaadS", "Ds", "UNICODE_CI", 4);
+    // Advanced tests.
+    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_BINARY", 5);
+    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_LCASE", 5);
+    assertStringInstr("test大千世界X大千世界", "大千", "UNICODE", 5);
+    assertStringInstr("test大千世界X大千世界", "大千", "UNICODE_CI", 5);
+    assertStringInstr("test大千世界X大千世界", "界X", "UTF8_BINARY", 8);
+    assertStringInstr("test大千世界X大千世界", "界X", "UTF8_LCASE", 8);
     assertStringInstr("test大千世界X大千世界", "界X", "UNICODE", 8);
-    assertStringInstr("xxxx", "", "UNICODE_CI", 1);
-    assertStringInstr("", "xxxx", "UNICODE_CI", 0);
-    assertStringInstr("aaads", "AD", "UNICODE_CI", 3);
-    assertStringInstr("aaads", "dS", "UNICODE_CI", 4);
-    assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
+    assertStringInstr("test大千世界X大千世界", "界X", "UNICODE_CI", 8);
+    assertStringInstr("test大千世界X大千世界", "界x", "UTF8_BINARY", 0);
+    assertStringInstr("test大千世界X大千世界", "界x", "UTF8_LCASE", 8);
+    assertStringInstr("test大千世界X大千世界", "界x", "UNICODE", 0);
     assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
-    assertStringInstr("i̇", "i", "UNICODE_CI", 0);
-    assertStringInstr("i̇", "\u0307", "UNICODE_CI", 0);
-    assertStringInstr("i̇", "İ", "UNICODE_CI", 1);
+    assertStringInstr("test大千世界X大千世界", "界y", "UTF8_BINARY", 0);
+    assertStringInstr("test大千世界X大千世界", "界y", "UTF8_LCASE", 0);
+    assertStringInstr("test大千世界X大千世界", "界y", "UNICODE", 0);
+    assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringInstr("i\u0307", "i", "UNICODE_CI", 0);
+    assertStringInstr("i\u0307", "\u0307", "UNICODE_CI", 0);
+    assertStringInstr("i\u0307", "İ", "UNICODE_CI", 1);
     assertStringInstr("İ", "i", "UNICODE_CI", 0);
-    assertStringInstr("İoi̇o12", "i̇o", "UNICODE_CI", 1);
+    assertStringInstr("İoi̇o12", "i\u0307o", "UNICODE_CI", 1);
     assertStringInstr("i̇oİo12", "İo", "UNICODE_CI", 1);
-    assertStringInstr("abİoi̇o", "i̇o", "UNICODE_CI", 3);
+    assertStringInstr("abİoi̇o", "i\u0307o", "UNICODE_CI", 3);
     assertStringInstr("abi̇oİo", "İo", "UNICODE_CI", 3);
     assertStringInstr("ai̇oxXİo", "Xx", "UNICODE_CI", 5);
     assertStringInstr("aİoi̇oxx", "XX", "UNICODE_CI", 7);
-    assertStringInstr("i̇", "i", "UTF8_LCASE", 1); // != UNICODE_CI
-    assertStringInstr("i̇", "\u0307", "UTF8_LCASE", 2); // != UNICODE_CI
-    assertStringInstr("i̇", "İ", "UTF8_LCASE", 1);
+    assertStringInstr("i\u0307", "i", "UTF8_LCASE", 1); // != UNICODE_CI
+    assertStringInstr("i\u0307", "\u0307", "UTF8_LCASE", 2); // != UNICODE_CI
+    assertStringInstr("i\u0307", "İ", "UTF8_LCASE", 1);
     assertStringInstr("İ", "i", "UTF8_LCASE", 0);
-    assertStringInstr("İoi̇o12", "i̇o", "UTF8_LCASE", 1);
+    assertStringInstr("İoi̇o12", "i\u0307o", "UTF8_LCASE", 1);
     assertStringInstr("i̇oİo12", "İo", "UTF8_LCASE", 1);
-    assertStringInstr("abİoi̇o", "i̇o", "UTF8_LCASE", 3);
+    assertStringInstr("abİoi̇o", "i\u0307o", "UTF8_LCASE", 3);
     assertStringInstr("abi̇oİo", "İo", "UTF8_LCASE", 3);
     assertStringInstr("abI\u0307oi̇o", "İo", "UTF8_LCASE", 3);
     assertStringInstr("ai̇oxXİo", "Xx", "UTF8_LCASE", 5);
     assertStringInstr("abİoi̇o", "\u0307o", "UTF8_LCASE", 6);
     assertStringInstr("aİoi̇oxx", "XX", "UTF8_LCASE", 7);
-    // Greek sigmas.
+    // Conditional case mapping (e.g. Greek sigmas).
     assertStringInstr("σ", "σ", "UTF8_BINARY", 1);
     assertStringInstr("σ", "ς", "UTF8_BINARY", 0);
     assertStringInstr("σ", "Σ", "UTF8_BINARY", 0);
@@ -954,6 +987,31 @@ public class CollationSupportSuite {
     assertStringInstr("Σ", "σ", "UNICODE_CI", 1);
     assertStringInstr("Σ", "ς", "UNICODE_CI", 1);
     assertStringInstr("Σ", "Σ", "UNICODE_CI", 1);
+    // Surrogate pairs.
+    assertStringInstr("a🙃b", "a", "UTF8_BINARY", 1);
+    assertStringInstr("a🙃b", "a", "UTF8_LCASE", 1);
+    assertStringInstr("a🙃b", "a", "UNICODE", 1);
+    assertStringInstr("a🙃b", "a", "UNICODE_CI", 1);
+    assertStringInstr("a🙃b", "🙃", "UTF8_BINARY", 2);
+    assertStringInstr("a🙃b", "🙃", "UTF8_LCASE", 2);
+    assertStringInstr("a🙃b", "🙃", "UNICODE", 2);
+    assertStringInstr("a🙃b", "🙃", "UNICODE_CI", 2);
+    assertStringInstr("a🙃b", "b", "UTF8_BINARY", 3);
+    assertStringInstr("a🙃b", "b", "UTF8_LCASE", 3);
+    assertStringInstr("a🙃b", "b", "UNICODE", 3);
+    assertStringInstr("a🙃b", "b", "UNICODE_CI", 3);
+    assertStringInstr("a🙃🙃b", "🙃", "UTF8_BINARY", 2);
+    assertStringInstr("a🙃🙃b", "🙃", "UTF8_LCASE", 2);
+    assertStringInstr("a🙃🙃b", "🙃", "UNICODE", 2);
+    assertStringInstr("a🙃🙃b", "🙃", "UNICODE_CI", 2);
+    assertStringInstr("a🙃🙃b", "b", "UTF8_BINARY", 4);
+    assertStringInstr("a🙃🙃b", "b", "UTF8_LCASE", 4);
+    assertStringInstr("a🙃🙃b", "b", "UNICODE", 4);
+    assertStringInstr("a🙃🙃b", "b", "UNICODE_CI", 4);
+    assertStringInstr("a🙃x🙃b", "b", "UTF8_BINARY", 5);
+    assertStringInstr("a🙃x🙃b", "b", "UTF8_LCASE", 5);
+    assertStringInstr("a🙃x🙃b", "b", "UNICODE", 5);
+    assertStringInstr("a🙃x🙃b", "b", "UNICODE_CI", 5);
   }
 
   private void assertFindInSet(String word, UTF8String set, String collationName,
@@ -1185,118 +1243,288 @@ public class CollationSupportSuite {
 
   }
 
-  private void assertLocate(String substring, String string, Integer start, String collationName,
-        Integer expected) throws SparkException {
+  /**
+   * Verify the behaviour of the `StringLocate` collation support class.
+   */
+
+  private void assertStringLocate(String substring, String string, int start,
+      String collationName, int expected) throws SparkException {
+    // Note: When using start < 1, be careful to understand the behavior of the `indexOf`
+    // method and the implications of using `indexOf` in the `StringLocate` case class.
     UTF8String substr = UTF8String.fromString(substring);
     UTF8String str = UTF8String.fromString(string);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr,
-      start - 1, collationId) + 1);
+    int result = CollationSupport.StringLocate.exec(str, substr, start - 1, collationId) + 1;
+    assertEquals(expected, result);
   }
 
   @Test
-  public void testLocate() throws SparkException {
-    // If you add tests with start < 1 be careful to understand the behavior of the indexOf method
-    // and usage of indexOf in the StringLocate class.
-    assertLocate("aa", "aaads", 1, "UTF8_BINARY", 1);
-    assertLocate("aa", "aaads", 2, "UTF8_BINARY", 2);
-    assertLocate("aa", "aaads", 3, "UTF8_BINARY", 0);
-    assertLocate("Aa", "aaads", 1, "UTF8_BINARY", 0);
-    assertLocate("Aa", "aAads", 1, "UTF8_BINARY", 2);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
-    assertLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
-    assertLocate("AA", "aaads", 1, "UTF8_LCASE", 1);
-    assertLocate("aa", "aAads", 2, "UTF8_LCASE", 2);
-    assertLocate("aa", "aaAds", 3, "UTF8_LCASE", 0);
-    assertLocate("abC", "abcabc", 1, "UTF8_LCASE", 1);
-    assertLocate("abC", "abCabc", 2, "UTF8_LCASE", 4);
-    assertLocate("abc", "abcabc", 4, "UTF8_LCASE", 4);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_LCASE", 8);
-    assertLocate("界X", "test大千世界Xtest大千世界", 1, "UTF8_LCASE", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_LCASE", 13);
-    assertLocate("大千", "test大千世界大千世界", 1, "UTF8_LCASE", 5);
-    assertLocate("大千", "test大千世界大千世界", 9, "UTF8_LCASE", 9);
-    assertLocate("大千", "大千世界大千世界", 1, "UTF8_LCASE", 1);
-    assertLocate("aa", "Aaads", 1, "UNICODE", 2);
-    assertLocate("AA", "aaads", 1, "UNICODE", 0);
-    assertLocate("aa", "aAads", 2, "UNICODE", 0);
-    assertLocate("aa", "aaAds", 3, "UNICODE", 0);
-    assertLocate("abC", "abcabc", 1, "UNICODE", 0);
-    assertLocate("abC", "abCabc", 2, "UNICODE", 0);
-    assertLocate("abC", "abCabC", 2, "UNICODE", 4);
-    assertLocate("abc", "abcabc", 1, "UNICODE", 1);
-    assertLocate("abc", "abcabc", 3, "UNICODE", 4);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE", 0);
-    assertLocate("界X", "test大千世界X大千世界", 1, "UNICODE", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE", 13);
-    assertLocate("AA", "aaads", 1, "UNICODE_CI", 1);
-    assertLocate("aa", "aAads", 2, "UNICODE_CI", 2);
-    assertLocate("aa", "aaAds", 3, "UNICODE_CI", 0);
-    assertLocate("abC", "abcabc", 1, "UNICODE_CI", 1);
-    assertLocate("abC", "abCabc", 2, "UNICODE_CI", 4);
-    assertLocate("abc", "abcabc", 4, "UNICODE_CI", 4);
-    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
-    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
-    assertLocate("大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
-    assertLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
-    assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
-    // Case-variable character length
-    assertLocate("\u0307", "i̇", 1, "UTF8_BINARY", 2);
-    assertLocate("\u0307", "İ", 1, "UTF8_LCASE", 0); // != UTF8_BINARY
-    assertLocate("i", "i̇", 1, "UNICODE_CI", 0);
-    assertLocate("\u0307", "i̇", 1, "UNICODE_CI", 0);
-    assertLocate("i̇", "i", 1, "UNICODE_CI", 0);
-    assertLocate("İ", "i̇", 1, "UNICODE_CI", 1);
-    assertLocate("İ", "i", 1, "UNICODE_CI", 0);
-    assertLocate("i", "i̇", 1, "UTF8_LCASE", 1); // != UNICODE_CI
-    assertLocate("\u0307", "i̇", 1, "UTF8_LCASE", 2); // != UNICODE_CI
-    assertLocate("i̇", "i", 1, "UTF8_LCASE", 0);
-    assertLocate("İ", "i̇", 1, "UTF8_LCASE", 1);
-    assertLocate("İ", "i", 1, "UTF8_LCASE", 0);
-    assertLocate("i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
-    assertLocate("i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
-    assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
-    assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
-    assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
-    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12);
-    // Greek sigmas.
-    assertLocate("σ", "σ", 1, "UTF8_BINARY", 1);
-    assertLocate("σ", "ς", 1, "UTF8_BINARY", 0);
-    assertLocate("σ", "Σ", 1, "UTF8_BINARY", 0);
-    assertLocate("ς", "σ", 1, "UTF8_BINARY", 0);
-    assertLocate("ς", "ς", 1, "UTF8_BINARY", 1);
-    assertLocate("ς", "Σ", 1, "UTF8_BINARY", 0);
-    assertLocate("Σ", "σ", 1, "UTF8_BINARY", 0);
-    assertLocate("Σ", "ς", 1, "UTF8_BINARY", 0);
-    assertLocate("Σ", "Σ", 1, "UTF8_BINARY", 1);
-    assertLocate("σ", "σ", 1, "UTF8_LCASE", 1);
-    assertLocate("σ", "ς", 1, "UTF8_LCASE", 1);
-    assertLocate("σ", "Σ", 1, "UTF8_LCASE", 1);
-    assertLocate("ς", "σ", 1, "UTF8_LCASE", 1);
-    assertLocate("ς", "ς", 1, "UTF8_LCASE", 1);
-    assertLocate("ς", "Σ", 1, "UTF8_LCASE", 1);
-    assertLocate("Σ", "σ", 1, "UTF8_LCASE", 1);
-    assertLocate("Σ", "ς", 1, "UTF8_LCASE", 1);
-    assertLocate("Σ", "Σ", 1, "UTF8_LCASE", 1);
-    assertLocate("σ", "σ", 1, "UNICODE", 1);
-    assertLocate("σ", "ς", 1, "UNICODE", 0);
-    assertLocate("σ", "Σ", 1, "UNICODE", 0);
-    assertLocate("ς", "σ", 1, "UNICODE", 0);
-    assertLocate("ς", "ς", 1, "UNICODE", 1);
-    assertLocate("ς", "Σ", 1, "UNICODE", 0);
-    assertLocate("Σ", "σ", 1, "UNICODE", 0);
-    assertLocate("Σ", "ς", 1, "UNICODE", 0);
-    assertLocate("Σ", "Σ", 1, "UNICODE", 1);
-    assertLocate("σ", "σ", 1, "UNICODE_CI", 1);
-    assertLocate("σ", "ς", 1, "UNICODE_CI", 1);
-    assertLocate("σ", "Σ", 1, "UNICODE_CI", 1);
-    assertLocate("ς", "σ", 1, "UNICODE_CI", 1);
-    assertLocate("ς", "ς", 1, "UNICODE_CI", 1);
-    assertLocate("ς", "Σ", 1, "UNICODE_CI", 1);
-    assertLocate("Σ", "σ", 1, "UNICODE_CI", 1);
-    assertLocate("Σ", "ς", 1, "UNICODE_CI", 1);
-    assertLocate("Σ", "Σ", 1, "UNICODE_CI", 1);
+  public void testStringLocate() throws SparkException {
+    // Empty strings.
+    assertStringLocate("", "", -1, "UTF8_BINARY", 1);
+    assertStringLocate("", "", -1, "UTF8_LCASE", 1);
+    assertStringLocate("", "", -1, "UNICODE", 1);
+    assertStringLocate("", "", -1, "UNICODE_CI", 1);
+    assertStringLocate("", "", 0, "UTF8_BINARY", 1);
+    assertStringLocate("", "", 0, "UTF8_LCASE", 1);
+    assertStringLocate("", "", 0, "UNICODE", 1);
+    assertStringLocate("", "", 0, "UNICODE_CI", 1);
+    assertStringLocate("", "", 1, "UTF8_BINARY", 1);
+    assertStringLocate("", "", 1, "UTF8_LCASE", 1);
+    assertStringLocate("", "", 1, "UNICODE", 1);
+    assertStringLocate("", "", 1, "UNICODE_CI", 1);
+    assertStringLocate("a", "", -1, "UTF8_BINARY", 0);
+    assertStringLocate("a", "", -1, "UTF8_LCASE", 0);
+    assertStringLocate("a", "", -1, "UNICODE", 0);
+    assertStringLocate("a", "", -1, "UNICODE_CI", 0);
+    assertStringLocate("a", "", 0, "UTF8_BINARY", 0);
+    assertStringLocate("a", "", 0, "UTF8_LCASE", 0);
+    assertStringLocate("a", "", 0, "UNICODE", 0);
+    assertStringLocate("a", "", 0, "UNICODE_CI", 0);
+    assertStringLocate("a", "", 1, "UTF8_BINARY", 0);
+    assertStringLocate("a", "", 1, "UTF8_LCASE", 0);
+    assertStringLocate("a", "", 1, "UNICODE", 0);
+    assertStringLocate("a", "", 1, "UNICODE_CI", 0);
+    assertStringLocate("", "x", -1, "UTF8_BINARY", 1);
+    assertStringLocate("", "x", -1, "UTF8_LCASE", 1);
+    assertStringLocate("", "x", -1, "UNICODE", 1);
+    assertStringLocate("", "x", -1, "UNICODE_CI", 1);
+    assertStringLocate("", "x", 0, "UTF8_BINARY", 1);
+    assertStringLocate("", "x", 0, "UTF8_LCASE", 1);
+    assertStringLocate("", "x", 0, "UNICODE", 1);
+    assertStringLocate("", "x", 0, "UNICODE_CI", 1);
+    assertStringLocate("", "x", 1, "UTF8_BINARY", 1);
+    assertStringLocate("", "x", 1, "UTF8_LCASE", 1);
+    assertStringLocate("", "x", 1, "UNICODE", 1);
+    assertStringLocate("", "x", 1, "UNICODE_CI", 1);
+    // Basic tests.
+    assertStringLocate("aa", "aaads", 1, "UTF8_BINARY", 1);
+    assertStringLocate("aa", "aaads", 1, "UTF8_LCASE", 1);
+    assertStringLocate("aa", "aaads", 1, "UNICODE", 1);
+    assertStringLocate("aa", "aaads", 1, "UNICODE_CI", 1);
+    assertStringLocate("aa", "aaads", 2, "UTF8_BINARY", 2);
+    assertStringLocate("aa", "aaads", 2, "UTF8_LCASE", 2);
+    assertStringLocate("aa", "aaads", 2, "UNICODE", 2);
+    assertStringLocate("aa", "aaads", 2, "UNICODE_CI", 2);
+    assertStringLocate("aa", "aaads", 3, "UTF8_BINARY", 0);
+    assertStringLocate("aa", "aaads", 3, "UTF8_LCASE", 0);
+    assertStringLocate("aa", "aaads", 3, "UNICODE", 0);
+    assertStringLocate("aa", "aaads", 3, "UNICODE_CI", 0);
+    assertStringLocate("Aa", "aaads", 1, "UTF8_BINARY", 0);
+    assertStringLocate("Aa", "aaads", 1, "UTF8_LCASE", 1);
+    assertStringLocate("Aa", "aaads", 1, "UNICODE", 0);
+    assertStringLocate("Aa", "aaads", 1, "UNICODE_CI", 1);
+    assertStringLocate("Aa", "aaads", 2, "UTF8_BINARY", 0);
+    assertStringLocate("Aa", "aaads", 2, "UTF8_LCASE", 2);
+    assertStringLocate("Aa", "aaads", 2, "UNICODE", 0);
+    assertStringLocate("Aa", "aaads", 2, "UNICODE_CI", 2);
+    assertStringLocate("Aa", "aaads", 3, "UTF8_BINARY", 0);
+    assertStringLocate("Aa", "aaads", 3, "UTF8_LCASE", 0);
+    assertStringLocate("Aa", "aaads", 3, "UNICODE", 0);
+    assertStringLocate("Aa", "aaads", 3, "UNICODE_CI", 0);
+    assertStringLocate("Aa", "aAads", 1, "UTF8_BINARY", 2);
+    assertStringLocate("Aa", "aAads", 1, "UTF8_LCASE", 1);
+    assertStringLocate("Aa", "aAads", 1, "UNICODE", 2);
+    assertStringLocate("Aa", "aAads", 1, "UNICODE_CI", 1);
+    assertStringLocate("AA", "aaads", 1, "UTF8_BINARY", 0);
+    assertStringLocate("AA", "aaads", 1, "UTF8_LCASE", 1);
+    assertStringLocate("AA", "aaads", 1, "UNICODE", 0);
+    assertStringLocate("AA", "aaads", 1, "UNICODE_CI", 1);
+    assertStringLocate("aa", "aAads", 2, "UTF8_BINARY", 0);
+    assertStringLocate("aa", "aAads", 2, "UTF8_LCASE", 2);
+    assertStringLocate("aa", "aAads", 2, "UNICODE", 0);
+    assertStringLocate("aa", "aAads", 2, "UNICODE_CI", 2);
+    assertStringLocate("aa", "aaAds", 3, "UTF8_BINARY", 0);
+    assertStringLocate("aa", "aaAds", 3, "UTF8_LCASE", 0);
+    assertStringLocate("aa", "aaAds", 3, "UNICODE", 0);
+    assertStringLocate("aa", "aaAds", 3, "UNICODE_CI", 0);
+    assertStringLocate("abC", "abcabc", 1, "UTF8_BINARY", 0);
+    assertStringLocate("abC", "abcabc", 1, "UTF8_LCASE", 1);
+    assertStringLocate("abC", "abcabc", 1, "UNICODE", 0);
+    assertStringLocate("abC", "abcabc", 1, "UNICODE_CI", 1);
+    assertStringLocate("abC", "abCabc", 2, "UTF8_BINARY", 0);
+    assertStringLocate("abC", "abCabc", 2, "UTF8_LCASE", 4);
+    assertStringLocate("abC", "abCabc", 2, "UNICODE", 0);
+    assertStringLocate("abC", "abCabc", 2, "UNICODE_CI", 4);
+    assertStringLocate("abc", "abcabc", 1, "UTF8_BINARY", 1);
+    assertStringLocate("abc", "abcabc", 1, "UTF8_LCASE", 1);
+    assertStringLocate("abc", "abcabc", 1, "UNICODE", 1);
+    assertStringLocate("abc", "abcabc", 1, "UNICODE_CI", 1);
+    assertStringLocate("abc", "abcabc", 2, "UTF8_BINARY", 4);
+    assertStringLocate("abc", "abcabc", 2, "UTF8_LCASE", 4);
+    assertStringLocate("abc", "abcabc", 2, "UNICODE", 4);
+    assertStringLocate("abc", "abcabc", 2, "UNICODE_CI", 4);
+    assertStringLocate("abc", "abcabc", 3, "UTF8_BINARY", 4);
+    assertStringLocate("abc", "abcabc", 3, "UTF8_LCASE", 4);
+    assertStringLocate("abc", "abcabc", 3, "UNICODE", 4);
+    assertStringLocate("abc", "abcabc", 3, "UNICODE_CI", 4);
+    assertStringLocate("abc", "abcabc", 4, "UTF8_BINARY", 4);
+    assertStringLocate("abc", "abcabc", 4, "UTF8_LCASE", 4);
+    assertStringLocate("abc", "abcabc", 4, "UNICODE", 4);
+    assertStringLocate("abc", "abcabc", 4, "UNICODE_CI", 4);
+    assertStringLocate("aa", "Aaads", 1, "UTF8_BINARY", 2);
+    assertStringLocate("aa", "Aaads", 1, "UTF8_LCASE", 1);
+    assertStringLocate("aa", "Aaads", 1, "UNICODE", 2);
+    assertStringLocate("aa", "Aaads", 1, "UNICODE_CI", 1);
+    // Advanced tests.
+    assertStringLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
+    assertStringLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
+    assertStringLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
+    assertStringLocate("界x", "test大千世界X大千世界", 1, "UTF8_LCASE", 8);
+    assertStringLocate("界X", "test大千世界Xtest大千世界", 1, "UTF8_LCASE", 8);
+    assertStringLocate("界", "test大千世界X大千世界", 13, "UTF8_LCASE", 13);
+    assertStringLocate("大千", "test大千世界大千世界", 1, "UTF8_LCASE", 5);
+    assertStringLocate("大千", "test大千世界大千世界", 9, "UTF8_LCASE", 9);
+    assertStringLocate("大千", "大千世界大千世界", 1, "UTF8_LCASE", 1);
+    assertStringLocate("界x", "test大千世界X大千世界", 1, "UNICODE", 0);
+    assertStringLocate("界X", "test大千世界X大千世界", 1, "UNICODE", 8);
+    assertStringLocate("界", "test大千世界X大千世界", 13, "UNICODE", 13);
+    assertStringLocate("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
+    assertStringLocate("界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
+    assertStringLocate("大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
+    assertStringLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
+    assertStringLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringLocate("\u0307", "i\u0307", 1, "UTF8_BINARY", 2);
+    assertStringLocate("\u0307", "İ", 1, "UTF8_LCASE", 0); // != UTF8_BINARY
+    assertStringLocate("i", "i\u0307", 1, "UNICODE_CI", 0);
+    assertStringLocate("\u0307", "i\u0307", 1, "UNICODE_CI", 0);
+    assertStringLocate("i\u0307", "i", 1, "UNICODE_CI", 0);
+    assertStringLocate("İ", "i\u0307", 1, "UNICODE_CI", 1);
+    assertStringLocate("İ", "i", 1, "UNICODE_CI", 0);
+    assertStringLocate("i", "i\u0307", 1, "UTF8_LCASE", 1); // != UNICODE_CI
+    assertStringLocate("\u0307", "i\u0307", 1, "UTF8_LCASE", 2); // != UNICODE_CI
+    assertStringLocate("i\u0307", "i", 1, "UTF8_LCASE", 0);
+    assertStringLocate("İ", "i\u0307", 1, "UTF8_LCASE", 1);
+    assertStringLocate("İ", "i", 1, "UTF8_LCASE", 0);
+    assertStringLocate("i\u0307o", "İo世界大千世界", 1, "UNICODE_CI", 1);
+    assertStringLocate("i\u0307o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
+    assertStringLocate("i\u0307o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
+    assertStringLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
+    assertStringLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
+    assertStringLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStringLocate("σ", "σ", 1, "UTF8_BINARY", 1);
+    assertStringLocate("σ", "ς", 1, "UTF8_BINARY", 0);
+    assertStringLocate("σ", "Σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate("ς", "σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate("ς", "ς", 1, "UTF8_BINARY", 1);
+    assertStringLocate("ς", "Σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate("Σ", "σ", 1, "UTF8_BINARY", 0);
+    assertStringLocate("Σ", "ς", 1, "UTF8_BINARY", 0);
+    assertStringLocate("Σ", "Σ", 1, "UTF8_BINARY", 1);
+    assertStringLocate("σ", "σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate("σ", "ς", 1, "UTF8_LCASE", 1);
+    assertStringLocate("σ", "Σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate("ς", "σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate("ς", "ς", 1, "UTF8_LCASE", 1);
+    assertStringLocate("ς", "Σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate("Σ", "σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate("Σ", "ς", 1, "UTF8_LCASE", 1);
+    assertStringLocate("Σ", "Σ", 1, "UTF8_LCASE", 1);
+    assertStringLocate("σ", "σ", 1, "UNICODE", 1);
+    assertStringLocate("σ", "ς", 1, "UNICODE", 0);
+    assertStringLocate("σ", "Σ", 1, "UNICODE", 0);
+    assertStringLocate("ς", "σ", 1, "UNICODE", 0);
+    assertStringLocate("ς", "ς", 1, "UNICODE", 1);
+    assertStringLocate("ς", "Σ", 1, "UNICODE", 0);
+    assertStringLocate("Σ", "σ", 1, "UNICODE", 0);
+    assertStringLocate("Σ", "ς", 1, "UNICODE", 0);
+    assertStringLocate("Σ", "Σ", 1, "UNICODE", 1);
+    assertStringLocate("σ", "σ", 1, "UNICODE_CI", 1);
+    assertStringLocate("σ", "ς", 1, "UNICODE_CI", 1);
+    assertStringLocate("σ", "Σ", 1, "UNICODE_CI", 1);
+    assertStringLocate("ς", "σ", 1, "UNICODE_CI", 1);
+    assertStringLocate("ς", "ς", 1, "UNICODE_CI", 1);
+    assertStringLocate("ς", "Σ", 1, "UNICODE_CI", 1);
+    assertStringLocate("Σ", "σ", 1, "UNICODE_CI", 1);
+    assertStringLocate("Σ", "ς", 1, "UNICODE_CI", 1);
+    assertStringLocate("Σ", "Σ", 1, "UNICODE_CI", 1);
+    // Surrogate pairs.
+    assertStringLocate("a", "a🙃b", 1, "UTF8_BINARY", 1);
+    assertStringLocate("a", "a🙃b", 1, "UTF8_LCASE", 1);
+    assertStringLocate("a", "a🙃b", 1, "UNICODE", 1);
+    assertStringLocate("a", "a🙃b", 1, "UNICODE_CI", 1);
+    assertStringLocate("a", "a🙃b", 2, "UTF8_BINARY", 0);
+    assertStringLocate("a", "a🙃b", 2, "UTF8_LCASE", 0);
+    assertStringLocate("a", "a🙃b", 2, "UNICODE", 0);
+    assertStringLocate("a", "a🙃b", 2, "UNICODE_CI", 0);
+    assertStringLocate("a", "a🙃b", 3, "UTF8_BINARY", 0);
+    assertStringLocate("a", "a🙃b", 3, "UTF8_LCASE", 0);
+    assertStringLocate("a", "a🙃b", 3, "UNICODE", 0);
+    assertStringLocate("a", "a🙃b", 3, "UNICODE_CI", 0);
+    assertStringLocate("🙃", "a🙃b", 1, "UTF8_BINARY", 2);
+    assertStringLocate("🙃", "a🙃b", 1, "UTF8_LCASE", 2);
+    assertStringLocate("🙃", "a🙃b", 1, "UNICODE", 2);
+    assertStringLocate("🙃", "a🙃b", 1, "UNICODE_CI", 2);
+    assertStringLocate("🙃", "a🙃b", 2, "UTF8_BINARY", 2);
+    assertStringLocate("🙃", "a🙃b", 2, "UTF8_LCASE", 2);
+    assertStringLocate("🙃", "a🙃b", 2, "UNICODE", 2);
+    assertStringLocate("🙃", "a🙃b", 2, "UNICODE_CI", 2);
+    assertStringLocate("🙃", "a🙃b", 3, "UTF8_BINARY", 0);
+    assertStringLocate("🙃", "a🙃b", 3, "UTF8_LCASE", 0);
+    assertStringLocate("🙃", "a🙃b", 3, "UNICODE", 0);
+    assertStringLocate("🙃", "a🙃b", 3, "UNICODE_CI", 0);
+    assertStringLocate("b", "a🙃b", 1, "UTF8_BINARY", 3);
+    assertStringLocate("b", "a🙃b", 1, "UTF8_LCASE", 3);
+    assertStringLocate("b", "a🙃b", 1, "UNICODE", 3);
+    assertStringLocate("b", "a🙃b", 1, "UNICODE_CI", 3);
+    assertStringLocate("b", "a🙃b", 2, "UTF8_BINARY", 3);
+    assertStringLocate("b", "a🙃b", 2, "UTF8_LCASE", 3);
+    assertStringLocate("b", "a🙃b", 2, "UNICODE", 3);
+    assertStringLocate("b", "a🙃b", 2, "UNICODE_CI", 3);
+    assertStringLocate("b", "a🙃b", 3, "UTF8_BINARY", 3);
+    assertStringLocate("b", "a🙃b", 3, "UTF8_LCASE", 3);
+    assertStringLocate("b", "a🙃b", 3, "UNICODE", 3);
+    assertStringLocate("b", "a🙃b", 3, "UNICODE_CI", 3);
+    assertStringLocate("🙃", "a🙃🙃b", 1, "UTF8_BINARY", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 1, "UTF8_LCASE", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 1, "UNICODE", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 1, "UNICODE_CI", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 2, "UTF8_BINARY", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 2, "UTF8_LCASE", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 2, "UNICODE", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 2, "UNICODE_CI", 2);
+    assertStringLocate("🙃", "a🙃🙃b", 3, "UTF8_BINARY", 3);
+    assertStringLocate("🙃", "a🙃🙃b", 3, "UTF8_LCASE", 3);
+    assertStringLocate("🙃", "a🙃🙃b", 3, "UNICODE", 3);
+    assertStringLocate("🙃", "a🙃🙃b", 3, "UNICODE_CI", 3);
+    assertStringLocate("🙃", "a🙃🙃b", 4, "UTF8_BINARY", 0);
+    assertStringLocate("🙃", "a🙃🙃b", 4, "UTF8_LCASE", 0);
+    assertStringLocate("🙃", "a🙃🙃b", 4, "UNICODE", 0);
+    assertStringLocate("🙃", "a🙃🙃b", 4, "UNICODE_CI", 0);
+    assertStringLocate("b", "a🙃🙃b", 1, "UTF8_BINARY", 4);
+    assertStringLocate("b", "a🙃🙃b", 1, "UTF8_LCASE", 4);
+    assertStringLocate("b", "a🙃🙃b", 1, "UNICODE", 4);
+    assertStringLocate("b", "a🙃🙃b", 1, "UNICODE_CI", 4);
+    assertStringLocate("b", "a🙃🙃b", 2, "UTF8_BINARY", 4);
+    assertStringLocate("b", "a🙃🙃b", 2, "UTF8_LCASE", 4);
+    assertStringLocate("b", "a🙃🙃b", 2, "UNICODE", 4);
+    assertStringLocate("b", "a🙃🙃b", 2, "UNICODE_CI", 4);
+    assertStringLocate("b", "a🙃🙃b", 3, "UTF8_BINARY", 4);
+    assertStringLocate("b", "a🙃🙃b", 3, "UTF8_LCASE", 4);
+    assertStringLocate("b", "a🙃🙃b", 3, "UNICODE", 4);
+    assertStringLocate("b", "a🙃🙃b", 3, "UNICODE_CI", 4);
+    assertStringLocate("b", "a🙃🙃b", 4, "UTF8_BINARY", 4);
+    assertStringLocate("b", "a🙃🙃b", 4, "UTF8_LCASE", 4);
+    assertStringLocate("b", "a🙃🙃b", 4, "UNICODE", 4);
+    assertStringLocate("b", "a🙃🙃b", 4, "UNICODE_CI", 4);
+    assertStringLocate("b", "a🙃x🙃b", 1, "UTF8_BINARY", 5);
+    assertStringLocate("b", "a🙃x🙃b", 1, "UTF8_LCASE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 1, "UNICODE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 1, "UNICODE_CI", 5);
+    assertStringLocate("b", "a🙃x🙃b", 2, "UTF8_BINARY", 5);
+    assertStringLocate("b", "a🙃x🙃b", 2, "UTF8_LCASE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 2, "UNICODE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 2, "UNICODE_CI", 5);
+    assertStringLocate("b", "a🙃x🙃b", 3, "UTF8_BINARY", 5);
+    assertStringLocate("b", "a🙃x🙃b", 3, "UTF8_LCASE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 3, "UNICODE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 3, "UNICODE_CI", 5);
+    assertStringLocate("b", "a🙃x🙃b", 4, "UTF8_BINARY", 5);
+    assertStringLocate("b", "a🙃x🙃b", 4, "UTF8_LCASE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE", 5);
+    assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE_CI", 5);
   }
 
   private void assertSubstringIndex(String string, String delimiter, Integer count,
