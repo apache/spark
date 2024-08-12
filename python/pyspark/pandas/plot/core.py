@@ -182,7 +182,7 @@ class HistogramPlotBase(NumericPlotBase):
         colnames = sdf.columns
         bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
-        # TODO(): add function in scala side
+        # TODO(SPARK-49202): register this function in scala side
         @F.udf(returnType=DoubleType())
         def binary_search_for_buckets(value):
             # Given bins = [1.0, 2.0, 3.0, 4.0]
