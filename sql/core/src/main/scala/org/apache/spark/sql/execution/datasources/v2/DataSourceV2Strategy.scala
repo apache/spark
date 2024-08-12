@@ -53,7 +53,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  lazy private val hadoopConf = session.sparkContext.hadoopConfiguration
+  private val hadoopConf = session.sessionState.newHadoopConf()
 
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
     session.sharedState.cacheManager.recacheByPlan(session, r)
