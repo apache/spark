@@ -24,7 +24,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -35,7 +35,8 @@ import org.apache.spark.util.collection.OpenHashMap
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
   extends QueryTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
 
@@ -964,25 +965,36 @@ class CollationSQLExpressionsSuite
     })
   }
 
-  test("Support StringToMap expression with collation") {
-    // Supported collations
-    case class StringToMapTestCase[R](t: String, p: String, k: String, c: String, result: R)
+  test("Support `StringToMap` expression with collation") {
+    case class StringToMapTestCase[R](
+        text: String,
+        pairDelim: String,
+        keyValueDelim: String,
+        collation: String,
+        result: R)
     val testCases = Seq(
       StringToMapTestCase("a:1,b:2,c:3", ",", ":", "UTF8_BINARY",
         Map("a" -> "1", "b" -> "2", "c" -> "3")),
-      StringToMapTestCase("A-1;B-2;C-3", ";", "-", "UTF8_LCASE",
+      StringToMapTestCase("A-1xB-2xC-3", "X", "-", "UTF8_LCASE",
         Map("A" -> "1", "B" -> "2", "C" -> "3")),
-      StringToMapTestCase("1:a,2:b,3:c", ",", ":", "UNICODE",
+      StringToMapTestCase("1:ax2:bx3:c", "x", ":", "UNICODE",
         Map("1" -> "a", "2" -> "b", "3" -> "c")),
-      StringToMapTestCase("1/A!2/B!3/C", "!", "/", "UNICODE_CI",
+      StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
         Map("1" -> "A", "2" -> "B", "3" -> "C"))
     )
     testCases.foreach(t => {
-      val query = s"SELECT str_to_map(collate('${t.t}', '${t.c}'), '${t.p}', '${t.k}');"
-      // Result & data type
-      checkAnswer(sql(query), Row(t.result))
-      val dataType = MapType(StringType(t.c), StringType(t.c), true)
-      assert(sql(query).schema.fields.head.dataType.sameType(dataType))
+      // Unit test.
+      val text = Literal.create(t.text, StringType(t.collation))
+      val pairDelim = Literal.create(t.pairDelim, StringType(t.collation))
+      val keyValueDelim = Literal.create(t.keyValueDelim, StringType(t.collation))
+      checkEvaluation(StringToMap(text, pairDelim, keyValueDelim), t.result)
+      // E2E SQL test.
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query = s"SELECT str_to_map('${t.text}', '${t.pairDelim}', '${t.keyValueDelim}')"
+        checkAnswer(sql(query), Row(t.result))
+        val dataType = MapType(StringType(t.collation), StringType(t.collation), true)
+        assert(sql(query).schema.fields.head.dataType.sameType(dataType))
+      }
     })
   }
 
