@@ -38,8 +38,8 @@ _CALLING_DIR="$(pwd)"
 # Options used during compilation
 _COMPILE_JVM_OPTS="-Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m"
 
-# Installs any application tarball given a URL, the expected tarball name,
-# and, optionally. Arguments:
+# Installs any application tarball given a URL, the expected tarball name.
+# Arguments:
 # 1 - Mirror host
 # 2 - URL path on host
 # 3 - URL query string
