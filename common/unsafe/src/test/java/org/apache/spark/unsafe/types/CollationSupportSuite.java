@@ -194,11 +194,11 @@ public class CollationSupportSuite {
   }
 
   /**
-   * Collation-aware string expressions.
+   * Verify the behaviour of the `Contains` collation support class.
    */
 
-  private void assertContains(String pattern, String target, String collationName, boolean expected)
-          throws SparkException {
+  private void assertContains(String pattern, String target, String collationName,
+      boolean expected) throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(target);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -207,20 +207,31 @@ public class CollationSupportSuite {
 
   @Test
   public void testContains() throws SparkException {
-    // Edge cases
-    assertContains("", "", "UTF8_BINARY", true);
-    assertContains("c", "", "UTF8_BINARY", true);
-    assertContains("", "c", "UTF8_BINARY", false);
-    assertContains("", "", "UNICODE", true);
-    assertContains("c", "", "UNICODE", true);
-    assertContains("", "c", "UNICODE", false);
-    assertContains("", "", "UTF8_LCASE", true);
-    assertContains("c", "", "UTF8_LCASE", true);
-    assertContains("", "c", "UTF8_LCASE", false);
-    assertContains("", "", "UNICODE_CI", true);
-    assertContains("c", "", "UNICODE_CI", true);
-    assertContains("", "c", "UNICODE_CI", false);
-    // Basic tests
+    for (String collationName: testSupportedCollations) {
+      // Empty strings.
+      assertContains("", "", collationName, true);
+      assertContains("a", "", collationName, true);
+      assertContains("", "x", collationName, false);
+      // Basic tests.
+      assertContains("abcde", "xyz", collationName, false);
+      assertContains("abcde", "bcd", collationName, true);
+      assertContains("abcde", "abc", collationName, true);
+      assertContains("abcde", "cde", collationName, true);
+      assertContains("abcde", "abcde", collationName, true);
+      assertContains("你好", "x", collationName, false);
+      assertContains("你好", "你", collationName, true);
+      assertContains("你好", "好", collationName, true);
+      assertContains("你好", "你好", collationName, true);
+      assertContains("Γειά", "x", collationName, false);
+      assertContains("Γειά", "ειά", collationName, true);
+      assertContains("Γειά", "Γει", collationName, true);
+      assertContains("Γειά", "Γειά", collationName, true);
+      assertContains("Здраво", "x", collationName, false);
+      assertContains("Здраво", "драво", collationName, true);
+      assertContains("Здраво", "Здрав", collationName, true);
+      assertContains("Здраво", "Здраво", collationName, true);
+    }
+    // Advanced tests.
     assertContains("abcde", "bcd", "UTF8_BINARY", true);
     assertContains("abcde", "bde", "UTF8_BINARY", false);
     assertContains("abcde", "fgh", "UTF8_BINARY", false);
@@ -233,25 +244,6 @@ public class CollationSupportSuite {
     assertContains("abcde", "c", "UNICODE_CI", true);
     assertContains("abcde", "bCD", "UNICODE_CI", true);
     assertContains("abcde", "123", "UNICODE_CI", false);
-    // Case variation
-    assertContains("aBcDe", "bcd", "UTF8_BINARY", false);
-    assertContains("aBcDe", "BcD", "UTF8_BINARY", true);
-    assertContains("aBcDe", "abcde", "UNICODE", false);
-    assertContains("aBcDe", "aBcDe", "UNICODE", true);
-    assertContains("aBcDe", "bcd", "UTF8_LCASE", true);
-    assertContains("aBcDe", "BCD", "UTF8_LCASE", true);
-    assertContains("aBcDe", "abcde", "UNICODE_CI", true);
-    assertContains("aBcDe", "AbCdE", "UNICODE_CI", true);
-    // Accent variation
-    assertContains("aBcDe", "bćd", "UTF8_BINARY", false);
-    assertContains("aBcDe", "BćD", "UTF8_BINARY", false);
-    assertContains("aBcDe", "abćde", "UNICODE", false);
-    assertContains("aBcDe", "aBćDe", "UNICODE", false);
-    assertContains("aBcDe", "bćd", "UTF8_LCASE", false);
-    assertContains("aBcDe", "BĆD", "UTF8_LCASE", false);
-    assertContains("aBcDe", "abćde", "UNICODE_CI", false);
-    assertContains("aBcDe", "AbĆdE", "UNICODE_CI", false);
-    // Variable byte length characters
     assertContains("ab世De", "b世D", "UTF8_BINARY", true);
     assertContains("ab世De", "B世d", "UTF8_BINARY", false);
     assertContains("äbćδe", "bćδ", "UTF8_BINARY", true);
@@ -268,41 +260,58 @@ public class CollationSupportSuite {
     assertContains("ab世De", "AB世dE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
-    // Characters with the same binary lowercase representation
     assertContains("The Kelvin.", "Kelvin", "UTF8_LCASE", true);
     assertContains("The Kelvin.", "Kelvin", "UTF8_LCASE", true);
     assertContains("The KKelvin.", "KKelvin", "UTF8_LCASE", true);
     assertContains("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertContains("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertContains("The KKelvin.", "KKelvin,", "UTF8_LCASE", false);
-    // Case-variable character length
-    assertContains("i̇", "i", "UNICODE_CI", false);
-    assertContains("i̇", "\u0307", "UNICODE_CI", false);
-    assertContains("i̇", "İ", "UNICODE_CI", true);
+    // Case variation.
+    assertContains("aBcDe", "bcd", "UTF8_BINARY", false);
+    assertContains("aBcDe", "BcD", "UTF8_BINARY", true);
+    assertContains("aBcDe", "abcde", "UNICODE", false);
+    assertContains("aBcDe", "aBcDe", "UNICODE", true);
+    assertContains("aBcDe", "bcd", "UTF8_LCASE", true);
+    assertContains("aBcDe", "BCD", "UTF8_LCASE", true);
+    assertContains("aBcDe", "abcde", "UNICODE_CI", true);
+    assertContains("aBcDe", "AbCdE", "UNICODE_CI", true);
+    // Accent variation.
+    assertContains("aBcDe", "bćd", "UTF8_BINARY", false);
+    assertContains("aBcDe", "BćD", "UTF8_BINARY", false);
+    assertContains("aBcDe", "abćde", "UNICODE", false);
+    assertContains("aBcDe", "aBćDe", "UNICODE", false);
+    assertContains("aBcDe", "bćd", "UTF8_LCASE", false);
+    assertContains("aBcDe", "BĆD", "UTF8_LCASE", false);
+    assertContains("aBcDe", "abćde", "UNICODE_CI", false);
+    assertContains("aBcDe", "AbĆdE", "UNICODE_CI", false);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertContains("i\u0307", "i", "UNICODE_CI", false);
+    assertContains("i\u0307", "\u0307", "UNICODE_CI", false);
+    assertContains("i\u0307", "İ", "UNICODE_CI", true);
     assertContains("İ", "i", "UNICODE_CI", false);
     assertContains("adi̇os", "io", "UNICODE_CI", false);
     assertContains("adi̇os", "Io", "UNICODE_CI", false);
-    assertContains("adi̇os", "i̇o", "UNICODE_CI", true);
+    assertContains("adi̇os", "i\u0307o", "UNICODE_CI", true);
     assertContains("adi̇os", "İo", "UNICODE_CI", true);
     assertContains("adİos", "io", "UNICODE_CI", false);
     assertContains("adİos", "Io", "UNICODE_CI", false);
-    assertContains("adİos", "i̇o", "UNICODE_CI", true);
+    assertContains("adİos", "i\u0307o", "UNICODE_CI", true);
     assertContains("adİos", "İo", "UNICODE_CI", true);
-    assertContains("i̇", "i", "UTF8_LCASE", true); // != UNICODE_CI
+    assertContains("i\u0307", "i", "UTF8_LCASE", true); // != UNICODE_CI
     assertContains("İ", "\u0307", "UTF8_LCASE", false);
     assertContains("İ", "i", "UTF8_LCASE", false);
-    assertContains("i̇", "\u0307", "UTF8_LCASE", true); // != UNICODE_CI
-    assertContains("i̇", "İ", "UTF8_LCASE", true);
+    assertContains("i\u0307", "\u0307", "UTF8_LCASE", true); // != UNICODE_CI
+    assertContains("i\u0307", "İ", "UTF8_LCASE", true);
     assertContains("İ", "i", "UTF8_LCASE", false);
     assertContains("adi̇os", "io", "UTF8_LCASE", false);
     assertContains("adi̇os", "Io", "UTF8_LCASE", false);
-    assertContains("adi̇os", "i̇o", "UTF8_LCASE", true);
+    assertContains("adi̇os", "i\u0307o", "UTF8_LCASE", true);
     assertContains("adi̇os", "İo", "UTF8_LCASE", true);
     assertContains("adİos", "io", "UTF8_LCASE", false);
     assertContains("adİos", "Io", "UTF8_LCASE", false);
-    assertContains("adİos", "i̇o", "UTF8_LCASE", true);
+    assertContains("adİos", "i\u0307o", "UTF8_LCASE", true);
     assertContains("adİos", "İo", "UTF8_LCASE", true);
-    // Greek sigmas.
+    // Conditional case mapping (e.g. Greek sigmas).
     assertContains("σ", "σ", "UTF8_BINARY", true);
     assertContains("σ", "ς", "UTF8_BINARY", false);
     assertContains("σ", "Σ", "UTF8_BINARY", false);
@@ -339,11 +348,91 @@ public class CollationSupportSuite {
     assertContains("Σ", "σ", "UNICODE_CI", true);
     assertContains("Σ", "ς", "UNICODE_CI", true);
     assertContains("Σ", "Σ", "UNICODE_CI", true);
+    assertContains("ΣΑΛΑΤΑ", "Σ", "UTF8_BINARY", true);
+    assertContains("ΣΑΛΑΤΑ", "σ", "UTF8_BINARY", false);
+    assertContains("ΣΑΛΑΤΑ", "ς", "UTF8_BINARY", false);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UTF8_BINARY", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UTF8_BINARY", false);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UTF8_BINARY", false);
+    assertContains("ΣΑΛΑΤΑ", "Σ", "UTF8_LCASE", true);
+    assertContains("ΣΑΛΑΤΑ", "σ", "UTF8_LCASE", true);
+    assertContains("ΣΑΛΑΤΑ", "ς", "UTF8_LCASE", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UTF8_LCASE", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UTF8_LCASE", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UTF8_LCASE", true);
+    assertContains("ΣΑΛΑΤΑ", "Σ", "UNICODE", true);
+    assertContains("ΣΑΛΑΤΑ", "σ", "UNICODE", false);
+    assertContains("ΣΑΛΑΤΑ", "ς", "UNICODE", false);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UNICODE", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UNICODE", false);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UNICODE", false);
+    assertContains("ΣΑΛΑΤΑ", "Σ", "UNICODE_CI", true);
+    assertContains("ΣΑΛΑΤΑ", "σ", "UNICODE_CI", true);
+    assertContains("ΣΑΛΑΤΑ", "ς", "UNICODE_CI", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UNICODE_CI", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UNICODE_CI", true);
+    assertContains("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UNICODE_CI", true);
+    // Surrogate pairs.
+    assertContains("a🙃b🙃c", "x", "UTF8_BINARY", false);
+    assertContains("a🙃b🙃c", "x", "UTF8_LCASE", false);
+    assertContains("a🙃b🙃c", "x", "UNICODE", false);
+    assertContains("a🙃b🙃c", "x", "UNICODE_CI", false);
+    assertContains("a🙃b🙃c", "b", "UTF8_BINARY", true);
+    assertContains("a🙃b🙃c", "b", "UTF8_LCASE", true);
+    assertContains("a🙃b🙃c", "b", "UNICODE", true);
+    assertContains("a🙃b🙃c", "b", "UNICODE_CI", true);
+    assertContains("a🙃b🙃c", "a🙃b", "UTF8_BINARY", true);
+    assertContains("a🙃b🙃c", "a🙃b", "UTF8_LCASE", true);
+    assertContains("a🙃b🙃c", "a🙃b", "UNICODE", true);
+    assertContains("a🙃b🙃c", "a🙃b", "UNICODE_CI", true);
+    assertContains("a🙃b🙃c", "b🙃c", "UTF8_BINARY", true);
+    assertContains("a🙃b🙃c", "b🙃c", "UTF8_LCASE", true);
+    assertContains("a🙃b🙃c", "b🙃c", "UNICODE", true);
+    assertContains("a🙃b🙃c", "b🙃c", "UNICODE_CI", true);
+    assertContains("a🙃b🙃c", "a🙃b🙃c", "UTF8_BINARY", true);
+    assertContains("a🙃b🙃c", "a🙃b🙃c", "UTF8_LCASE", true);
+    assertContains("a🙃b🙃c", "a🙃b🙃c", "UNICODE", true);
+    assertContains("a🙃b🙃c", "a🙃b🙃c", "UNICODE_CI", true);
+    assertContains("😀😆😃😄", "😄😆", "UTF8_BINARY", false);
+    assertContains("😀😆😃😄", "😄😆", "UTF8_LCASE", false);
+    assertContains("😀😆😃😄", "😄😆", "UNICODE", false);
+    assertContains("😀😆😃😄", "😄😆", "UNICODE_CI", false);
+    assertContains("😀😆😃😄", "😆😃", "UTF8_BINARY", true);
+    assertContains("😀😆😃😄", "😆😃", "UTF8_LCASE", true);
+    assertContains("😀😆😃😄", "😆😃", "UNICODE", true);
+    assertContains("😀😆😃😄", "😆😃", "UNICODE_CI", true);
+    assertContains("😀😆😃😄", "😀😆", "UTF8_BINARY", true);
+    assertContains("😀😆😃😄", "😀😆", "UTF8_LCASE", true);
+    assertContains("😀😆😃😄", "😀😆", "UNICODE", true);
+    assertContains("😀😆😃😄", "😀😆", "UNICODE_CI", true);
+    assertContains("😀😆😃😄", "😃😄", "UTF8_BINARY", true);
+    assertContains("😀😆😃😄", "😃😄", "UTF8_LCASE", true);
+    assertContains("😀😆😃😄", "😃😄", "UNICODE", true);
+    assertContains("😀😆😃😄", "😃😄", "UNICODE_CI", true);
+    assertContains("😀😆😃😄", "😀😆😃😄", "UTF8_BINARY", true);
+    assertContains("😀😆😃😄", "😀😆😃😄", "UTF8_LCASE", true);
+    assertContains("😀😆😃😄", "😀😆😃😄", "UNICODE", true);
+    assertContains("😀😆😃😄", "😀😆😃😄", "UNICODE_CI", true);
+    assertContains("𐐅", "𐐅", "UTF8_BINARY", true);
+    assertContains("𐐅", "𐐅", "UTF8_LCASE", true);
+    assertContains("𐐅", "𐐅", "UNICODE", true);
+    assertContains("𐐅", "𐐅", "UNICODE_CI", true);
+    assertContains("𐐅", "𐐭", "UTF8_BINARY", false);
+    assertContains("𐐅", "𐐭", "UTF8_LCASE", true);
+    assertContains("𐐅", "𐐭", "UNICODE", false);
+    assertContains("𐐅", "𐐭", "UNICODE_CI", true);
+    assertContains("𝔸", "𝔸", "UTF8_BINARY", true);
+    assertContains("𝔸", "𝔸", "UTF8_LCASE", true);
+    assertContains("𝔸", "𝔸", "UNICODE", true);
+    assertContains("𝔸", "𝔸", "UNICODE_CI", true);
   }
 
-  private void assertStartsWith(
-          String pattern, String prefix, String collationName, boolean expected)
-          throws SparkException {
+  /**
+   * Verify the behaviour of the `StartsWith` collation support class.
+   */
+
+  private void assertStartsWith(String pattern, String prefix, String collationName,
+      boolean expected) throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(prefix);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -352,20 +441,31 @@ public class CollationSupportSuite {
 
   @Test
   public void testStartsWith() throws SparkException {
-    // Edge cases
-    assertStartsWith("", "", "UTF8_BINARY", true);
-    assertStartsWith("c", "", "UTF8_BINARY", true);
-    assertStartsWith("", "c", "UTF8_BINARY", false);
-    assertStartsWith("", "", "UNICODE", true);
-    assertStartsWith("c", "", "UNICODE", true);
-    assertStartsWith("", "c", "UNICODE", false);
-    assertStartsWith("", "", "UTF8_LCASE", true);
-    assertStartsWith("c", "", "UTF8_LCASE", true);
-    assertStartsWith("", "c", "UTF8_LCASE", false);
-    assertStartsWith("", "", "UNICODE_CI", true);
-    assertStartsWith("c", "", "UNICODE_CI", true);
-    assertStartsWith("", "c", "UNICODE_CI", false);
-    // Basic tests
+    for (String collationName: testSupportedCollations) {
+      // Empty strings.
+      assertStartsWith("", "", collationName, true);
+      assertStartsWith("a", "", collationName, true);
+      assertStartsWith("", "x", collationName, false);
+      // Basic tests.
+      assertStartsWith("abcde", "xyz", collationName, false);
+      assertStartsWith("abcde", "bcd", collationName, false);
+      assertStartsWith("abcde", "abc", collationName, true);
+      assertStartsWith("abcde", "cde", collationName, false);
+      assertStartsWith("abcde", "abcde", collationName, true);
+      assertStartsWith("你好", "x", collationName, false);
+      assertStartsWith("你好", "你", collationName, true);
+      assertStartsWith("你好", "好", collationName, false);
+      assertStartsWith("你好", "你好", collationName, true);
+      assertStartsWith("Γειά", "x", collationName, false);
+      assertStartsWith("Γειά", "ειά", collationName, false);
+      assertStartsWith("Γειά", "Γει", collationName, true);
+      assertStartsWith("Γειά", "Γειά", collationName, true);
+      assertStartsWith("Здраво", "x", collationName, false);
+      assertStartsWith("Здраво", "драво", collationName, false);
+      assertStartsWith("Здраво", "Здрав", collationName, true);
+      assertStartsWith("Здраво", "Здраво", collationName, true);
+    }
+    // Advanced tests.
     assertStartsWith("abcde", "abc", "UTF8_BINARY", true);
     assertStartsWith("abcde", "abd", "UTF8_BINARY", false);
     assertStartsWith("abcde", "fgh", "UTF8_BINARY", false);
@@ -379,25 +479,6 @@ public class CollationSupportSuite {
     assertStartsWith("abcde", "aBC", "UNICODE_CI", true);
     assertStartsWith("abcde", "bcd", "UNICODE_CI", false);
     assertStartsWith("abcde", "123", "UNICODE_CI", false);
-    // Case variation
-    assertStartsWith("aBcDe", "abc", "UTF8_BINARY", false);
-    assertStartsWith("aBcDe", "aBc", "UTF8_BINARY", true);
-    assertStartsWith("aBcDe", "abcde", "UNICODE", false);
-    assertStartsWith("aBcDe", "aBcDe", "UNICODE", true);
-    assertStartsWith("aBcDe", "abc", "UTF8_LCASE", true);
-    assertStartsWith("aBcDe", "ABC", "UTF8_LCASE", true);
-    assertStartsWith("aBcDe", "abcde", "UNICODE_CI", true);
-    assertStartsWith("aBcDe", "AbCdE", "UNICODE_CI", true);
-    // Accent variation
-    assertStartsWith("aBcDe", "abć", "UTF8_BINARY", false);
-    assertStartsWith("aBcDe", "aBć", "UTF8_BINARY", false);
-    assertStartsWith("aBcDe", "abćde", "UNICODE", false);
-    assertStartsWith("aBcDe", "aBćDe", "UNICODE", false);
-    assertStartsWith("aBcDe", "abć", "UTF8_LCASE", false);
-    assertStartsWith("aBcDe", "ABĆ", "UTF8_LCASE", false);
-    assertStartsWith("aBcDe", "abćde", "UNICODE_CI", false);
-    assertStartsWith("aBcDe", "AbĆdE", "UNICODE_CI", false);
-    // Variable byte length characters
     assertStartsWith("ab世De", "ab世", "UTF8_BINARY", true);
     assertStartsWith("ab世De", "aB世", "UTF8_BINARY", false);
     assertStartsWith("äbćδe", "äbć", "UTF8_BINARY", true);
@@ -414,16 +495,33 @@ public class CollationSupportSuite {
     assertStartsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
-    // Characters with the same binary lowercase representation
     assertStartsWith("Kelvin.", "Kelvin", "UTF8_LCASE", true);
     assertStartsWith("Kelvin.", "Kelvin", "UTF8_LCASE", true);
     assertStartsWith("KKelvin.", "KKelvin", "UTF8_LCASE", true);
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertStartsWith("KKelvin.", "KKelvin,", "UTF8_LCASE", false);
-    // Case-variable character length
-    assertStartsWith("i̇", "i", "UNICODE_CI", false);
-    assertStartsWith("i̇", "İ", "UNICODE_CI", true);
+    // Case variation.
+    assertStartsWith("aBcDe", "abc", "UTF8_BINARY", false);
+    assertStartsWith("aBcDe", "aBc", "UTF8_BINARY", true);
+    assertStartsWith("aBcDe", "abcde", "UNICODE", false);
+    assertStartsWith("aBcDe", "aBcDe", "UNICODE", true);
+    assertStartsWith("aBcDe", "abc", "UTF8_LCASE", true);
+    assertStartsWith("aBcDe", "ABC", "UTF8_LCASE", true);
+    assertStartsWith("aBcDe", "abcde", "UNICODE_CI", true);
+    assertStartsWith("aBcDe", "AbCdE", "UNICODE_CI", true);
+    // Accent variation.
+    assertStartsWith("aBcDe", "abć", "UTF8_BINARY", false);
+    assertStartsWith("aBcDe", "aBć", "UTF8_BINARY", false);
+    assertStartsWith("aBcDe", "abćde", "UNICODE", false);
+    assertStartsWith("aBcDe", "aBćDe", "UNICODE", false);
+    assertStartsWith("aBcDe", "abć", "UTF8_LCASE", false);
+    assertStartsWith("aBcDe", "ABĆ", "UTF8_LCASE", false);
+    assertStartsWith("aBcDe", "abćde", "UNICODE_CI", false);
+    assertStartsWith("aBcDe", "AbĆdE", "UNICODE_CI", false);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStartsWith("i\u0307", "i", "UNICODE_CI", false);
+    assertStartsWith("i\u0307", "İ", "UNICODE_CI", true);
     assertStartsWith("İ", "i", "UNICODE_CI", false);
     assertStartsWith("İİİ", "i̇i̇", "UNICODE_CI", true);
     assertStartsWith("İİİ", "i̇i", "UNICODE_CI", false);
@@ -431,14 +529,14 @@ public class CollationSupportSuite {
     assertStartsWith("i̇İi̇i̇", "İi̇İi", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "io", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "Io", "UNICODE_CI", false);
-    assertStartsWith("i̇onic", "i̇o", "UNICODE_CI", true);
+    assertStartsWith("i̇onic", "i\u0307o", "UNICODE_CI", true);
     assertStartsWith("i̇onic", "İo", "UNICODE_CI", true);
     assertStartsWith("İonic", "io", "UNICODE_CI", false);
     assertStartsWith("İonic", "Io", "UNICODE_CI", false);
-    assertStartsWith("İonic", "i̇o", "UNICODE_CI", true);
+    assertStartsWith("İonic", "i\u0307o", "UNICODE_CI", true);
     assertStartsWith("İonic", "İo", "UNICODE_CI", true);
-    assertStartsWith("i̇", "i", "UTF8_LCASE", true); // != UNICODE_CI
-    assertStartsWith("i̇", "İ", "UTF8_LCASE", true);
+    assertStartsWith("i\u0307", "i", "UTF8_LCASE", true); // != UNICODE_CI
+    assertStartsWith("i\u0307", "İ", "UTF8_LCASE", true);
     assertStartsWith("İ", "i", "UTF8_LCASE", false);
     assertStartsWith("İİİ", "i̇i̇", "UTF8_LCASE", true);
     assertStartsWith("İİİ", "i̇i", "UTF8_LCASE", false);
@@ -446,16 +544,134 @@ public class CollationSupportSuite {
     assertStartsWith("i̇İi̇i̇", "İi̇İi", "UTF8_LCASE", true); // != UNICODE_CI
     assertStartsWith("i̇onic", "io", "UTF8_LCASE", false);
     assertStartsWith("i̇onic", "Io", "UTF8_LCASE", false);
-    assertStartsWith("i̇onic", "i̇o", "UTF8_LCASE", true);
+    assertStartsWith("i̇onic", "i\u0307o", "UTF8_LCASE", true);
     assertStartsWith("i̇onic", "İo", "UTF8_LCASE", true);
     assertStartsWith("İonic", "io", "UTF8_LCASE", false);
     assertStartsWith("İonic", "Io", "UTF8_LCASE", false);
-    assertStartsWith("İonic", "i̇o", "UTF8_LCASE", true);
+    assertStartsWith("İonic", "i\u0307o", "UTF8_LCASE", true);
     assertStartsWith("İonic", "İo", "UTF8_LCASE", true);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStartsWith("σ", "σ", "UTF8_BINARY", true);
+    assertStartsWith("σ", "ς", "UTF8_BINARY", false);
+    assertStartsWith("σ", "Σ", "UTF8_BINARY", false);
+    assertStartsWith("ς", "σ", "UTF8_BINARY", false);
+    assertStartsWith("ς", "ς", "UTF8_BINARY", true);
+    assertStartsWith("ς", "Σ", "UTF8_BINARY", false);
+    assertStartsWith("Σ", "σ", "UTF8_BINARY", false);
+    assertStartsWith("Σ", "ς", "UTF8_BINARY", false);
+    assertStartsWith("Σ", "Σ", "UTF8_BINARY", true);
+    assertStartsWith("σ", "σ", "UTF8_LCASE", true);
+    assertStartsWith("σ", "ς", "UTF8_LCASE", true);
+    assertStartsWith("σ", "Σ", "UTF8_LCASE", true);
+    assertStartsWith("ς", "σ", "UTF8_LCASE", true);
+    assertStartsWith("ς", "ς", "UTF8_LCASE", true);
+    assertStartsWith("ς", "Σ", "UTF8_LCASE", true);
+    assertStartsWith("Σ", "σ", "UTF8_LCASE", true);
+    assertStartsWith("Σ", "ς", "UTF8_LCASE", true);
+    assertStartsWith("Σ", "Σ", "UTF8_LCASE", true);
+    assertStartsWith("σ", "σ", "UNICODE", true);
+    assertStartsWith("σ", "ς", "UNICODE", false);
+    assertStartsWith("σ", "Σ", "UNICODE", false);
+    assertStartsWith("ς", "σ", "UNICODE", false);
+    assertStartsWith("ς", "ς", "UNICODE", true);
+    assertStartsWith("ς", "Σ", "UNICODE", false);
+    assertStartsWith("Σ", "σ", "UNICODE", false);
+    assertStartsWith("Σ", "ς", "UNICODE", false);
+    assertStartsWith("Σ", "Σ", "UNICODE", true);
+    assertStartsWith("σ", "σ", "UNICODE_CI", true);
+    assertStartsWith("σ", "ς", "UNICODE_CI", true);
+    assertStartsWith("σ", "Σ", "UNICODE_CI", true);
+    assertStartsWith("ς", "σ", "UNICODE_CI", true);
+    assertStartsWith("ς", "ς", "UNICODE_CI", true);
+    assertStartsWith("ς", "Σ", "UNICODE_CI", true);
+    assertStartsWith("Σ", "σ", "UNICODE_CI", true);
+    assertStartsWith("Σ", "ς", "UNICODE_CI", true);
+    assertStartsWith("Σ", "Σ", "UNICODE_CI", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "Σ", "UTF8_BINARY", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "σ", "UTF8_BINARY", false);
+    assertStartsWith("ΣΑΛΑΤΑ", "ς", "UTF8_BINARY", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UTF8_BINARY", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UTF8_BINARY", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UTF8_BINARY", false);
+    assertStartsWith("ΣΑΛΑΤΑ", "Σ", "UTF8_LCASE", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "σ", "UTF8_LCASE", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "ς", "UTF8_LCASE", true);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UTF8_LCASE", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UTF8_LCASE", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UTF8_LCASE", false);
+    assertStartsWith("ΣΑΛΑΤΑ", "Σ", "UNICODE", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "σ", "UNICODE", false);
+    assertStartsWith("ΣΑΛΑΤΑ", "ς", "UNICODE", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UNICODE", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UNICODE", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UNICODE", false);
+    assertStartsWith("ΣΑΛΑΤΑ", "Σ", "UNICODE_CI", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "σ", "UNICODE_CI", true);
+    assertStartsWith("ΣΑΛΑΤΑ", "ς", "UNICODE_CI", true);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UNICODE_CI", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UNICODE_CI", false);
+    assertStartsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UNICODE_CI", false);
+    // Surrogate pairs.
+    assertStartsWith("a🙃b🙃c", "x", "UTF8_BINARY", false);
+    assertStartsWith("a🙃b🙃c", "x", "UTF8_LCASE", false);
+    assertStartsWith("a🙃b🙃c", "x", "UNICODE", false);
+    assertStartsWith("a🙃b🙃c", "x", "UNICODE_CI", false);
+    assertStartsWith("a🙃b🙃c", "b", "UTF8_BINARY", false);
+    assertStartsWith("a🙃b🙃c", "b", "UTF8_LCASE", false);
+    assertStartsWith("a🙃b🙃c", "b", "UNICODE", false);
+    assertStartsWith("a🙃b🙃c", "b", "UNICODE_CI", false);
+    assertStartsWith("a🙃b🙃c", "a🙃b", "UTF8_BINARY", true);
+    assertStartsWith("a🙃b🙃c", "a🙃b", "UTF8_LCASE", true);
+    assertStartsWith("a🙃b🙃c", "a🙃b", "UNICODE", true);
+    assertStartsWith("a🙃b🙃c", "a🙃b", "UNICODE_CI", true);
+    assertStartsWith("a🙃b🙃c", "b🙃c", "UTF8_BINARY", false);
+    assertStartsWith("a🙃b🙃c", "b🙃c", "UTF8_LCASE", false);
+    assertStartsWith("a🙃b🙃c", "b🙃c", "UNICODE", false);
+    assertStartsWith("a🙃b🙃c", "b🙃c", "UNICODE_CI", false);
+    assertStartsWith("a🙃b🙃c", "a🙃b🙃c", "UTF8_BINARY", true);
+    assertStartsWith("a🙃b🙃c", "a🙃b🙃c", "UTF8_LCASE", true);
+    assertStartsWith("a🙃b🙃c", "a🙃b🙃c", "UNICODE", true);
+    assertStartsWith("a🙃b🙃c", "a🙃b🙃c", "UNICODE_CI", true);
+    assertStartsWith("😀😆😃😄", "😄😆", "UTF8_BINARY", false);
+    assertStartsWith("😀😆😃😄", "😄😆", "UTF8_LCASE", false);
+    assertStartsWith("😀😆😃😄", "😄😆", "UNICODE", false);
+    assertStartsWith("😀😆😃😄", "😄😆", "UNICODE_CI", false);
+    assertStartsWith("😀😆😃😄", "😆😃", "UTF8_BINARY", false);
+    assertStartsWith("😀😆😃😄", "😆😃", "UTF8_LCASE", false);
+    assertStartsWith("😀😆😃😄", "😆😃", "UNICODE", false);
+    assertStartsWith("😀😆😃😄", "😆😃", "UNICODE_CI", false);
+    assertStartsWith("😀😆😃😄", "😀😆", "UTF8_BINARY", true);
+    assertStartsWith("😀😆😃😄", "😀😆", "UTF8_LCASE", true);
+    assertStartsWith("😀😆😃😄", "😀😆", "UNICODE", true);
+    assertStartsWith("😀😆😃😄", "😀😆", "UNICODE_CI", true);
+    assertStartsWith("😀😆😃😄", "😃😄", "UTF8_BINARY", false);
+    assertStartsWith("😀😆😃😄", "😃😄", "UTF8_LCASE", false);
+    assertStartsWith("😀😆😃😄", "😃😄", "UNICODE", false);
+    assertStartsWith("😀😆😃😄", "😃😄", "UNICODE_CI", false);
+    assertStartsWith("😀😆😃😄", "😀😆😃😄", "UTF8_BINARY", true);
+    assertStartsWith("😀😆😃😄", "😀😆😃😄", "UTF8_LCASE", true);
+    assertStartsWith("😀😆😃😄", "😀😆😃😄", "UNICODE", true);
+    assertStartsWith("😀😆😃😄", "😀😆😃😄", "UNICODE_CI", true);
+    assertStartsWith("𐐅", "𐐅", "UTF8_BINARY", true);
+    assertStartsWith("𐐅", "𐐅", "UTF8_LCASE", true);
+    assertStartsWith("𐐅", "𐐅", "UNICODE", true);
+    assertStartsWith("𐐅", "𐐅", "UNICODE_CI", true);
+    assertStartsWith("𐐅", "𐐭", "UTF8_BINARY", false);
+    assertStartsWith("𐐅", "𐐭", "UTF8_LCASE", true);
+    assertStartsWith("𐐅", "𐐭", "UNICODE", false);
+    assertStartsWith("𐐅", "𐐭", "UNICODE_CI", true);
+    assertStartsWith("𝔸", "𝔸", "UTF8_BINARY", true);
+    assertStartsWith("𝔸", "𝔸", "UTF8_LCASE", true);
+    assertStartsWith("𝔸", "𝔸", "UNICODE", true);
+    assertStartsWith("𝔸", "𝔸", "UNICODE_CI", true);
   }
 
-  private void assertEndsWith(String pattern, String suffix, String collationName, boolean expected)
-          throws SparkException {
+  /**
+   * Verify the behaviour of the `EndsWith` collation support class.
+   */
+
+  private void assertEndsWith(String pattern, String suffix, String collationName,
+      boolean expected) throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(suffix);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -464,20 +680,31 @@ public class CollationSupportSuite {
 
   @Test
   public void testEndsWith() throws SparkException {
-    // Edge cases
-    assertEndsWith("", "", "UTF8_BINARY", true);
-    assertEndsWith("c", "", "UTF8_BINARY", true);
-    assertEndsWith("", "c", "UTF8_BINARY", false);
-    assertEndsWith("", "", "UNICODE", true);
-    assertEndsWith("c", "", "UNICODE", true);
-    assertEndsWith("", "c", "UNICODE", false);
-    assertEndsWith("", "", "UTF8_LCASE", true);
-    assertEndsWith("c", "", "UTF8_LCASE", true);
-    assertEndsWith("", "c", "UTF8_LCASE", false);
-    assertEndsWith("", "", "UNICODE_CI", true);
-    assertEndsWith("c", "", "UNICODE_CI", true);
-    assertEndsWith("", "c", "UNICODE_CI", false);
-    // Basic tests
+    for (String collationName: testSupportedCollations) {
+      // Empty strings.
+      assertEndsWith("", "", collationName, true);
+      assertEndsWith("a", "", collationName, true);
+      assertEndsWith("", "x", collationName, false);
+      // Basic tests.
+      assertEndsWith("abcde", "xyz", collationName, false);
+      assertEndsWith("abcde", "bcd", collationName, false);
+      assertEndsWith("abcde", "abc", collationName, false);
+      assertEndsWith("abcde", "cde", collationName, true);
+      assertEndsWith("abcde", "abcde", collationName, true);
+      assertEndsWith("你好", "x", collationName, false);
+      assertEndsWith("你好", "你", collationName, false);
+      assertEndsWith("你好", "好", collationName, true);
+      assertEndsWith("你好", "你好", collationName, true);
+      assertEndsWith("Γειά", "x", collationName, false);
+      assertEndsWith("Γειά", "ειά", collationName, true);
+      assertEndsWith("Γειά", "Γει", collationName, false);
+      assertEndsWith("Γειά", "Γειά", collationName, true);
+      assertEndsWith("Здраво", "x", collationName, false);
+      assertEndsWith("Здраво", "драво", collationName, true);
+      assertEndsWith("Здраво", "Здрав", collationName, false);
+      assertEndsWith("Здраво", "Здраво", collationName, true);
+    }
+    // Advanced tests.
     assertEndsWith("abcde", "cde", "UTF8_BINARY", true);
     assertEndsWith("abcde", "bde", "UTF8_BINARY", false);
     assertEndsWith("abcde", "fgh", "UTF8_BINARY", false);
@@ -491,25 +718,6 @@ public class CollationSupportSuite {
     assertEndsWith("abcde", "CDe", "UNICODE_CI", true);
     assertEndsWith("abcde", "bcd", "UNICODE_CI", false);
     assertEndsWith("abcde", "123", "UNICODE_CI", false);
-    // Case variation
-    assertEndsWith("aBcDe", "cde", "UTF8_BINARY", false);
-    assertEndsWith("aBcDe", "cDe", "UTF8_BINARY", true);
-    assertEndsWith("aBcDe", "abcde", "UNICODE", false);
-    assertEndsWith("aBcDe", "aBcDe", "UNICODE", true);
-    assertEndsWith("aBcDe", "cde", "UTF8_LCASE", true);
-    assertEndsWith("aBcDe", "CDE", "UTF8_LCASE", true);
-    assertEndsWith("aBcDe", "abcde", "UNICODE_CI", true);
-    assertEndsWith("aBcDe", "AbCdE", "UNICODE_CI", true);
-    // Accent variation
-    assertEndsWith("aBcDe", "ćde", "UTF8_BINARY", false);
-    assertEndsWith("aBcDe", "ćDe", "UTF8_BINARY", false);
-    assertEndsWith("aBcDe", "abćde", "UNICODE", false);
-    assertEndsWith("aBcDe", "aBćDe", "UNICODE", false);
-    assertEndsWith("aBcDe", "ćde", "UTF8_LCASE", false);
-    assertEndsWith("aBcDe", "ĆDE", "UTF8_LCASE", false);
-    assertEndsWith("aBcDe", "abćde", "UNICODE_CI", false);
-    assertEndsWith("aBcDe", "AbĆdE", "UNICODE_CI", false);
-    // Variable byte length characters
     assertEndsWith("ab世De", "世De", "UTF8_BINARY", true);
     assertEndsWith("ab世De", "世dE", "UTF8_BINARY", false);
     assertEndsWith("äbćδe", "ćδe", "UTF8_BINARY", true);
@@ -526,45 +734,176 @@ public class CollationSupportSuite {
     assertEndsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
-    // Characters with the same binary lowercase representation
     assertEndsWith("The Kelvin", "Kelvin", "UTF8_LCASE", true);
     assertEndsWith("The Kelvin", "Kelvin", "UTF8_LCASE", true);
     assertEndsWith("The KKelvin", "KKelvin", "UTF8_LCASE", true);
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_LCASE", true);
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_LCASE", true);
     assertEndsWith("The KKelvin", "KKelvin,", "UTF8_LCASE", false);
-    // Case-variable character length
-    assertEndsWith("i̇", "\u0307", "UNICODE_CI", false);
-    assertEndsWith("i̇", "İ", "UNICODE_CI", true);
+    // Case variation.
+    assertEndsWith("aBcDe", "cde", "UTF8_BINARY", false);
+    assertEndsWith("aBcDe", "cDe", "UTF8_BINARY", true);
+    assertEndsWith("aBcDe", "abcde", "UNICODE", false);
+    assertEndsWith("aBcDe", "aBcDe", "UNICODE", true);
+    assertEndsWith("aBcDe", "cde", "UTF8_LCASE", true);
+    assertEndsWith("aBcDe", "CDE", "UTF8_LCASE", true);
+    assertEndsWith("aBcDe", "abcde", "UNICODE_CI", true);
+    assertEndsWith("aBcDe", "AbCdE", "UNICODE_CI", true);
+    // Accent variation.
+    assertEndsWith("aBcDe", "ćde", "UTF8_BINARY", false);
+    assertEndsWith("aBcDe", "ćDe", "UTF8_BINARY", false);
+    assertEndsWith("aBcDe", "abćde", "UNICODE", false);
+    assertEndsWith("aBcDe", "aBćDe", "UNICODE", false);
+    assertEndsWith("aBcDe", "ćde", "UTF8_LCASE", false);
+    assertEndsWith("aBcDe", "ĆDE", "UTF8_LCASE", false);
+    assertEndsWith("aBcDe", "abćde", "UNICODE_CI", false);
+    assertEndsWith("aBcDe", "AbĆdE", "UNICODE_CI", false);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertEndsWith("i\u0307", "\u0307", "UNICODE_CI", false);
+    assertEndsWith("i\u0307", "İ", "UNICODE_CI", true);
     assertEndsWith("İ", "i", "UNICODE_CI", false);
     assertEndsWith("İİİ", "i̇i̇", "UNICODE_CI", true);
     assertEndsWith("İİİ", "ii̇", "UNICODE_CI", false);
     assertEndsWith("İi̇İ", "İi̇", "UNICODE_CI", true);
     assertEndsWith("i̇İi̇i̇", "\u0307İi̇İ", "UNICODE_CI", false);
-    assertEndsWith("the i̇o", "io", "UNICODE_CI", false);
-    assertEndsWith("the i̇o", "Io", "UNICODE_CI", false);
-    assertEndsWith("the i̇o", "i̇o", "UNICODE_CI", true);
-    assertEndsWith("the i̇o", "İo", "UNICODE_CI", true);
+    assertEndsWith("the i\u0307o", "io", "UNICODE_CI", false);
+    assertEndsWith("the i\u0307o", "Io", "UNICODE_CI", false);
+    assertEndsWith("the i\u0307o", "i\u0307o", "UNICODE_CI", true);
+    assertEndsWith("the i\u0307o", "İo", "UNICODE_CI", true);
     assertEndsWith("the İo", "io", "UNICODE_CI", false);
     assertEndsWith("the İo", "Io", "UNICODE_CI", false);
-    assertEndsWith("the İo", "i̇o", "UNICODE_CI", true);
+    assertEndsWith("the İo", "i\u0307o", "UNICODE_CI", true);
     assertEndsWith("the İo", "İo", "UNICODE_CI", true);
-    assertEndsWith("i̇", "\u0307", "UTF8_LCASE", true); // != UNICODE_CI
-    assertEndsWith("i̇", "İ", "UTF8_LCASE", true);
+    assertEndsWith("i\u0307", "\u0307", "UTF8_LCASE", true); // != UNICODE_CI
+    assertEndsWith("i\u0307", "İ", "UTF8_LCASE", true);
     assertEndsWith("İ", "\u0307", "UTF8_LCASE", false);
     assertEndsWith("İİİ", "i̇i̇", "UTF8_LCASE", true);
     assertEndsWith("İİİ", "ii̇", "UTF8_LCASE", false);
     assertEndsWith("İi̇İ", "İi̇", "UTF8_LCASE", true);
     assertEndsWith("i̇İi̇i̇", "\u0307İi̇İ", "UTF8_LCASE", true); // != UNICODE_CI
     assertEndsWith("i̇İi̇i̇", "\u0307İİ", "UTF8_LCASE", false);
-    assertEndsWith("the i̇o", "io", "UTF8_LCASE", false);
-    assertEndsWith("the i̇o", "Io", "UTF8_LCASE", false);
-    assertEndsWith("the i̇o", "i̇o", "UTF8_LCASE", true);
-    assertEndsWith("the i̇o", "İo", "UTF8_LCASE", true);
+    assertEndsWith("the i\u0307o", "io", "UTF8_LCASE", false);
+    assertEndsWith("the i\u0307o", "Io", "UTF8_LCASE", false);
+    assertEndsWith("the i\u0307o", "i\u0307o", "UTF8_LCASE", true);
+    assertEndsWith("the i\u0307o", "İo", "UTF8_LCASE", true);
     assertEndsWith("the İo", "io", "UTF8_LCASE", false);
     assertEndsWith("the İo", "Io", "UTF8_LCASE", false);
-    assertEndsWith("the İo", "i̇o", "UTF8_LCASE", true);
+    assertEndsWith("the İo", "i\u0307o", "UTF8_LCASE", true);
     assertEndsWith("the İo", "İo", "UTF8_LCASE", true);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertEndsWith("σ", "σ", "UTF8_BINARY", true);
+    assertEndsWith("σ", "ς", "UTF8_BINARY", false);
+    assertEndsWith("σ", "Σ", "UTF8_BINARY", false);
+    assertEndsWith("ς", "σ", "UTF8_BINARY", false);
+    assertEndsWith("ς", "ς", "UTF8_BINARY", true);
+    assertEndsWith("ς", "Σ", "UTF8_BINARY", false);
+    assertEndsWith("Σ", "σ", "UTF8_BINARY", false);
+    assertEndsWith("Σ", "ς", "UTF8_BINARY", false);
+    assertEndsWith("Σ", "Σ", "UTF8_BINARY", true);
+    assertEndsWith("σ", "σ", "UTF8_LCASE", true);
+    assertEndsWith("σ", "ς", "UTF8_LCASE", true);
+    assertEndsWith("σ", "Σ", "UTF8_LCASE", true);
+    assertEndsWith("ς", "σ", "UTF8_LCASE", true);
+    assertEndsWith("ς", "ς", "UTF8_LCASE", true);
+    assertEndsWith("ς", "Σ", "UTF8_LCASE", true);
+    assertEndsWith("Σ", "σ", "UTF8_LCASE", true);
+    assertEndsWith("Σ", "ς", "UTF8_LCASE", true);
+    assertEndsWith("Σ", "Σ", "UTF8_LCASE", true);
+    assertEndsWith("σ", "σ", "UNICODE", true);
+    assertEndsWith("σ", "ς", "UNICODE", false);
+    assertEndsWith("σ", "Σ", "UNICODE", false);
+    assertEndsWith("ς", "σ", "UNICODE", false);
+    assertEndsWith("ς", "ς", "UNICODE", true);
+    assertEndsWith("ς", "Σ", "UNICODE", false);
+    assertEndsWith("Σ", "σ", "UNICODE", false);
+    assertEndsWith("Σ", "ς", "UNICODE", false);
+    assertEndsWith("Σ", "Σ", "UNICODE", true);
+    assertEndsWith("σ", "σ", "UNICODE_CI", true);
+    assertEndsWith("σ", "ς", "UNICODE_CI", true);
+    assertEndsWith("σ", "Σ", "UNICODE_CI", true);
+    assertEndsWith("ς", "σ", "UNICODE_CI", true);
+    assertEndsWith("ς", "ς", "UNICODE_CI", true);
+    assertEndsWith("ς", "Σ", "UNICODE_CI", true);
+    assertEndsWith("Σ", "σ", "UNICODE_CI", true);
+    assertEndsWith("Σ", "ς", "UNICODE_CI", true);
+    assertEndsWith("Σ", "Σ", "UNICODE_CI", true);
+    assertEndsWith("ΣΑΛΑΤΑ", "Σ", "UTF8_BINARY", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "σ", "UTF8_BINARY", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "ς", "UTF8_BINARY", false);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UTF8_BINARY", true);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UTF8_BINARY", false);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UTF8_BINARY", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "Σ", "UTF8_LCASE", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "σ", "UTF8_LCASE", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "ς", "UTF8_LCASE", false);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UTF8_LCASE", true);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UTF8_LCASE", true);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UTF8_LCASE", true);
+    assertEndsWith("ΣΑΛΑΤΑ", "Σ", "UNICODE", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "σ", "UNICODE", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "ς", "UNICODE", false);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UNICODE", true);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UNICODE", false);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UNICODE", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "Σ", "UNICODE_CI", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "σ", "UNICODE_CI", false);
+    assertEndsWith("ΣΑΛΑΤΑ", "ς", "UNICODE_CI", false);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "Σ", "UNICODE_CI", true);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "σ", "UNICODE_CI", true);
+    assertEndsWith("ΘΑΛΑΣΣΙΝΟΣ", "ς", "UNICODE_CI", true);
+    // Surrogate pairs.
+    assertEndsWith("a🙃b🙃c", "x", "UTF8_BINARY", false);
+    assertEndsWith("a🙃b🙃c", "x", "UTF8_LCASE", false);
+    assertEndsWith("a🙃b🙃c", "x", "UNICODE", false);
+    assertEndsWith("a🙃b🙃c", "x", "UNICODE_CI", false);
+    assertEndsWith("a🙃b🙃c", "b", "UTF8_BINARY", false);
+    assertEndsWith("a🙃b🙃c", "b", "UTF8_LCASE", false);
+    assertEndsWith("a🙃b🙃c", "b", "UNICODE", false);
+    assertEndsWith("a🙃b🙃c", "b", "UNICODE_CI", false);
+    assertEndsWith("a🙃b🙃c", "a🙃b", "UTF8_BINARY", false);
+    assertEndsWith("a🙃b🙃c", "a🙃b", "UTF8_LCASE", false);
+    assertEndsWith("a🙃b🙃c", "a🙃b", "UNICODE", false);
+    assertEndsWith("a🙃b🙃c", "a🙃b", "UNICODE_CI", false);
+    assertEndsWith("a🙃b🙃c", "b🙃c", "UTF8_BINARY", true);
+    assertEndsWith("a🙃b🙃c", "b🙃c", "UTF8_LCASE", true);
+    assertEndsWith("a🙃b🙃c", "b🙃c", "UNICODE", true);
+    assertEndsWith("a🙃b🙃c", "b🙃c", "UNICODE_CI", true);
+    assertEndsWith("a🙃b🙃c", "a🙃b🙃c", "UTF8_BINARY", true);
+    assertEndsWith("a🙃b🙃c", "a🙃b🙃c", "UTF8_LCASE", true);
+    assertEndsWith("a🙃b🙃c", "a🙃b🙃c", "UNICODE", true);
+    assertEndsWith("a🙃b🙃c", "a🙃b🙃c", "UNICODE_CI", true);
+    assertEndsWith("😀😆😃😄", "😄😆", "UTF8_BINARY", false);
+    assertEndsWith("😀😆😃😄", "😄😆", "UTF8_LCASE", false);
+    assertEndsWith("😀😆😃😄", "😄😆", "UNICODE", false);
+    assertEndsWith("😀😆😃😄", "😄😆", "UNICODE_CI", false);
+    assertEndsWith("😀😆😃😄", "😆😃", "UTF8_BINARY", false);
+    assertEndsWith("😀😆😃😄", "😆😃", "UTF8_LCASE", false);
+    assertEndsWith("😀😆😃😄", "😆😃", "UNICODE", false);
+    assertEndsWith("😀😆😃😄", "😆😃", "UNICODE_CI", false);
+    assertEndsWith("😀😆😃😄", "😀😆", "UTF8_BINARY", false);
+    assertEndsWith("😀😆😃😄", "😀😆", "UTF8_LCASE", false);
+    assertEndsWith("😀😆😃😄", "😀😆", "UNICODE", false);
+    assertEndsWith("😀😆😃😄", "😀😆", "UNICODE_CI", false);
+    assertEndsWith("😀😆😃😄", "😃😄", "UTF8_BINARY", true);
+    assertEndsWith("😀😆😃😄", "😃😄", "UTF8_LCASE", true);
+    assertEndsWith("😀😆😃😄", "😃😄", "UNICODE", true);
+    assertEndsWith("😀😆😃😄", "😃😄", "UNICODE_CI", true);
+    assertEndsWith("😀😆😃😄", "😀😆😃😄", "UTF8_BINARY", true);
+    assertEndsWith("😀😆😃😄", "😀😆😃😄", "UTF8_LCASE", true);
+    assertEndsWith("😀😆😃😄", "😀😆😃😄", "UNICODE", true);
+    assertEndsWith("😀😆😃😄", "😀😆😃😄", "UNICODE_CI", true);
+    assertEndsWith("𐐅", "𐐅", "UTF8_BINARY", true);
+    assertEndsWith("𐐅", "𐐅", "UTF8_LCASE", true);
+    assertEndsWith("𐐅", "𐐅", "UNICODE", true);
+    assertEndsWith("𐐅", "𐐅", "UNICODE_CI", true);
+    assertEndsWith("𐐅", "𐐭", "UTF8_BINARY", false);
+    assertEndsWith("𐐅", "𐐭", "UTF8_LCASE", true);
+    assertEndsWith("𐐅", "𐐭", "UNICODE", false);
+    assertEndsWith("𐐅", "𐐭", "UNICODE_CI", true);
+    assertEndsWith("𝔸", "𝔸", "UTF8_BINARY", true);
+    assertEndsWith("𝔸", "𝔸", "UTF8_LCASE", true);
+    assertEndsWith("𝔸", "𝔸", "UNICODE", true);
+    assertEndsWith("𝔸", "𝔸", "UNICODE_CI", true);
   }
 
   private void assertStringSplitSQL(String str, String delimiter, String collationName,
