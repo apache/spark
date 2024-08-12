@@ -90,12 +90,6 @@ case class ErrorHandler(
     handlerType: HandlerType) extends CompoundPlanStatement
 
 /**
- * Logical operator for a leave statement.
- * @param label Label of the CompoundBody leave statement should exit.
- */
-case class BatchLeaveStatement(label: String) extends CompoundPlanStatement
-
-/**
  * Logical operator for IF ELSE statement.
  * @param conditions Collection of conditions. First condition corresponds to IF clause,
  *                   while others (if any) correspond to following ELSE IF clauses.
