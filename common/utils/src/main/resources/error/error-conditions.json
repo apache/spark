@@ -4949,7 +4949,7 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_STREAMING_QUERY_WITHOUT_WATERMARK" : {
+  "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
     "message" : [
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],

@@ -604,8 +604,8 @@ case class StateStoreSaveExec(
           case Some(Append) =>
             if (watermarkPredicateForDataForLateEvents.isEmpty ||
               watermarkPredicateForKeysForEviction.isEmpty) {
-              throw QueryExecutionErrors.unsupportedStreamingQueryWithoutWatermark(
-                "Append", "streaming aggregations")
+              throw QueryExecutionErrors.unsupportedStreamingOperatorWithoutWatermark(
+                "Append", "aggregations")
             }
 
             allUpdatesTimeMs += timeTakenMs {
@@ -904,8 +904,8 @@ case class SessionWindowStateStoreSaveExec(
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
           if (watermarkPredicateForDataForEviction.isEmpty) {
-            throw QueryExecutionErrors.unsupportedStreamingQueryWithoutWatermark(
-              "Append", "session window")
+            throw QueryExecutionErrors.unsupportedStreamingOperatorWithoutWatermark(
+              "Append", "session window aggregations")
           }
 
           allUpdatesTimeMs += timeTakenMs {
