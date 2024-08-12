@@ -18,12 +18,14 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
@@ -833,6 +835,10 @@ class SparkSession private[sql] (
 object SparkSession extends Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
+  private var server: Option[Process] = None
+  private[sql] val initOptions = sys.props.filter { p =>
+    p._1.startsWith("spark.") && p._2.nonEmpty
+  }.toMap
 
   private val sessions = CacheBuilder
     .newBuilder()
@@ -863,6 +869,49 @@ object SparkSession extends Logging {
     if (getActiveSession.isEmpty) {
       setActiveSession(session)
     }
+  }
+
+  /**
+   * Create a new Spark Connect server to connect locally.
+   */
+  private[sql] def withLocalConnectServer[T](f: => T): T = {
+    synchronized {
+      val remoteString = initOptions
+        .get("spark.remote")
+        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+
+      if (server.isEmpty && remoteString.exists(_.startsWith("local"))) {
+        val sparkHome = System.getenv("SPARK_HOME")
+        server = Some {
+          val args = Seq(
+            Paths.get(sparkHome, "sbin", "start-connect-server.sh").toString,
+            "--master",
+            remoteString.get) ++ initOptions
+            .filter(p => !p._1.startsWith("spark.remote"))
+            .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
+          val pb = new ProcessBuilder(args: _*)
+          // So don't exclude spark-sql jar in classpath
+          pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.start()
+        }
+
+        // Let the server start. We will directly request to set the configurations
+        // and this sleep makes less noisy with retries.
+        Thread.sleep(2000L)
+        System.setProperty("spark.remote", "sc://localhost")
+
+        // scalastyle:off runtimeaddshutdownhook
+        Runtime.getRuntime.addShutdownHook(new Thread() {
+          override def run(): Unit = if (server.isDefined) {
+            new ProcessBuilder(Paths.get(sparkHome, "sbin", "stop-connect-server.sh").toString)
+              .start()
+          }
+        })
+        // scalastyle:on runtimeaddshutdownhook
+      }
+    }
+    f
   }
 
   /**
@@ -1007,6 +1056,16 @@ object SparkSession extends Logging {
     }
 
     private def applyOptions(session: SparkSession): Unit = {
+      // Only attempts to set Spark SQL configurations.
+      // If the configurations are static, it might throw an exception so
+      // simply ignore it for now.
+      initOptions
+        .filter { case (k, _) =>
+          k.startsWith("spark.sql.")
+        }
+        .foreach { case (key, value) =>
+          Try(session.conf.set(key, value))
+        }
       options.foreach { case (key, value) =>
         session.conf.set(key, value)
       }
@@ -1029,7 +1088,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def create(): SparkSession = {
+    def create(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
@@ -1049,7 +1108,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def getOrCreate(): SparkSession = {
+    def getOrCreate(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse({
           var existingSession = sessions.get(builder.configuration)
