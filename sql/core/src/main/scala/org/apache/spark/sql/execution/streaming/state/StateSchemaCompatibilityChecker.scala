@@ -194,10 +194,12 @@ class StateSchemaCompatibilityChecker(
       // For each column family we are creating, check if it existed in the
       // previous run, and assign its ID to the old ID if the schema hasn't changed.
       // If the schema has evolved, assign it a new ID.
+      var hasEvolvedSchema = false
       val newList = newStateSchema.map { newSchema =>
         existingSchemas.get(newSchema.colFamilyName) match {
           case Some(existingSchema) =>
             if (check(existingSchema, newSchema, ignoreValueSchema)) {
+              hasEvolvedSchema = true
               maxId = (maxId + 1).toShort
               newSchema.copy(colFamilyId = maxId)
             } else {
@@ -209,7 +211,7 @@ class StateSchemaCompatibilityChecker(
         }
       }
 
-      (false, newList)
+      (hasEvolvedSchema, newList)
     }
   }
 
