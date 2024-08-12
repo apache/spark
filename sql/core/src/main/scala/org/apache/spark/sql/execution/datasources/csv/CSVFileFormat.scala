@@ -157,4 +157,5 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     case _ => false
   }
 
+  override def allowDuplicatedColumnNames: Boolean = true
 }
