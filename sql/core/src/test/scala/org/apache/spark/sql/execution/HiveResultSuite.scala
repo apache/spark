@@ -24,6 +24,9 @@ import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.HiveResult._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.YearMonthIntervalType
+
 
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
@@ -120,9 +123,6 @@ class HiveResultSuite extends SharedSparkSession {
   }
 
   test("SPARK-49208: negative month intervals") {
-    import org.apache.spark.sql.types.YearMonthIntervalType
-    import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
-
     Seq(
       "0-0" -> (11, YM.YEAR, YM.YEAR),
       "0-0" -> (-11, YM.YEAR, YM.YEAR),

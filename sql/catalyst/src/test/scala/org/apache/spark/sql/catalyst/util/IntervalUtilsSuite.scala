@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DayTimeIntervalType
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -448,7 +449,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("from day-time string") {
-    import org.apache.spark.sql.types.DayTimeIntervalType._
     def check(input: String, from: Byte, to: Byte, expected: String): Unit = {
       withClue(s"from = $from, to = $to") {
         val expectedUtf8 = UTF8String.fromString(expected)
@@ -553,7 +553,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-34615: period to months") {
-    import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
     assert(periodToMonths(Period.ZERO) === 0)
     assert(periodToMonths(Period.of(0, -1, 0)) === -1)
     assert(periodToMonths(Period.of(0, -11, 0)) === -11)
@@ -682,7 +681,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format day-time intervals") {
-    import DayTimeIntervalType._
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
@@ -698,7 +696,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-49208: format negative month intervals") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0' MONTH"),
       -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
@@ -714,7 +711,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35734: Format day-time intervals using type fields") {
-    import DayTimeIntervalType._
     Seq(
       0L ->
         ("INTERVAL '0 00:00:00' DAY TO SECOND",
@@ -847,7 +843,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-38324: The second range is not [0, 59] in the day time ANSI interval") {
-    import org.apache.spark.sql.types.DayTimeIntervalType._
     Seq(
       ("10 12:40:60", 60, DAY, SECOND),
       ("10 12:40:60.999999999", 60, DAY, SECOND),
