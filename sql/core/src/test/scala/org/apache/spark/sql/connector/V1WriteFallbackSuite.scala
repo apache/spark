@@ -209,10 +209,13 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()
       val df = session.createDataFrame(Seq((1, "p1"), (2, "p2"), (3, "p2")))
-      df.write.partitionBy("_2").mode("append").format(v2Format).saveAsTable("test")
+        .toDF("id", "p_49210")
+      df.write.partitionBy("p_49210").mode("append").format(v2Format).saveAsTable("test")
       val statusStore = session.sharedState.statusStore
       val execId = statusStore.executionsList()
-        .find(x => x.physicalPlanDescription.contains("AppendData")).get.executionId
+        .find(x => x.metrics.exists(_.name.equals("number of written partitions")
+          && x.physicalPlanDescription.contains("p_49210")))
+        .get.executionId
       val metrics = statusStore.executionMetrics(execId)
       assert(metrics.head._2 == "2")
     } finally {
@@ -488,7 +491,7 @@ object OnlyOnceOptimizerRule extends Rule[LogicalPlan] {
 
 class WrittenPartitionDriverMetric extends CustomMetric {
   override def name(): String = "number_of_written_partitions"
-  override def description(): String = "Simple custom driver metrics: number of written partitions"
+  override def description(): String = "number of written partitions"
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = taskMetrics.sum.toString
 }
 
