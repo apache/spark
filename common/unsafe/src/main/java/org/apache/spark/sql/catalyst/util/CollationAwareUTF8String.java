@@ -1080,7 +1080,7 @@ public class CollationAwareUTF8String {
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
       int codePoint = trimIter.next();
-      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
+      trimChars.putIfAbsent(codePoint, new String(Character.toChars(codePoint)));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -1190,7 +1190,7 @@ public class CollationAwareUTF8String {
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
       int codePoint = trimIter.next();
-      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
+      trimChars.putIfAbsent(codePoint, new String(Character.toChars(codePoint)));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.

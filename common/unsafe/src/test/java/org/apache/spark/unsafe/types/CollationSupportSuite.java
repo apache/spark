@@ -1446,28 +1446,28 @@ public class CollationSupportSuite {
 
   }
 
-  private void assertStringTrim(
-      String collation,
-      String sourceString,
-      String trimString,
-      String expectedResultString) throws SparkException {
+  /**
+   * Verify the behaviour of the `StringTrim` collation support class.
+   */
+
+  private void assertStringTrim(String collationName, String sourceString, String trimString,
+      String expected) throws SparkException {
     // Prepare the input and expected result.
-    int collationId = CollationFactory.collationNameToId(collation);
+    int collationId = CollationFactory.collationNameToId(collationName);
     UTF8String src = UTF8String.fromString(sourceString);
     UTF8String trim = UTF8String.fromString(trimString);
-    UTF8String resultTrimLeftRight, resultTrimRightLeft;
-    String resultTrim;
+    UTF8String result, resultTrimLeftRight, resultTrimRightLeft;
 
     if (trimString == null) {
       // Trim string is ASCII space.
-      resultTrim = CollationSupport.StringTrim.exec(src).toString();
+      result = CollationSupport.StringTrim.exec(src);
       UTF8String trimLeft = CollationSupport.StringTrimLeft.exec(src);
       resultTrimLeftRight = CollationSupport.StringTrimRight.exec(trimLeft);
       UTF8String trimRight = CollationSupport.StringTrimRight.exec(src);
       resultTrimRightLeft = CollationSupport.StringTrimLeft.exec(trimRight);
     } else {
       // Trim string is specified.
-      resultTrim = CollationSupport.StringTrim.exec(src, trim, collationId).toString();
+      result = CollationSupport.StringTrim.exec(src, trim, collationId);
       UTF8String trimLeft = CollationSupport.StringTrimLeft.exec(src, trim, collationId);
       resultTrimLeftRight = CollationSupport.StringTrimRight.exec(trimLeft, trim, collationId);
       UTF8String trimRight = CollationSupport.StringTrimRight.exec(src, trim, collationId);
@@ -1475,61 +1475,15 @@ public class CollationSupportSuite {
     }
 
     // Test that StringTrim result is as expected.
-    assertEquals(expectedResultString, resultTrim);
+    assertEquals(UTF8String.fromString(expected), result);
     // Test that the order of the trims is not important.
-    assertEquals(resultTrimLeftRight.toString(), resultTrim);
-    assertEquals(resultTrimRightLeft.toString(), resultTrim);
-  }
-
-  private void assertStringTrimLeft(
-      String collation,
-      String sourceString,
-      String trimString,
-      String expectedResultString) throws SparkException {
-    // Prepare the input and expected result.
-    int collationId = CollationFactory.collationNameToId(collation);
-    UTF8String src = UTF8String.fromString(sourceString);
-    UTF8String trim = UTF8String.fromString(trimString);
-    String result;
-
-    if (trimString == null) {
-      // Trim string is ASCII space.
-      result = CollationSupport.StringTrimLeft.exec(src).toString();
-    } else {
-      // Trim string is specified.
-      result = CollationSupport.StringTrimLeft.exec(src, trim, collationId).toString();
-    }
-
-    // Test that StringTrimLeft result is as expected.
-    assertEquals(expectedResultString, result);
-  }
-
-  private void assertStringTrimRight(
-      String collation,
-      String sourceString,
-      String trimString,
-      String expectedResultString) throws SparkException {
-    // Prepare the input and expected result.
-    int collationId = CollationFactory.collationNameToId(collation);
-    UTF8String src = UTF8String.fromString(sourceString);
-    UTF8String trim = UTF8String.fromString(trimString);
-    String result;
-
-    if (trimString == null) {
-      // Trim string is ASCII space.
-      result = CollationSupport.StringTrimRight.exec(src).toString();
-    } else {
-      // Trim string is specified.
-      result = CollationSupport.StringTrimRight.exec(src, trim, collationId).toString();
-    }
-
-    // Test that StringTrimRight result is as expected.
-    assertEquals(expectedResultString, result);
+    assertEquals(resultTrimLeftRight, result);
+    assertEquals(resultTrimRightLeft, result);
   }
 
   @Test
   public void testStringTrim() throws SparkException {
-    // Basic tests - UTF8_BINARY.
+    // Basic tests.
     assertStringTrim("UTF8_BINARY", "", "", "");
     assertStringTrim("UTF8_BINARY", "", "xyz", "");
     assertStringTrim("UTF8_BINARY", "asd", "", "asd");
@@ -1539,25 +1493,6 @@ public class CollationSupportSuite {
     assertStringTrim("UTF8_BINARY", "asd", "x", "asd");
     assertStringTrim("UTF8_BINARY", "xxasdxx", "x", "asd");
     assertStringTrim("UTF8_BINARY", "xa世ax", "x", "a世a");
-    assertStringTrimLeft("UTF8_BINARY", "", "", "");
-    assertStringTrimLeft("UTF8_BINARY", "", "xyz", "");
-    assertStringTrimLeft("UTF8_BINARY", "asd", "", "asd");
-    assertStringTrimLeft("UTF8_BINARY", "asd", null, "asd");
-    assertStringTrimLeft("UTF8_BINARY", "  asd  ", null, "asd  ");
-    assertStringTrimLeft("UTF8_BINARY", " a世a ", null, "a世a ");
-    assertStringTrimLeft("UTF8_BINARY", "asd", "x", "asd");
-    assertStringTrimLeft("UTF8_BINARY", "xxasdxx", "x", "asdxx");
-    assertStringTrimLeft("UTF8_BINARY", "xa世ax", "x", "a世ax");
-    assertStringTrimRight("UTF8_BINARY", "", "", "");
-    assertStringTrimRight("UTF8_BINARY", "", "xyz", "");
-    assertStringTrimRight("UTF8_BINARY", "asd", "", "asd");
-    assertStringTrimRight("UTF8_BINARY", "asd", null, "asd");
-    assertStringTrimRight("UTF8_BINARY", "  asd  ", null, "  asd");
-    assertStringTrimRight("UTF8_BINARY", " a世a ", null, " a世a");
-    assertStringTrimRight("UTF8_BINARY", "asd", "x", "asd");
-    assertStringTrimRight("UTF8_BINARY", "xxasdxx", "x", "xxasd");
-    assertStringTrimRight("UTF8_BINARY", "xa世ax", "x", "xa世a");
-    // Basic tests - UTF8_LCASE.
     assertStringTrim("UTF8_LCASE", "", "", "");
     assertStringTrim("UTF8_LCASE", "", "xyz", "");
     assertStringTrim("UTF8_LCASE", "asd", "", "asd");
@@ -1567,25 +1502,6 @@ public class CollationSupportSuite {
     assertStringTrim("UTF8_LCASE", "asd", "x", "asd");
     assertStringTrim("UTF8_LCASE", "xxasdxx", "x", "asd");
     assertStringTrim("UTF8_LCASE", "xa世ax", "x", "a世a");
-    assertStringTrimLeft("UTF8_LCASE", "", "", "");
-    assertStringTrimLeft("UTF8_LCASE", "", "xyz", "");
-    assertStringTrimLeft("UTF8_LCASE", "asd", "", "asd");
-    assertStringTrimLeft("UTF8_LCASE", "asd", null, "asd");
-    assertStringTrimLeft("UTF8_LCASE", "  asd  ", null, "asd  ");
-    assertStringTrimLeft("UTF8_LCASE", " a世a ", null, "a世a ");
-    assertStringTrimLeft("UTF8_LCASE", "asd", "x", "asd");
-    assertStringTrimLeft("UTF8_LCASE", "xxasdxx", "x", "asdxx");
-    assertStringTrimLeft("UTF8_LCASE", "xa世ax", "x", "a世ax");
-    assertStringTrimRight("UTF8_LCASE", "", "", "");
-    assertStringTrimRight("UTF8_LCASE", "", "xyz", "");
-    assertStringTrimRight("UTF8_LCASE", "asd", "", "asd");
-    assertStringTrimRight("UTF8_LCASE", "asd", null, "asd");
-    assertStringTrimRight("UTF8_LCASE", "  asd  ", null, "  asd");
-    assertStringTrimRight("UTF8_LCASE", " a世a ", null, " a世a");
-    assertStringTrimRight("UTF8_LCASE", "asd", "x", "asd");
-    assertStringTrimRight("UTF8_LCASE", "xxasdxx", "x", "xxasd");
-    assertStringTrimRight("UTF8_LCASE", "xa世ax", "x", "xa世a");
-    // Basic tests - UNICODE.
     assertStringTrim("UNICODE", "", "", "");
     assertStringTrim("UNICODE", "", "xyz", "");
     assertStringTrim("UNICODE", "asd", "", "asd");
@@ -1595,25 +1511,6 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE", "asd", "x", "asd");
     assertStringTrim("UNICODE", "xxasdxx", "x", "asd");
     assertStringTrim("UNICODE", "xa世ax", "x", "a世a");
-    assertStringTrimLeft("UNICODE", "", "", "");
-    assertStringTrimLeft("UNICODE", "", "xyz", "");
-    assertStringTrimLeft("UNICODE", "asd", "", "asd");
-    assertStringTrimLeft("UNICODE", "asd", null, "asd");
-    assertStringTrimLeft("UNICODE", "  asd  ", null, "asd  ");
-    assertStringTrimLeft("UNICODE", " a世a ", null, "a世a ");
-    assertStringTrimLeft("UNICODE", "asd", "x", "asd");
-    assertStringTrimLeft("UNICODE", "xxasdxx", "x", "asdxx");
-    assertStringTrimLeft("UNICODE", "xa世ax", "x", "a世ax");
-    assertStringTrimRight("UNICODE", "", "", "");
-    assertStringTrimRight("UNICODE", "", "xyz", "");
-    assertStringTrimRight("UNICODE", "asd", "", "asd");
-    assertStringTrimRight("UNICODE", "asd", null, "asd");
-    assertStringTrimRight("UNICODE", "  asd  ", null, "  asd");
-    assertStringTrimRight("UNICODE", " a世a ", null, " a世a");
-    assertStringTrimRight("UNICODE", "asd", "x", "asd");
-    assertStringTrimRight("UNICODE", "xxasdxx", "x", "xxasd");
-    assertStringTrimRight("UNICODE", "xa世ax", "x", "xa世a");
-    // Basic tests - UNICODE_CI.
     assertStringTrim("UNICODE_CI", "", "", "");
     assertStringTrim("UNICODE_CI", "", "xyz", "");
     assertStringTrim("UNICODE_CI", "asd", "", "asd");
@@ -1623,92 +1520,33 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE_CI", "asd", "x", "asd");
     assertStringTrim("UNICODE_CI", "xxasdxx", "x", "asd");
     assertStringTrim("UNICODE_CI", "xa世ax", "x", "a世a");
-    assertStringTrimLeft("UNICODE_CI", "", "", "");
-    assertStringTrimLeft("UNICODE_CI", "", "xyz", "");
-    assertStringTrimLeft("UNICODE_CI", "asd", "", "asd");
-    assertStringTrimLeft("UNICODE_CI", "asd", null, "asd");
-    assertStringTrimLeft("UNICODE_CI", "  asd  ", null, "asd  ");
-    assertStringTrimLeft("UNICODE_CI", " a世a ", null, "a世a ");
-    assertStringTrimLeft("UNICODE_CI", "asd", "x", "asd");
-    assertStringTrimLeft("UNICODE_CI", "xxasdxx", "x", "asdxx");
-    assertStringTrimLeft("UNICODE_CI", "xa世ax", "x", "a世ax");
-    assertStringTrimRight("UNICODE_CI", "", "", "");
-    assertStringTrimRight("UNICODE_CI", "", "xyz", "");
-    assertStringTrimRight("UNICODE_CI", "asd", "", "asd");
-    assertStringTrimRight("UNICODE_CI", "asd", null, "asd");
-    assertStringTrimRight("UNICODE_CI", "  asd  ", null, "  asd");
-    assertStringTrimRight("UNICODE_CI", " a世a ", null, " a世a");
-    assertStringTrimRight("UNICODE_CI", "asd", "x", "asd");
-    assertStringTrimRight("UNICODE_CI", "xxasdxx", "x", "xxasd");
-    assertStringTrimRight("UNICODE_CI", "xa世ax", "x", "xa世a");
-
-    // Case variation - UTF8_BINARY.
+    // Case variation.
     assertStringTrim("UTF8_BINARY", "asd", "A", "asd");
     assertStringTrim("UTF8_BINARY", "ddsXXXaa", "asd", "XXX");
     assertStringTrim("UTF8_BINARY", "ASD", "a", "ASD");
-    assertStringTrimLeft("UTF8_BINARY", "ddsXXXaa", "asd", "XXXaa");
-    assertStringTrimRight("UTF8_BINARY", "ddsXXXaa", "asd", "ddsXXX");
-    // Case variation - UTF8_LCASE.
     assertStringTrim("UTF8_LCASE", "asd", "A", "sd");
     assertStringTrim("UTF8_LCASE", "ASD", "a", "SD");
     assertStringTrim("UTF8_LCASE", "ddsXXXaa", "ASD", "XXX");
-    assertStringTrimLeft("UTF8_LCASE", "ddsXXXaa", "aSd", "XXXaa");
-    assertStringTrimRight("UTF8_LCASE", "ddsXXXaa", "AsD", "ddsXXX");
-    // Case variation - UNICODE.
     assertStringTrim("UNICODE", "asd", "A", "asd");
     assertStringTrim("UNICODE", "ASD", "a", "ASD");
     assertStringTrim("UNICODE", "ddsXXXaa", "asd", "XXX");
-    assertStringTrimLeft("UNICODE", "ddsXXXaa", "asd", "XXXaa");
-    assertStringTrimRight("UNICODE", "ddsXXXaa", "asd", "ddsXXX");
-    // Case variation - UNICODE_CI.
     assertStringTrim("UNICODE_CI", "asd", "A", "sd");
     assertStringTrim("UNICODE_CI", "ASD", "a", "SD");
     assertStringTrim("UNICODE_CI", "ddsXXXaa", "ASD", "XXX");
-    assertStringTrimLeft("UNICODE_CI", "ddsXXXaa", "aSd", "XXXaa");
-    assertStringTrimRight("UNICODE_CI", "ddsXXXaa", "AsD", "ddsXXX");
-
-    // Case-variable character length - UTF8_BINARY.
+    // One-to-many case mapping (e.g. Turkish dotted I)..
     assertStringTrim("UTF8_BINARY", "ẞaaaẞ", "ß", "ẞaaaẞ");
-    assertStringTrimLeft("UTF8_BINARY", "ẞaaaẞ", "ß", "ẞaaaẞ");
-    assertStringTrimRight("UTF8_BINARY", "ẞaaaẞ", "ß", "ẞaaaẞ");
     assertStringTrim("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
-    assertStringTrimLeft("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
-    assertStringTrimRight("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
     assertStringTrim("UTF8_BINARY", "Ëaaaẞ", "Ëẞ", "aaa");
-    assertStringTrimLeft("UTF8_BINARY", "Ëaaaẞ", "Ëẞ", "aaaẞ");
-    assertStringTrimRight("UTF8_BINARY", "Ëaaaẞ", "Ëẞ", "Ëaaa");
-    // Case-variable character length - UTF8_LCASE.
     assertStringTrim("UTF8_LCASE", "ẞaaaẞ", "ß", "aaa");
-    assertStringTrimLeft("UTF8_LCASE", "ẞaaaẞ", "ß", "aaaẞ");
-    assertStringTrimRight("UTF8_LCASE", "ẞaaaẞ", "ß", "ẞaaa");
     assertStringTrim("UTF8_LCASE", "ßaaaß", "ẞ", "aaa");
-    assertStringTrimLeft("UTF8_LCASE", "ßaaaß", "ẞ", "aaaß");
-    assertStringTrimRight("UTF8_LCASE", "ßaaaß", "ẞ", "ßaaa");
     assertStringTrim("UTF8_LCASE", "Ëaaaẞ", "Ëẞ", "aaa");
-    assertStringTrimLeft("UTF8_LCASE", "Ëaaaẞ", "Ëẞ", "aaaẞ");
-    assertStringTrimRight("UTF8_LCASE", "Ëaaaẞ", "Ëẞ", "Ëaaa");
-    // Case-variable character length - UNICODE.
     assertStringTrim("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
-    assertStringTrimLeft("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
-    assertStringTrimRight("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
     assertStringTrim("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
-    assertStringTrimLeft("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
-    assertStringTrimRight("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
     assertStringTrim("UNICODE", "Ëaaaẞ", "Ëẞ", "aaa");
-    assertStringTrimLeft("UNICODE", "Ëaaaẞ", "Ëẞ", "aaaẞ");
-    assertStringTrimRight("UNICODE", "Ëaaaẞ", "Ëẞ", "Ëaaa");
-    // Case-variable character length - UNICODE_CI.
     assertStringTrim("UNICODE_CI", "ẞaaaẞ", "ß", "aaa");
-    assertStringTrimLeft("UNICODE_CI", "ẞaaaẞ", "ß", "aaaẞ");
-    assertStringTrimRight("UNICODE_CI", "ẞaaaẞ", "ß", "ẞaaa");
     assertStringTrim("UNICODE_CI", "ßaaaß", "ẞ", "aaa");
-    assertStringTrimLeft("UNICODE_CI", "ßaaaß", "ẞ", "aaaß");
-    assertStringTrimRight("UNICODE_CI", "ßaaaß", "ẞ", "ßaaa");
     assertStringTrim("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaa");
-    assertStringTrimLeft("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaaẞ");
-    assertStringTrimRight("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "Ëaaa");
-
-    // One-to-many case mapping - UTF8_BINARY.
+    // One-to-many case mapping (e.g. Turkish dotted I).
     assertStringTrim("UTF8_BINARY", "i", "i", "");
     assertStringTrim("UTF8_BINARY", "iii", "I", "iii");
     assertStringTrim("UTF8_BINARY", "I", "iii", "I");
@@ -1734,57 +1572,6 @@ public class CollationSupportSuite {
     assertStringTrim("UTF8_BINARY", "Ixİ", "i\u0307", "Ixİ");
     assertStringTrim("UTF8_BINARY", "IXİ", "ix\u0307", "IXİ");
     assertStringTrim("UTF8_BINARY", "xi\u0307", "\u0307IX", "xi");
-    assertStringTrimLeft("UTF8_BINARY", "i", "i", "");
-    assertStringTrimLeft("UTF8_BINARY", "iii", "I", "iii");
-    assertStringTrimLeft("UTF8_BINARY", "I", "iii", "I");
-    assertStringTrimLeft("UTF8_BINARY", "ixi", "i", "xi");
-    assertStringTrimLeft("UTF8_BINARY", "i", "İ", "i");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "i", "\u0307");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "\u0307", "i\u0307");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "i\u0307", "");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307i\u0307", "i\u0307", "");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307\u0307", "i\u0307", "");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307i", "i\u0307", "");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307i", "İ", "i\u0307i");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307İ", "i\u0307", "İ");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307İ", "İ", "i\u0307İ");
-    assertStringTrimLeft("UTF8_BINARY", "İ", "İ", "");
-    assertStringTrimLeft("UTF8_BINARY", "IXi", "İ", "IXi");
-    assertStringTrimLeft("UTF8_BINARY", "ix\u0307", "Ixİ", "ix\u0307");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307x", "IXİ", "i\u0307x");
-    assertStringTrimLeft("UTF8_BINARY", "i\u0307x", "ix\u0307İ", "");
-    assertStringTrimLeft("UTF8_BINARY", "İ", "i", "İ");
-    assertStringTrimLeft("UTF8_BINARY", "İ", "\u0307", "İ");
-    assertStringTrimLeft("UTF8_BINARY", "Ixİ", "i\u0307", "Ixİ");
-    assertStringTrimLeft("UTF8_BINARY", "IXİ", "ix\u0307", "IXİ");
-    assertStringTrimLeft("UTF8_BINARY", "xi\u0307", "\u0307IX", "xi\u0307");
-    assertStringTrimRight("UTF8_BINARY", "i", "i", "");
-    assertStringTrimRight("UTF8_BINARY", "iii", "I", "iii");
-    assertStringTrimRight("UTF8_BINARY", "I", "iii", "I");
-    assertStringTrimRight("UTF8_BINARY", "ixi", "i", "ix");
-    assertStringTrimRight("UTF8_BINARY", "i", "İ", "i");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307", "i", "i\u0307");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307", "\u0307", "i");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307", "i\u0307", "");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307i\u0307", "i\u0307", "");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307\u0307", "i\u0307", "");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307i", "i\u0307", "");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307i", "İ", "i\u0307i");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307İ", "i\u0307", "i\u0307İ");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307İ", "İ", "i\u0307");
-    assertStringTrimRight("UTF8_BINARY", "İ", "İ", "");
-    assertStringTrimRight("UTF8_BINARY", "IXi", "İ", "IXi");
-    assertStringTrimRight("UTF8_BINARY", "ix\u0307", "Ixİ", "ix\u0307");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307x", "IXİ", "i\u0307x");
-    assertStringTrimRight("UTF8_BINARY", "i\u0307x", "ix\u0307İ", "");
-    assertStringTrimRight("UTF8_BINARY", "İ", "i", "İ");
-    assertStringTrimRight("UTF8_BINARY", "İ", "\u0307", "İ");
-    assertStringTrimRight("UTF8_BINARY", "Ixİ", "i\u0307", "Ixİ");
-    assertStringTrimRight("UTF8_BINARY", "IXİ", "ix\u0307", "IXİ");
-    assertStringTrimRight("UTF8_BINARY", "xi\u0307", "\u0307IX", "xi");
-    // One-to-many case mapping - UTF8_LCASE.
     assertStringTrim("UTF8_LCASE", "i", "i", "");
     assertStringTrim("UTF8_LCASE", "iii", "I", "");
     assertStringTrim("UTF8_LCASE", "I", "iii", "");
@@ -1810,57 +1597,6 @@ public class CollationSupportSuite {
     assertStringTrim("UTF8_LCASE", "Ixİ", "i\u0307", "xİ");
     assertStringTrim("UTF8_LCASE", "IXİ", "ix\u0307", "İ");
     assertStringTrim("UTF8_LCASE", "xi\u0307", "\u0307IX", "");
-    assertStringTrimLeft("UTF8_LCASE", "i", "i", "");
-    assertStringTrimLeft("UTF8_LCASE", "iii", "I", "");
-    assertStringTrimLeft("UTF8_LCASE", "I", "iii", "");
-    assertStringTrimLeft("UTF8_LCASE", "ixi", "i", "xi");
-    assertStringTrimLeft("UTF8_LCASE", "i", "İ", "i");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "İ", "");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "i", "\u0307");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "\u0307", "i\u0307");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "i\u0307", "");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307i\u0307", "i\u0307", "");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307\u0307", "i\u0307", "");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307i", "i\u0307", "");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307i", "İ", "i");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307İ", "i\u0307", "İ");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307İ", "İ", "");
-    assertStringTrimLeft("UTF8_LCASE", "İ", "İ", "");
-    assertStringTrimLeft("UTF8_LCASE", "IXi", "İ", "IXi");
-    assertStringTrimLeft("UTF8_LCASE", "ix\u0307", "Ixİ", "\u0307");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307x", "IXİ", "");
-    assertStringTrimLeft("UTF8_LCASE", "i\u0307x", "I\u0307xİ", "");
-    assertStringTrimLeft("UTF8_LCASE", "İ", "i", "İ");
-    assertStringTrimLeft("UTF8_LCASE", "İ", "\u0307", "İ");
-    assertStringTrimLeft("UTF8_LCASE", "Ixİ", "i\u0307", "xİ");
-    assertStringTrimLeft("UTF8_LCASE", "IXİ", "ix\u0307", "İ");
-    assertStringTrimLeft("UTF8_LCASE", "xi\u0307", "\u0307IX", "");
-    assertStringTrimRight("UTF8_LCASE", "i", "i", "");
-    assertStringTrimRight("UTF8_LCASE", "iii", "I", "");
-    assertStringTrimRight("UTF8_LCASE", "I", "iii", "");
-    assertStringTrimRight("UTF8_LCASE", "ixi", "i", "ix");
-    assertStringTrimRight("UTF8_LCASE", "i", "İ", "i");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307", "İ", "");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307", "i", "i\u0307");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307", "\u0307", "i");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307", "i\u0307", "");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307i\u0307", "i\u0307", "");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307\u0307", "i\u0307", "");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307i", "i\u0307", "");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307i", "İ", "i\u0307i");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307İ", "i\u0307", "i\u0307İ");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307İ", "İ", "");
-    assertStringTrimRight("UTF8_LCASE", "İ", "İ", "");
-    assertStringTrimRight("UTF8_LCASE", "IXi", "İ", "IXi");
-    assertStringTrimRight("UTF8_LCASE", "ix\u0307", "Ixİ", "ix\u0307");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307x", "IXİ", "");
-    assertStringTrimRight("UTF8_LCASE", "i\u0307x", "I\u0307xİ", "");
-    assertStringTrimRight("UTF8_LCASE", "İ", "i", "İ");
-    assertStringTrimRight("UTF8_LCASE", "İ", "\u0307", "İ");
-    assertStringTrimRight("UTF8_LCASE", "Ixİ", "i\u0307", "Ixİ");
-    assertStringTrimRight("UTF8_LCASE", "IXİ", "ix\u0307", "IXİ");
-    assertStringTrimRight("UTF8_LCASE", "xi\u0307", "\u0307IX", "");
-    // One-to-many case mapping - UNICODE.
     assertStringTrim("UNICODE", "i", "i", "");
     assertStringTrim("UNICODE", "iii", "I", "iii");
     assertStringTrim("UNICODE", "I", "iii", "I");
@@ -1887,59 +1623,6 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE", "Ixİ", "i\u0307", "Ixİ");
     assertStringTrim("UNICODE", "IXİ", "ix\u0307", "IXİ");
     assertStringTrim("UNICODE", "xi\u0307", "\u0307IX", "xi\u0307");
-    assertStringTrimLeft("UNICODE", "i", "i", "");
-    assertStringTrimLeft("UNICODE", "iii", "I", "iii");
-    assertStringTrimLeft("UNICODE", "I", "iii", "I");
-    assertStringTrimLeft("UNICODE", "ixi", "i", "xi");
-    assertStringTrimLeft("UNICODE", "i", "İ", "i");
-    assertStringTrimLeft("UNICODE", "i\u0307", "İ", "i\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307", "i", "i\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307", "\u0307", "i\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307", "i\u0307", "i\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307i\u0307", "i\u0307", "i\u0307i\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307\u0307", "i\u0307", "i\u0307\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307i", "i\u0307", "i\u0307i");
-    assertStringTrimLeft("UNICODE", "i\u0307i", "İ", "i\u0307i");
-    assertStringTrimLeft("UNICODE", "i\u0307İ", "i\u0307", "i\u0307İ");
-    assertStringTrimLeft("UNICODE", "i\u0307İ", "İ", "i\u0307İ");
-    assertStringTrimLeft("UNICODE", "İ", "İ", "");
-    assertStringTrimLeft("UNICODE", "IXi", "İ", "IXi");
-    assertStringTrimLeft("UNICODE", "ix\u0307", "Ixİ", "ix\u0307");
-    assertStringTrimLeft("UNICODE", "i\u0307x", "IXİ", "i\u0307x");
-    assertStringTrimLeft("UNICODE", "i\u0307x", "ix\u0307İ", "i\u0307x");
-    assertStringTrimLeft("UNICODE", "İ", "i", "İ");
-    assertStringTrimLeft("UNICODE", "İ", "\u0307", "İ");
-    assertStringTrimLeft("UNICODE", "i\u0307", "i\u0307", "i\u0307");
-    assertStringTrimLeft("UNICODE", "Ixİ", "i\u0307", "Ixİ");
-    assertStringTrimLeft("UNICODE", "IXİ", "ix\u0307", "IXİ");
-    assertStringTrimLeft("UNICODE", "xi\u0307", "\u0307IX", "xi\u0307");
-    assertStringTrimRight("UNICODE", "i", "i", "");
-    assertStringTrimRight("UNICODE", "iii", "I", "iii");
-    assertStringTrimRight("UNICODE", "I", "iii", "I");
-    assertStringTrimRight("UNICODE", "ixi", "i", "ix");
-    assertStringTrimRight("UNICODE", "i", "İ", "i");
-    assertStringTrimRight("UNICODE", "i\u0307", "İ", "i\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307", "i", "i\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307", "\u0307", "i\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307", "i\u0307", "i\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307i\u0307", "i\u0307", "i\u0307i\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307\u0307", "i\u0307", "i\u0307\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307i", "i\u0307", "i\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307i", "İ", "i\u0307i");
-    assertStringTrimRight("UNICODE", "i\u0307İ", "i\u0307", "i\u0307İ");
-    assertStringTrimRight("UNICODE", "i\u0307İ", "İ", "i\u0307");
-    assertStringTrimRight("UNICODE", "İ", "İ", "");
-    assertStringTrimRight("UNICODE", "IXi", "İ", "IXi");
-    assertStringTrimRight("UNICODE", "ix\u0307", "Ixİ", "ix\u0307");
-    assertStringTrimRight("UNICODE", "i\u0307x", "IXİ", "i\u0307x");
-    assertStringTrimRight("UNICODE", "i\u0307x", "ix\u0307İ", "i\u0307");
-    assertStringTrimRight("UNICODE", "İ", "i", "İ");
-    assertStringTrimRight("UNICODE", "İ", "\u0307", "İ");
-    assertStringTrimRight("UNICODE", "i\u0307", "i\u0307", "i\u0307");
-    assertStringTrimRight("UNICODE", "Ixİ", "i\u0307", "Ixİ");
-    assertStringTrimRight("UNICODE", "IXİ", "ix\u0307", "IXİ");
-    assertStringTrimRight("UNICODE", "xi\u0307", "\u0307IX", "xi\u0307");
-    // One-to-many case mapping - UNICODE_CI.
     assertStringTrim("UNICODE_CI", "i", "i", "");
     assertStringTrim("UNICODE_CI", "iii", "I", "");
     assertStringTrim("UNICODE_CI", "I", "iii", "");
@@ -1966,6 +1649,260 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE_CI", "Ixİ", "i\u0307", "xİ");
     assertStringTrim("UNICODE_CI", "IXİ", "ix\u0307", "İ");
     assertStringTrim("UNICODE_CI", "xi\u0307", "\u0307IX", "i\u0307");
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStringTrim("UTF8_BINARY", "ςxς", "σ", "ςxς");
+    assertStringTrim("UTF8_BINARY", "ςxς", "ς", "x");
+    assertStringTrim("UTF8_BINARY", "ςxς", "Σ", "ςxς");
+    assertStringTrim("UTF8_BINARY", "σxσ", "σ", "x");
+    assertStringTrim("UTF8_BINARY", "σxσ", "ς", "σxσ");
+    assertStringTrim("UTF8_BINARY", "σxσ", "Σ", "σxσ");
+    assertStringTrim("UTF8_BINARY", "ΣxΣ", "σ", "ΣxΣ");
+    assertStringTrim("UTF8_BINARY", "ΣxΣ", "ς", "ΣxΣ");
+    assertStringTrim("UTF8_BINARY", "ΣxΣ", "Σ", "x");
+    assertStringTrim("UTF8_LCASE", "ςxς", "σ", "x");
+    assertStringTrim("UTF8_LCASE", "ςxς", "ς", "x");
+    assertStringTrim("UTF8_LCASE", "ςxς", "Σ", "x");
+    assertStringTrim("UTF8_LCASE", "σxσ", "σ", "x");
+    assertStringTrim("UTF8_LCASE", "σxσ", "ς", "x");
+    assertStringTrim("UTF8_LCASE", "σxσ", "Σ", "x");
+    assertStringTrim("UTF8_LCASE", "ΣxΣ", "σ", "x");
+    assertStringTrim("UTF8_LCASE", "ΣxΣ", "ς", "x");
+    assertStringTrim("UTF8_LCASE", "ΣxΣ", "Σ", "x");
+    assertStringTrim("UNICODE", "ςxς", "σ", "ςxς");
+    assertStringTrim("UNICODE", "ςxς", "ς", "x");
+    assertStringTrim("UNICODE", "ςxς", "Σ", "ςxς");
+    assertStringTrim("UNICODE", "σxσ", "σ", "x");
+    assertStringTrim("UNICODE", "σxσ", "ς", "σxσ");
+    assertStringTrim("UNICODE", "σxσ", "Σ", "σxσ");
+    assertStringTrim("UNICODE", "ΣxΣ", "σ", "ΣxΣ");
+    assertStringTrim("UNICODE", "ΣxΣ", "ς", "ΣxΣ");
+    assertStringTrim("UNICODE", "ΣxΣ", "Σ", "x");
+    assertStringTrim("UNICODE_CI", "ςxς", "σ", "x");
+    assertStringTrim("UNICODE_CI", "ςxς", "ς", "x");
+    assertStringTrim("UNICODE_CI", "ςxς", "Σ", "x");
+    assertStringTrim("UNICODE_CI", "σxσ", "σ", "x");
+    assertStringTrim("UNICODE_CI", "σxσ", "ς", "x");
+    assertStringTrim("UNICODE_CI", "σxσ", "Σ", "x");
+    assertStringTrim("UNICODE_CI", "ΣxΣ", "σ", "x");
+    assertStringTrim("UNICODE_CI", "ΣxΣ", "ς", "x");
+    assertStringTrim("UNICODE_CI", "ΣxΣ", "Σ", "x");
+    // Unicode normalization.
+    assertStringTrim("UTF8_BINARY", "åβγδa\u030A", "å", "βγδa\u030A");
+    assertStringTrim("UTF8_LCASE", "åβγδa\u030A", "Å", "βγδa\u030A");
+    assertStringTrim("UNICODE", "åβγδa\u030A", "å", "βγδ");
+    assertStringTrim("UNICODE_CI", "åβγδa\u030A", "Å", "βγδ");
+    // Surrogate pairs.
+    assertStringTrim("UTF8_BINARY", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrim("UTF8_LCASE", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrim("UNICODE", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrim("UNICODE_CI", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrim("UTF8_BINARY", "a🙃b🙃c", "ac", "🙃b🙃");
+    assertStringTrim("UTF8_LCASE", "a🙃b🙃c", "ac", "🙃b🙃");
+    assertStringTrim("UNICODE", "a🙃b🙃c", "ac", "🙃b🙃");
+    assertStringTrim("UNICODE_CI", "a🙃b🙃c", "ac", "🙃b🙃");
+    assertStringTrim("UTF8_BINARY", "a🙃b🙃c", "a🙃c", "b");
+    assertStringTrim("UTF8_LCASE", "a🙃b🙃c", "a🙃c", "b");
+    assertStringTrim("UNICODE", "a🙃b🙃c", "a🙃c", "b");
+    assertStringTrim("UNICODE_CI", "a🙃b🙃c", "a🙃c", "b");
+    assertStringTrim("UTF8_BINARY", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrim("UTF8_LCASE", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrim("UNICODE", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrim("UNICODE_CI", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrim("UTF8_BINARY", "😀😆😃😄", "😀😄", "😆😃");
+    assertStringTrim("UTF8_LCASE", "😀😆😃😄", "😀😄", "😆😃");
+    assertStringTrim("UNICODE", "😀😆😃😄", "😀😄", "😆😃");
+    assertStringTrim("UNICODE_CI", "😀😆😃😄", "😀😄", "😆😃");
+    assertStringTrim("UTF8_BINARY", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrim("UTF8_LCASE", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrim("UNICODE", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrim("UNICODE_CI", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrim("UTF8_BINARY", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrim("UTF8_LCASE", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrim("UNICODE", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrim("UNICODE_CI", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrim("UTF8_BINARY", "𐐅", "𐐅", "");
+    assertStringTrim("UTF8_LCASE", "𐐅", "𐐅", "");
+    assertStringTrim("UNICODE", "𐐅", "𐐅", "");
+    assertStringTrim("UNICODE_CI", "𐐅", "𐐅", "");
+    assertStringTrim("UTF8_BINARY", "𐐅", "𐐭", "𐐅");
+    assertStringTrim("UTF8_LCASE", "𐐅", "𐐭", "");
+    assertStringTrim("UNICODE", "𐐅", "𐐭", "𐐅");
+    assertStringTrim("UNICODE_CI", "𐐅", "𐐭", "");
+    assertStringTrim("UTF8_BINARY", "𝔸", "𝔸", "");
+    assertStringTrim("UTF8_LCASE", "𝔸", "𝔸", "");
+    assertStringTrim("UNICODE", "𝔸", "𝔸", "");
+    assertStringTrim("UNICODE_CI", "𝔸", "𝔸", "");
+    assertStringTrim("UTF8_BINARY", "𝔸", "A", "𝔸");
+    assertStringTrim("UTF8_LCASE", "𝔸", "A", "𝔸");
+    assertStringTrim("UNICODE", "𝔸", "A", "𝔸");
+    assertStringTrim("UNICODE_CI", "𝔸", "A", "");
+    assertStringTrim("UTF8_BINARY", "𝔸", "a", "𝔸");
+    assertStringTrim("UTF8_LCASE", "𝔸", "a", "𝔸");
+    assertStringTrim("UNICODE", "𝔸", "a", "𝔸");
+    assertStringTrim("UNICODE_CI", "𝔸", "a", "");
+  }
+
+  /**
+   * Verify the behaviour of the `StringTrimLeft` collation support class.
+   */
+
+  private void assertStringTrimLeft(String collationName, String sourceString, String trimString,
+      String expected) throws SparkException {
+    // Prepare the input and expected result.
+    int collationId = CollationFactory.collationNameToId(collationName);
+    UTF8String src = UTF8String.fromString(sourceString);
+    UTF8String trim = UTF8String.fromString(trimString);
+    UTF8String result;
+
+    if (trimString == null) {
+      // Trim string is ASCII space.
+      result = CollationSupport.StringTrimLeft.exec(src);
+    } else {
+      // Trim string is specified.
+      result = CollationSupport.StringTrimLeft.exec(src, trim, collationId);
+    }
+
+    // Test that StringTrimLeft result is as expected.
+    assertEquals(UTF8String.fromString(expected), result);
+  }
+
+  @Test
+  public void testStringTrimLeft() throws SparkException {
+    // Basic tests - UTF8_BINARY.
+    assertStringTrimLeft("UTF8_BINARY", "", "", "");
+    assertStringTrimLeft("UTF8_BINARY", "", "xyz", "");
+    assertStringTrimLeft("UTF8_BINARY", "asd", "", "asd");
+    assertStringTrimLeft("UTF8_BINARY", "asd", null, "asd");
+    assertStringTrimLeft("UTF8_BINARY", "  asd  ", null, "asd  ");
+    assertStringTrimLeft("UTF8_BINARY", " a世a ", null, "a世a ");
+    assertStringTrimLeft("UTF8_BINARY", "asd", "x", "asd");
+    assertStringTrimLeft("UTF8_BINARY", "xxasdxx", "x", "asdxx");
+    assertStringTrimLeft("UTF8_BINARY", "xa世ax", "x", "a世ax");
+    // Basic tests - UTF8_LCASE.
+    assertStringTrimLeft("UTF8_LCASE", "", "", "");
+    assertStringTrimLeft("UTF8_LCASE", "", "xyz", "");
+    assertStringTrimLeft("UTF8_LCASE", "asd", "", "asd");
+    assertStringTrimLeft("UTF8_LCASE", "asd", null, "asd");
+    assertStringTrimLeft("UTF8_LCASE", "  asd  ", null, "asd  ");
+    assertStringTrimLeft("UTF8_LCASE", " a世a ", null, "a世a ");
+    assertStringTrimLeft("UTF8_LCASE", "asd", "x", "asd");
+    assertStringTrimLeft("UTF8_LCASE", "xxasdxx", "x", "asdxx");
+    assertStringTrimLeft("UTF8_LCASE", "xa世ax", "x", "a世ax");
+    // Basic tests - UNICODE.
+    assertStringTrimLeft("UNICODE", "", "", "");
+    assertStringTrimLeft("UNICODE", "", "xyz", "");
+    assertStringTrimLeft("UNICODE", "asd", "", "asd");
+    assertStringTrimLeft("UNICODE", "asd", null, "asd");
+    assertStringTrimLeft("UNICODE", "  asd  ", null, "asd  ");
+    assertStringTrimLeft("UNICODE", " a世a ", null, "a世a ");
+    assertStringTrimLeft("UNICODE", "asd", "x", "asd");
+    assertStringTrimLeft("UNICODE", "xxasdxx", "x", "asdxx");
+    assertStringTrimLeft("UNICODE", "xa世ax", "x", "a世ax");
+    // Basic tests - UNICODE_CI.
+    assertStringTrimLeft("UNICODE_CI", "", "", "");
+    assertStringTrimLeft("UNICODE_CI", "", "xyz", "");
+    assertStringTrimLeft("UNICODE_CI", "asd", "", "asd");
+    assertStringTrimLeft("UNICODE_CI", "asd", null, "asd");
+    assertStringTrimLeft("UNICODE_CI", "  asd  ", null, "asd  ");
+    assertStringTrimLeft("UNICODE_CI", " a世a ", null, "a世a ");
+    assertStringTrimLeft("UNICODE_CI", "asd", "x", "asd");
+    assertStringTrimLeft("UNICODE_CI", "xxasdxx", "x", "asdxx");
+    assertStringTrimLeft("UNICODE_CI", "xa世ax", "x", "a世ax");
+    // Case variation.
+    assertStringTrimLeft("UTF8_BINARY", "ddsXXXaa", "asd", "XXXaa");
+    assertStringTrimLeft("UTF8_LCASE", "ddsXXXaa", "aSd", "XXXaa");
+    assertStringTrimLeft("UNICODE", "ddsXXXaa", "asd", "XXXaa");
+    assertStringTrimLeft("UNICODE_CI", "ddsXXXaa", "aSd", "XXXaa");
+    // One-to-many case mapping (e.g. Turkish dotted I)..
+    assertStringTrimLeft("UTF8_BINARY", "ẞaaaẞ", "ß", "ẞaaaẞ");
+    assertStringTrimLeft("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
+    assertStringTrimLeft("UTF8_BINARY", "Ëaaaẞ", "Ëẞ", "aaaẞ");
+    assertStringTrimLeft("UTF8_LCASE", "ẞaaaẞ", "ß", "aaaẞ");
+    assertStringTrimLeft("UTF8_LCASE", "ßaaaß", "ẞ", "aaaß");
+    assertStringTrimLeft("UTF8_LCASE", "Ëaaaẞ", "Ëẞ", "aaaẞ");
+    assertStringTrimLeft("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
+    assertStringTrimLeft("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
+    assertStringTrimLeft("UNICODE", "Ëaaaẞ", "Ëẞ", "aaaẞ");
+    assertStringTrimLeft("UNICODE_CI", "ẞaaaẞ", "ß", "aaaẞ");
+    assertStringTrimLeft("UNICODE_CI", "ßaaaß", "ẞ", "aaaß");
+    assertStringTrimLeft("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaaẞ");
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringTrimLeft("UTF8_BINARY", "i", "i", "");
+    assertStringTrimLeft("UTF8_BINARY", "iii", "I", "iii");
+    assertStringTrimLeft("UTF8_BINARY", "I", "iii", "I");
+    assertStringTrimLeft("UTF8_BINARY", "ixi", "i", "xi");
+    assertStringTrimLeft("UTF8_BINARY", "i", "İ", "i");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "i", "\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "\u0307", "i\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307", "i\u0307", "");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307i\u0307", "i\u0307", "");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307\u0307", "i\u0307", "");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307i", "i\u0307", "");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307i", "İ", "i\u0307i");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307İ", "i\u0307", "İ");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307İ", "İ", "i\u0307İ");
+    assertStringTrimLeft("UTF8_BINARY", "İ", "İ", "");
+    assertStringTrimLeft("UTF8_BINARY", "IXi", "İ", "IXi");
+    assertStringTrimLeft("UTF8_BINARY", "ix\u0307", "Ixİ", "ix\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307x", "IXİ", "i\u0307x");
+    assertStringTrimLeft("UTF8_BINARY", "i\u0307x", "ix\u0307İ", "");
+    assertStringTrimLeft("UTF8_BINARY", "İ", "i", "İ");
+    assertStringTrimLeft("UTF8_BINARY", "İ", "\u0307", "İ");
+    assertStringTrimLeft("UTF8_BINARY", "Ixİ", "i\u0307", "Ixİ");
+    assertStringTrimLeft("UTF8_BINARY", "IXİ", "ix\u0307", "IXİ");
+    assertStringTrimLeft("UTF8_BINARY", "xi\u0307", "\u0307IX", "xi\u0307");
+    assertStringTrimLeft("UTF8_LCASE", "i", "i", "");
+    assertStringTrimLeft("UTF8_LCASE", "iii", "I", "");
+    assertStringTrimLeft("UTF8_LCASE", "I", "iii", "");
+    assertStringTrimLeft("UTF8_LCASE", "ixi", "i", "xi");
+    assertStringTrimLeft("UTF8_LCASE", "i", "İ", "i");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "İ", "");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "i", "\u0307");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "\u0307", "i\u0307");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307", "i\u0307", "");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307i\u0307", "i\u0307", "");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307\u0307", "i\u0307", "");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307i", "i\u0307", "");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307i", "İ", "i");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307İ", "i\u0307", "İ");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307İ", "İ", "");
+    assertStringTrimLeft("UTF8_LCASE", "İ", "İ", "");
+    assertStringTrimLeft("UTF8_LCASE", "IXi", "İ", "IXi");
+    assertStringTrimLeft("UTF8_LCASE", "ix\u0307", "Ixİ", "\u0307");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307x", "IXİ", "");
+    assertStringTrimLeft("UTF8_LCASE", "i\u0307x", "I\u0307xİ", "");
+    assertStringTrimLeft("UTF8_LCASE", "İ", "i", "İ");
+    assertStringTrimLeft("UTF8_LCASE", "İ", "\u0307", "İ");
+    assertStringTrimLeft("UTF8_LCASE", "Ixİ", "i\u0307", "xİ");
+    assertStringTrimLeft("UTF8_LCASE", "IXİ", "ix\u0307", "İ");
+    assertStringTrimLeft("UTF8_LCASE", "xi\u0307", "\u0307IX", "");
+    assertStringTrimLeft("UNICODE", "i", "i", "");
+    assertStringTrimLeft("UNICODE", "iii", "I", "iii");
+    assertStringTrimLeft("UNICODE", "I", "iii", "I");
+    assertStringTrimLeft("UNICODE", "ixi", "i", "xi");
+    assertStringTrimLeft("UNICODE", "i", "İ", "i");
+    assertStringTrimLeft("UNICODE", "i\u0307", "İ", "i\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307", "i", "i\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307", "\u0307", "i\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307", "i\u0307", "i\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307i\u0307", "i\u0307", "i\u0307i\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307\u0307", "i\u0307", "i\u0307\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307i", "i\u0307", "i\u0307i");
+    assertStringTrimLeft("UNICODE", "i\u0307i", "İ", "i\u0307i");
+    assertStringTrimLeft("UNICODE", "i\u0307İ", "i\u0307", "i\u0307İ");
+    assertStringTrimLeft("UNICODE", "i\u0307İ", "İ", "i\u0307İ");
+    assertStringTrimLeft("UNICODE", "İ", "İ", "");
+    assertStringTrimLeft("UNICODE", "IXi", "İ", "IXi");
+    assertStringTrimLeft("UNICODE", "ix\u0307", "Ixİ", "ix\u0307");
+    assertStringTrimLeft("UNICODE", "i\u0307x", "IXİ", "i\u0307x");
+    assertStringTrimLeft("UNICODE", "i\u0307x", "ix\u0307İ", "i\u0307x");
+    assertStringTrimLeft("UNICODE", "İ", "i", "İ");
+    assertStringTrimLeft("UNICODE", "İ", "\u0307", "İ");
+    assertStringTrimLeft("UNICODE", "i\u0307", "i\u0307", "i\u0307");
+    assertStringTrimLeft("UNICODE", "Ixİ", "i\u0307", "Ixİ");
+    assertStringTrimLeft("UNICODE", "IXİ", "ix\u0307", "IXİ");
+    assertStringTrimLeft("UNICODE", "xi\u0307", "\u0307IX", "xi\u0307");
     assertStringTrimLeft("UNICODE_CI", "i", "i", "");
     assertStringTrimLeft("UNICODE_CI", "iii", "I", "");
     assertStringTrimLeft("UNICODE_CI", "I", "iii", "");
@@ -1992,6 +1929,261 @@ public class CollationSupportSuite {
     assertStringTrimLeft("UNICODE_CI", "Ixİ", "i\u0307", "xİ");
     assertStringTrimLeft("UNICODE_CI", "IXİ", "ix\u0307", "İ");
     assertStringTrimLeft("UNICODE_CI", "xi\u0307", "\u0307IX", "i\u0307");
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStringTrimLeft("UTF8_BINARY", "ςxς", "σ", "ςxς");
+    assertStringTrimLeft("UTF8_BINARY", "ςxς", "ς", "xς");
+    assertStringTrimLeft("UTF8_BINARY", "ςxς", "Σ", "ςxς");
+    assertStringTrimLeft("UTF8_BINARY", "σxσ", "σ", "xσ");
+    assertStringTrimLeft("UTF8_BINARY", "σxσ", "ς", "σxσ");
+    assertStringTrimLeft("UTF8_BINARY", "σxσ", "Σ", "σxσ");
+    assertStringTrimLeft("UTF8_BINARY", "ΣxΣ", "σ", "ΣxΣ");
+    assertStringTrimLeft("UTF8_BINARY", "ΣxΣ", "ς", "ΣxΣ");
+    assertStringTrimLeft("UTF8_BINARY", "ΣxΣ", "Σ", "xΣ");
+    assertStringTrimLeft("UTF8_LCASE", "ςxς", "σ", "xς");
+    assertStringTrimLeft("UTF8_LCASE", "ςxς", "ς", "xς");
+    assertStringTrimLeft("UTF8_LCASE", "ςxς", "Σ", "xς");
+    assertStringTrimLeft("UTF8_LCASE", "σxσ", "σ", "xσ");
+    assertStringTrimLeft("UTF8_LCASE", "σxσ", "ς", "xσ");
+    assertStringTrimLeft("UTF8_LCASE", "σxσ", "Σ", "xσ");
+    assertStringTrimLeft("UTF8_LCASE", "ΣxΣ", "σ", "xΣ");
+    assertStringTrimLeft("UTF8_LCASE", "ΣxΣ", "ς", "xΣ");
+    assertStringTrimLeft("UTF8_LCASE", "ΣxΣ", "Σ", "xΣ");
+    assertStringTrimLeft("UNICODE", "ςxς", "σ", "ςxς");
+    assertStringTrimLeft("UNICODE", "ςxς", "ς", "xς");
+    assertStringTrimLeft("UNICODE", "ςxς", "Σ", "ςxς");
+    assertStringTrimLeft("UNICODE", "σxσ", "σ", "xσ");
+    assertStringTrimLeft("UNICODE", "σxσ", "ς", "σxσ");
+    assertStringTrimLeft("UNICODE", "σxσ", "Σ", "σxσ");
+    assertStringTrimLeft("UNICODE", "ΣxΣ", "σ", "ΣxΣ");
+    assertStringTrimLeft("UNICODE", "ΣxΣ", "ς", "ΣxΣ");
+    assertStringTrimLeft("UNICODE", "ΣxΣ", "Σ", "xΣ");
+    assertStringTrimLeft("UNICODE_CI", "ςxς", "σ", "xς");
+    assertStringTrimLeft("UNICODE_CI", "ςxς", "ς", "xς");
+    assertStringTrimLeft("UNICODE_CI", "ςxς", "Σ", "xς");
+    assertStringTrimLeft("UNICODE_CI", "σxσ", "σ", "xσ");
+    assertStringTrimLeft("UNICODE_CI", "σxσ", "ς", "xσ");
+    assertStringTrimLeft("UNICODE_CI", "σxσ", "Σ", "xσ");
+    assertStringTrimLeft("UNICODE_CI", "ΣxΣ", "σ", "xΣ");
+    assertStringTrimLeft("UNICODE_CI", "ΣxΣ", "ς", "xΣ");
+    assertStringTrimLeft("UNICODE_CI", "ΣxΣ", "Σ", "xΣ");
+    // Unicode normalization.
+    assertStringTrimLeft("UTF8_BINARY", "åβγδa\u030A", "å", "βγδa\u030A");
+    assertStringTrimLeft("UTF8_LCASE", "åβγδa\u030A", "Å", "βγδa\u030A");
+    assertStringTrimLeft("UNICODE", "åβγδa\u030A", "å", "βγδa\u030A");
+    assertStringTrimLeft("UNICODE_CI", "åβγδa\u030A", "Å", "βγδa\u030A");
+    // Surrogate pairs.
+    assertStringTrimLeft("UTF8_BINARY", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimLeft("UTF8_LCASE", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimLeft("UNICODE", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimLeft("UNICODE_CI", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimLeft("UTF8_BINARY", "a🙃b🙃c", "a", "🙃b🙃c");
+    assertStringTrimLeft("UTF8_LCASE", "a🙃b🙃c", "a", "🙃b🙃c");
+    assertStringTrimLeft("UNICODE", "a🙃b🙃c", "a", "🙃b🙃c");
+    assertStringTrimLeft("UNICODE_CI", "a🙃b🙃c", "a", "🙃b🙃c");
+    assertStringTrimLeft("UTF8_BINARY", "a🙃b🙃c", "a🙃", "b🙃c");
+    assertStringTrimLeft("UTF8_LCASE", "a🙃b🙃c", "a🙃", "b🙃c");
+    assertStringTrimLeft("UNICODE", "a🙃b🙃c", "a🙃", "b🙃c");
+    assertStringTrimLeft("UNICODE_CI", "a🙃b🙃c", "a🙃", "b🙃c");
+    assertStringTrimLeft("UTF8_BINARY", "a🙃b🙃c", "a🙃b", "c");
+    assertStringTrimLeft("UTF8_LCASE", "a🙃b🙃c", "a🙃b", "c");
+    assertStringTrimLeft("UNICODE", "a🙃b🙃c", "a🙃b", "c");
+    assertStringTrimLeft("UNICODE_CI", "a🙃b🙃c", "a🙃b", "c");
+    assertStringTrimLeft("UTF8_BINARY", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimLeft("UTF8_LCASE", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimLeft("UNICODE", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimLeft("UNICODE_CI", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimLeft("UTF8_BINARY", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimLeft("UTF8_LCASE", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimLeft("UNICODE", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimLeft("UNICODE_CI", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimLeft("UTF8_BINARY", "😀😆😃😄", "😀😆", "😃😄");
+    assertStringTrimLeft("UTF8_LCASE", "😀😆😃😄", "😀😆", "😃😄");
+    assertStringTrimLeft("UNICODE", "😀😆😃😄", "😀😆", "😃😄");
+    assertStringTrimLeft("UNICODE_CI", "😀😆😃😄", "😀😆", "😃😄");
+    assertStringTrimLeft("UTF8_BINARY", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimLeft("UTF8_LCASE", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimLeft("UNICODE", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimLeft("UNICODE_CI", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimLeft("UTF8_BINARY", "𐐅", "𐐅", "");
+    assertStringTrimLeft("UTF8_LCASE", "𐐅", "𐐅", "");
+    assertStringTrimLeft("UNICODE", "𐐅", "𐐅", "");
+    assertStringTrimLeft("UNICODE_CI", "𐐅", "𐐅", "");
+    assertStringTrimLeft("UTF8_BINARY", "𐐅", "𐐭", "𐐅");
+    assertStringTrimLeft("UTF8_LCASE", "𐐅", "𐐭", "");
+    assertStringTrimLeft("UNICODE", "𐐅", "𐐭", "𐐅");
+    assertStringTrimLeft("UNICODE_CI", "𐐅", "𐐭", "");
+    assertStringTrimLeft("UTF8_BINARY", "𝔸", "𝔸", "");
+    assertStringTrimLeft("UTF8_LCASE", "𝔸", "𝔸", "");
+    assertStringTrimLeft("UNICODE", "𝔸", "𝔸", "");
+    assertStringTrimLeft("UNICODE_CI", "𝔸", "𝔸", "");
+    assertStringTrimLeft("UTF8_BINARY", "𝔸", "A", "𝔸");
+    assertStringTrimLeft("UTF8_LCASE", "𝔸", "A", "𝔸");
+    assertStringTrimLeft("UNICODE", "𝔸", "A", "𝔸");
+    assertStringTrimLeft("UNICODE_CI", "𝔸", "A", "");
+    assertStringTrimLeft("UTF8_BINARY", "𝔸", "a", "𝔸");
+    assertStringTrimLeft("UTF8_LCASE", "𝔸", "a", "𝔸");
+    assertStringTrimLeft("UNICODE", "𝔸", "a", "𝔸");
+    assertStringTrimLeft("UNICODE_CI", "𝔸", "a", "");
+  }
+
+  /**
+   * Verify the behaviour of the `StringTrimRight` collation support class.
+   */
+
+  private void assertStringTrimRight(String collationName, String sourceString, String trimString,
+      String expected) throws SparkException {
+    // Prepare the input and expected result.
+    int collationId = CollationFactory.collationNameToId(collationName);
+    UTF8String src = UTF8String.fromString(sourceString);
+    UTF8String trim = UTF8String.fromString(trimString);
+    UTF8String result;
+
+    if (trimString == null) {
+      // Trim string is ASCII space.
+      result = CollationSupport.StringTrimRight.exec(src);
+    } else {
+      // Trim string is specified.
+      result = CollationSupport.StringTrimRight.exec(src, trim, collationId);
+    }
+
+    // Test that StringTrimRight result is as expected.
+    assertEquals(UTF8String.fromString(expected), result);
+  }
+
+  @Test
+  public void testStringTrimRight() throws SparkException {
+    // Basic tests.
+    assertStringTrimRight("UTF8_BINARY", "", "", "");
+    assertStringTrimRight("UTF8_BINARY", "", "xyz", "");
+    assertStringTrimRight("UTF8_BINARY", "asd", "", "asd");
+    assertStringTrimRight("UTF8_BINARY", "asd", null, "asd");
+    assertStringTrimRight("UTF8_BINARY", "  asd  ", null, "  asd");
+    assertStringTrimRight("UTF8_BINARY", " a世a ", null, " a世a");
+    assertStringTrimRight("UTF8_BINARY", "asd", "x", "asd");
+    assertStringTrimRight("UTF8_BINARY", "xxasdxx", "x", "xxasd");
+    assertStringTrimRight("UTF8_BINARY", "xa世ax", "x", "xa世a");
+    assertStringTrimRight("UTF8_LCASE", "", "", "");
+    assertStringTrimRight("UTF8_LCASE", "", "xyz", "");
+    assertStringTrimRight("UTF8_LCASE", "asd", "", "asd");
+    assertStringTrimRight("UTF8_LCASE", "asd", null, "asd");
+    assertStringTrimRight("UTF8_LCASE", "  asd  ", null, "  asd");
+    assertStringTrimRight("UTF8_LCASE", " a世a ", null, " a世a");
+    assertStringTrimRight("UTF8_LCASE", "asd", "x", "asd");
+    assertStringTrimRight("UTF8_LCASE", "xxasdxx", "x", "xxasd");
+    assertStringTrimRight("UTF8_LCASE", "xa世ax", "x", "xa世a");
+    assertStringTrimRight("UNICODE", "", "", "");
+    assertStringTrimRight("UNICODE", "", "xyz", "");
+    assertStringTrimRight("UNICODE", "asd", "", "asd");
+    assertStringTrimRight("UNICODE", "asd", null, "asd");
+    assertStringTrimRight("UNICODE", "  asd  ", null, "  asd");
+    assertStringTrimRight("UNICODE", " a世a ", null, " a世a");
+    assertStringTrimRight("UNICODE", "asd", "x", "asd");
+    assertStringTrimRight("UNICODE", "xxasdxx", "x", "xxasd");
+    assertStringTrimRight("UNICODE", "xa世ax", "x", "xa世a");
+    assertStringTrimRight("UNICODE_CI", "", "", "");
+    assertStringTrimRight("UNICODE_CI", "", "xyz", "");
+    assertStringTrimRight("UNICODE_CI", "asd", "", "asd");
+    assertStringTrimRight("UNICODE_CI", "asd", null, "asd");
+    assertStringTrimRight("UNICODE_CI", "  asd  ", null, "  asd");
+    assertStringTrimRight("UNICODE_CI", " a世a ", null, " a世a");
+    assertStringTrimRight("UNICODE_CI", "asd", "x", "asd");
+    assertStringTrimRight("UNICODE_CI", "xxasdxx", "x", "xxasd");
+    assertStringTrimRight("UNICODE_CI", "xa世ax", "x", "xa世a");
+    // Case variation.
+    assertStringTrimRight("UTF8_BINARY", "ddsXXXaa", "asd", "ddsXXX");
+    assertStringTrimRight("UTF8_LCASE", "ddsXXXaa", "AsD", "ddsXXX");
+    assertStringTrimRight("UNICODE", "ddsXXXaa", "asd", "ddsXXX");
+    assertStringTrimRight("UNICODE_CI", "ddsXXXaa", "AsD", "ddsXXX");
+    // One-to-many case mapping (e.g. Turkish dotted I)..
+    assertStringTrimRight("UTF8_BINARY", "ẞaaaẞ", "ß", "ẞaaaẞ");
+    assertStringTrimRight("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
+    assertStringTrimRight("UTF8_BINARY", "Ëaaaẞ", "Ëẞ", "Ëaaa");
+    assertStringTrimRight("UTF8_LCASE", "ẞaaaẞ", "ß", "ẞaaa");
+    assertStringTrimRight("UTF8_LCASE", "ßaaaß", "ẞ", "ßaaa");
+    assertStringTrimRight("UTF8_LCASE", "Ëaaaẞ", "Ëẞ", "Ëaaa");
+    assertStringTrimRight("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
+    assertStringTrimRight("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
+    assertStringTrimRight("UNICODE", "Ëaaaẞ", "Ëẞ", "Ëaaa");
+    assertStringTrimRight("UNICODE_CI", "ẞaaaẞ", "ß", "ẞaaa");
+    assertStringTrimRight("UNICODE_CI", "ßaaaß", "ẞ", "ßaaa");
+    assertStringTrimRight("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "Ëaaa");
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringTrimRight("UTF8_BINARY", "i", "i", "");
+    assertStringTrimRight("UTF8_BINARY", "iii", "I", "iii");
+    assertStringTrimRight("UTF8_BINARY", "I", "iii", "I");
+    assertStringTrimRight("UTF8_BINARY", "ixi", "i", "ix");
+    assertStringTrimRight("UTF8_BINARY", "i", "İ", "i");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307", "i", "i\u0307");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307", "\u0307", "i");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307", "i\u0307", "");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307i\u0307", "i\u0307", "");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307\u0307", "i\u0307", "");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307i", "i\u0307", "");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307i", "İ", "i\u0307i");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307İ", "i\u0307", "i\u0307İ");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307İ", "İ", "i\u0307");
+    assertStringTrimRight("UTF8_BINARY", "İ", "İ", "");
+    assertStringTrimRight("UTF8_BINARY", "IXi", "İ", "IXi");
+    assertStringTrimRight("UTF8_BINARY", "ix\u0307", "Ixİ", "ix\u0307");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307x", "IXİ", "i\u0307x");
+    assertStringTrimRight("UTF8_BINARY", "i\u0307x", "ix\u0307İ", "");
+    assertStringTrimRight("UTF8_BINARY", "İ", "i", "İ");
+    assertStringTrimRight("UTF8_BINARY", "İ", "\u0307", "İ");
+    assertStringTrimRight("UTF8_BINARY", "Ixİ", "i\u0307", "Ixİ");
+    assertStringTrimRight("UTF8_BINARY", "IXİ", "ix\u0307", "IXİ");
+    assertStringTrimRight("UTF8_BINARY", "xi\u0307", "\u0307IX", "xi");
+    assertStringTrimRight("UTF8_LCASE", "i", "i", "");
+    assertStringTrimRight("UTF8_LCASE", "iii", "I", "");
+    assertStringTrimRight("UTF8_LCASE", "I", "iii", "");
+    assertStringTrimRight("UTF8_LCASE", "ixi", "i", "ix");
+    assertStringTrimRight("UTF8_LCASE", "i", "İ", "i");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307", "İ", "");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307", "i", "i\u0307");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307", "\u0307", "i");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307", "i\u0307", "");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307i\u0307", "i\u0307", "");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307\u0307", "i\u0307", "");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307i", "i\u0307", "");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307i", "İ", "i\u0307i");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307İ", "i\u0307", "i\u0307İ");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307İ", "İ", "");
+    assertStringTrimRight("UTF8_LCASE", "İ", "İ", "");
+    assertStringTrimRight("UTF8_LCASE", "IXi", "İ", "IXi");
+    assertStringTrimRight("UTF8_LCASE", "ix\u0307", "Ixİ", "ix\u0307");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307x", "IXİ", "");
+    assertStringTrimRight("UTF8_LCASE", "i\u0307x", "I\u0307xİ", "");
+    assertStringTrimRight("UTF8_LCASE", "İ", "i", "İ");
+    assertStringTrimRight("UTF8_LCASE", "İ", "\u0307", "İ");
+    assertStringTrimRight("UTF8_LCASE", "Ixİ", "i\u0307", "Ixİ");
+    assertStringTrimRight("UTF8_LCASE", "IXİ", "ix\u0307", "IXİ");
+    assertStringTrimRight("UTF8_LCASE", "xi\u0307", "\u0307IX", "");
+    assertStringTrimRight("UNICODE", "i", "i", "");
+    assertStringTrimRight("UNICODE", "iii", "I", "iii");
+    assertStringTrimRight("UNICODE", "I", "iii", "I");
+    assertStringTrimRight("UNICODE", "ixi", "i", "ix");
+    assertStringTrimRight("UNICODE", "i", "İ", "i");
+    assertStringTrimRight("UNICODE", "i\u0307", "İ", "i\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307", "i", "i\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307", "\u0307", "i\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307", "i\u0307", "i\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307i\u0307", "i\u0307", "i\u0307i\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307\u0307", "i\u0307", "i\u0307\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307i", "i\u0307", "i\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307i", "İ", "i\u0307i");
+    assertStringTrimRight("UNICODE", "i\u0307İ", "i\u0307", "i\u0307İ");
+    assertStringTrimRight("UNICODE", "i\u0307İ", "İ", "i\u0307");
+    assertStringTrimRight("UNICODE", "İ", "İ", "");
+    assertStringTrimRight("UNICODE", "IXi", "İ", "IXi");
+    assertStringTrimRight("UNICODE", "ix\u0307", "Ixİ", "ix\u0307");
+    assertStringTrimRight("UNICODE", "i\u0307x", "IXİ", "i\u0307x");
+    assertStringTrimRight("UNICODE", "i\u0307x", "ix\u0307İ", "i\u0307");
+    assertStringTrimRight("UNICODE", "İ", "i", "İ");
+    assertStringTrimRight("UNICODE", "İ", "\u0307", "İ");
+    assertStringTrimRight("UNICODE", "i\u0307", "i\u0307", "i\u0307");
+    assertStringTrimRight("UNICODE", "Ixİ", "i\u0307", "Ixİ");
+    assertStringTrimRight("UNICODE", "IXİ", "ix\u0307", "IXİ");
+    assertStringTrimRight("UNICODE", "xi\u0307", "\u0307IX", "xi\u0307");
     assertStringTrimRight("UNICODE_CI", "i", "i", "");
     assertStringTrimRight("UNICODE_CI", "iii", "I", "");
     assertStringTrimRight("UNICODE_CI", "I", "iii", "");
@@ -2018,26 +2210,7 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE_CI", "Ixİ", "i\u0307", "Ixİ");
     assertStringTrimRight("UNICODE_CI", "IXİ", "ix\u0307", "IXİ");
     assertStringTrimRight("UNICODE_CI", "xi\u0307", "\u0307IX", "xi\u0307");
-
-    // Greek sigmas - UTF8_BINARY.
-    assertStringTrim("UTF8_BINARY", "ςxς", "σ", "ςxς");
-    assertStringTrim("UTF8_BINARY", "ςxς", "ς", "x");
-    assertStringTrim("UTF8_BINARY", "ςxς", "Σ", "ςxς");
-    assertStringTrim("UTF8_BINARY", "σxσ", "σ", "x");
-    assertStringTrim("UTF8_BINARY", "σxσ", "ς", "σxσ");
-    assertStringTrim("UTF8_BINARY", "σxσ", "Σ", "σxσ");
-    assertStringTrim("UTF8_BINARY", "ΣxΣ", "σ", "ΣxΣ");
-    assertStringTrim("UTF8_BINARY", "ΣxΣ", "ς", "ΣxΣ");
-    assertStringTrim("UTF8_BINARY", "ΣxΣ", "Σ", "x");
-    assertStringTrimLeft("UTF8_BINARY", "ςxς", "σ", "ςxς");
-    assertStringTrimLeft("UTF8_BINARY", "ςxς", "ς", "xς");
-    assertStringTrimLeft("UTF8_BINARY", "ςxς", "Σ", "ςxς");
-    assertStringTrimLeft("UTF8_BINARY", "σxσ", "σ", "xσ");
-    assertStringTrimLeft("UTF8_BINARY", "σxσ", "ς", "σxσ");
-    assertStringTrimLeft("UTF8_BINARY", "σxσ", "Σ", "σxσ");
-    assertStringTrimLeft("UTF8_BINARY", "ΣxΣ", "σ", "ΣxΣ");
-    assertStringTrimLeft("UTF8_BINARY", "ΣxΣ", "ς", "ΣxΣ");
-    assertStringTrimLeft("UTF8_BINARY", "ΣxΣ", "Σ", "xΣ");
+    // Conditional case mapping (e.g. Greek sigmas).
     assertStringTrimRight("UTF8_BINARY", "ςxς", "σ", "ςxς");
     assertStringTrimRight("UTF8_BINARY", "ςxς", "ς", "ςx");
     assertStringTrimRight("UTF8_BINARY", "ςxς", "Σ", "ςxς");
@@ -2047,25 +2220,6 @@ public class CollationSupportSuite {
     assertStringTrimRight("UTF8_BINARY", "ΣxΣ", "σ", "ΣxΣ");
     assertStringTrimRight("UTF8_BINARY", "ΣxΣ", "ς", "ΣxΣ");
     assertStringTrimRight("UTF8_BINARY", "ΣxΣ", "Σ", "Σx");
-    // Greek sigmas - UTF8_LCASE.
-    assertStringTrim("UTF8_LCASE", "ςxς", "σ", "x");
-    assertStringTrim("UTF8_LCASE", "ςxς", "ς", "x");
-    assertStringTrim("UTF8_LCASE", "ςxς", "Σ", "x");
-    assertStringTrim("UTF8_LCASE", "σxσ", "σ", "x");
-    assertStringTrim("UTF8_LCASE", "σxσ", "ς", "x");
-    assertStringTrim("UTF8_LCASE", "σxσ", "Σ", "x");
-    assertStringTrim("UTF8_LCASE", "ΣxΣ", "σ", "x");
-    assertStringTrim("UTF8_LCASE", "ΣxΣ", "ς", "x");
-    assertStringTrim("UTF8_LCASE", "ΣxΣ", "Σ", "x");
-    assertStringTrimLeft("UTF8_LCASE", "ςxς", "σ", "xς");
-    assertStringTrimLeft("UTF8_LCASE", "ςxς", "ς", "xς");
-    assertStringTrimLeft("UTF8_LCASE", "ςxς", "Σ", "xς");
-    assertStringTrimLeft("UTF8_LCASE", "σxσ", "σ", "xσ");
-    assertStringTrimLeft("UTF8_LCASE", "σxσ", "ς", "xσ");
-    assertStringTrimLeft("UTF8_LCASE", "σxσ", "Σ", "xσ");
-    assertStringTrimLeft("UTF8_LCASE", "ΣxΣ", "σ", "xΣ");
-    assertStringTrimLeft("UTF8_LCASE", "ΣxΣ", "ς", "xΣ");
-    assertStringTrimLeft("UTF8_LCASE", "ΣxΣ", "Σ", "xΣ");
     assertStringTrimRight("UTF8_LCASE", "ςxς", "σ", "ςx");
     assertStringTrimRight("UTF8_LCASE", "ςxς", "ς", "ςx");
     assertStringTrimRight("UTF8_LCASE", "ςxς", "Σ", "ςx");
@@ -2075,25 +2229,6 @@ public class CollationSupportSuite {
     assertStringTrimRight("UTF8_LCASE", "ΣxΣ", "σ", "Σx");
     assertStringTrimRight("UTF8_LCASE", "ΣxΣ", "ς", "Σx");
     assertStringTrimRight("UTF8_LCASE", "ΣxΣ", "Σ", "Σx");
-    // Greek sigmas - UNICODE.
-    assertStringTrim("UNICODE", "ςxς", "σ", "ςxς");
-    assertStringTrim("UNICODE", "ςxς", "ς", "x");
-    assertStringTrim("UNICODE", "ςxς", "Σ", "ςxς");
-    assertStringTrim("UNICODE", "σxσ", "σ", "x");
-    assertStringTrim("UNICODE", "σxσ", "ς", "σxσ");
-    assertStringTrim("UNICODE", "σxσ", "Σ", "σxσ");
-    assertStringTrim("UNICODE", "ΣxΣ", "σ", "ΣxΣ");
-    assertStringTrim("UNICODE", "ΣxΣ", "ς", "ΣxΣ");
-    assertStringTrim("UNICODE", "ΣxΣ", "Σ", "x");
-    assertStringTrimLeft("UNICODE", "ςxς", "σ", "ςxς");
-    assertStringTrimLeft("UNICODE", "ςxς", "ς", "xς");
-    assertStringTrimLeft("UNICODE", "ςxς", "Σ", "ςxς");
-    assertStringTrimLeft("UNICODE", "σxσ", "σ", "xσ");
-    assertStringTrimLeft("UNICODE", "σxσ", "ς", "σxσ");
-    assertStringTrimLeft("UNICODE", "σxσ", "Σ", "σxσ");
-    assertStringTrimLeft("UNICODE", "ΣxΣ", "σ", "ΣxΣ");
-    assertStringTrimLeft("UNICODE", "ΣxΣ", "ς", "ΣxΣ");
-    assertStringTrimLeft("UNICODE", "ΣxΣ", "Σ", "xΣ");
     assertStringTrimRight("UNICODE", "ςxς", "σ", "ςxς");
     assertStringTrimRight("UNICODE", "ςxς", "ς", "ςx");
     assertStringTrimRight("UNICODE", "ςxς", "Σ", "ςxς");
@@ -2103,25 +2238,6 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE", "ΣxΣ", "σ", "ΣxΣ");
     assertStringTrimRight("UNICODE", "ΣxΣ", "ς", "ΣxΣ");
     assertStringTrimRight("UNICODE", "ΣxΣ", "Σ", "Σx");
-    // Greek sigmas - UNICODE_CI.
-    assertStringTrim("UNICODE_CI", "ςxς", "σ", "x");
-    assertStringTrim("UNICODE_CI", "ςxς", "ς", "x");
-    assertStringTrim("UNICODE_CI", "ςxς", "Σ", "x");
-    assertStringTrim("UNICODE_CI", "σxσ", "σ", "x");
-    assertStringTrim("UNICODE_CI", "σxσ", "ς", "x");
-    assertStringTrim("UNICODE_CI", "σxσ", "Σ", "x");
-    assertStringTrim("UNICODE_CI", "ΣxΣ", "σ", "x");
-    assertStringTrim("UNICODE_CI", "ΣxΣ", "ς", "x");
-    assertStringTrim("UNICODE_CI", "ΣxΣ", "Σ", "x");
-    assertStringTrimLeft("UNICODE_CI", "ςxς", "σ", "xς");
-    assertStringTrimLeft("UNICODE_CI", "ςxς", "ς", "xς");
-    assertStringTrimLeft("UNICODE_CI", "ςxς", "Σ", "xς");
-    assertStringTrimLeft("UNICODE_CI", "σxσ", "σ", "xσ");
-    assertStringTrimLeft("UNICODE_CI", "σxσ", "ς", "xσ");
-    assertStringTrimLeft("UNICODE_CI", "σxσ", "Σ", "xσ");
-    assertStringTrimLeft("UNICODE_CI", "ΣxΣ", "σ", "xΣ");
-    assertStringTrimLeft("UNICODE_CI", "ΣxΣ", "ς", "xΣ");
-    assertStringTrimLeft("UNICODE_CI", "ΣxΣ", "Σ", "xΣ");
     assertStringTrimRight("UNICODE_CI", "ςxς", "σ", "ςx");
     assertStringTrimRight("UNICODE_CI", "ςxς", "ς", "ςx");
     assertStringTrimRight("UNICODE_CI", "ςxς", "Σ", "ςx");
@@ -2131,23 +2247,64 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE_CI", "ΣxΣ", "σ", "Σx");
     assertStringTrimRight("UNICODE_CI", "ΣxΣ", "ς", "Σx");
     assertStringTrimRight("UNICODE_CI", "ΣxΣ", "Σ", "Σx");
-
-    // Unicode normalization - UTF8_BINARY.
-    assertStringTrim("UTF8_BINARY", "åβγδa\u030A", "å", "βγδa\u030A");
-    assertStringTrimLeft("UTF8_BINARY", "åβγδa\u030A", "å", "βγδa\u030A");
+    // Unicode normalization.
     assertStringTrimRight("UTF8_BINARY", "åβγδa\u030A", "å", "åβγδa\u030A");
-    // Unicode normalization - UTF8_LCASE.
-    assertStringTrim("UTF8_LCASE", "åβγδa\u030A", "Å", "βγδa\u030A");
-    assertStringTrimLeft("UTF8_LCASE", "åβγδa\u030A", "Å", "βγδa\u030A");
     assertStringTrimRight("UTF8_LCASE", "åβγδa\u030A", "Å", "åβγδa\u030A");
-    // Unicode normalization - UNICODE.
-    assertStringTrim("UNICODE", "åβγδa\u030A", "å", "βγδ");
-    assertStringTrimLeft("UNICODE", "åβγδa\u030A", "å", "βγδa\u030A");
     assertStringTrimRight("UNICODE", "åβγδa\u030A", "å", "åβγδ");
-    // Unicode normalization - UNICODE_CI.
-    assertStringTrim("UNICODE_CI", "åβγδa\u030A", "Å", "βγδ");
-    assertStringTrimLeft("UNICODE_CI", "åβγδa\u030A", "Å", "βγδa\u030A");
     assertStringTrimRight("UNICODE_CI", "åβγδa\u030A", "Å", "åβγδ");
+    // Surrogate pairs.
+    assertStringTrimRight("UTF8_BINARY", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimRight("UTF8_LCASE", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimRight("UNICODE", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimRight("UNICODE_CI", "a🙃b🙃c", "🙃", "a🙃b🙃c");
+    assertStringTrimRight("UTF8_BINARY", "a🙃b🙃c", "c", "a🙃b🙃");
+    assertStringTrimRight("UTF8_LCASE", "a🙃b🙃c", "c", "a🙃b🙃");
+    assertStringTrimRight("UNICODE", "a🙃b🙃c", "c", "a🙃b🙃");
+    assertStringTrimRight("UNICODE_CI", "a🙃b🙃c", "c", "a🙃b🙃");
+    assertStringTrimRight("UTF8_BINARY", "a🙃b🙃c", "c🙃", "a🙃b");
+    assertStringTrimRight("UTF8_LCASE", "a🙃b🙃c", "c🙃", "a🙃b");
+    assertStringTrimRight("UNICODE", "a🙃b🙃c", "c🙃", "a🙃b");
+    assertStringTrimRight("UNICODE_CI", "a🙃b🙃c", "c🙃", "a🙃b");
+    assertStringTrimRight("UTF8_BINARY", "a🙃b🙃c", "c🙃b", "a");
+    assertStringTrimRight("UTF8_LCASE", "a🙃b🙃c", "c🙃b", "a");
+    assertStringTrimRight("UNICODE", "a🙃b🙃c", "c🙃b", "a");
+    assertStringTrimRight("UNICODE_CI", "a🙃b🙃c", "c🙃b", "a");
+    assertStringTrimRight("UTF8_BINARY", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimRight("UTF8_LCASE", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimRight("UNICODE", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimRight("UNICODE_CI", "a🙃b🙃c", "abc🙃", "");
+    assertStringTrimRight("UTF8_BINARY", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimRight("UTF8_LCASE", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimRight("UNICODE", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimRight("UNICODE_CI", "😀😆😃😄", "😆😃", "😀😆😃😄");
+    assertStringTrimRight("UTF8_BINARY", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrimRight("UTF8_LCASE", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrimRight("UNICODE", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrimRight("UNICODE_CI", "😀😆😃😄", "😃😄", "😀😆");
+    assertStringTrimRight("UTF8_BINARY", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimRight("UTF8_LCASE", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimRight("UNICODE", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimRight("UNICODE_CI", "😀😆😃😄", "😀😆😃😄", "");
+    assertStringTrimRight("UTF8_BINARY", "𐐅", "𐐅", "");
+    assertStringTrimRight("UTF8_LCASE", "𐐅", "𐐅", "");
+    assertStringTrimRight("UNICODE", "𐐅", "𐐅", "");
+    assertStringTrimRight("UNICODE_CI", "𐐅", "𐐅", "");
+    assertStringTrimRight("UTF8_BINARY", "𐐅", "𐐭", "𐐅");
+    assertStringTrimRight("UTF8_LCASE", "𐐅", "𐐭", "");
+    assertStringTrimRight("UNICODE", "𐐅", "𐐭", "𐐅");
+    assertStringTrimRight("UNICODE_CI", "𐐅", "𐐭", "");
+    assertStringTrimRight("UTF8_BINARY", "𝔸", "𝔸", "");
+    assertStringTrimRight("UTF8_LCASE", "𝔸", "𝔸", "");
+    assertStringTrimRight("UNICODE", "𝔸", "𝔸", "");
+    assertStringTrimRight("UNICODE_CI", "𝔸", "𝔸", "");
+    assertStringTrimRight("UTF8_BINARY", "𝔸", "A", "𝔸");
+    assertStringTrimRight("UTF8_LCASE", "𝔸", "A", "𝔸");
+    assertStringTrimRight("UNICODE", "𝔸", "A", "𝔸");
+    assertStringTrimRight("UNICODE_CI", "𝔸", "A", "");
+    assertStringTrimRight("UTF8_BINARY", "𝔸", "a", "𝔸");
+    assertStringTrimRight("UTF8_LCASE", "𝔸", "a", "𝔸");
+    assertStringTrimRight("UNICODE", "𝔸", "a", "𝔸");
+    assertStringTrimRight("UNICODE_CI", "𝔸", "a", "");
   }
 
   private void assertStringTranslate(
