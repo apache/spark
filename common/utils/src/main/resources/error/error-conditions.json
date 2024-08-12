@@ -256,6 +256,26 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
+      "INVALID_CHANGE_LOG_READER_VERSION" : {
+        "message" : [
+          "The change log reader version cannot be <version>."
+        ]
+      },
+      "INVALID_CHANGE_LOG_WRITER_VERSION" : {
+        "message" : [
+          "The change log writer version cannot be <version>."
+        ]
+      },
+      "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load RocksDB state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
       "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
         "message" : [
           "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
@@ -624,6 +644,17 @@
       "Please make sure only one streaming job runs on a specific checkpoint location at a time."
     ],
     "sqlState" : "40000"
+  },
+  "CONFLICTING_PARTITION_COLUMN_NAMES" : {
+    "message" : [
+      "Conflicting partition column names detected:",
+      "<distinctPartColLists>",
+      "For partitioned table directories, data files should only live in leaf directories.",
+      "And directories at the same level should have the same partition column name.",
+      "Please check the following directories for unexpected files or inconsistent partition column names:",
+      "<suspiciousPaths>"
+    ],
+    "sqlState" : "KD009"
   },
   "CONNECT" : {
     "message" : [
@@ -1940,6 +1971,12 @@
       "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
     ],
     "sqlState" : "22003"
+  },
+  "INVALID_BOOLEAN_STATEMENT" : {
+    "message" : [
+      "Boolean statement is expected in the condition, but <invalidStatement> was found."
+    ],
+    "sqlState" : "22546"
   },
   "INVALID_BOUNDARY" : {
     "message" : [

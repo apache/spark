@@ -24,6 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -91,7 +92,10 @@ trait NonLeafStatementExec extends CompoundStatementExec {
    * Evaluate the boolean condition represented by the statement.
    * @param session SparkSession that SQL script is executed within.
    * @param statement Statement representing the boolean condition to evaluate.
-   * @return Whether the condition evaluates to True.
+   * @return
+   *    The value (`true` or `false`) of condition evaluation;
+   *    or throw the error during the evaluation (eg: returning multiple rows of data
+   *    or non-boolean statement).
    */
   protected def evaluateBooleanCondition(
       session: SparkSession,
@@ -104,11 +108,15 @@ trait NonLeafStatementExec extends CompoundStatementExec {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
             case Array(row) => row.getBoolean(0)
-            case _ => false
+            case _ =>
+              throw SparkException.internalError(
+                s"Boolean statement ${statement.getText} is invalid. It returns more than one row.")
           }
-        case _ => false
+        case _ =>
+          throw SqlScriptingErrors.invalidBooleanStatement(statement.origin, statement.getText)
       }
-    case _ => false
+    case _ =>
+      throw SparkException.internalError("Boolean condition must be SingleStatementExec")
   }
 }
 

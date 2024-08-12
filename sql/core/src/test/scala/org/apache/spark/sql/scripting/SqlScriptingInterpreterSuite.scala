@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -635,6 +636,50 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
 
       val expected = Seq(Array.empty[Row], Array.empty[Row], Array.empty[Row], Array(Row(43)))
       verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("if's condition must be a boolean statement") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  IF 1 THEN
+          |    SELECT 45;
+          |  END IF;
+          |END
+          |""".stripMargin
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          verifySqlScriptResult(commands, Seq())
+        ),
+        errorClass = "INVALID_BOOLEAN_STATEMENT",
+        parameters = Map("invalidStatement" -> "1")
+      )
+    }
+  }
+
+  test("if's condition must return a single row data") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a BOOLEAN) USING parquet;
+          |  INSERT INTO t VALUES (true);
+          |  INSERT INTO t VALUES (true);
+          |  IF (select * from t) THEN
+          |    SELECT 46;
+          |  END IF;
+          |END
+          |""".stripMargin
+      checkError(
+        exception = intercept[SparkException] (
+          verifySqlScriptResult(commands, Seq())
+        ),
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(select * from t)", start = 118, stop = 134)
+      )
     }
   }
 }
