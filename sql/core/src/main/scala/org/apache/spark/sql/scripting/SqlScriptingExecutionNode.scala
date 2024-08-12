@@ -52,9 +52,7 @@ trait LeafStatementExec extends CompoundStatementExec {
   /** Whether an error was raised during the execution of this statement. */
   var raisedError: Boolean = false
 
-  /**
-   * Error state of the statement.
-   */
+  /** Error state of the statement. */
   var errorState: Option[String] = None
 
   /** Error raised during statement execution. */
@@ -68,6 +66,13 @@ trait LeafStatementExec extends CompoundStatementExec {
    * @param session Spark session.
    */
   def execute(session: SparkSession): Unit
+
+  override def reset(): Unit = {
+    raisedError = false
+    errorState = None
+    error = None
+    rethrow = None
+  }
 }
 
 /**
@@ -149,11 +154,8 @@ class SingleStatementExec(
   }
 
   override def reset(): Unit = {
-    raisedError = false
-    errorState = None
-    error = None
-    rethrow = None
-    result = None // Should we do this?
+    super.reset()
+    result = None
   }
 
   override def execute(session: SparkSession): Unit = {
@@ -188,12 +190,17 @@ class SingleStatementExec(
  *   Spark session.
  */
 class CompoundBodyExec(
-      label: Option[String] = None,
-      statements: Seq[CompoundStatementExec],
-      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
-      session: SparkSession)
+    statements: Seq[CompoundStatementExec],
+    session: SparkSession,
+    label: Option[String] = None,
+    conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap())
   extends NonLeafStatementExec {
 
+  /**
+   * Get handler to handle error given by condition.
+   * @param condition SqlState of the error raised during statement execution.
+   * @return Corresponding error handler executable node.
+   */
   private def getHandler(condition: String): Option[ErrorHandlerExec] = {
     conditionHandlerMap.get(condition)
       .orElse(conditionHandlerMap.get("NOT FOUND") match {

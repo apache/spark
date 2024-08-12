@@ -83,21 +83,27 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       .map(new SingleStatementExec(_, Origin(), isInternal = true))
       .reverse
 
+    // Create a map of conditions (SqlStates) to their respective handlers.
     val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
     compoundBody.handlers.foreach(handler => {
       val handlerBodyExec =
         transformBodyIntoExec(handler.body,
           handler.handlerType == HandlerType.EXIT,
           compoundBody.label.get)
+
+      // Execution node of handler.
       val handlerExec = new ErrorHandlerExec(handlerBodyExec)
 
+      // For each condition handler is defined for, add corresponding key value pair
+      // to the conditionHandlerMap.
       handler.conditions.foreach(condition => {
+        // Condition can either be the key in conditions map or SqlState.
         val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
-        conditionHandlerMap.get(conditionValue) match {
-          case Some(_) =>
-            throw SqlScriptingErrors.duplicateHandlerForSameSqlState(
-              CurrentOrigin.get, conditionValue)
-          case None => conditionHandlerMap.put(conditionValue, handlerExec)
+        if (conditionHandlerMap.contains(conditionValue)) {
+          throw SqlScriptingErrors.duplicateHandlerForSameSqlState(
+            CurrentOrigin.get, conditionValue)
+        } else {
+          conditionHandlerMap.put(conditionValue, handlerExec)
         }
       })
     })
@@ -108,18 +114,14 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       val statements = compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++
         dropVariables :+ leave
 
-      return new CompoundBodyExec(
-        compoundBody.label,
-        statements,
-        conditionHandlerMap,
-        session)
+      return new CompoundBodyExec(statements, session, compoundBody.label, conditionHandlerMap)
     }
 
     new CompoundBodyExec(
-      compoundBody.label,
       compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
-      conditionHandlerMap,
-      session)
+      session,
+      compoundBody.label,
+      conditionHandlerMap)
   }
 
   /**

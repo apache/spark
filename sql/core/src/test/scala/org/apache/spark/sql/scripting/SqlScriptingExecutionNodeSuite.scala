@@ -40,7 +40,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   case class TestBody(statements: Seq[CompoundStatementExec])
-    extends CompoundBodyExec(None, statements, mutable.HashMap(), null)
+    extends CompoundBodyExec(statements, null, None, mutable.HashMap())
 
   case class TestSparkStatementWithPlan(testVal: String)
   case class TestIfElseCondition(condVal: Boolean, description: String)
