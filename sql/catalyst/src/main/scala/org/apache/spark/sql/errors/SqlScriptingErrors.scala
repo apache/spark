@@ -68,6 +68,16 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("sqlState" -> sqlState))
   }
 
+  def duplicateConditionNameForDifferentSqlState(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_CONDITION_NAME_FOR_DIFFERENT_SQL_STATE",
+      cause = null,
+      messageParameters = Map("conditionName" -> conditionName))
+  }
+
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
       varName: String,

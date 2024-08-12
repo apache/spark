@@ -18,7 +18,6 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
@@ -39,12 +38,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *
    * @param compound
    *   CompoundBody for which to build the plan.
-   * @param session
-   *   Spark session that SQL script is executed within.
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+  private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
@@ -61,10 +58,22 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       case _ => None
     }
 
+  /**
+   * Fetch the name of the Create Variable plan.
+   * @param compoundBody
+   *   CompoundBody to be transformed into CompoundBodyExec.
+   * @param isExitHandler
+   *   Flag to indicate if the body is an exit handler body to add leave statement at the end.
+   * @param exitHandlerLabel
+   *   If body is an exit handler body, this is the label of surrounding CompoundBody
+   *   that should be exited.
+   * @return
+   *   Executable version of the CompoundBody .
+   */
   private def transformBodyIntoExec(
       compoundBody: CompoundBody,
       isExitHandler: Boolean = false,
-      label: String = ""): CompoundBodyExec = {
+      exitHandlerLabel: String = ""): CompoundBodyExec = {
     val variables = compoundBody.collection.flatMap {
       case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
       case _ => None
@@ -75,7 +84,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       .reverse
 
     val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
-    val handlers = ListBuffer[ErrorHandlerExec]()
     compoundBody.handlers.foreach(handler => {
       val handlerBodyExec =
         transformBodyIntoExec(handler.body,
@@ -92,12 +100,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           case None => conditionHandlerMap.put(conditionValue, handlerExec)
         }
       })
-
-      handlers += handlerExec
     })
 
     if (isExitHandler) {
-      val leave = new LeaveStatementExec(label)
+      // Create leave statement to exit the surrounding CompoundBody after handler execution.
+      val leave = new LeaveStatementExec(exitHandlerLabel)
       val statements = compoundBody.collection.map(st => transformTreeIntoExecutable(st)) ++
         dropVariables :+ leave
 

@@ -149,8 +149,10 @@ class AstBuilder extends DataTypeAstBuilder
       stmt match {
         case handler: ErrorHandler => handlers += handler
         case condition: ErrorCondition =>
-          assert(!conditions.contains(condition.conditionName))   // Check for duplicate names.
-          assert(!sqlStates.contains(condition.value))            // Check for duplicate sqlStates.
+          if (conditions.contains(condition.conditionName)) {
+            throw SqlScriptingErrors.duplicateConditionNameForDifferentSqlState(
+              CurrentOrigin.get, condition.conditionName)
+          }
           conditions += condition.conditionName -> condition.value
           sqlStates += condition.value
         case s => buff += s
@@ -229,11 +231,7 @@ class AstBuilder extends DataTypeAstBuilder
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
-          val stmt = Option(ctx.beginEndCompoundBlock()).
-            getOrElse(Option(ctx.declareHandler()).
-              getOrElse(Option(ctx.declareCondition()).
-                getOrElse(ctx.ifElseStatement())))
-          visit(stmt).asInstanceOf[CompoundPlanStatement]
+          visitChildren(ctx).asInstanceOf[CompoundPlanStatement]
         }
     }
 
@@ -245,15 +243,13 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitConditionValueList(ctx: ConditionValueListContext): Seq[String] = {
     Option(ctx.SQLEXCEPTION()).map(_ => Seq("SQLEXCEPTION")).getOrElse {
       Option(ctx.NOT()).map(_ => Seq("NOT FOUND")).getOrElse {
-        val buff = ListBuffer[String]()
-        val seen = scala.collection.mutable.Set[String]()
+        val buff = scala.collection.mutable.Set[String]()
         ctx.conditionValues.forEach { conditionValue =>
           val elem = visit(conditionValue).asInstanceOf[String]
-          if (seen(elem)) {
+          if (buff(elem)) {
             throw SqlScriptingErrors.duplicateSqlStateForSameHandler(CurrentOrigin.get, elem)
           }
           buff += elem
-          seen += elem
         }
         buff.toSeq
       }
@@ -275,8 +271,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitDeclareCondition(ctx: DeclareConditionContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
-    val conditionValue = Option(ctx.stringLit()).map(_.getText).getOrElse("'45000'").
-      replace("'", "")
+    val conditionValue = Option(ctx.stringLit()).map(_.getText.replace("'", "")).getOrElse("45000")
 
     val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
     assert(sqlStateRegex.findFirstIn(conditionValue).isDefined)

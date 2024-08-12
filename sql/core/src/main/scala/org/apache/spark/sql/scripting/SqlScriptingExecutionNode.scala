@@ -49,15 +49,7 @@ sealed trait CompoundStatementExec extends Logging {
  */
 trait LeafStatementExec extends CompoundStatementExec {
 
-  /**
-  * Execute the statement.
-  * @param session Spark session.
-  */
-  def execute(session: SparkSession): Unit
-
-  /**
-   * Whether an error was raised during the execution of this statement.
-   */
+  /** Whether an error was raised during the execution of this statement. */
   var raisedError: Boolean = false
 
   /**
@@ -65,15 +57,17 @@ trait LeafStatementExec extends CompoundStatementExec {
    */
   var errorState: Option[String] = None
 
-  /**
-   * Error raised during statement execution.
-   */
+  /** Error raised during statement execution. */
   var error: Option[SparkThrowable] = None
 
-  /**
-   * Throwable to rethrow after the statement execution if the error is not handled.
-   */
+  /** Throwable to rethrow after the statement execution if the error is not handled. */
   var rethrow: Option[Throwable] = None
+
+  /**
+   * Execute the statement.
+   * @param session Spark session.
+   */
+  def execute(session: SparkSession): Unit
 }
 
 /**
@@ -141,9 +135,7 @@ class SingleStatementExec(
     val shouldCollectResult: Boolean = false)
   extends LeafStatementExec with WithOrigin {
 
-  /**
-   * Data returned after execution.
-   */
+  /** Data returned after execution. */
   var result: Option[Array[Row]] = None
 
   /**
@@ -164,7 +156,7 @@ class SingleStatementExec(
     result = None // Should we do this?
   }
 
-  def execute(session: SparkSession): Unit = {
+  override def execute(session: SparkSession): Unit = {
     try {
       val rows = Some(Dataset.ofRows(session, parsedPlan).collect())
       if (shouldCollectResult) {
@@ -334,18 +326,6 @@ class LeaveStatementExec(val label: String) extends LeafStatementExec {
   var used: Boolean = false
 
   def getLabel: String = label
-
-  override def execute(session: SparkSession): Unit = ()
-
-  override def reset(): Unit = used = false
-}
-
-/**
- * Executable node for Continue statement.
- */
-class ContinueStatementExec() extends LeafStatementExec {
-
-  var used: Boolean = false
 
   override def execute(session: SparkSession): Unit = ()
 

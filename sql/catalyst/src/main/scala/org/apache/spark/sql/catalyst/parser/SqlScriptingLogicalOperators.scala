@@ -57,6 +57,8 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * @param label Label set to CompoundBody by user or UUID otherwise.
  *              It can be None in case when CompoundBody is not part of BeginEndCompoundBlock
  *              for example when CompoundBody is inside loop or conditional block.
+ * @param handlers Collection of handlers defined in the compound body.
+ * @param conditions Map of Condition Name - Sql State values declared in the compound body.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],

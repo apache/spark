@@ -1128,6 +1128,12 @@
     ],
     "sqlState" : "42614"
   },
+  "DUPLICATE_CONDITION_NAME_FOR_DIFFERENT_SQL_STATE" : {
+    "message" : [
+      "Found duplicate condition name <conditionName> for different SQL states. Please, remove one of them."
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_HANDLER_FOR_SAME_SQL_STATE" : {
     "message" : [
       "Found duplicate handlers for the same SQL state <sqlState>. Please, remove one of them."
