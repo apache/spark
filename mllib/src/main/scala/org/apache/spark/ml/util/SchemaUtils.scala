@@ -19,6 +19,7 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.types._
 
 
@@ -224,5 +225,19 @@ private[spark] object SchemaUtils {
       new ArrayType(DoubleType, false),
       new ArrayType(FloatType, false))
     checkColumnTypes(schema, colName, typeCandidates)
+  }
+
+  /**
+   * Get schema field.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def getSchemaField(schema: StructType, colName: String): StructField = {
+    val colSplits = AttributeNameParser.parseAttributeName(colName)
+    var field = schema(colSplits(0))
+    for (colSplit <- colSplits.slice(1, colSplits.length)) {
+      field = field.dataType.asInstanceOf[StructType](colSplit)
+    }
+    field
   }
 }

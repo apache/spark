@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.NoSuchElementException
+import java.util.{ArrayList, NoSuchElementException}
 
 import scala.collection.mutable
 
@@ -29,7 +29,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -88,7 +88,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val schema = dataset.schema
 
     val vectorCols = $(inputCols).filter { c =>
-      schema(c).dataType match {
+      dataset.col(c).expr.dataType match {
         case _: VectorUDT => true
         case _ => false
       }
@@ -97,7 +97,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       dataset, vectorCols.toImmutableArraySeq, $(handleInvalid))
 
     val featureAttributesMap = $(inputCols).map { c =>
-      val field = schema(c)
+      val field = SchemaUtils.getSchemaField(schema, c)
       field.dataType match {
         case DoubleType =>
           val attribute = Attribute.fromStructField(field)
@@ -145,7 +145,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
     val args = $(inputCols).map { c =>
-      schema(c).dataType match {
+      dataset(c).expr.dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
@@ -160,8 +160,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
+    val sparkSession = SparkSession.getDefaultSession.get
+    val transformDataset = sparkSession.createDataFrame(
+      new ArrayList[Row](), schema = schema
+    )
     val incorrectColumns = inputColNames.flatMap { name =>
-      schema(name).dataType match {
+      transformDataset.col(name).expr.dataType match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
         case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")
@@ -226,7 +230,8 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
       columns: Seq[String],
       handleInvalid: String): Map[String, Int] = {
     val groupSizes = columns.map { c =>
-      c -> AttributeGroup.fromStructField(dataset.schema(c)).size
+      val field = SchemaUtils.getSchemaField(dataset.schema, c)
+      c -> AttributeGroup.fromStructField(field).size
     }.toMap
     val missingColumns = groupSizes.filter(_._2 == -1).keys.toSeq
     val firstSizes = (missingColumns.nonEmpty, handleInvalid) match {
