@@ -706,7 +706,8 @@ public class CollationAwareUTF8String {
     // Initialize the string search with respect to the specified ICU collation.
     String targetStr = target.toValidString();
     String patternStr = pattern.toValidString();
-    StringSearch stringSearch = CollationFactory.getStringSearch(targetStr, patternStr, collationId);
+    StringSearch stringSearch =
+      CollationFactory.getStringSearch(targetStr, patternStr, collationId);
     stringSearch.setOverlapping(true);
     // Start the search from `start`-th code point (NOT necessarily from the `start`-th character).
     int startIndex = targetStr.offsetByCodePoints(0, start);
