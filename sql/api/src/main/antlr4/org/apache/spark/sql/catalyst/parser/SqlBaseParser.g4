@@ -1517,6 +1517,7 @@ ansiNonReserved
     | COMPUTE
     | CONCATENATE
     | CONTAINS
+    | CONTINUE
     | COST
     | CUBE
     | CURRENT
@@ -1555,6 +1556,7 @@ ansiNonReserved
     | EXCHANGE
     | EXCLUDE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTENDED
@@ -1842,6 +1844,7 @@ nonReserved
     | CONCATENATE
     | CONSTRAINT
     | CONTAINS
+    | CONTINUE
     | COST
     | CREATE
     | CUBE
@@ -1890,6 +1893,7 @@ nonReserved
     | EXCLUDE
     | EXECUTE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTENDED
