@@ -31,7 +31,7 @@ import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
  * Like the other UI filters, the following configurations are required to use this filter.
  * {{{
  *   - spark.ui.filters=org.apache.spark.ui.JWSFilter
- *   - spark.org.apache.spark.ui.JWSFilter.param.key=BASE64URL-ENCODED-YOUR-PROVIDED-KEY
+ *   - spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-YOUR-PROVIDED-KEY
  * }}}
  * The HTTP request should have {@code Authorization: Bearer <jws>} header.
  * {{{
@@ -52,7 +52,7 @@ private class JWSFilter extends Filter {
    * - WeakKeyException will happen if the user-provided value is insufficient
    */
   override def init(config: FilterConfig): Unit = {
-    key = Keys.hmacShaKeyFor(Decoders.BASE64URL.decode(config.getInitParameter("key")));
+    key = Keys.hmacShaKeyFor(Decoders.BASE64URL.decode(config.getInitParameter("secretKey")));
   }
 
   override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {

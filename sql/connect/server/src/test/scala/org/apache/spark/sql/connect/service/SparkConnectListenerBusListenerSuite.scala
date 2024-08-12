@@ -32,6 +32,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto.{Command, ExecutePlanResponse}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.connect.planner.SparkConnectStreamingQueryListenerHandler
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
@@ -186,7 +187,7 @@ class SparkConnectListenerBusListenerSuite
     when(executeHolder.sessionHolder).thenReturn(sessionHolder)
     when(executeHolder.operationId).thenReturn("operationId")
 
-    val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
+    val responseObserver = mock[ExecuteResponseObserver[ExecutePlanResponse]]
     doThrow(new RuntimeException("I'm dead"))
       .when(responseObserver)
       .onNext(any[ExecutePlanResponse]())
@@ -204,14 +205,13 @@ class SparkConnectListenerBusListenerSuite
         sessionHolder.streamingServersideListenerHolder.streamingQueryServerSideListener.isEmpty)
       assert(spark.streams.listListeners().size === listenerCntBeforeThrow)
       assert(listenerHolder.streamingQueryStartedEventCache.isEmpty)
-      assert(listenerHolder.streamingQueryListenerLatch.getCount === 0)
     }
 
   }
 
   test("Proper handling on onNext throw - query progress") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
+    val responseObserver = mock[ExecuteResponseObserver[ExecutePlanResponse]]
     doThrow(new RuntimeException("I'm dead"))
       .when(responseObserver)
       .onNext(any[ExecutePlanResponse]())
@@ -235,7 +235,6 @@ class SparkConnectListenerBusListenerSuite
     eventually(timeout(5.seconds), interval(500.milliseconds)) {
       assert(!spark.streams.listListeners().contains(listenerBusListener))
       assert(listenerHolder.streamingQueryStartedEventCache.isEmpty)
-      assert(listenerHolder.streamingQueryListenerLatch.getCount === 0)
     }
   }
 }

@@ -343,7 +343,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./dev/infra/
           push: true
@@ -870,17 +870,23 @@ jobs:
         bundle install
     - name: Run documentation build
       run: |
-        # We need this link because the jekyll build calls `python`.
-        ln -s "$(which python3.9)" "/usr/local/bin/python"
+        # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
+        ln -s "$(which python3.9)" "/usr/local/bin/python3"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
-        cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
+        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
+        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
+        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
+        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
+        echo "SKIP_RDOC: $SKIP_RDOC"
+        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
@@ -1126,11 +1132,10 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
           if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-3.4' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.9.0/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

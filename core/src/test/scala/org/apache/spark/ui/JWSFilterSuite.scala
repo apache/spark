@@ -48,7 +48,7 @@ class JWSFilterSuite extends SparkFunSuite {
   test("Succeed to initialize") {
     val filter = new JWSFilter()
     val params = new JHashMap[String, String]
-    params.put("key", TEST_KEY)
+    params.put("secretKey", TEST_KEY)
     filter.init(new DummyFilterConfig(params))
   }
 
@@ -59,7 +59,7 @@ class JWSFilterSuite extends SparkFunSuite {
 
     val filter = new JWSFilter()
     val params = new JHashMap[String, String]
-    params.put("key", TEST_KEY)
+    params.put("secretKey", TEST_KEY)
     val conf = new DummyFilterConfig(params)
     filter.init(conf)
 
@@ -84,7 +84,7 @@ class JWSFilterSuite extends SparkFunSuite {
 
     val filter = new JWSFilter()
     val params = new JHashMap[String, String]
-    params.put("key", TEST_KEY)
+    params.put("secretKey", TEST_KEY)
     val conf = new DummyFilterConfig(params)
     filter.init(conf)
 

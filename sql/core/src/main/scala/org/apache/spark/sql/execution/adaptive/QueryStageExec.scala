@@ -194,7 +194,7 @@ case class ShuffleQueryStageExec(
 
   def advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
 
-  override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob
+  override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob()
 
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
@@ -240,7 +240,7 @@ case class BroadcastQueryStageExec(
       throw SparkException.internalError(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
-  override protected def doMaterialize(): Future[Any] = broadcast.submitBroadcastJob
+  override protected def doMaterialize(): Future[Any] = broadcast.submitBroadcastJob()
 
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {

@@ -94,22 +94,20 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
                 return
             }
         }
-        logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
-          log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-          log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
-          log"Server side listener added. Now blocking until " +
-          log"all client side listeners are removed or there is error transmitting the event back.")
-        // Block the handling thread, and have serverListener continuously send back new events
-        listenerHolder.streamingQueryListenerLatch.await()
         logInfo(
           log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
             log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
             log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
-            log"Server side listener long-running handling thread ended.")
+            log"Server side listener added.")
+
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {
           case true =>
             sessionHolder.streamingServersideListenerHolder.cleanUp()
+            logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+              log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
+              log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
+              log"Server side listener removed.")
           case false =>
             logWarning(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
               log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
@@ -121,11 +119,6 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
       case StreamingQueryListenerBusCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryListenerBusCommand")
     }
-    // If this thread is the handling thread of the original ADD_LISTENER_BUS_LISTENER command,
-    // this will be sent when the latch is counted down (either through
-    // a REMOVE_LISTENER_BUS_LISTENER command, or long-lived gRPC throws.
-    // If this thread is the handling thread of the REMOVE_LISTENER_BUS_LISTENER command,
-    // this is hit right away.
     executeHolder.eventsManager.postFinished()
   }
 }

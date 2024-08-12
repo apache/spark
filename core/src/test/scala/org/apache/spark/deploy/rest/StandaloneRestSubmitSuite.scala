@@ -20,6 +20,7 @@ package org.apache.spark.deploy.rest
 import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 
 import scala.collection.mutable
 
@@ -32,6 +33,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.internal.config.MASTER_REST_SERVER_FILTERS
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -479,6 +481,55 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val servlet = new StandaloneSubmitRequestServlet(null, null, null)
     val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
     assert(desc.command.javaOpts.exists(_.startsWith("--add-opens")))
+  }
+
+  test("SPARK-49103: `spark.master.rest.filters` loads filters successfully") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+
+    // Causes exceptions in order to verify new configuration loads filters successfully
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    val m = intercept[IllegalArgumentException] {
+      server.get.start()
+    }.getMessage()
+    assert(m.contains("Decode argument cannot be null"))
+  }
+
+  private val TEST_KEY = Base64.getUrlEncoder.encodeToString(
+    "Visit https://spark.apache.org to download Apache Spark.".getBytes())
+
+  test("SPARK-49103: REST server stars successfully with `spark.master.rest.filters`") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    server.get.start()
+  }
+
+  test("SPARK-49103: JWSFilter successfully protects REST API via configurations") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    val port = server.get.start()
+    val masterUrl = s"spark://$localhost:$port"
+    val json = constructSubmitRequest(masterUrl).toJson
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val submitRequestPath = s"$httpUrl/${RestSubmissionServer.PROTOCOL_VERSION}/submissions/create"
+    val conn = sendHttpRequest(submitRequestPath, "POST", json)
+    assert(conn.getResponseCode === HttpServletResponse.SC_FORBIDDEN)
   }
 
   /* --------------------- *

@@ -150,7 +150,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     val batches = (
-    Batch("Finish Analysis", Once, FinishAnalysis) ::
+    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis) ::
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
     Batch("Rewrite With expression", Once, RewriteWithExpression) ::
@@ -246,8 +246,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
-    Batch("InsertMapSortInGroupingExpressions", Once,
-      InsertMapSortInGroupingExpressions) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
@@ -297,6 +295,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
+      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
+      // so the grouping keys can only be attribute and literal which makes
+      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
+      InsertMapSortInGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,

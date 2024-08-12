@@ -32,10 +32,13 @@ import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Utility class for collation-aware UTF8String operations.
@@ -59,7 +62,7 @@ public class CollationAwareUTF8String {
    * @param startPos the start position for searching (in the target string)
    * @return whether the target string starts with the specified prefix in UTF8_LCASE
    */
-  public static boolean lowercaseMatchFrom(
+  private static boolean lowercaseMatchFrom(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int startPos) {
@@ -161,7 +164,7 @@ public class CollationAwareUTF8String {
    * @param endPos the end position for searching (in the target string)
    * @return whether the target string ends with the specified suffix in lowercase
    */
-  public static boolean lowercaseMatchUntil(
+  private static boolean lowercaseMatchUntil(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int endPos) {
@@ -620,6 +623,58 @@ public class CollationAwareUTF8String {
   }
 
   /**
+   * Checks whether the target string contains the pattern string, with respect to the UTF8_LCASE
+   * collation. This method generally works with respect to code-point based comparison logic.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @return whether the target string contains the pattern string
+   */
+  public static boolean lowercaseContains(final UTF8String target, final UTF8String pattern) {
+    // Fast path for ASCII-only strings.
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().contains(pattern.toLowerCase());
+    }
+    // Slow path for non-ASCII strings.
+    return CollationAwareUTF8String.lowercaseIndexOfSlow(target, pattern, 0) >= 0;
+  }
+
+  /**
+   * Checks whether the target string starts with the pattern string, with respect to the UTF8_LCASE
+   * collation. This method generally works with respect to code-point based comparison logic.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @return whether the target string starts with the pattern string
+   */
+  public static boolean lowercaseStartsWith(final UTF8String target, final UTF8String pattern) {
+    // Fast path for ASCII-only strings.
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().startsWith(pattern.toLowerCase());
+    }
+    // Slow path for non-ASCII strings.
+    return CollationAwareUTF8String.lowercaseMatchFrom(target, lowerCaseCodePointsSlow(pattern), 0);
+  }
+
+  /**
+   * Checks whether the target string ends with the pattern string, with respect to the UTF8_LCASE
+   * collation. This method generally works with respect to code-point based comparison logic.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @return whether the target string ends with the pattern string
+   */
+  public static boolean lowercaseEndsWith(final UTF8String target, final UTF8String pattern) {
+    // Fast path for ASCII-only strings.
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().endsWith(pattern.toLowerCase());
+    }
+    // Slow path for non-ASCII strings.
+    return CollationAwareUTF8String.lowercaseMatchUntil(target, lowerCaseCodePointsSlow(pattern),
+      target.numChars());
+  }
+
+  /**
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
    * UTF8String), with respect to the UTF8_LCASE collation. If the pattern is not found,
@@ -633,6 +688,14 @@ public class CollationAwareUTF8String {
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
     if (pattern.numChars() == 0) return target.indexOfEmpty(start);
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().indexOf(pattern.toLowerCase(), start);
+    }
+    return lowercaseIndexOfSlow(target, pattern, start);
+  }
+
+  private static int lowercaseIndexOfSlow(final UTF8String target, final UTF8String pattern,
+      final int start) {
     return lowercaseFind(target, lowerCaseCodePoints(pattern), start);
   }
 
@@ -647,7 +710,7 @@ public class CollationAwareUTF8String {
     return stringSearch.next();
   }
 
-  public static int find(UTF8String target, UTF8String pattern, int start,
+  private static int find(UTF8String target, UTF8String pattern, int start,
       int collationId) {
     assert (pattern.numBytes() > 0);
 
@@ -1164,6 +1227,60 @@ public class CollationAwareUTF8String {
 
     // Return the substring from the start of the string until that position.
     return UTF8String.fromString(src.substring(0, charIndex));
+  }
+
+  public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
+      final int limit, final int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return input.split(delim, limit);
+    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+      return lowercaseSplitSQL(input, delim, limit);
+    } else {
+      return icuSplitSQL(input, delim, limit, collationId);
+    }
+  }
+
+  public static UTF8String[] lowercaseSplitSQL(final UTF8String string, final UTF8String delimiter,
+      final int limit) {
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
+        CollationSupport.lowercaseRegexFlags);
+      String[] splits = pattern.split(string.toString(), limit);
+      UTF8String[] res = new UTF8String[splits.length];
+      for (int i = 0; i < res.length; i++) {
+        res[i] = UTF8String.fromString(splits[i]);
+      }
+      return res;
+  }
+
+  public static UTF8String[] icuSplitSQL(final UTF8String string, final UTF8String delimiter,
+      final int limit, final int collationId) {
+    if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+    if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+    List<UTF8String> strings = new ArrayList<>();
+    String target = string.toString(), pattern = delimiter.toString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+    int start = 0, end;
+    while ((end = stringSearch.next()) != StringSearch.DONE) {
+      if (limit > 0 && strings.size() == limit - 1) {
+        break;
+      }
+      strings.add(UTF8String.fromString(target.substring(start, end)));
+      start = end + stringSearch.getMatchLength();
+    }
+    if (start <= target.length()) {
+      strings.add(UTF8String.fromString(target.substring(start)));
+    }
+    if (limit == 0) {
+      // Remove trailing empty strings
+      int i = strings.size() - 1;
+      while (i >= 0 && strings.get(i).numBytes() == 0) {
+        strings.remove(i);
+        i--;
+      }
+    }
+    return strings.toArray(new UTF8String[0]);
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
