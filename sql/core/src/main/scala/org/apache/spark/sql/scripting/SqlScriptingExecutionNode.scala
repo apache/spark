@@ -67,7 +67,6 @@ trait LeafStatementExec extends CompoundStatementExec {
   override def reset(): Unit = {
     raisedError = false
     errorState = None
-    error = None
     rethrow = None
   }
 }
