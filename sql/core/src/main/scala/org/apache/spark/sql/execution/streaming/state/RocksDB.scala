@@ -161,6 +161,7 @@ class RocksDB(
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
+  @volatile private var colFamilyIdsChanged = false
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
@@ -219,6 +220,7 @@ class RocksDB(
             metadata.numKeys
           }
         loadedMapping = metadata.columnFamilyMapping
+        updateColumnFamilyMapping(loadedMapping)
 
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
@@ -249,8 +251,19 @@ class RocksDB(
 
   def updateColumnFamilyMapping(mapping: Option[Map[String, Short]]): Unit = {
     mapping.foreach { map =>
-      colFamilyNameToIdMap.clear()
-      colFamilyNameToIdMap.putAll(map.asJava)
+      // Check if map and colFamilyNameToIdMap are the same
+      // if so, we don't need to force a snapshot and put a map.
+      if (map.size == colFamilyNameToIdMap.size() &&
+        map.forall { case (key, value) =>
+          colFamilyNameToIdMap.containsKey(key) && colFamilyNameToIdMap.get(key) == value
+        }) {
+        // Maps are the same, no need to update
+      } else {
+        // Maps are different, update colFamilyNameToIdMap
+        colFamilyNameToIdMap.clear()  // Clear existing entries
+        colFamilyNameToIdMap.putAll(map.asJava)
+        colFamilyIdsChanged = true
+      }
     }
   }
 
@@ -604,7 +617,7 @@ class RocksDB(
   }
 
   private def shouldCreateSnapshot(): Boolean = {
-    if (enableChangelogCheckpointing) {
+    if (enableChangelogCheckpointing && !colFamilyIdsChanged) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
       newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot
