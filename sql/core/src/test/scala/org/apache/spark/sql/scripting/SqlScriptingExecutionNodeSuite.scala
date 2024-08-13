@@ -268,10 +268,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("while - doesn't enter body") {
-    val iter = new CompoundBodyExec(Seq(
+    val iter = TestBody(Seq(
       TestWhile(
         condition = TestWhileCondition(condVal = true, reps = 0, description = "con1"),
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+        body = TestBody(Seq(TestLeafStatement("body1")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -279,10 +279,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("while - enters body once") {
-    val iter = new CompoundBodyExec(Seq(
+    val iter = TestBody(Seq(
       TestWhile(
         condition = TestWhileCondition(condVal = true, reps = 1, description = "con1"),
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+        body = TestBody(Seq(TestLeafStatement("body1")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -290,10 +290,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("while - enters body with multiple statements multiple times") {
-    val iter = new CompoundBodyExec(Seq(
+    val iter = TestBody(Seq(
       TestWhile(
         condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
-        body = new CompoundBodyExec(Seq(
+        body = TestBody(Seq(
           TestLeafStatement("statement1"),
           TestLeafStatement("statement2")))
       )
@@ -304,13 +304,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("nested while - 2 times outer 2 times inner") {
-    val iter = new CompoundBodyExec(Seq(
+    val iter = TestBody(Seq(
       TestWhile(
         condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
-        body = new CompoundBodyExec(Seq(
+        body = TestBody(Seq(
           TestWhile(
             condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
-            body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+            body = TestBody(Seq(TestLeafStatement("body1")))
           ))
         )
       )

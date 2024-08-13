@@ -103,7 +103,7 @@ declareCondition
     ;
 
 declareHandler
-    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValueList (BEGIN compoundBody END | statement)
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValueList (BEGIN compoundBody END | statement | setStatementWithOptionalVarKeyword)
     ;
 
 beginLabel

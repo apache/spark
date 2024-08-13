@@ -696,14 +696,14 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq(Row(0)), // select i
-      Seq.empty[Row], // set i
-      Seq(Row(1)), // select i
-      Seq.empty[Row], // set i
-      Seq(Row(2)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop var
+      Array.empty[Row], // declare i
+      Array(Row(0)), // select i
+      Array.empty[Row], // set i
+      Array(Row(1)), // select i
+      Array.empty[Row], // set i
+      Array(Row(2)), // select i
+      Array.empty[Row], // set i
+      Array.empty[Row] // drop var
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -721,8 +721,8 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row] // drop i
+      Array.empty[Row], // declare i
+      Array.empty[Row] // drop i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -745,22 +745,22 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row], // declare j
-      Seq.empty[Row], // set j to 0
-      Seq(Row(0, 0)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq(Row(0, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // set j to 0
-      Seq(Row(1, 0)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq(Row(1, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // drop j
-      Seq.empty[Row] // drop i
+      Array.empty[Row], // declare i
+      Array.empty[Row], // declare j
+      Array.empty[Row], // set j to 0
+      Array(Row(0, 0)), // select i, j
+      Array.empty[Row], // increase j
+      Array(Row(0, 1)), // select i, j
+      Array.empty[Row], // increase j
+      Array.empty[Row], // increase i
+      Array.empty[Row], // set j to 0
+      Array(Row(1, 0)), // select i, j
+      Array.empty[Row], // increase j
+      Array(Row(1, 1)), // select i, j
+      Array.empty[Row], // increase j
+      Array.empty[Row], // increase i
+      Array.empty[Row], // drop j
+      Array.empty[Row] // drop i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -779,11 +779,11 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // create table
-        Seq(Row(42)), // select
-        Seq.empty[Row], // insert
-        Seq(Row(42)), // select
-        Seq.empty[Row] // insert
+        Array.empty[Row], // create table
+        Array(Row(42)), // select
+        Array.empty[Row], // insert
+        Array(Row(42)), // select
+        Array.empty[Row] // insert
       )
       verifySqlScriptResult(commands, expected)
     }
