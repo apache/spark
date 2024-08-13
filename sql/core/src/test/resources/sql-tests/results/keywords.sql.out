@@ -58,7 +58,7 @@ COMPACTIONS	false
 COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
-CONDITION	false
+CONDITION	true
 CONSTRAINT	false
 CONTAINS	false
 CONTINUE	false
@@ -372,4 +372,4 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-
+CONDITION

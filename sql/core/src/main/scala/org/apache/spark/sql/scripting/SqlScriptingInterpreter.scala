@@ -59,7 +59,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
     }
 
   /**
-   * Fetch the name of the Create Variable plan.
+   * Transform [[CompoundBody]] into [[CompoundBodyExec]].
    * @param compoundBody
    *   CompoundBody to be transformed into CompoundBodyExec.
    * @param isExitHandler

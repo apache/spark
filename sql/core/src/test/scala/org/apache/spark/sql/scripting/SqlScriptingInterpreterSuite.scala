@@ -702,8 +702,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array(Row(1)), // select i
       Array.empty[Row], // set i
       Array(Row(2)), // select i
-      Array.empty[Row], // set i
-      Array.empty[Row] // drop var
+      Array.empty[Row] // set i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -721,8 +720,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
         |""".stripMargin
 
     val expected = Seq(
-      Array.empty[Row], // declare i
-      Array.empty[Row] // drop i
+      Array.empty[Row] // declare i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -758,9 +756,7 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
       Array.empty[Row], // increase j
       Array(Row(1, 1)), // select i, j
       Array.empty[Row], // increase j
-      Array.empty[Row], // increase i
-      Array.empty[Row], // drop j
-      Array.empty[Row] // drop i
+      Array.empty[Row] // increase i
     )
     verifySqlScriptResult(commands, expected)
   }

@@ -1521,7 +1521,6 @@ ansiNonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
-    | CONDITION
     | CONTAINS
     | CONTINUE
     | COST
@@ -1853,7 +1852,6 @@ nonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
-    | CONDITION
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
