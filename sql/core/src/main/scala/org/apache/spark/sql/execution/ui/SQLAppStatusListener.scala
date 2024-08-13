@@ -181,7 +181,7 @@ class SQLAppStatusListener(
       event.taskMetrics.withExternalAccums(_.flatMap { a =>
         // This call may fail if the accumulator is gc'ed, so account for that.
         try {
-          Some(a.toInfo(Some(a.value), None))
+          Some(a.toInfoUpdate)
         } catch {
           case _: IllegalAccessError => None
         }
