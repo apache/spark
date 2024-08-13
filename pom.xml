@@ -599,6 +599,10 @@
             <artifactId>FastInfoset</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>txw2</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jvnet.staxex</groupId>
             <artifactId>stax-ex</artifactId>
           </exclusion>
