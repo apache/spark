@@ -547,7 +547,7 @@ case class EnsureRequirements(
   private def createKeyGroupedShuffleSpec(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Option[KeyGroupedShuffleSpec] = {
-    def tryCreate(partitioning: KeyGroupedPartitioning): Option[KeyGroupedShuffleSpec] = {
+    def check(partitioning: KeyGroupedPartitioning): Option[KeyGroupedShuffleSpec] = {
       val attributes = partitioning.expressions.flatMap(_.collectLeaves())
       val clustering = distribution.clustering
 
@@ -567,10 +567,11 @@ case class EnsureRequirements(
     }
 
     partitioning match {
-      case p: KeyGroupedPartitioning => tryCreate(p)
+      case p: KeyGroupedPartitioning => check(p)
       case PartitioningCollection(partitionings) =>
         val specs = partitionings.map(p => createKeyGroupedShuffleSpec(p, distribution))
-        specs.filter(_.isDefined).map(_.get).headOption
+        assert(specs.forall(_.isEmpty) || specs.forall(_.isDefined))
+        specs.head
       case _ => None
     }
   }
