@@ -41,7 +41,6 @@ trait DatasourceV2SQLBase
     registerCatalog("testpart", classOf[InMemoryPartitionTableCatalog])
     registerCatalog("testcat_atomic", classOf[StagingInMemoryTableCatalog])
     registerCatalog("testcat2", classOf[InMemoryCatalog])
-    registerCatalog("testcat3", classOf[V2CatalogSupportBuiltinDataSource])
 
     registerCatalog(SESSION_CATALOG_NAME, classOf[InMemoryTableSessionCatalog])
 

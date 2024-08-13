@@ -50,7 +50,6 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -3631,10 +3630,14 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("SPARK-49211: V2 Catalog can also support built-in data sources") {
     val fullTablename = "testcat3.default.t"
-    withTable(fullTablename) {
-      sql(
-        "CREATE TABLE " + fullTablename + " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
-      sql("select * from " + fullTablename)
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTable(fullTablename) {
+        sql(
+          "CREATE TABLE " + fullTablename +
+            " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
+        sql("select * from " + fullTablename)
+      }
     }
     val fullTablename2 = "spark_catalog.default.t"
     withSQLConf(
@@ -3684,7 +3687,7 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 }
 
 
-class V2CatalogSupportBuiltinDataSource extends DelegatingCatalogExtension {
+class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
   override def name: String = "testcat3"
 
   override def createTable(
@@ -3697,13 +3700,6 @@ class V2CatalogSupportBuiltinDataSource extends DelegatingCatalogExtension {
     newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
     newProps.put(TableCatalog.PROP_EXTERNAL, "true")
     super.createTable(ident, columns, partitions, newProps)
-  }
-
-  val delegateCatalog = {
-    val catalog = new InMemoryCatalog()
-    catalog.initialize(name, CaseInsensitiveStringMap.empty())
-    super.setDelegateCatalog(catalog)
-    catalog
   }
 
   override def loadTable(ident: Identifier): Table = {
@@ -3723,11 +3719,7 @@ class V2CatalogSupportBuiltinDataSource extends DelegatingCatalogExtension {
       provider = Some(superTable.properties().get(TableCatalog.PROP_PROVIDER)),
       tracksPartitionsInCatalog = false
     )
-    // scalastyle:off classforname
-    Class.forName("org.apache.spark.sql.connector.catalog.V1Table")
-      .getDeclaredConstructor(classOf[CatalogTable]).newInstance(sparkTable)
-      .asInstanceOf[Table]
-    // scalastyle:on classforname
+    V1Table(sparkTable)
   }
 }
 
