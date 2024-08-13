@@ -388,12 +388,6 @@
     ],
     "sqlState" : "58030"
   },
-  "CANNOT_SAVE_VARIANT" : {
-    "message" : [
-      "Cannot save variant data type into external storage."
-    ],
-    "sqlState" : "0A000"
-  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
