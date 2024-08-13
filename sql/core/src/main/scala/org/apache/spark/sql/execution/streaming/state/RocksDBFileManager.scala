@@ -883,6 +883,10 @@ object RocksDBFileManagerMetrics {
   val EMPTY_METRICS = RocksDBFileManagerMetrics(0L, 0L, 0L, None)
 }
 
+/**
+ * Classes to represent metadata of checkpoints saved to DFS. Since this is converted to JSON, any
+ * changes to this MUST be backward-compatible.
+ */
 case class RocksDBCheckpointMetadata(
     sstFiles: Seq[RocksDBSstFile],
     logFiles: Seq[RocksDBLogFile],
@@ -911,11 +915,14 @@ case class RocksDBCheckpointMetadata(
   def immutableFiles: Seq[RocksDBImmutableFile] = sstFiles ++ logFiles
 }
 
+
+/** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = 2
+  val VERSION = 1
 
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 
+  /** Used to convert between classes and JSON. */
   lazy val mapper = {
     val _mapper = new ObjectMapper with ClassTagExtensions
     _mapper.setSerializationInclusion(Include.NON_ABSENT)
@@ -928,7 +935,7 @@ object RocksDBCheckpointMetadata {
     val reader = Files.newBufferedReader(metadataFile.toPath, UTF_8)
     try {
       val versionLine = reader.readLine()
-      if (versionLine != s"v$VERSION" && versionLine != "v1") {
+      if (versionLine != "v1") {
         throw QueryExecutionErrors.cannotReadCheckpoint(versionLine, s"v$VERSION or v1")
       }
       Serialization.read[RocksDBCheckpointMetadata](reader)
