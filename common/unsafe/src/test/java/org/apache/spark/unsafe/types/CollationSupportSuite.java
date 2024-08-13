@@ -567,12 +567,17 @@ public class CollationSupportSuite {
     assertEndsWith("the İo", "İo", "UTF8_LCASE", true);
   }
 
+  /**
+   * Verify the behaviour of the `StringSplitSQL` collation support class.
+   */
+
   private void assertStringSplitSQL(String str, String delimiter, String collationName,
       UTF8String[] expected) throws SparkException {
     UTF8String s = UTF8String.fromString(str);
     UTF8String d = UTF8String.fromString(delimiter);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertArrayEquals(expected, CollationSupport.StringSplitSQL.exec(s, d, collationId));
+    UTF8String[] result = CollationSupport.StringSplitSQL.exec(s, d, collationId);
+    assertArrayEquals(expected, result);
   }
 
   @Test
@@ -590,7 +595,21 @@ public class CollationSupportSuite {
     var array_A_B = new UTF8String[] { UTF8String.fromString("A"), UTF8String.fromString("B") };
     var array_a_e = new UTF8String[] { UTF8String.fromString("ä"), UTF8String.fromString("e") };
     var array_Aa_bB = new UTF8String[] { UTF8String.fromString("Aa"), UTF8String.fromString("bB") };
-    // Edge cases
+    var array_Turkish_uppercase_dotted_I = new UTF8String[] { UTF8String.fromString("İ") };
+    var array_Turkish_lowercase_dotted_i = new UTF8String[] { UTF8String.fromString("i\u0307") };
+    var array_i = new UTF8String[] { UTF8String.fromString("i"), UTF8String.fromString("") };
+    var array_dot = new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("\u0307") };
+    var array_AiB = new UTF8String[] { UTF8String.fromString("Ai\u0307B") };
+    var array_AIB = new UTF8String[] { UTF8String.fromString("AİB") };
+    var array_small_nonfinal_sigma = new UTF8String[] { UTF8String.fromString("σ") };
+    var array_small_final_sigma = new UTF8String[] { UTF8String.fromString("ς") };
+    var array_capital_sigma = new UTF8String[] { UTF8String.fromString("Σ") };
+    var array_a_b_c = new UTF8String[] { UTF8String.fromString("a"), UTF8String.fromString("b"),
+      UTF8String.fromString("c") };
+    var array_emojis = new UTF8String[] { UTF8String.fromString("😀"), UTF8String.fromString("😄") };
+    var array_AOB = new UTF8String[] { UTF8String.fromString("A𐐅B") };
+    var array_AoB = new UTF8String[] { UTF8String.fromString("A𐐭B") };
+    // Empty strings.
     assertStringSplitSQL("", "", "UTF8_BINARY", empty_match);
     assertStringSplitSQL("abc", "", "UTF8_BINARY", array_abc);
     assertStringSplitSQL("", "abc", "UTF8_BINARY", empty_match);
@@ -603,7 +622,7 @@ public class CollationSupportSuite {
     assertStringSplitSQL("", "", "UNICODE_CI", empty_match);
     assertStringSplitSQL("abc", "", "UNICODE_CI", array_abc);
     assertStringSplitSQL("", "abc", "UNICODE_CI", empty_match);
-    // Basic tests
+    // Basic tests.
     assertStringSplitSQL("1a2", "a", "UTF8_BINARY", array_1_2);
     assertStringSplitSQL("1a2", "A", "UTF8_BINARY", array_1a2);
     assertStringSplitSQL("1a2", "b", "UTF8_BINARY", array_1a2);
@@ -617,25 +636,7 @@ public class CollationSupportSuite {
     assertStringSplitSQL("1a2", "A", "UNICODE_CI", array_1_2);
     assertStringSplitSQL("1a2", "1A2", "UNICODE_CI", full_match);
     assertStringSplitSQL("1a2", "123", "UNICODE_CI", array_1a2);
-    // Case variation
-    assertStringSplitSQL("AaXbB", "x", "UTF8_BINARY", array_AaXbB);
-    assertStringSplitSQL("AaXbB", "X", "UTF8_BINARY", array_Aa_bB);
-    assertStringSplitSQL("AaXbB", "axb", "UNICODE", array_AaXbB);
-    assertStringSplitSQL("AaXbB", "aXb", "UNICODE", array_A_B);
-    assertStringSplitSQL("AaXbB", "axb", "UTF8_LCASE", array_A_B);
-    assertStringSplitSQL("AaXbB", "AXB", "UTF8_LCASE", array_A_B);
-    assertStringSplitSQL("AaXbB", "axb", "UNICODE_CI", array_A_B);
-    assertStringSplitSQL("AaXbB", "AxB", "UNICODE_CI", array_A_B);
-    // Accent variation
-    assertStringSplitSQL("aBcDe", "bćd", "UTF8_BINARY", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "BćD", "UTF8_BINARY", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "abćde", "UNICODE", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "aBćDe", "UNICODE", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "bćd", "UTF8_LCASE", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "BĆD", "UTF8_LCASE", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "abćde", "UNICODE_CI", array_aBcDe);
-    assertStringSplitSQL("aBcDe", "AbĆdE", "UNICODE_CI", array_aBcDe);
-    // Variable byte length characters
+    // Advanced tests.
     assertStringSplitSQL("äb世De", "b世D", "UTF8_BINARY", array_a_e);
     assertStringSplitSQL("äb世De", "B世d", "UTF8_BINARY", array_special);
     assertStringSplitSQL("äbćδe", "bćδ", "UTF8_BINARY", array_a_e);
@@ -652,6 +653,115 @@ public class CollationSupportSuite {
     assertStringSplitSQL("äb世De", "AB世dE", "UNICODE_CI", array_special);
     assertStringSplitSQL("äbćδe", "ÄbćδE", "UNICODE_CI", full_match);
     assertStringSplitSQL("äbćδe", "ÄBcΔÉ", "UNICODE_CI", array_abcde);
+    // Case variation.
+    assertStringSplitSQL("AaXbB", "x", "UTF8_BINARY", array_AaXbB);
+    assertStringSplitSQL("AaXbB", "X", "UTF8_BINARY", array_Aa_bB);
+    assertStringSplitSQL("AaXbB", "axb", "UNICODE", array_AaXbB);
+    assertStringSplitSQL("AaXbB", "aXb", "UNICODE", array_A_B);
+    assertStringSplitSQL("AaXbB", "axb", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("AaXbB", "AXB", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("AaXbB", "axb", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("AaXbB", "AxB", "UNICODE_CI", array_A_B);
+    // Accent variation.
+    assertStringSplitSQL("aBcDe", "bćd", "UTF8_BINARY", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "BćD", "UTF8_BINARY", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "abćde", "UNICODE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "aBćDe", "UNICODE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "bćd", "UTF8_LCASE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "BĆD", "UTF8_LCASE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "abćde", "UNICODE_CI", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "AbĆdE", "UNICODE_CI", array_aBcDe);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringSplitSQL("İ", "i", "UTF8_BINARY", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "i", "UTF8_LCASE", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "i", "UNICODE", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "i", "UNICODE_CI", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "\u0307", "UTF8_BINARY", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "\u0307", "UTF8_LCASE", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "\u0307", "UNICODE", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("İ", "\u0307", "UNICODE_CI", array_Turkish_uppercase_dotted_I);
+    assertStringSplitSQL("i\u0307", "i", "UTF8_BINARY", array_dot);
+    assertStringSplitSQL("i\u0307", "i", "UTF8_LCASE", array_dot);
+    assertStringSplitSQL("i\u0307", "i", "UNICODE", array_Turkish_lowercase_dotted_i);
+    assertStringSplitSQL("i\u0307", "i", "UNICODE_CI", array_Turkish_lowercase_dotted_i);
+    assertStringSplitSQL("i\u0307", "\u0307", "UTF8_BINARY", array_i);
+    assertStringSplitSQL("i\u0307", "\u0307", "UTF8_LCASE", array_i);
+    assertStringSplitSQL("i\u0307", "\u0307", "UNICODE", array_Turkish_lowercase_dotted_i);
+    assertStringSplitSQL("i\u0307", "\u0307", "UNICODE_CI", array_Turkish_lowercase_dotted_i);
+    assertStringSplitSQL("AİB", "İ", "UTF8_BINARY", array_A_B);
+    assertStringSplitSQL("AİB", "İ", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("AİB", "İ", "UNICODE", array_A_B);
+    assertStringSplitSQL("AİB", "İ", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("AİB", "i\u0307", "UTF8_BINARY", array_AIB);
+    assertStringSplitSQL("AİB", "i\u0307", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("AİB", "i\u0307", "UNICODE", array_AIB);
+    assertStringSplitSQL("AİB", "i\u0307", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("Ai\u0307B", "İ", "UTF8_BINARY", array_AiB);
+    assertStringSplitSQL("Ai\u0307B", "İ", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("Ai\u0307B", "İ", "UNICODE", array_AiB);
+    assertStringSplitSQL("Ai\u0307B", "İ", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("Ai\u0307B", "i\u0307", "UTF8_BINARY", array_A_B);
+    assertStringSplitSQL("Ai\u0307B", "i\u0307", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("Ai\u0307B", "i\u0307", "UNICODE", array_A_B);
+    assertStringSplitSQL("Ai\u0307B", "i\u0307", "UNICODE_CI", array_A_B);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStringSplitSQL("σ", "σ", "UTF8_BINARY", full_match);
+    assertStringSplitSQL("σ", "σ", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("σ", "σ", "UNICODE", full_match);
+    assertStringSplitSQL("σ", "σ", "UNICODE_CI", full_match);
+    assertStringSplitSQL("σ", "ς", "UTF8_BINARY", array_small_nonfinal_sigma);
+    assertStringSplitSQL("σ", "ς", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("σ", "ς", "UNICODE", array_small_nonfinal_sigma);
+    assertStringSplitSQL("σ", "ς", "UNICODE_CI", full_match);
+    assertStringSplitSQL("σ", "Σ", "UTF8_BINARY", array_small_nonfinal_sigma);
+    assertStringSplitSQL("σ", "Σ", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("σ", "Σ", "UNICODE", array_small_nonfinal_sigma);
+    assertStringSplitSQL("σ", "Σ", "UNICODE_CI", full_match);
+    assertStringSplitSQL("ς", "σ", "UTF8_BINARY", array_small_final_sigma);
+    assertStringSplitSQL("ς", "σ", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("ς", "σ", "UNICODE", array_small_final_sigma);
+    assertStringSplitSQL("ς", "σ", "UNICODE_CI", full_match);
+    assertStringSplitSQL("ς", "ς", "UTF8_BINARY", full_match);
+    assertStringSplitSQL("ς", "ς", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("ς", "ς", "UNICODE", full_match);
+    assertStringSplitSQL("ς", "ς", "UNICODE_CI", full_match);
+    assertStringSplitSQL("ς", "Σ", "UTF8_BINARY", array_small_final_sigma);
+    assertStringSplitSQL("ς", "Σ", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("ς", "Σ", "UNICODE", array_small_final_sigma);
+    assertStringSplitSQL("ς", "Σ", "UNICODE_CI", full_match);
+    assertStringSplitSQL("Σ", "σ", "UTF8_BINARY", array_capital_sigma);
+    assertStringSplitSQL("Σ", "σ", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("Σ", "σ", "UNICODE", array_capital_sigma);
+    assertStringSplitSQL("Σ", "σ", "UNICODE_CI", full_match);
+    assertStringSplitSQL("Σ", "ς", "UTF8_BINARY", array_capital_sigma);
+    assertStringSplitSQL("Σ", "ς", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("Σ", "ς", "UNICODE", array_capital_sigma);
+    assertStringSplitSQL("Σ", "ς", "UNICODE_CI", full_match);
+    assertStringSplitSQL("Σ", "Σ", "UTF8_BINARY", full_match);
+    assertStringSplitSQL("Σ", "Σ", "UTF8_LCASE", full_match);
+    assertStringSplitSQL("Σ", "Σ", "UNICODE", full_match);
+    assertStringSplitSQL("Σ", "Σ", "UNICODE_CI", full_match);
+    // Surrogate pairs.
+    assertStringSplitSQL("a🙃b🙃c", "🙃", "UTF8_BINARY", array_a_b_c);
+    assertStringSplitSQL("a🙃b🙃c", "🙃", "UTF8_LCASE", array_a_b_c);
+    assertStringSplitSQL("a🙃b🙃c", "🙃", "UNICODE", array_a_b_c);
+    assertStringSplitSQL("a🙃b🙃c", "🙃", "UNICODE_CI", array_a_b_c);
+    assertStringSplitSQL("😀😆😃😄", "😆😃", "UTF8_BINARY", array_emojis);
+    assertStringSplitSQL("😀😆😃😄", "😆😃", "UTF8_LCASE", array_emojis);
+    assertStringSplitSQL("😀😆😃😄", "😆😃", "UNICODE", array_emojis);
+    assertStringSplitSQL("😀😆😃😄", "😆😃", "UNICODE_CI", array_emojis);
+    assertStringSplitSQL("A𐐅B", "𐐅", "UTF8_BINARY", array_A_B);
+    assertStringSplitSQL("A𐐅B", "𐐅", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("A𐐅B", "𐐅", "UNICODE", array_A_B);
+    assertStringSplitSQL("A𐐅B", "𐐅", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("A𐐅B", "𐐭", "UTF8_BINARY", array_AOB);
+    assertStringSplitSQL("A𐐅B", "𐐭", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("A𐐅B", "𐐭", "UNICODE", array_AOB);
+    assertStringSplitSQL("A𐐅B", "𐐭", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("A𐐭B", "𐐅", "UTF8_BINARY", array_AoB);
+    assertStringSplitSQL("A𐐭B", "𐐅", "UTF8_LCASE", array_A_B);
+    assertStringSplitSQL("A𐐭B", "𐐅", "UNICODE", array_AoB);
+    assertStringSplitSQL("A𐐭B", "𐐅", "UNICODE_CI", array_A_B);
   }
 
   private void assertUpper(String target, String collationName, String expected)
