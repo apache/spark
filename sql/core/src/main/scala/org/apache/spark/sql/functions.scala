@@ -25,9 +25,9 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction, UserDefinedFunctionUtils}
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -427,7 +427,7 @@ object functions {
    * @since 1.3.0
    */
   def count(columnName: String): TypedColumn[Any, Long] =
-    count(Column(columnName)).as(ExpressionEncoder[Long]())
+    count(Column(columnName)).as(AgnosticEncoders.PrimitiveLongEncoder)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -7895,7 +7895,7 @@ object functions {
       | * @since 1.3.0
       | */
       |def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
-      |  UserDefinedFunctionUtils.toUDF(f, $implicitTypeTags)
+      |  SparkUserDefinedFunction(f, $implicitTypeTags)
       |}""".stripMargin)
   }
 
@@ -7917,7 +7917,7 @@ object functions {
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
       |  val func = $funcCall
-      |  UserDefinedFunctionUtils.toUDF(func, returnType, $i)
+      |  SparkUserDefinedFunction(func, returnType, $i)
       |}""".stripMargin)
   }
 
@@ -7953,7 +7953,7 @@ object functions {
    * @note The input encoder is inferred from the input type IN.
    */
   def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
-    udaf(agg, ExpressionEncoder[IN]())
+    udaf(agg, ScalaReflection.encoderFor[IN])
   }
 
   /**
@@ -8000,7 +8000,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]])
   }
 
   /**
@@ -8013,7 +8013,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]])
   }
 
   /**
@@ -8026,7 +8026,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]])
   }
 
   /**
@@ -8039,7 +8039,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]])
   }
 
   /**
@@ -8052,7 +8052,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]])
   }
 
   /**
@@ -8065,7 +8065,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]])
   }
 
   /**
@@ -8078,7 +8078,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]])
   }
 
   /**
@@ -8091,7 +8091,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]])
   }
 
   /**
@@ -8104,7 +8104,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]])
   }
 
   /**
@@ -8117,7 +8117,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]])
   }
 
   /**
@@ -8130,7 +8130,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
-    UserDefinedFunctionUtils.toUDF(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]])
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]])
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -8148,7 +8148,7 @@ object functions {
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
     val func = () => f.asInstanceOf[UDF0[Any]].call()
-    UserDefinedFunctionUtils.toUDF(func, returnType, 0)
+    SparkUserDefinedFunction(func, returnType, 0)
   }
 
   /**
@@ -8162,7 +8162,7 @@ object functions {
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 1)
+    SparkUserDefinedFunction(func, returnType, 1)
   }
 
   /**
@@ -8176,7 +8176,7 @@ object functions {
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 2)
+    SparkUserDefinedFunction(func, returnType, 2)
   }
 
   /**
@@ -8190,7 +8190,7 @@ object functions {
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 3)
+    SparkUserDefinedFunction(func, returnType, 3)
   }
 
   /**
@@ -8204,7 +8204,7 @@ object functions {
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 4)
+    SparkUserDefinedFunction(func, returnType, 4)
   }
 
   /**
@@ -8218,7 +8218,7 @@ object functions {
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 5)
+    SparkUserDefinedFunction(func, returnType, 5)
   }
 
   /**
@@ -8232,7 +8232,7 @@ object functions {
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 6)
+    SparkUserDefinedFunction(func, returnType, 6)
   }
 
   /**
@@ -8246,7 +8246,7 @@ object functions {
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 7)
+    SparkUserDefinedFunction(func, returnType, 7)
   }
 
   /**
@@ -8260,7 +8260,7 @@ object functions {
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 8)
+    SparkUserDefinedFunction(func, returnType, 8)
   }
 
   /**
@@ -8274,7 +8274,7 @@ object functions {
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 9)
+    SparkUserDefinedFunction(func, returnType, 9)
   }
 
   /**
@@ -8288,7 +8288,7 @@ object functions {
    */
   def udf(f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunctionUtils.toUDF(func, returnType, 10)
+    SparkUserDefinedFunction(func, returnType, 10)
   }
 
   // scalastyle:on parameter.number

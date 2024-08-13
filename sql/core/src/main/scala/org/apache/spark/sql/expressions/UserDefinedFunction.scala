@@ -23,9 +23,8 @@ import scala.util.Try
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoders}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 import org.apache.spark.sql.types.DataType
 
@@ -125,6 +124,35 @@ private[spark] case class SparkUserDefinedFunction(
   override def name: String = givenName.getOrElse("UDF")
 }
 
+object SparkUserDefinedFunction {
+  private[sql] def apply(
+      function: AnyRef,
+      returnTypeTag: TypeTag[_],
+      inputTypeTags: TypeTag[_]*): SparkUserDefinedFunction = {
+    val outputEncoder = ScalaReflection.encoderFor(returnTypeTag)
+    val inputEncoders = inputTypeTags.map { tag =>
+      Try(ScalaReflection.encoderFor(tag)).toOption
+    }
+    SparkUserDefinedFunction(
+      f = function,
+      inputEncoders = inputEncoders,
+      dataType = outputEncoder.dataType,
+      outputEncoder = Option(outputEncoder),
+      nullable = outputEncoder.nullable)
+  }
+
+  private[sql] def apply(
+      function: AnyRef,
+      returnType: DataType,
+      cardinality: Int): SparkUserDefinedFunction = {
+    SparkUserDefinedFunction(
+      function,
+      returnType,
+      inputEncoders = Seq.fill(cardinality)(None),
+      None)
+  }
+}
+
 private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
     inputEncoder: Encoder[IN],
@@ -156,33 +184,6 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
 }
 
 private[sql] object UserDefinedFunctionUtils {
-  private[sql] def toUDF(
-      function: AnyRef,
-      returnTypeTag: TypeTag[_],
-      inputTypeTags: TypeTag[_]*): SparkUserDefinedFunction = {
-    val outputEncoder = ScalaReflection.encoderFor(returnTypeTag)
-    val inputEncoders = inputTypeTags.map { tag =>
-      Try(ScalaReflection.encoderFor(tag)).toOption
-    }
-    SparkUserDefinedFunction(
-      f = function,
-      inputEncoders = inputEncoders,
-      dataType = outputEncoder.dataType,
-      outputEncoder = Option(outputEncoder),
-      nullable = outputEncoder.nullable)
-  }
-
-  private[sql] def toUDF(
-      function: AnyRef,
-      returnType: DataType,
-      cardinality: Int): SparkUserDefinedFunction = {
-    SparkUserDefinedFunction(
-      function,
-      CharVarcharUtils.failIfHasCharVarchar(returnType),
-      inputEncoders = Seq.fill(cardinality)(None),
-      None)
-  }
-
   /**
    * Create a [[ScalaUDF]].
    *
@@ -194,7 +195,10 @@ private[sql] object UserDefinedFunctionUtils {
       udf.f,
       udf.dataType,
       children,
-      udf.inputEncoders.map(_.map(encoderFor(_))),
+      udf.inputEncoders.map(_.collect {
+        // At some point it would be nice if were to support this.
+        case e if e != AgnosticEncoders.UnboundRowEncoder => encoderFor(e)
+      }),
       udf.outputEncoder.map(encoderFor(_)),
       udfName = udf.givenName,
       nullable = udf.nullable,
