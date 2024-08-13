@@ -1579,7 +1579,7 @@ object CopyDependencies {
         } else {
           Def.task {}
         }
-      }.value
+      }.dependsOn(LocalProject("connect-client-jvm") / assembly).value
     },
     (Compile / packageBin / crossTarget) := destPath.value,
     (Compile / packageBin) := (Compile / packageBin).dependsOn(copyDeps).value
