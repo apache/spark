@@ -1549,30 +1549,37 @@ object CopyDependencies {
 
       // Here we get the full classpathes required for Spark Connect client including
       // ammonite, and exclude all spark-* jars. After that, we add the shaded Spark
-      // Connect cleint assembly manually.
-      if (moduleName.value.contains("assembly")) {
-        val replClasspathes = (LocalProject("connect-client-jvm") / Compile / dependencyClasspath)
-          .value.map(_.data).filter(_.isFile())
-        val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
-          "scala.binary.version").asInstanceOf[String]
-        val sparkVer = SbtPomKeys.effectivePom.value.getProperties.get(
-          "spark.version").asInstanceOf[String]
-        val destDir = new File(dest, "connect-repl").toPath
-        Files.createDirectories(destDir)
+      // Connect client assembly manually.
+      Def.taskDyn {
+        if (moduleName.value.contains("assembly")) {
+          Def.task {
+            val replClasspathes = (LocalProject("connect-client-jvm") / Compile / dependencyClasspath)
+              .value.map(_.data).filter(_.isFile())
+            val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
+              "scala.binary.version").asInstanceOf[String]
+            val sparkVer = SbtPomKeys.effectivePom.value.getProperties.get(
+              "spark.version").asInstanceOf[String]
+            val dest = destPath.value
+            val destDir = new File(dest, "connect-repl").toPath
+            Files.createDirectories(destDir)
 
-        val sourceAssemblyJar = Paths.get(
-          BuildCommons.sparkHome.getAbsolutePath, "connector", "connect", "client",
-          "jvm", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jvm-assembly-$sparkVer.jar")
-        val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jvm-assembly-$sparkVer.jar")
-        Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
+            val sourceAssemblyJar = Paths.get(
+              BuildCommons.sparkHome.getAbsolutePath, "connector", "connect", "client",
+              "jvm", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jvm-assembly-$sparkVer.jar")
+            val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jvm-assembly-$sparkVer.jar")
+            Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
 
-        replClasspathes.foreach { f =>
-          val destFile = Paths.get(destDir.toString, f.getName)
-          if (!f.getName.startsWith("spark-")) {
-            Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
-          }
+            replClasspathes.foreach { f =>
+              val destFile = Paths.get(destDir.toString, f.getName)
+              if (!f.getName.startsWith("spark-")) {
+                Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
+              }
+            }
+          }.dependsOn(LocalProject("connect-client-jvm") / assembly)
+        } else {
+          Def.task {}
         }
-      }
+      }.value
     },
     (Compile / packageBin / crossTarget) := destPath.value,
     (Compile / packageBin) := (Compile / packageBin).dependsOn(copyDeps).value
