@@ -1899,15 +1899,7 @@ class SparkConnectPlanner(
       fun: org.apache.spark.sql.expressions.UserDefinedFunction,
       exprs: Seq[Expression]): ScalaUDF = {
     val f = fun.asInstanceOf[org.apache.spark.sql.expressions.SparkUserDefinedFunction]
-    ScalaUDF(
-      function = f.f,
-      dataType = f.dataType,
-      children = exprs,
-      inputEncoders = f.inputEncoders,
-      outputEncoder = f.outputEncoder,
-      udfName = f.name,
-      nullable = f.nullable,
-      udfDeterministic = f.deterministic)
+    f.createScalaUDF(exprs)
   }
 
   private def extractProtobufArgs(children: Seq[Expression]) = {
