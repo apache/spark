@@ -5004,6 +5004,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
+    "message" : [
+      "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
