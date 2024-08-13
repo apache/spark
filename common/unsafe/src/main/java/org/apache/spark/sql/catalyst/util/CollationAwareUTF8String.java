@@ -26,8 +26,6 @@ import com.ibm.icu.util.ULocale;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
-import static org.apache.spark.unsafe.Platform.copyMemory;
 import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 
 import java.text.CharacterIterator;
@@ -710,16 +708,34 @@ public class CollationAwareUTF8String {
     return stringSearch.next();
   }
 
-  private static int find(UTF8String target, UTF8String pattern, int start,
-      int collationId) {
-    assert (pattern.numBytes() > 0);
+  private static int findIndex(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      int nextIndex = stringSearch.next();
+      if (nextIndex == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      } else if (nextIndex == index && index != 0) {
+        stringSearch.setIndex(stringSearch.getIndex() + stringSearch.getMatchLength());
+      } else {
+        count--;
+        index = nextIndex;
+      }
+    }
+    return index;
+  }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-    // Set search start position (start from character at start position)
-    stringSearch.setIndex(target.bytePosToChar(start));
-
-    // Return either the byte position or -1 if not found
-    return target.charPosToByte(stringSearch.next());
+  private static int findIndexReverse(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      index = stringSearch.previous();
+      if (index == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      }
+      count--;
+    }
+    return index + stringSearch.getMatchLength();
   }
 
   public static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
@@ -727,63 +743,30 @@ public class CollationAwareUTF8String {
     if (delimiter.numBytes() == 0 || count == 0 || string.numBytes() == 0) {
       return UTF8String.EMPTY_UTF8;
     }
+    String str = string.toValidString();
+    String delim = delimiter.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(str, delim, collationId);
+    stringSearch.setOverlapping(true);
     if (count > 0) {
-      int idx = -1;
-      while (count > 0) {
-        idx = find(string, delimiter, idx + 1, collationId);
-        if (idx >= 0) {
-          count --;
-        } else {
-          // can not find enough delim
-          return string;
-        }
-      }
-      if (idx == 0) {
+      // If the count is positive, we search for the count-th delimiter from the left.
+      int searchIndex = findIndex(stringSearch, count);
+      if (searchIndex == MATCH_NOT_FOUND) {
+        return string;
+      } else if (searchIndex == 0) {
         return UTF8String.EMPTY_UTF8;
+      } else {
+        return UTF8String.fromString(str.substring(0, searchIndex));
       }
-      byte[] bytes = new byte[idx];
-      copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-      return UTF8String.fromBytes(bytes);
-
     } else {
-      count = -count;
-
-      StringSearch stringSearch = CollationFactory
-        .getStringSearch(string, delimiter, collationId);
-
-      int start = string.numChars() - 1;
-      int lastMatchLength = 0;
-      int prevStart = -1;
-      while (count > 0) {
-        stringSearch.reset();
-        prevStart = -1;
-        int matchStart = stringSearch.next();
-        lastMatchLength = stringSearch.getMatchLength();
-        while (matchStart <= start) {
-          if (matchStart != StringSearch.DONE) {
-            // Found a match, update the start position
-            prevStart = matchStart;
-            matchStart = stringSearch.next();
-          } else {
-            break;
-          }
-        }
-
-        if (prevStart == -1) {
-          // can not find enough delim
+      // If the count is negative, we search for the count-th delimiter from the right.
+      int searchIndex = findIndexReverse(stringSearch, -count);
+      if (searchIndex == MATCH_NOT_FOUND) {
           return string;
-        } else {
-          start = prevStart - 1;
-          count--;
-        }
+      } else if (searchIndex == str.length()) {
+          return UTF8String.EMPTY_UTF8;
+      } else {
+          return UTF8String.fromString(str.substring(searchIndex));
       }
-
-      int resultStart = prevStart + lastMatchLength;
-      if (resultStart == string.numChars()) {
-        return UTF8String.EMPTY_UTF8;
-      }
-
-      return string.substring(resultStart, string.numChars());
     }
   }
 
