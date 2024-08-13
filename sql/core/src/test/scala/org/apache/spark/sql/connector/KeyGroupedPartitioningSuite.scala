@@ -331,9 +331,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       .add("time", TimestampType)
 
   test("SPARK-49179: Fix v2 multi bucketed inner joins throw AssertionError") {
-    val cols = Array(
-      Column.create("id", LongType),
-      Column.create("name", StringType))
+    val cols = new StructType()
+      .add("id", LongType)
+      .add("name", StringType)
     val buckets = Array(bucket(8, "id"))
 
     withTable("t1", "t2", "t3") {
