@@ -129,7 +129,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
-    visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
+    val labelText = generateLabelText(null, null)
+    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
   }
 
   private def visitCompoundBodyImpl(
