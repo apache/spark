@@ -1026,7 +1026,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  // TODO SPARK-48796 after restart state id will not be the same
   test(s"get, put, iterator, commit, load with multiple column families") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
       def get(store: StateStore, col1: String, col2: Int, colFamilyName: String): UnsafeRow = {

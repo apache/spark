@@ -65,7 +65,6 @@ private[sql] class RocksDBStateStoreProvider
       val colFamilyId = ColumnFamilyUtils.createColFamilyIfAbsent(colFamilyName, isInternal)
 
       colFamilyId.foreach { id =>
-        logError(s"### createColFamilyIfAbsent, $colFamilyName, $id")
         keyValueEncoderMap.putIfAbsent(colFamilyName,
           (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies, Some(id)),
             RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
@@ -376,7 +375,6 @@ private[sql] class RocksDBStateStoreProvider
       val store = new RocksDBStateStore(version)
       (colFamilyMapping, maxColFamilyId) match {
         case (Some(mapping), Some(id)) =>
-          logError(s"### setting columnFamilyIds: ${mapping}")
           colFamilyNameToIdMap.putAll(mapping.asJava)
           maxColumnFamilyId = id
         case _ =>
