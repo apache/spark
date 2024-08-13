@@ -250,12 +250,14 @@ class RocksDBFileManager(
       version: Long,
       numKeys: Long,
       capturedFileMappings: RocksDBFileMappings,
-      columnFamilyMapping: Option[Map[String, Short]] = None): Unit = {
+      columnFamilyMapping: Option[Map[String, Short]] = None,
+      maxColumnFamilyId: Option[Short] = None): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
     val rocksDBFiles = saveImmutableFilesToDfs(version, localImmutableFiles, capturedFileMappings)
-    val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, columnFamilyMapping)
+    val metadata = RocksDBCheckpointMetadata(
+      rocksDBFiles, numKeys, columnFamilyMapping, maxColumnFamilyId)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
     logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
@@ -294,7 +296,7 @@ class RocksDBFileManager(
       if (localDir.exists) Utils.deleteRecursively(localDir)
       fileMappings.localFilesToDfsFiles.clear()
       localDir.mkdirs()
-      RocksDBCheckpointMetadata(Seq.empty, 0, None)
+      RocksDBCheckpointMetadata(Seq.empty, 0)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
@@ -891,7 +893,12 @@ case class RocksDBCheckpointMetadata(
     sstFiles: Seq[RocksDBSstFile],
     logFiles: Seq[RocksDBLogFile],
     numKeys: Long,
-    columnFamilyMapping: Option[Map[String, Short]] = None) {
+    columnFamilyMapping: Option[Map[String, Short]] = None,
+    maxColumnFamilyId: Option[Short] = None) {
+
+  require(columnFamilyMapping.isDefined == maxColumnFamilyId.isDefined,
+    "columnFamilyMapping and maxColumnFamilyId must either both be defined or both be None")
+
   import RocksDBCheckpointMetadata._
 
   def json: String = {
@@ -915,8 +922,6 @@ case class RocksDBCheckpointMetadata(
   def immutableFiles: Seq[RocksDBImmutableFile] = sstFiles ++ logFiles
 }
 
-
-/** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
   val VERSION = 1
 
@@ -944,22 +949,7 @@ object RocksDBCheckpointMetadata {
     }
   }
 
-  // Overloaded apply methods for different use cases
-  def apply(
-      sstFiles: Seq[RocksDBSstFile],
-      logFiles: Seq[RocksDBLogFile],
-      numKeys: Long): RocksDBCheckpointMetadata = {
-    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, None)
-  }
-
-  def apply(
-      sstFiles: Seq[RocksDBSstFile],
-      logFiles: Seq[RocksDBLogFile],
-      numKeys: Long,
-      columnFamilyMapping: Option[Map[String, Short]]): RocksDBCheckpointMetadata = {
-    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, columnFamilyMapping)
-  }
-
+  // Apply method for cases without column family information
   def apply(
       rocksDBFiles: Seq[RocksDBImmutableFile],
       numKeys: Long): RocksDBCheckpointMetadata = {
@@ -968,6 +958,7 @@ object RocksDBCheckpointMetadata {
       sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
       logFiles.map(_.asInstanceOf[RocksDBLogFile]),
       numKeys,
+      None,
       None
     )
   }
@@ -975,13 +966,55 @@ object RocksDBCheckpointMetadata {
   def apply(
       rocksDBFiles: Seq[RocksDBImmutableFile],
       numKeys: Long,
-      columnFamilyMapping: Option[Map[String, Short]]): RocksDBCheckpointMetadata = {
+      columnFamilyMapping: Option[Map[String, Short]],
+      maxColumnFamilyId: Option[Short]): RocksDBCheckpointMetadata = {
     val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
     new RocksDBCheckpointMetadata(
       sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
       logFiles.map(_.asInstanceOf[RocksDBLogFile]),
       numKeys,
-      columnFamilyMapping
+      columnFamilyMapping,
+      maxColumnFamilyId
+    )
+  }
+
+  // Apply method for cases with separate sstFiles and logFiles, without column family information
+  def apply(
+      sstFiles: Seq[RocksDBSstFile],
+      logFiles: Seq[RocksDBLogFile],
+      numKeys: Long): RocksDBCheckpointMetadata = {
+    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, None, None)
+  }
+
+  // Apply method for cases with column family information
+  def apply(
+      rocksDBFiles: Seq[RocksDBImmutableFile],
+      numKeys: Long,
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short): RocksDBCheckpointMetadata = {
+    val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
+    new RocksDBCheckpointMetadata(
+      sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
+      logFiles.map(_.asInstanceOf[RocksDBLogFile]),
+      numKeys,
+      Some(columnFamilyMapping),
+      Some(maxColumnFamilyId)
+    )
+  }
+
+  // Apply method for cases with separate sstFiles and logFiles, and column family information
+  def apply(
+      sstFiles: Seq[RocksDBSstFile],
+      logFiles: Seq[RocksDBLogFile],
+      numKeys: Long,
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short): RocksDBCheckpointMetadata = {
+    new RocksDBCheckpointMetadata(
+      sstFiles,
+      logFiles,
+      numKeys,
+      Some(columnFamilyMapping),
+      Some(maxColumnFamilyId)
     )
   }
 }

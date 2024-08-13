@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
@@ -74,13 +75,15 @@ class RocksDB(
     useColumnFamilies: Boolean = false) extends Logging {
 
   private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+  private val maxColumnFamilyId = new AtomicInteger(0)
 
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
       numKeys: Long,
       capturedFileMappings: RocksDBFileMappings,
-      columnFamilyMapping: Map[String, Short]) {
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
@@ -176,11 +179,13 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long, readOnly: Boolean = false): (RocksDB, Option[Map[String, Short]]) = {
+  def load(version: Long, readOnly: Boolean = false):
+  (RocksDB, Option[Map[String, Short]], Option[Short]) = {
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
     var loadedMapping: Option[Map[String, Short]] = None
+    var maxColumnFamilyId: Option[Short] = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version) {
@@ -220,7 +225,9 @@ class RocksDB(
             metadata.numKeys
           }
         loadedMapping = metadata.columnFamilyMapping
+        maxColumnFamilyId = metadata.maxColumnFamilyId
         updateColumnFamilyMapping(loadedMapping)
+        updateMaxColumnFamilyId(maxColumnFamilyId)
 
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
@@ -242,11 +249,15 @@ class RocksDB(
       changelogWriter.foreach(_.abort())
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
-    (this, loadedMapping)
+    (this, loadedMapping, maxColumnFamilyId)
   }
 
   private def getColumnFamilyMapping(): Map[String, Short] = {
     colFamilyNameToIdMap.asScala.toMap
+  }
+
+  private def getMaxColumnFamilyId(): Short = {
+    maxColumnFamilyId.get().toShort
   }
 
   def updateColumnFamilyMapping(mapping: Option[Map[String, Short]]): Unit = {
@@ -264,6 +275,12 @@ class RocksDB(
         colFamilyNameToIdMap.putAll(map.asJava)
         colFamilyIdsChanged = true
       }
+    }
+  }
+
+  def updateMaxColumnFamilyId(columnFamilyId: Option[Short]): Unit = {
+    columnFamilyId.foreach { id =>
+      maxColumnFamilyId.updateAndGet(currentMax => Math.max(currentMax, id.toInt))
     }
   }
 
@@ -567,7 +584,8 @@ class RocksDB(
                 newVersion,
                 numKeysOnWritingVersion,
                 fileManager.captureFileMapReference(),
-                getColumnFamilyMapping()))
+                getColumnFamilyMapping(),
+                getMaxColumnFamilyId()))
             lastSnapshotVersion = newVersion
           }
         }
@@ -643,7 +661,8 @@ class RocksDB(
           version,
           numKeys,
           capturedFileMappings,
-          columnFamilyMapping)) =>
+          columnFamilyMapping,
+          maxColumnFamilyId)) =>
         try {
           val uploadTime = timeTakenMs {
             fileManager.saveCheckpointToDfs(
@@ -651,7 +670,8 @@ class RocksDB(
               version,
               numKeys,
               capturedFileMappings,
-              Some(columnFamilyMapping.toMap) // Pass the column family mapping
+              Some(columnFamilyMapping.toMap),
+              Some(maxColumnFamilyId)
             )
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }

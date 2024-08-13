@@ -204,6 +204,7 @@ private[sql] class RocksDBStateStoreProvider
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         rocksDB.updateColumnFamilyMapping(Some(colFamilyNameToIdMap.asScala))
+        rocksDB.updateMaxColumnFamilyId(Some(maxColumnFamilyId))
         val newVersion = rocksDB.commit()
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
@@ -370,12 +371,13 @@ private[sql] class RocksDBStateStoreProvider
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      val (_, colFamilyMapping) = rocksDB.load(version)
+      val (_, colFamilyMapping, maxColFamilyId) = rocksDB.load(version)
       val store = new RocksDBStateStore(version)
-      colFamilyMapping match {
-        case Some(mapping) =>
+      (colFamilyMapping, maxColFamilyId) match {
+        case (Some(mapping), Some(id)) =>
           colFamilyNameToIdMap.putAll(mapping.asJava)
-        case None =>
+          maxColumnFamilyId = id
+        case _ =>
       }
       store
     }
@@ -454,18 +456,10 @@ private[sql] class RocksDBStateStoreProvider
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
   private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
-  private val colFamilyIdLock = new Object()
 
   private val defaultColFamilyId: Option[Short] = Some(0)
 
-  private def getNextColumnFamilyId: Short = colFamilyIdLock.synchronized {
-    val maxId = if (colFamilyNameToIdMap.isEmpty) {
-      0.toShort
-    } else {
-      colFamilyNameToIdMap.values().asScala.max
-    }
-    (maxId + 1).toShort
-  }
+  private var maxColumnFamilyId: Short = 0
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
@@ -597,7 +591,8 @@ private[sql] class RocksDBStateStoreProvider
       Option[Short] = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       if (!checkColFamilyExists(colFamilyName)) {
-        val newColumnFamilyId = getNextColumnFamilyId
+        val newColumnFamilyId = (maxColumnFamilyId + 1).toShort
+        maxColumnFamilyId = newColumnFamilyId
         colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
         Option(newColumnFamilyId)
       } else Some(colFamilyNameToIdMap.get(colFamilyName))
