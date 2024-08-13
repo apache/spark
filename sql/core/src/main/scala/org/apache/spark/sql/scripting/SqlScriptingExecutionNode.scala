@@ -18,9 +18,9 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.parser.SingleStatement
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
