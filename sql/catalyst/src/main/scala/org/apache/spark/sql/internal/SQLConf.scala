@@ -4392,7 +4392,8 @@ object SQLConf {
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
       .internal()
-      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser.")
+      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +
+        "can be overwritten by the JSON option `useUnsafeRow`.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
