@@ -17,11 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.ArrayList
-
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{Estimator, Model, Transformer}
@@ -29,7 +27,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -124,17 +122,15 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     require(outputColNames.distinct.length == outputColNames.length,
       s"Output columns should not be duplicate.")
 
-    val sparkSession = SparkSession.getDefaultSession.get
-    val transformDataset = sparkSession.createDataFrame(new ArrayList[Row](), schema = schema)
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
         try {
-          val dtype = transformDataset.col(inputColName).expr.dataType
+          val dtype = SchemaUtils.getSchemaFieldType(schema, inputColName)
           Some(
             validateAndTransformField(schema, inputColName, dtype, outputColName)
           )
         } catch {
-          case _: AnalysisException =>
+          case e: SparkIllegalArgumentException if e.getErrorClass == "FIELD_NOT_FOUND" =>
             if (skipNonExistsCol) {
               None
             } else {

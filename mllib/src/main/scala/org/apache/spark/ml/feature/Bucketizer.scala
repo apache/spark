@@ -201,7 +201,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
       var transformedSchema = schema
       $(inputCols).zip($(outputCols)).zipWithIndex.foreach { case ((inputCol, outputCol), idx) =>
-        SchemaUtils.checkNumericType(schema, inputCol)
+        SchemaUtils.checkNumericType(transformedSchema, inputCol)
         transformedSchema = SchemaUtils.appendColumn(transformedSchema,
           prepOutputField($(splitsArray)(idx), outputCol))
       }

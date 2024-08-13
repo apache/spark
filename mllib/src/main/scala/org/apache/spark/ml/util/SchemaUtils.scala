@@ -72,22 +72,12 @@ private[spark] object SchemaUtils {
   def checkNumericType(
       schema: StructType,
       colName: String,
-      msg: String): Unit = {
+      msg: String = ""): Unit = {
     val actualDataType = getSchemaFieldType(schema, colName)
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.isInstanceOf[NumericType],
       s"Column $colName must be of type ${NumericType.simpleString} but was actually of type " +
-        s"${actualDataType.catalogString}.$message")
-  }
-
-  /**
-   * Check whether the given schema contains a column of the numeric data type.
-   * @param colName  column name
-   */
-  def checkNumericType(
-      schema: StructType,
-      colName: String): Unit = {
-    checkNumericType(schema, colName, "")
+      s"${actualDataType.catalogString}.$message")
   }
 
   /**

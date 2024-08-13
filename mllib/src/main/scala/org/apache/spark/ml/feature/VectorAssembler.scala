@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.{ArrayList, NoSuchElementException}
+import java.util.NoSuchElementException
 
 import scala.collection.mutable
 
@@ -29,7 +29,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -160,12 +160,8 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
-    val sparkSession = SparkSession.getDefaultSession.get
-    val transformDataset = sparkSession.createDataFrame(
-      new ArrayList[Row](), schema = schema
-    )
     val incorrectColumns = inputColNames.flatMap { name =>
-      transformDataset.col(name).expr.dataType match {
+      SchemaUtils.getSchemaFieldType(schema, name) match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
         case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")

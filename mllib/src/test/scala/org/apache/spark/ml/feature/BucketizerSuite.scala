@@ -389,11 +389,11 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
       .collect()
 
     resultForSingleCol.zip(resultForMultiCols).foreach {
-      case (rowForSingle, rowForMultiCols) =>
-        assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
-          rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
-          rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2) &&
-          rowForSingle.getDouble(3) == rowForMultiCols.getDouble(3))
+        case (rowForSingle, rowForMultiCols) =>
+          assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
+            rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
+            rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2) &&
+            rowForSingle.getDouble(3) == rowForMultiCols.getDouble(3))
     }
   }
 
@@ -420,7 +420,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
       ("outputCols", Array("result1", "result2")))
   }
 
-  test("Bucket nested input column") {
+  test("Bucketizer nested input column") {
     // Check a set of valid feature values.
     val splits = Array(-0.5, 0.0, 0.5)
     val validData = Array(-0.5, -0.3, 0.0, 0.2)
