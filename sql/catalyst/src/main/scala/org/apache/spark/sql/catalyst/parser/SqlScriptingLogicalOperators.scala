@@ -90,6 +90,12 @@ case class WhileStatement(
     body: CompoundBody,
     label: Option[String]) extends CompoundPlanStatement
 
+case class RepeatStatement(
+  condition: SingleStatement,
+  body: CompoundBody,
+  label: Option[String]) extends CompoundPlanStatement
+
+
 /**
  * Logical operator for LEAVE statement.
  * The statement can be used both for compounds or any kind of loops.

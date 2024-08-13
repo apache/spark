@@ -261,6 +261,20 @@ class AstBuilder extends DataTypeAstBuilder
     WhileStatement(condition, body, Some(labelText))
   }
 
+  override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
+    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val boolExpr = ctx.booleanExpression()
+
+    val condition = withOrigin(boolExpr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(boolExpr), "condition")()),
+          OneRowRelation()))}
+    val body = visitCompoundBody(ctx.compoundBody())
+
+    RepeatStatement(condition, body, Some(labelText))
+  }
+
   private def leaveOrIterateContextHasLabel(
       ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
     ctx match {
