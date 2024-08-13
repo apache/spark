@@ -935,8 +935,8 @@ object RocksDBCheckpointMetadata {
     val reader = Files.newBufferedReader(metadataFile.toPath, UTF_8)
     try {
       val versionLine = reader.readLine()
-      if (versionLine != "v1") {
-        throw QueryExecutionErrors.cannotReadCheckpoint(versionLine, s"v$VERSION or v1")
+      if (versionLine != s"v$VERSION") {
+        throw QueryExecutionErrors.cannotReadCheckpoint(versionLine, s"v$VERSION")
       }
       Serialization.read[RocksDBCheckpointMetadata](reader)
     } finally {
