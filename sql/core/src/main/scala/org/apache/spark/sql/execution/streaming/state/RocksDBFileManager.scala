@@ -922,6 +922,7 @@ case class RocksDBCheckpointMetadata(
   def immutableFiles: Seq[RocksDBImmutableFile] = sstFiles ++ logFiles
 }
 
+/** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
   val VERSION = 1
 

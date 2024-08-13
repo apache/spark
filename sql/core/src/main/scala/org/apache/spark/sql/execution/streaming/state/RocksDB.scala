@@ -285,7 +285,6 @@ class RocksDB(
     }
   }
 
-
   /**
    * Load from the start snapshot version and apply all the changelog records to reach the
    * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
@@ -540,6 +539,7 @@ class RocksDB(
   def commit(): Long = {
     val newVersion = loadedVersion + 1
     try {
+
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
 
       var compactTimeMs = 0L
@@ -686,6 +686,7 @@ class RocksDB(
           for (snapshot <- oldSnapshotsImmutable) {
             snapshot.close()
           }
+
         }
       case _ =>
     }
