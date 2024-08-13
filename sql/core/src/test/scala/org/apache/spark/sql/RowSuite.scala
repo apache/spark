@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -129,7 +129,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
     val rowWithNullValue = Row.fromSeq(Seq(null))
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkRuntimeException] {
         rowWithNullValue.getLong(position)
       },
       errorClass = "ROW_VALUE_IS_NULL",
