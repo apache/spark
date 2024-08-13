@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 import org.apache.spark.sql.api.java._
 
 /**
- * Helper class that provided conversions from org.apache.spark.sql.api.java.Function* to
+ * Helper class that provides conversions from org.apache.spark.sql.api.java.Function* to
  * scala.Function*.
  */
 private[sql] object ToScalaUDF {
