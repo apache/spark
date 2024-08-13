@@ -580,11 +580,76 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
     val expected = Seq(
       Seq.empty[Row], // declare i
-      Seq(Row(0)), // select i
+      Seq(Row(3)), // select i
       Seq.empty[Row], // set i
       Seq.empty[Row] // drop i
     )
     verifySqlScriptResult(commands, expected)
+  }
+
+  test("nested repeat") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | DECLARE j = 0;
+        | REPEAT
+        |   SET VAR j = 0;
+        |   REPEAT
+        |     SELECT i, j;
+        |     SET VAR j = j + 1;
+        |   UNTIL j >= 2
+        |   END REPEAT;
+        |   SET VAR i = i + 1;
+        | UNTIL i >= 2
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq.empty[Row], // declare j
+      Seq.empty[Row], // set j to 0
+      Seq(Row(0, 0)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq(Row(0, 1)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq.empty[Row], // increase i
+      Seq.empty[Row], // set j to 0
+      Seq(Row(1, 0)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq(Row(1, 1)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq.empty[Row], // increase i
+      Seq.empty[Row], // drop j
+      Seq.empty[Row] // drop i
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |REPEAT
+          |  SELECT 42;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |UNTIL (SELECT COUNT(*) >= 2 FROM t)
+          |END REPEAT;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq(Row(42)), // select
+        Seq.empty[Row], // insert
+        Seq(Row(42)), // select
+        Seq.empty[Row] // insert
+      )
+      verifySqlScriptResult(commands, expected)
+    }
   }
 //
 //  test("nested while") {
