@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
@@ -62,6 +63,12 @@ class TempVariableManager extends DataTypeErrorsBase {
 
   def clear(): Unit = synchronized {
     variables.clear()
+  }
+
+  def listViewNames(pattern: String): Seq[(String, VariableDefinition)] = synchronized {
+    StringUtils.filterPattern(variables.keys.toSeq, pattern).map(name => {
+      (name, variables(name))
+    })
   }
 }
 

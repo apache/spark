@@ -393,6 +393,17 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
+   * Drops variable `variableName` after calling `f`.
+   */
+  protected def withVariable(variableNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      variableNames.foreach { name =>
+        spark.sql(s"DROP TEMPORARY VARIABLE IF EXISTS $name")
+      }
+    }
+  }
+
+  /**
    * Restores the current catalog/database after calling `f`.
    */
   protected def withCurrentCatalogAndNamespace(f: => Unit): Unit = {
