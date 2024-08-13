@@ -246,13 +246,21 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     if (mainClass != null) {
       args.add(parser.CLASS);
-      args.add(mainClass);
+      if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
+        args.add("org.apache.spark.sql.application.ConnectRepl");
+      } else {
+        args.add(mainClass);
+      }
     }
 
     args.addAll(parsedArgs);
 
     if (appResource != null) {
-      args.add(appResource);
+      if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
+        args.add("connect-shell");
+      } else {
+        args.add(appResource);
+      }
     }
 
     args.addAll(appArgs);
@@ -499,7 +507,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       switch (opt) {
         case MASTER -> master = value;
-        case REMOTE -> remote = value;
+        case REMOTE -> {
+          isRemote = true;
+          remote = value;
+        }
         case DEPLOY_MODE -> deployMode = value;
         case PROPERTIES_FILE -> propertiesFile = value;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
@@ -512,6 +523,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
+          if (setConf[0].equals("spark.remote")) {
+            isRemote = true;
+          }
           conf.put(setConf[0], setConf[1]);
         }
         case CLASS -> {

@@ -66,12 +66,17 @@ compoundStatement
     | declareCondition
     | declareHandler
     | ifElseStatement
+    | whileStatement
     ;
 
 setStatementWithOptionalVarKeyword
     : SET variable? assignmentList                              #setVariableWithOptionalKeyword
     | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+whileStatement
+    : beginLabel? WHILE booleanExpression DO compoundBody END WHILE endLabel?
     ;
 
 ifElseStatement
@@ -1549,6 +1554,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ESCAPED
@@ -1751,6 +1757,7 @@ ansiNonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WINDOW
     | YEAR
     | YEARS
@@ -1882,6 +1889,7 @@ nonReserved
     | DISTINCT
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ELSE
@@ -2122,6 +2130,7 @@ nonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WHEN
     | WHERE
     | WINDOW

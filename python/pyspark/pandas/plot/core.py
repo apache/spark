@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import bisect
 import importlib
 import math
 
@@ -24,7 +25,7 @@ from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.utils import is_remote
+from pyspark.sql.types import DoubleType
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -147,10 +148,9 @@ class HistogramPlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_hist(psdf, bins):
-        from pyspark.ml.feature import Bucketizer
-
         # 'data' is a Spark DataFrame that selects one column.
         assert isinstance(bins, (np.ndarray, np.generic))
+        assert len(bins) > 2, "the number of buckets must be higher than 2."
 
         sdf = psdf._internal.spark_frame
         scols = []
@@ -181,14 +181,31 @@ class HistogramPlotBase(NumericPlotBase):
         colnames = sdf.columns
         bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
+        # TODO(SPARK-49202): register this function in scala side
+        @F.udf(returnType=DoubleType())
+        def binary_search_for_buckets(value):
+            # Given bins = [1.0, 2.0, 3.0, 4.0]
+            # the intervals are:
+            #   [1.0, 2.0) -> 0.0
+            #   [2.0, 3.0) -> 1.0
+            #   [3.0, 4.0] -> 2.0 (the last bucket is a closed interval)
+            if value < bins[0] or value > bins[-1]:
+                raise ValueError(f"value {value} out of the bins bounds: [{bins[0]}, {bins[-1]}]")
+
+            if value == bins[-1]:
+                idx = len(bins) - 2
+            else:
+                idx = bisect.bisect(bins, value) - 1
+            return float(idx)
+
         output_df = None
         for group_id, (colname, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            # creates a Bucketizer to get corresponding bin of each value
-            bucketizer = Bucketizer(
-                splits=bins, inputCol=colname, outputCol=bucket_name, handleInvalid="skip"
-            )
+            # sdf.na.drop to match handleInvalid="skip" in Bucketizer
 
-            bucket_df = bucketizer.transform(sdf)
+            bucket_df = sdf.na.drop(subset=[colname]).withColumn(
+                bucket_name,
+                binary_search_for_buckets(F.col(colname).cast("double")),
+            )
 
             if output_df is None:
                 output_df = bucket_df.select(
@@ -595,9 +612,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
-        if is_remote() and kind == "hist":
-            return unsupported_function(class_name="pd.DataFrame", method_name=kind)()
-
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
@@ -974,9 +988,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.from_pandas(df)
             >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
         """
-        if is_remote():
-            return unsupported_function(class_name="pd.DataFrame", method_name="hist")()
-
         return self(kind="hist", bins=bins, **kwds)
 
     def kde(self, bw_method=None, ind=None, **kwargs):

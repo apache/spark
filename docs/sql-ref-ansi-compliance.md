@@ -493,6 +493,7 @@ Below is a list of all the keywords in Spark SQL.
 |DISTINCT|reserved|non-reserved|reserved|
 |DISTRIBUTE|non-reserved|non-reserved|non-reserved|
 |DIV|non-reserved|non-reserved|not a keyword|
+|DO|non-reserved|non-reserved|non-reserved|
 |DOUBLE|non-reserved|non-reserved|reserved|
 |DROP|non-reserved|non-reserved|reserved|
 |ELSE|reserved|non-reserved|reserved|
@@ -750,6 +751,7 @@ Below is a list of all the keywords in Spark SQL.
 |WEEKS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|
 |WHERE|reserved|non-reserved|reserved|
+|WHILE|non-reserved|non-reserved|non-reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|

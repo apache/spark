@@ -21,8 +21,8 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -49,10 +49,42 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       isInternal = false)
 
+  case class DummyLogicalPlan() extends LeafNode {
+    override def output: Seq[Attribute] = Seq.empty
+  }
+
+  case class TestWhileCondition(
+      condVal: Boolean, reps: Int, description: String)
+    extends SingleStatementExec(
+      parsedPlan = DummyLogicalPlan(),
+      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      isInternal = false)
+
+  case class TestWhile(
+      condition: TestWhileCondition,
+      body: CompoundBodyExec)
+    extends WhileStatementExec(condition, body, spark) {
+
+    private var callCount: Int = 0
+
+    override def evaluateBooleanCondition(
+        session: SparkSession,
+        statement: LeafStatementExec): Boolean = {
+      if (callCount < condition.reps) {
+        callCount += 1
+        condition.condVal
+      } else {
+        callCount = 0
+        !condition.condVal
+      }
+    }
+  }
+
   private def extractStatementValue(statement: CompoundStatementExec): String =
     statement match {
       case TestLeafStatement(testVal) => testVal
       case TestIfElseCondition(_, description) => description
+      case TestWhileCondition(_, _, description) => description
       case _ => fail("Unexpected statement type")
     }
 
@@ -234,4 +266,60 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
   }
+
+  test("while - doesn't enter body") {
+    val iter = new CompoundBodyExec(Seq(
+      TestWhile(
+        condition = TestWhileCondition(condVal = true, reps = 0, description = "con1"),
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1"))
+  }
+
+  test("while - enters body once") {
+    val iter = new CompoundBodyExec(Seq(
+      TestWhile(
+        condition = TestWhileCondition(condVal = true, reps = 1, description = "con1"),
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1", "con1"))
+  }
+
+  test("while - enters body with multiple statements multiple times") {
+    val iter = new CompoundBodyExec(Seq(
+      TestWhile(
+        condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
+        body = new CompoundBodyExec(Seq(
+          TestLeafStatement("statement1"),
+          TestLeafStatement("statement2")))
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "statement1", "statement2",
+                              "con1", "statement1", "statement2", "con1"))
+  }
+
+  test("nested while - 2 times outer 2 times inner") {
+    val iter = new CompoundBodyExec(Seq(
+      TestWhile(
+        condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
+        body = new CompoundBodyExec(Seq(
+          TestWhile(
+            condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
+            body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+          ))
+        )
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body1",
+                                      "con2", "body1", "con2",
+                              "con1", "con2", "body1",
+                                      "con2", "body1", "con2", "con1"))
+  }
+
 }

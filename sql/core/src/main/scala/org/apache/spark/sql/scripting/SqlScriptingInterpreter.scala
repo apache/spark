@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, IfElseStatement, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, HandlerType, IfElseStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -146,6 +146,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+      case WhileStatement(condition, body, _) =>
+        val conditionExec =
+          new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false)
+        val bodyExec =
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec]
+        new WhileStatementExec(conditionExec, bodyExec, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
