@@ -34,9 +34,9 @@ import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
-    extends QueryTest
-    with SharedSparkSession
-    with ExpressionEvalHelper {
+  extends QueryTest
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
 
