@@ -155,7 +155,6 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
 
-      logError(s"### colFamilyName: $colFamilyName")
       // As Virtual Column Family attaches a column family prefix to the key row,
       // we'll need to do prefixScan on the default column family with the same column
       // family id prefix to get all rows stored in a given virtual column family
