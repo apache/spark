@@ -351,14 +351,13 @@ private[sql] class RocksDBStateStoreProvider
         " enabled in RocksDBStateStore.")
     }
 
-    val colFamilyId = getNextColumnFamilyId
     if (useColumnFamilies) {
       // put default column family only if useColumnFamilies are enabled
-      colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, colFamilyId)
+      colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, defaultColFamilyId.get)
     }
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, Some(colFamilyId)),
+        useColumnFamilies, defaultColFamilyId),
         RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
 
     rocksDB // lazy initialization
@@ -457,9 +456,11 @@ private[sql] class RocksDBStateStoreProvider
   private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
   private val colFamilyIdLock = new Object()
 
+  private val defaultColFamilyId: Option[Short] = Some(0)
+
   private def getNextColumnFamilyId: Short = colFamilyIdLock.synchronized {
     val maxId = if (colFamilyNameToIdMap.isEmpty) {
-      -1.toShort
+      0.toShort
     } else {
       colFamilyNameToIdMap.values().asScala.max
     }
