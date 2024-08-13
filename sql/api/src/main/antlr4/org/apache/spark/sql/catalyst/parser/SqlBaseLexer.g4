@@ -576,10 +576,6 @@ BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
 
-LABEL
-    : IDENTIFIER COLON
-    ;
-
 fragment DECIMAL_DIGITS
     : DIGIT+ '.' DIGIT*
     | '.' DIGIT+

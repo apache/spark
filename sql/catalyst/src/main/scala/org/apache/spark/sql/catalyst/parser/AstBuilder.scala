@@ -177,8 +177,8 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def generateLabelText(
       beginLabelCtx: BeginLabelContext, endLabelCtx: EndLabelContext): String = {
-    val beginLabelName = Option(beginLabelCtx).map(_.LABEL().getText.dropRight(1))
-    val endLabelName = Option(endLabelCtx).map(_.IDENTIFIER().getText)
+    val beginLabelName = Option(beginLabelCtx).map(_.multipartIdentifier().getText)
+    val endLabelName = Option(endLabelCtx).map(_.multipartIdentifier().getText)
 
     (beginLabelName, endLabelName) match {
       case (Some(bl: String), Some(el: String))
