@@ -1089,6 +1089,31 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("verify that column family id is assigned correctly after removal") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
+      var store = provider.getStore(0)
+      val colFamily1: String = "abc"
+      val colFamily2: String = "def"
+      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.commit()
+
+      store = provider.getStore(1)
+      val colFamily3: String = "ghi"
+      store.removeColFamilyIfExists(colFamily2)
+      store.commit()
+
+      store = provider.getStore(2)
+      store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(!provider.colFamilyNameToIdMap.containsKey(colFamily2))
+      // maxColFamilyId should be 2, we should increment the id and then assign it.
+      assert(provider.colFamilyNameToIdMap.get(colFamily3) === 3)
+    }
+  }
+
   Seq(
     NoPrefixKeyStateEncoderSpec(keySchema), PrefixKeyScanStateEncoderSpec(keySchema, 1)
   ).foreach { keyEncoder =>
