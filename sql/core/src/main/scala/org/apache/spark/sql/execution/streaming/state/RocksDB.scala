@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters.{MapHasAsJava, MapHasAsScala}
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -72,11 +73,14 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false) extends Logging {
 
+  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
       numKeys: Long,
-      capturedFileMappings: RocksDBFileMappings) {
+      capturedFileMappings: RocksDBFileMappings,
+      columnFamilyMapping: Map[String, Short]) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
@@ -171,10 +175,11 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long, readOnly: Boolean = false): RocksDB = {
+  def load(version: Long, readOnly: Boolean = false): (RocksDB, Option[Map[String, Short]]) = {
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
+    var loadedMapping: Option[Map[String, Short]] = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version) {
@@ -213,6 +218,8 @@ class RocksDB(
           } else {
             metadata.numKeys
           }
+        loadedMapping = metadata.columnFamilyMapping
+
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -233,8 +240,20 @@ class RocksDB(
       changelogWriter.foreach(_.abort())
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
-    this
+    (this, loadedMapping)
   }
+
+  private def getColumnFamilyMapping(): Map[String, Short] = {
+    colFamilyNameToIdMap.asScala.toMap
+  }
+
+  def updateColumnFamilyMapping(mapping: Option[Map[String, Short]]): Unit = {
+    mapping.foreach { map =>
+      colFamilyNameToIdMap.clear()
+      colFamilyNameToIdMap.putAll(map.asJava)
+    }
+  }
+
 
   /**
    * Load from the start snapshot version and apply all the changelog records to reach the
@@ -490,7 +509,6 @@ class RocksDB(
   def commit(): Long = {
     val newVersion = loadedVersion + 1
     try {
-
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
 
       var compactTimeMs = 0L
@@ -535,7 +553,8 @@ class RocksDB(
               RocksDBSnapshot(checkpointDir,
                 newVersion,
                 numKeysOnWritingVersion,
-                fileManager.captureFileMapReference()))
+                fileManager.captureFileMapReference(),
+                getColumnFamilyMapping()))
             lastSnapshotVersion = newVersion
           }
         }
@@ -606,10 +625,21 @@ class RocksDB(
       checkpoint
     }
     localCheckpoint match {
-      case Some(RocksDBSnapshot(localDir, version, numKeys, capturedFileMappings)) =>
+      case Some(RocksDBSnapshot(
+          localDir,
+          version,
+          numKeys,
+          capturedFileMappings,
+          columnFamilyMapping)) =>
         try {
           val uploadTime = timeTakenMs {
-            fileManager.saveCheckpointToDfs(localDir, version, numKeys, capturedFileMappings)
+            fileManager.saveCheckpointToDfs(
+              localDir,
+              version,
+              numKeys,
+              capturedFileMappings,
+              Some(columnFamilyMapping.toMap) // Pass the column family mapping
+            )
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
           logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
@@ -622,7 +652,6 @@ class RocksDB(
           for (snapshot <- oldSnapshotsImmutable) {
             snapshot.close()
           }
-
         }
       case _ =>
     }

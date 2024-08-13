@@ -249,12 +249,13 @@ class RocksDBFileManager(
       checkpointDir: File,
       version: Long,
       numKeys: Long,
-      capturedFileMappings: RocksDBFileMappings): Unit = {
+      capturedFileMappings: RocksDBFileMappings,
+      columnFamilyMapping: Option[Map[String, Short]] = None): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
     val rocksDBFiles = saveImmutableFilesToDfs(version, localImmutableFiles, capturedFileMappings)
-    val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys)
+    val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, columnFamilyMapping)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
     logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
@@ -293,7 +294,7 @@ class RocksDBFileManager(
       if (localDir.exists) Utils.deleteRecursively(localDir)
       fileMappings.localFilesToDfsFiles.clear()
       localDir.mkdirs()
-      RocksDBCheckpointMetadata(Seq.empty, 0)
+      RocksDBCheckpointMetadata(Seq.empty, 0, None)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
@@ -882,18 +883,15 @@ object RocksDBFileManagerMetrics {
   val EMPTY_METRICS = RocksDBFileManagerMetrics(0L, 0L, 0L, None)
 }
 
-/**
- * Classes to represent metadata of checkpoints saved to DFS. Since this is converted to JSON, any
- * changes to this MUST be backward-compatible.
- */
 case class RocksDBCheckpointMetadata(
     sstFiles: Seq[RocksDBSstFile],
     logFiles: Seq[RocksDBLogFile],
-    numKeys: Long) {
+    numKeys: Long,
+    columnFamilyMapping: Option[Map[String, Short]] = None) {
   import RocksDBCheckpointMetadata._
 
   def json: String = {
-    // We turn this field into a null to avoid write a empty logFiles field in the json.
+    // We turn this field into a null to avoid write an empty logFiles field in the json.
     val nullified = if (logFiles.isEmpty) this.copy(logFiles = null) else this
     mapper.writeValueAsString(nullified)
   }
@@ -913,13 +911,11 @@ case class RocksDBCheckpointMetadata(
   def immutableFiles: Seq[RocksDBImmutableFile] = sstFiles ++ logFiles
 }
 
-/** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = 1
+  val VERSION = 2
 
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 
-  /** Used to convert between classes and JSON. */
   lazy val mapper = {
     val _mapper = new ObjectMapper with ClassTagExtensions
     _mapper.setSerializationInclusion(Include.NON_ABSENT)
@@ -932,8 +928,8 @@ object RocksDBCheckpointMetadata {
     val reader = Files.newBufferedReader(metadataFile.toPath, UTF_8)
     try {
       val versionLine = reader.readLine()
-      if (versionLine != s"v$VERSION") {
-        throw QueryExecutionErrors.cannotReadCheckpoint(versionLine, s"v$VERSION")
+      if (versionLine != s"v$VERSION" && versionLine != "v1") {
+        throw QueryExecutionErrors.cannotReadCheckpoint(versionLine, s"v$VERSION or v1")
       }
       Serialization.read[RocksDBCheckpointMetadata](reader)
     } finally {
@@ -941,11 +937,45 @@ object RocksDBCheckpointMetadata {
     }
   }
 
-  def apply(rocksDBFiles: Seq[RocksDBImmutableFile], numKeys: Long): RocksDBCheckpointMetadata = {
-    val sstFiles = rocksDBFiles.collect { case file: RocksDBSstFile => file }
-    val logFiles = rocksDBFiles.collect { case file: RocksDBLogFile => file }
+  // Overloaded apply methods for different use cases
+  def apply(
+      sstFiles: Seq[RocksDBSstFile],
+      logFiles: Seq[RocksDBLogFile],
+      numKeys: Long): RocksDBCheckpointMetadata = {
+    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, None)
+  }
 
-    RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys)
+  def apply(
+      sstFiles: Seq[RocksDBSstFile],
+      logFiles: Seq[RocksDBLogFile],
+      numKeys: Long,
+      columnFamilyMapping: Option[Map[String, Short]]): RocksDBCheckpointMetadata = {
+    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, columnFamilyMapping)
+  }
+
+  def apply(
+      rocksDBFiles: Seq[RocksDBImmutableFile],
+      numKeys: Long): RocksDBCheckpointMetadata = {
+    val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
+    new RocksDBCheckpointMetadata(
+      sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
+      logFiles.map(_.asInstanceOf[RocksDBLogFile]),
+      numKeys,
+      None
+    )
+  }
+
+  def apply(
+      rocksDBFiles: Seq[RocksDBImmutableFile],
+      numKeys: Long,
+      columnFamilyMapping: Option[Map[String, Short]]): RocksDBCheckpointMetadata = {
+    val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
+    new RocksDBCheckpointMetadata(
+      sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
+      logFiles.map(_.asInstanceOf[RocksDBLogFile]),
+      numKeys,
+      columnFamilyMapping
+    )
   }
 }
 
