@@ -58,7 +58,7 @@ COMPACTIONS	false
 COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
-CONDITION	true
+CONDITION	false
 CONSTRAINT	false
 CONTAINS	false
 CONTINUE	false
@@ -131,7 +131,7 @@ FOR	false
 FOREIGN	false
 FORMAT	false
 FORMATTED	false
-FOUND	true
+FOUND	false
 FROM	false
 FULL	false
 FUNCTION	false
@@ -141,7 +141,7 @@ GLOBAL	false
 GRANT	false
 GROUP	false
 GROUPING	false
-HANDLER	true
+HANDLER	false
 HAVING	false
 HOUR	false
 HOURS	false
@@ -293,7 +293,7 @@ SORTED	false
 SOURCE	false
 SPECIFIC	false
 SQL	false
-SQLEXCEPTION	true
+SQLEXCEPTION	false
 START	false
 STATISTICS	false
 STORED	false
@@ -372,7 +372,4 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-CONDITION
-FOUND
-HANDLER
-SQLEXCEPTION
+

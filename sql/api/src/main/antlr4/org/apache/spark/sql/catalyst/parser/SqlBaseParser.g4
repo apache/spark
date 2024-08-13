@@ -1521,6 +1521,7 @@ ansiNonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONTAINS
     | CONTINUE
     | COST
@@ -1575,11 +1576,13 @@ ansiNonReserved
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
     | GLOBAL
     | GROUPING
+    | HANDLER
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -1705,6 +1708,7 @@ ansiNonReserved
     | SORTED
     | SOURCE
     | SPECIFIC
+    | SQLEXCEPTION
     | START
     | STATISTICS
     | STORED
@@ -1849,6 +1853,7 @@ nonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -1919,6 +1924,7 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
+    | FOUND
     | FROM
     | FUNCTION
     | FUNCTIONS
@@ -1927,6 +1933,7 @@ nonReserved
     | GRANT
     | GROUP
     | GROUPING
+    | HANDLER
     | HAVING
     | HOUR
     | HOURS
@@ -2070,6 +2077,7 @@ nonReserved
     | SOURCE
     | SPECIFIC
     | SQL
+    | SQLEXCEPTION
     | START
     | STATISTICS
     | STORED
