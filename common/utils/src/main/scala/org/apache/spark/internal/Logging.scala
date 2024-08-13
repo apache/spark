@@ -151,7 +151,9 @@ trait Logging {
       args.foreach { mdc =>
         val value = if (mdc.value != null) mdc.value.toString else null
         sb.append(value)
-        context.put(mdc.key.name, value)
+        if (Logging.isStructuredLoggingEnabled) {
+          context.put(mdc.key.name, value)
+        }
 
         if (processedParts.hasNext) {
           sb.append(StringContext.processEscapes(processedParts.next()))
@@ -163,7 +165,7 @@ trait Logging {
   }
 
   protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
-    // put into context only when structured logging is enabled
+    // put into thread context only when structured logging is enabled
     val updatedContext = if (Logging.isStructuredLoggingEnabled) {
       context
     } else {
