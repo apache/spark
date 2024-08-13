@@ -17,9 +17,8 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -42,7 +41,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
   override def apply(node: ColumnNode): Expression = CurrentOrigin.withOrigin(node.origin) {
     node match {
       case Literal(value, Some(dataType), _) =>
-        expressions.Literal.create(value, dataType)
+        val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
+        expressions.Literal(converter(value), dataType)
 
       case Literal(value, None, _) =>
         expressions.Literal(value)
@@ -77,6 +77,10 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
           arguments = arguments.map(apply),
           isDistinct = isDistinct,
           isInternal = isInternal)
+
+      case Alias(child, Seq(name), None, _) =>
+        expressions.Alias(apply(child), name)(
+          nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
 
       case Alias(child, Seq(name), metadata, _) =>
         expressions.Alias(apply(child), name)(explicitMetadata = metadata)

@@ -68,7 +68,7 @@ class WindowSpec private[sql](
    */
   @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
-    new WindowSpec(cols.map(_.node), cols.map(_.sortOrder), frame)
+    new WindowSpec(partitionSpec, cols.map(_.sortOrder), frame)
   }
 
   /**

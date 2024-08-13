@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Private, Stable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.analysis._
@@ -74,6 +74,12 @@ private[spark] object Column {
       isDistinct = isDistinct,
       isInternal = isInternal))
   }
+
+  /**
+   * Hook used by pyspark to create functions.
+   */
+  @Private
+  def pysparkFn(name: String, args: Seq[Column]): Column = fn(name, args: _*)
 }
 
 /**

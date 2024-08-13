@@ -198,7 +198,7 @@ class StringIndexer @Since("1.4.0") (
       } else {
         // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
         // we replace NaNs with null in advance.
-        nanvl(col, lit(null)).cast(StringType)
+        when(!isnan(col), col).cast(StringType)
       }
     }
   }

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.internal
 
+import java.util.concurrent.atomic.AtomicLong
+
 import ColumnNode._
 
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -74,10 +76,10 @@ private[internal] object ColumnNode {
     nodes.map(_.normalize().asInstanceOf[T])
   def argumentsToSql(nodes: Seq[ColumnNodeLike]): String =
     textArgumentsToSql(nodes.map(_.sql))
-  def textArgumentsToSql(parts: Seq[String]): String = parts.mkString("(", ",", ")")
+  def textArgumentsToSql(parts: Seq[String]): String = parts.mkString("(", ", ", ")")
   def elementsToSql(elements: Seq[ColumnNodeLike], prefix: String = ""): String = {
     if (elements.nonEmpty) {
-      elements.map(_.sql).mkString(prefix, ",", "")
+      elements.map(_.sql).mkString(prefix, ", ", "")
     } else {
       ""
     }
@@ -263,8 +265,8 @@ private[sql] case class SortOrder(
 
 private[sql] object SortOrder {
   sealed abstract class SortDirection(override val sql: String) extends ColumnNodeLike
-  object Ascending extends SortDirection("ASCENDING")
-  object Descending extends SortDirection("DESCENDING")
+  object Ascending extends SortDirection("ASC")
+  object Descending extends SortDirection("DESC")
   sealed abstract class NullOrdering(override val sql: String) extends ColumnNodeLike
   object NullsFirst extends NullOrdering("NULLS FIRST")
   object NullsLast extends NullOrdering("NULLS LAST")
@@ -351,13 +353,20 @@ private[sql] object WindowFrame {
 private[sql] case class LambdaFunction(
     function: ColumnNode,
     arguments: Seq[UnresolvedNamedLambdaVariable],
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin) extends ColumnNode {
+
   override private[internal] def normalize(): LambdaFunction = copy(
     function = function.normalize(),
     arguments = ColumnNode.normalize(arguments),
     origin = NO_ORIGIN)
 
   override def sql: String = argumentsToSql(arguments) + " -> " + function.sql
+}
+
+object LambdaFunction {
+  def apply(function: ColumnNode, arguments: Seq[UnresolvedNamedLambdaVariable]): LambdaFunction = (
+    new LambdaFunction(function, arguments, CurrentOrigin.get)
+  )
 }
 
 /**
@@ -372,6 +381,14 @@ private[sql] case class UnresolvedNamedLambdaVariable(
     copy(origin = NO_ORIGIN)
 
   override def sql: String = name
+}
+
+object UnresolvedNamedLambdaVariable {
+  private val nextId = new AtomicLong()
+  def apply(name: String): UnresolvedNamedLambdaVariable = {
+    // Generate a unique name because we reuse lambda variable names (e.g. x, y, or z).
+    new UnresolvedNamedLambdaVariable(s"${name}_${nextId.incrementAndGet()}")
+  }
 }
 
 /**
@@ -436,9 +453,9 @@ private[sql] case class CaseWhenOtherwise(
     origin = NO_ORIGIN)
 
   override def sql: String =
-    "CASE " +
-      branches.map(cv => s"WHEN ${cv._1.sql} THEN ${cv._2.sql}").mkString(" ") +
-      otherwise.map(o => s"ELSE ${o.sql}") +
+    "CASE" +
+      branches.map(cv => s" WHEN ${cv._1.sql} THEN ${cv._2.sql}").mkString +
+      otherwise.map(o => s" ELSE ${o.sql}").getOrElse("") +
       " END"
 }
 

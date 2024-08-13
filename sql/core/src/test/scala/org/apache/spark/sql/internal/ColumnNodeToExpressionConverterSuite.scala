@@ -17,10 +17,9 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.{analysis, expressions, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, AgnosticEncoders}
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -29,6 +28,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for [[ColumnNode]] to [[Expression]] conversions.
@@ -58,6 +58,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
       d.copy(inputAttributes = d.inputAttributes.map(_.withExprId(ExprId(0))))
     case a: expressions.aggregate.AggregateExpression =>
       a.copy(resultId = ExprId(0))
+    case expressions.UnresolvedNamedLambdaVariable(Seq(name)) =>
+      expressions.UnresolvedNamedLambdaVariable(name.takeWhile(_ != '_') :: Nil)
   }
 
   test("literal") {
@@ -65,6 +67,17 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     testConversion(
       Literal("foo", Option(StringType)),
       expressions.Literal.create("foo", StringType))
+    val value = (12.0, "north", 60.0, "west")
+    val dataType = new StructType()
+      .add("_1", DoubleType)
+      .add("_2", StringType)
+      .add("_3", DoubleType)
+      .add("_4", StringType)
+    testConversion(
+      Literal((12.0, "north", 60.0, "west"), Option(dataType)),
+      expressions.Literal(
+        InternalRow(12.0, UTF8String.fromString("north"), 60.0, UTF8String.fromString("west")),
+        dataType))
   }
 
   test("attribute") {
@@ -123,7 +136,13 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   test("alias") {
     testConversion(
       Alias(Literal("qwe"), "newA" :: Nil),
-      expressions.Alias(expressions.Literal("qwe"), "newA")())
+      expressions.Alias(expressions.Literal("qwe"), "newA")(
+        nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
+    val metadata = new MetadataBuilder().putLong("q", 10).build()
+    testConversion(
+      Alias(UnresolvedAttribute("a"), "b" :: Nil, Option(metadata)),
+      expressions.Alias(analysis.UnresolvedAttribute("a"), "b")(
+        explicitMetadata = Option(metadata)))
     testConversion(
       Alias(UnresolvedAttribute("complex"), "newA" :: "newB" :: Nil),
       analysis.MultiAlias(analysis.UnresolvedAttribute("complex"), Seq("newA", "newB")))
@@ -332,7 +351,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         UserDefinedAggregator(
           aggregator = int2LongSum,
           inputEncoder = AgnosticEncoders.PrimitiveIntEncoder,
-          nullable = false),
+          nullable = false,
+          givenName = Option("int2LongSum")),
         UnresolvedAttribute("i_col") :: Nil),
       aggregate.ScalaAggregator(
         children = analysis.UnresolvedAttribute("i_col") :: Nil,
