@@ -406,7 +406,7 @@ class WhileStatementExec(
 }
 
 /**
- * Executable node for WhileStatement.
+ * Executable node for RepeatStatement.
  * @param condition Executable node for the condition.
  * @param body Executable node for the body.
  * @param session Spark session that SQL script is executed within.
@@ -416,11 +416,11 @@ class RepeatStatementExec(
   body: CompoundBodyExec,
   session: SparkSession) extends NonLeafStatementExec {
 
-  private object WhileState extends Enumeration {
+  private object RepeatState extends Enumeration {
     val Condition, Body = Value
   }
 
-  private var state = WhileState.Body
+  private var state = RepeatState.Body
   private var curr: Option[CompoundStatementExec] = Some(body)
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
@@ -428,21 +428,21 @@ class RepeatStatementExec(
       override def hasNext: Boolean = curr.nonEmpty
 
       override def next(): CompoundStatementExec = state match {
-        case WhileState.Condition =>
+        case RepeatState.Condition =>
           assert(curr.get.isInstanceOf[SingleStatementExec])
           val condition = curr.get.asInstanceOf[SingleStatementExec]
           if (!evaluateBooleanCondition(session, condition)) {
-            state = WhileState.Body
+            state = RepeatState.Body
             curr = Some(body)
             body.reset()
           } else {
             curr = None
           }
           condition
-        case WhileState.Body =>
+        case RepeatState.Body =>
           val retStmt = body.getTreeIterator.next()
           if (!body.getTreeIterator.hasNext) {
-            state = WhileState.Condition
+            state = RepeatState.Condition
             curr = Some(condition)
             condition.reset()
           }
@@ -453,7 +453,7 @@ class RepeatStatementExec(
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
-    state = WhileState.Body
+    state = RepeatState.Body
     curr = Some(body)
     body.reset()
     condition.reset()

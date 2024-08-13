@@ -90,6 +90,17 @@ case class WhileStatement(
     body: CompoundBody,
     label: Option[String]) extends CompoundPlanStatement
 
+/**
+ * Logical operator for REPEAT statement.
+ * @param condition Any expression evaluating to a Boolean.
+ *                 Body is executed as long as the condition evaluates to false
+ * @param body Compound body is a collection of statements that are executed once no matter what,
+ *             and then as long as condition is false.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the LOOP statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
 case class RepeatStatement(
   condition: SingleStatement,
   body: CompoundBody,
