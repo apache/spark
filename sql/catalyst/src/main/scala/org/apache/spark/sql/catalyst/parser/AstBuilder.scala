@@ -291,6 +291,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): SearchedCaseStatement = {
+    // uses EqualTo to compare the case variable(the main case expression)
+    // to the WHEN clause expressions
     SearchedCaseStatement(
       conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
           SingleStatement(

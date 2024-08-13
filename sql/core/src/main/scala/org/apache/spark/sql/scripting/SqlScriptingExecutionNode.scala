@@ -405,6 +405,15 @@ class WhileStatementExec(
   }
 }
 
+/**
+ * Executable node for SearchedCaseStatement.
+ * @param conditions Collection of executable conditions which correspond to WHEN clauses.
+ * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
+ *                 in WHEN branches.
+ * @param elseBody Body that is executed if none of the conditions are met,
+ *                          i.e. ELSE branch.
+ * @param session Spark session that SQL script is executed within.
+ */
 class SearchedCaseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
@@ -435,7 +444,7 @@ class SearchedCaseStatementExec(
           } else {
             clauseIdx += 1
             if (clauseIdx < conditionsCount) {
-              // There are ELSE IF clauses remaining.
+              // There are WHEN clauses remaining.
               state = CaseState.Condition
               curr = Some(conditions(clauseIdx))
             } else if (elseBody.isDefined) {

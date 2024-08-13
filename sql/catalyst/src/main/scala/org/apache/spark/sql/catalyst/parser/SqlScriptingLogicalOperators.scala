@@ -125,16 +125,14 @@ case class LeaveStatement(label: String) extends CompoundPlanStatement
  */
 case class IterateStatement(label: String) extends CompoundPlanStatement
 
-// maybe have simple and search inherit from a base case
-// or maybe transform simple into search by creating equality comparison exec nodes
-//  case class SimpleCaseStatement(
-//      value: SingleStatement,
-//      conditionExpressions: Seq[SingleStatement],
-//      conditionalBodies: Seq[CompoundBody],
-//      elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
-//    assert(conditionExpressions.length == conditionalBodies.length)
-//  }
-
+/**
+ * Logical operator for CASE statement.
+ * @param conditions Collection of conditions which correspond to WHEN clauses.
+ * @param conditionalBodies Collection of bodies that have a corresponding condition,
+ *                          in WHEN branches.
+ * @param elseBody Body that is executed if none of the conditions are met,
+ *                          i.e. ELSE branch.
+ */
 case class SearchedCaseStatement(
     conditions: Seq[SingleStatement],
     conditionalBodies: Seq[CompoundBody],
