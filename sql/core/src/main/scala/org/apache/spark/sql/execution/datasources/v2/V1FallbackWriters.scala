@@ -64,14 +64,14 @@ sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
   def write: V1Write
 
   protected val customMetrics: Map[String, SQLMetric] =
-    SQLMetrics.createV2CustomMetrics(sparkContext, write)
+    SQLMetrics.createV2CustomMetrics(sparkContext, write.supportedCustomMetrics())
 
   override lazy val metrics: Map[String, SQLMetric] = customMetrics
 
   override def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV1(write.toInsertableRelation)
     refreshCache()
-    SQLMetrics.postV2DriverMetrics(sparkContext, write, metrics)
+    SQLMetrics.postV2DriverMetrics(sparkContext, write.reportDriverMetrics(), metrics)
     writtenRows
   }
 }

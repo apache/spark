@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   lazy val customMetrics: Map[String, SQLMetric] =
-    SQLMetrics.createV2CustomMetrics(sparkContext, scan)
+    SQLMetrics.createV2CustomMetrics(sparkContext, scan.supportedCustomMetrics())
 
   override lazy val metrics: Map[String, SQLMetric] = {
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
@@ -189,7 +189,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   protected def postDriverMetrics(): Unit = {
-    SQLMetrics.postV2DriverMetrics(sparkContext, scan, metrics)
+    SQLMetrics.postV2DriverMetrics(sparkContext, scan.reportDriverMetrics(), metrics)
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
