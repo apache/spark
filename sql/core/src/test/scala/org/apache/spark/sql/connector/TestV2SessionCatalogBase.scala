@@ -79,18 +79,22 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
     val key = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY
-    val propsWithLocation = if (properties.containsKey(key)) {
+    val newProps = new java.util.HashMap[String, String]()
+    newProps.putAll(properties)
+    if (properties.containsKey(TableCatalog.PROP_LOCATION)) {
+      newProps.put(TableCatalog.PROP_EXTERNAL, "true")
+    }
+
+    val propsWithLocation = if (newProps.containsKey(key)) {
       // Always set a location so that CREATE EXTERNAL TABLE won't fail with LOCATION not specified.
-      if (!properties.containsKey(TableCatalog.PROP_LOCATION)) {
-        val newProps = new java.util.HashMap[String, String]()
-        newProps.putAll(properties)
+      if (!newProps.containsKey(TableCatalog.PROP_LOCATION)) {
         newProps.put(TableCatalog.PROP_LOCATION, "file:/abc")
         newProps
       } else {
-        properties
+        newProps
       }
     } else {
-      properties
+      newProps
     }
     val created = super.createTable(ident, schema, partitions, propsWithLocation)
     val t = newTable(created.name(), schema, partitions, propsWithLocation)

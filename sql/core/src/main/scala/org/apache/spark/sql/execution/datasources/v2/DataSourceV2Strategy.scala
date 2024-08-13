@@ -69,6 +69,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     }
   }
 
+  private def hadoopConf = session.sessionState.newHadoopConf()
+
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
@@ -103,7 +105,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
-    tableSpec.withNewLocation(tableSpec.location.map(makeQualifiedDBObjectPath(_)))
+    tableSpec.withNewLocation(tableSpec.location.map(loc => CatalogUtils.makeQualifiedPath(
+      CatalogUtils.stringToURI(loc), hadoopConf).toString))
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
