@@ -164,6 +164,7 @@ class RocksDB(
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
+  // if column family ids have changed since last load, we want to take a full snapshot
   @volatile private var colFamilyIdsChanged = false
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
