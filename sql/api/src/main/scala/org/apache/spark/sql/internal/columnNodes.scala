@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 import ColumnNode._
 
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, Metadata}
 import org.apache.spark.util.SparkClassUtils
 
@@ -98,12 +99,16 @@ private[internal] object ColumnNode {
 private[sql] case class Literal(
     value: Any,
     dataType: Option[DataType] = None,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get) extends ColumnNode with DataTypeErrorsBase {
   override private[internal] def normalize(): Literal = copy(origin = NO_ORIGIN)
 
-  // TODO make this nicer.
   override def sql: String = value match {
     case null => "NULL"
+    case v: String => toSQLValue(v)
+    case v: Long => toSQLValue(v)
+    case v: Float => toSQLValue(v)
+    case v: Double => toSQLValue(v)
+    case v: Short => toSQLValue(v)
     case _ => value.toString
   }
 }
@@ -302,7 +307,7 @@ private[sql] case class WindowSpec(
   override private[internal] def sql: String = {
     val parts = Seq(
       elementsToSql(partitionColumns, "PARTITION BY "),
-      elementsToSql(sortColumns, "ORDER BY"),
+      elementsToSql(sortColumns, "ORDER BY "),
       optionToSql(frame))
     parts.filter(_.nonEmpty).mkString(" ")
   }
@@ -360,13 +365,18 @@ private[sql] case class LambdaFunction(
     arguments = ColumnNode.normalize(arguments),
     origin = NO_ORIGIN)
 
-  override def sql: String = argumentsToSql(arguments) + " -> " + function.sql
+  override def sql: String = {
+    val argumentsSql = arguments match {
+      case Seq(arg) => arg.sql
+      case _ => argumentsToSql(arguments)
+    }
+    argumentsSql + " -> " + function.sql
+  }
 }
 
 object LambdaFunction {
-  def apply(function: ColumnNode, arguments: Seq[UnresolvedNamedLambdaVariable]): LambdaFunction = (
+  def apply(function: ColumnNode, arguments: Seq[UnresolvedNamedLambdaVariable]): LambdaFunction =
     new LambdaFunction(function, arguments, CurrentOrigin.get)
-  )
 }
 
 /**
@@ -405,7 +415,7 @@ private[sql] case class UnresolvedExtractValue(
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
   override private[internal] def normalize(): UnresolvedExtractValue = copy(
     child = child.normalize(),
-    extraction = child.normalize(),
+    extraction = extraction.normalize(),
     origin = NO_ORIGIN)
 
   override def sql: String = s"${child.sql}[${extraction.sql}]"
