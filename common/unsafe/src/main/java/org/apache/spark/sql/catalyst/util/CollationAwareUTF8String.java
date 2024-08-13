@@ -701,11 +701,26 @@ public class CollationAwareUTF8String {
       final int start, final int collationId) {
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.numBytes() == 0) return MATCH_NOT_FOUND;
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-    stringSearch.setIndex(start);
-
-    return stringSearch.next();
+    // Initialize the string search with respect to the specified ICU collation.
+    String targetStr = target.toValidString();
+    String patternStr = pattern.toValidString();
+    StringSearch stringSearch =
+      CollationFactory.getStringSearch(targetStr, patternStr, collationId);
+    stringSearch.setOverlapping(true);
+    // Start the search from `start`-th code point (NOT necessarily from the `start`-th character).
+    int startIndex = targetStr.offsetByCodePoints(0, start);
+    stringSearch.setIndex(startIndex);
+    // Perform the search and return the next result, starting from the specified position.
+    int searchIndex = stringSearch.next();
+    if (searchIndex == StringSearch.DONE) {
+      return MATCH_NOT_FOUND;
+    }
+    // Convert the search index from character count to code point count.
+    int indexOf = targetStr.codePointCount(0, searchIndex);
+    if (indexOf < start) {
+      return MATCH_NOT_FOUND;
+    }
+    return indexOf;
   }
 
   private static int findIndex(final StringSearch stringSearch, int count) {
