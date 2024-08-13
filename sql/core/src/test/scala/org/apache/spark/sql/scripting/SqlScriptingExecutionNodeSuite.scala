@@ -73,6 +73,33 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     }
   }
 
+  case class TestRepeatCondition(
+    condVal: Boolean, reps: Int, description: String)
+    extends SingleStatementExec(
+      parsedPlan = DummyLogicalPlan(),
+      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      isInternal = false)
+
+  case class TestRepeat(
+    condition: TestRepeatCondition,
+    body: CompoundBodyExec)
+    extends RepeatStatementExec(condition, body, spark) {
+
+    private var callCount: Int = 0
+
+    override def evaluateBooleanCondition(
+      session: SparkSession,
+      statement: LeafStatementExec): Boolean = {
+      if (callCount < condition.reps) {
+        callCount += 1
+        condition.condVal
+      } else {
+        callCount = 0
+        !condition.condVal
+      }
+    }
+  }
+
   private def extractStatementValue(statement: CompoundStatementExec): String =
     statement match {
       case TestLeafStatement(testVal) => testVal
@@ -80,6 +107,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case TestWhileCondition(_, _, description) => description
       case leaveStmt: LeaveStatementExec => leaveStmt.label
       case iterateStmt: IterateStatementExec => iterateStmt.label
+      case TestRepeatCondition(_, _, description) => description
       case _ => fail("Unexpected statement type")
     }
 
@@ -315,6 +343,64 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
                                       "con2", "body1", "con2",
                               "con1", "con2", "body1",
                                       "con2", "body1", "con2", "con1"))
+  }
+
+  test("repeat - true condition") {
+    val iter = new CompoundBodyExec(Seq(
+      TestRepeat(
+        condition = TestRepeatCondition(condVal = false, reps = 0, description = "con1"),
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "con1"))
+  }
+
+  test("repeat - condition false once") {
+    val iter = new CompoundBodyExec(Seq(
+      TestRepeat(
+        condition = TestRepeatCondition(condVal = false, reps = 1, description = "con1"),
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "con1", "body1", "con1"))
+  }
+
+  test("repeat - enters body with multiple statements multiple times") {
+    val iter = new CompoundBodyExec(Seq(
+      TestRepeat(
+        condition = TestRepeatCondition(condVal = false, reps = 2, description = "con1"),
+        body = new CompoundBodyExec(Seq(
+          TestLeafStatement("statement1"),
+          TestLeafStatement("statement2")))
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("statement1", "statement2", "con1", "statement1", "statement2",
+      "con1", "statement1", "statement2", "con1"))
+  }
+
+  test("nested repeat") {
+    val iter = new CompoundBodyExec(Seq(
+      TestRepeat(
+        condition = TestRepeatCondition(condVal = false, reps = 2, description = "con1"),
+        body = new CompoundBodyExec(Seq(
+          TestRepeat(
+            condition = TestRepeatCondition(condVal = false, reps = 2, description = "con2"),
+            body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
+          ))
+        )
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "con2", "body1",
+      "con2", "body1", "con2",
+      "con1", "body1", "con2",
+      "body1", "con2", "body1",
+      "con2", "con1", "body1",
+      "con2", "body1", "con2",
+      "body1", "con2", "con1"))
   }
 
   test("leave compound block") {
