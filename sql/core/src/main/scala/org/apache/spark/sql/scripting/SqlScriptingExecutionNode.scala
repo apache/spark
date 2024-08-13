@@ -236,9 +236,13 @@ class CompoundBodyExec(
       // Hard stop the iteration of the current begin/end block
       stopIteration = true
       // If label of the block matches the label of the leave statement,
-      // mark the leave statement as used
-      if (label.getOrElse("").equals(leave.label)) {
-        leave.used = true
+      // mark the leave statement as used. label can be None in case of a
+      // CompoundBody inside loop or if/else structure. In such cases,
+      // loop will have its own label to be matched by leave statement.
+      if (label.isDefined) {
+        leave.used = label.get.equals(leave.label)
+      } else {
+        leave.used = false
       }
     }
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
