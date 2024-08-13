@@ -1518,6 +1518,163 @@ case class ArrayContains(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
+/**
+ * Searches the specified array for the specified object using the binary search algorithm.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(array, value) - Return index (0-based) of the search value, " +
+    "if it is contained in the array; otherwise, (-<insertion point> - 1).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       1
+      > SELECT _FUNC_(array(null, 1, 2, 3), 2);
+       2
+  """,
+  group = "array_funcs",
+  since = "4.0.0")
+// scalastyle:on line.size.limit
+case class ArrayBinarySearch(array: Expression, value: Expression)
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with QueryErrorsBase {
+
+  override def left: Expression = array
+  override def right: Expression = value
+  override def dataType: DataType = IntegerType
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) =>
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          Map("functionName" -> toSQLId(prettyName)))
+      case (t, _) if !ArrayType.acceptsType(t) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
+    }
+  }
+
+  @transient lazy val elementType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
+  private def resultArrayElementNullable: Boolean =
+    array.dataType.asInstanceOf[ArrayType].containsNull
+
+  @transient private lazy val comp: Comparator[Any] = {
+    val ordering = array.dataType match {
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType.ordering(n)
+    }
+
+    (o1: Any, o2: Any) =>
+      (o1, o2) match {
+        case (null, null) => 0
+        case (null, _) => 1
+        case (_, null) => -1
+        case _ => ordering.compare(o1, o2)
+      }
+  }
+
+  private def binarySearchEval(array: Any, value: Any): Any = {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    java.util.Arrays.binarySearch(data, value.asInstanceOf[AnyRef], comp)
+  }
+
+  private def binarySearchCodegen(
+    ctx: CodegenContext, ev: ExprCode, data: String, value: String): String = {
+    val array = ctx.freshName("array")
+    val c = ctx.freshName("c")
+    val canPerformFastBinarySearch = CodeGenerator.isPrimitiveType(elementType) &&
+      elementType != BooleanType && !resultArrayElementNullable
+    if (canPerformFastBinarySearch) {
+      val javaType = CodeGenerator.javaType(elementType)
+      val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
+      s"""
+         |$javaType[] $array = $data.to${primitiveTypeName}Array();
+         |${ev.value} = java.util.Arrays.binarySearch($array, $value);
+       """.stripMargin
+    } else {
+      val elementTypeTerm = ctx.addReferenceObj("elementTypeTerm", elementType)
+      val o1 = ctx.freshName("o1")
+      val o2 = ctx.freshName("o2")
+      val jt = CodeGenerator.javaType(elementType)
+      val comp = if (CodeGenerator.isPrimitiveType(elementType)) {
+        val bt = CodeGenerator.boxedType(elementType)
+        val v1 = ctx.freshName("v1")
+        val v2 = ctx.freshName("v2")
+        s"""
+           |$jt $v1 = (($bt) $o1).${jt}Value();
+           |$jt $v2 = (($bt) $o2).${jt}Value();
+           |int $c = ${ctx.genComp(elementType, v1, v2)};
+         """.stripMargin
+      } else {
+        s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
+      }
+      s"""
+         |Object[] $array = $data.toObjectArray($elementTypeTerm);
+         |${ev.value} = java.util.Arrays.binarySearch($array, $value, new java.util.Comparator() {
+         |  @Override public int compare(Object $o1, Object $o2) {
+         |    if ($o1 == null && $o2 == null) {
+         |      return 0;
+         |    } else if ($o1 == null) {
+         |      return -1;
+         |    } else if ($o2 == null) {
+         |      return 1;
+         |    }
+         |    $comp
+         |    return $c;
+         |  }
+         |});
+       """.stripMargin
+    }
+  }
+
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    binarySearchEval(arr, value)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (d, v) => binarySearchCodegen(ctx, ev, d, v))
+  }
+
+  override def prettyName: String = "array_binary_search"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayBinarySearch =
+    copy(array = newLeft, value = newRight)
+}
+
 trait ArrayPendBase extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] with QueryErrorsBase {
 

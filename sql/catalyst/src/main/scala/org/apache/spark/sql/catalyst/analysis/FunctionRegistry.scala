@@ -694,6 +694,7 @@ object FunctionRegistry {
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
     expression[ArrayCompact]("array_compact"),
+    expression[ArrayBinarySearch]("array_binary_search"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
