@@ -3629,24 +3629,20 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-49211: V2 Catalog can also support built-in data sources") {
-    val fullTablename = "testcat3.default.t"
-    withSQLConf(
-      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
-      withTable(fullTablename) {
-        sql(
-          "CREATE TABLE " + fullTablename +
-            " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
-        sql("select * from " + fullTablename)
+    def checkParquet(tableName: String): Unit = {
+      withTable(tableName) {
+        sql("CREATE TABLE " + tableName +
+          " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
+        sql("select * from " + tableName)
       }
     }
-    val fullTablename2 = "spark_catalog.default.t"
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      checkParquet("testcat3.default.t")
+    }
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
-      withTable(fullTablename2) {
-        sql("CREATE TABLE " + fullTablename2 +
-          " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
-        sql("select * from " + fullTablename2)
-      }
+      checkParquet("spark_catalog.default.t")
     }
   }
 
