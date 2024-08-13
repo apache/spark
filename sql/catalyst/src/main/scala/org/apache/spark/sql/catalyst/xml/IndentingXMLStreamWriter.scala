@@ -25,7 +25,6 @@ class IndentingXMLStreamWriter(wr: XMLStreamWriter) extends XMLStreamWriter {
   private var indentStep = "  "
   private var depth = 0
 
-  private var atBeginningOfDocument = true
   private var insideElementWithChild = false
 
   def setIndentStep(s: String): Unit = {
@@ -33,10 +32,9 @@ class IndentingXMLStreamWriter(wr: XMLStreamWriter) extends XMLStreamWriter {
   }
 
   private def onStartElement(): Unit = {
-    if (!atBeginningOfDocument) {
+    if (depth > 0) {
       writer.writeCharacters("\n")
     }
-    atBeginningOfDocument = false
     insideElementWithChild = false
     writeIndent()
     depth += 1
