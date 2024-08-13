@@ -203,13 +203,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     invalidParameter("DOUBLE", "ewm", "alpha", invalidValue)
   }
 
-  def invalidStringParameter(
-      functionName: String,
-      parameter: String,
-      invalidValue: Expression): Throwable = {
-    invalidParameter("STRING", functionName, parameter, invalidValue)
-  }
-
   def invalidParameter(
       subClass: String,
       functionName: String,
@@ -1676,12 +1669,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1136",
-      messageParameters = Map.empty)
-  }
-
-  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_SAVE_VARIANT",
       messageParameters = Map.empty)
   }
 
@@ -3728,13 +3715,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
       )
-    )
-  }
-
-  def indeterminateCollationError(): Throwable = {
-    new AnalysisException(
-      errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map.empty
     )
   }
 
