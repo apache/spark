@@ -41,7 +41,6 @@ trait DatasourceV2SQLBase
     registerCatalog("testpart", classOf[InMemoryPartitionTableCatalog])
     registerCatalog("testcat_atomic", classOf[StagingInMemoryTableCatalog])
     registerCatalog("testcat2", classOf[InMemoryCatalog])
-
     registerCatalog(SESSION_CATALOG_NAME, classOf[InMemoryTableSessionCatalog])
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
