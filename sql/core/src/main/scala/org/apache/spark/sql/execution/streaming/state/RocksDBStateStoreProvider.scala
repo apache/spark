@@ -155,6 +155,7 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
 
+      logError(s"### colFamilyName: $colFamilyName")
       // As Virtual Column Family attaches a column family prefix to the key row,
       // we'll need to do prefixScan on the default column family with the same column
       // family id prefix to get all rows stored in a given virtual column family
@@ -351,14 +352,14 @@ private[sql] class RocksDBStateStoreProvider
         " enabled in RocksDBStateStore.")
     }
 
-    var defaultColFamilyId: Option[Short] = None
+    val colFamilyId = getNextColumnFamilyId
     if (useColumnFamilies) {
       // put default column family only if useColumnFamilies are enabled
-      colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, getNextColumnFamilyId())
+      colFamilyNameToIdMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, colFamilyId)
     }
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, defaultColFamilyId),
+        useColumnFamilies, Some(colFamilyId)),
         RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
 
     rocksDB // lazy initialization
@@ -457,7 +458,7 @@ private[sql] class RocksDBStateStoreProvider
   private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
   private val colFamilyIdLock = new Object()
 
-  private def getNextColumnFamilyId(): Short = colFamilyIdLock.synchronized {
+  private def getNextColumnFamilyId: Short = colFamilyIdLock.synchronized {
     val maxId = if (colFamilyNameToIdMap.isEmpty) {
       -1.toShort
     } else {
@@ -596,7 +597,7 @@ private[sql] class RocksDBStateStoreProvider
       Option[Short] = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       if (!checkColFamilyExists(colFamilyName)) {
-        val newColumnFamilyId = getNextColumnFamilyId()
+        val newColumnFamilyId = getNextColumnFamilyId
         colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
         Option(newColumnFamilyId)
       } else Some(colFamilyNameToIdMap.get(colFamilyName))
