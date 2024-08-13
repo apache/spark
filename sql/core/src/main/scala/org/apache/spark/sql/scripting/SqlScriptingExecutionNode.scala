@@ -18,11 +18,11 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable
-
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.parser.SingleStatement
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -225,6 +225,18 @@ class CompoundBodyExec(
   }
 
   /**
+   * Drop variables declared in this CompoundBody.
+   */
+  private def cleanup(): Unit = {
+    // Filter out internal DropVariable statements and execute them.
+    statements.filter(
+        dropVar => dropVar.isInstanceOf[SingleStatementExec]
+        && dropVar.asInstanceOf[SingleStatementExec].parsedPlan.isInstanceOf[DropVariable]
+        && dropVar.isInternal)
+      .foreach(_.asInstanceOf[SingleStatementExec].execute(session))
+  }
+
+  /**
    * Check if the leave statement was used, if it is not used stop iterating surrounding
    * [[CompoundBodyExec]] and move iterator forward. If the label of the block matches the label of
    * the leave statement, mark the leave statement as used.
@@ -233,8 +245,10 @@ class CompoundBodyExec(
    */
   private def handleLeave(leave: LeaveStatementExec): LeaveStatementExec = {
     if (!leave.used) {
-      // Hard stop the iteration of the current begin/end block
+      // Hard stop the iteration of the current begin/end block.
       stopIteration = true
+      // Cleanup variables declared in the current block.
+      cleanup()
       // If label of the block matches the label of the leave statement,
       // mark the leave statement as used. label can be None in case of a
       // CompoundBody inside loop or if/else structure. In such cases,
@@ -300,7 +314,7 @@ class CompoundBodyExec(
                   handleLeave(leave)
                 case leafStatement: LeafStatementExec =>
                   // This check is done to handle error in surrounding begin/end block
-                  // if it was not handled in the nested block
+                  // if it was not handled in the nested block.
                   handleError(leafStatement)
                 case nonLeafStatement: NonLeafStatementExec => nonLeafStatement
               }
