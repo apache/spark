@@ -268,3 +268,58 @@ class IfElseStatementExec(
     elseBody.foreach(b => b.reset())
   }
 }
+
+/**
+ * Executable node for WhileStatement.
+ * @param condition Executable node for the condition.
+ * @param body Executable node for the body.
+ * @param session Spark session that SQL script is executed within.
+ */
+class WhileStatementExec(
+    condition: SingleStatementExec,
+    body: CompoundBodyExec,
+    session: SparkSession) extends NonLeafStatementExec {
+
+  private object WhileState extends Enumeration {
+    val Condition, Body = Value
+  }
+
+  private var state = WhileState.Condition
+  private var curr: Option[CompoundStatementExec] = Some(condition)
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = curr.nonEmpty
+
+      override def next(): CompoundStatementExec = state match {
+          case WhileState.Condition =>
+            assert(curr.get.isInstanceOf[SingleStatementExec])
+            val condition = curr.get.asInstanceOf[SingleStatementExec]
+            if (evaluateBooleanCondition(session, condition)) {
+              state = WhileState.Body
+              curr = Some(body)
+              body.reset()
+            } else {
+              curr = None
+            }
+            condition
+          case WhileState.Body =>
+            val retStmt = body.getTreeIterator.next()
+            if (!body.getTreeIterator.hasNext) {
+              state = WhileState.Condition
+              curr = Some(condition)
+              condition.reset()
+            }
+            retStmt
+        }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = WhileState.Condition
+    curr = Some(condition)
+    condition.reset()
+    body.reset()
+  }
+}
