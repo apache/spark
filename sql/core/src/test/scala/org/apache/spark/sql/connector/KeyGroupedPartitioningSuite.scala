@@ -328,6 +328,28 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       .add("price", FloatType)
       .add("time", TimestampType)
 
+  test("SPARK-49179: Fix v2 multi bucketed inner joins throw AssertionError") {
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("name", StringType))
+    val buckets = Array(bucket(8, "id"))
+
+    withTable("t1", "t2", "t3") {
+      Seq("t1", "t2", "t3").foreach { t =>
+        createTable(t, cols, buckets)
+        sql(s"INSERT INTO testcat.ns.$t VALUES (1, 'aa'), (2, 'bb'), (3, 'cc')")
+      }
+      val df = sql(
+        """
+          |SELECT t1.id, t2.id, t3.name FROM testcat.ns.t1
+          |JOIN testcat.ns.t2 ON t1.id = t2.id
+          |JOIN testcat.ns.t3 ON t1.id = t3.id
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 1, "aa"), Row(2, 2, "bb"), Row(3, 3, "cc")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
+    }
+  }
+
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
     createTable(items, items_schema, items_partitions)
