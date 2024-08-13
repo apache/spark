@@ -392,6 +392,11 @@ object functions {
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
+  private[spark] def grouped_count(e: Column, ignoreNulls: Boolean): Column =
+    Column.internalFn("grouped_count", e, lit(ignoreNulls))
+
+  private[spark] def grouped_count(e: Column): Column = grouped_count(e, true)
+
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *

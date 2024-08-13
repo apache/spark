@@ -83,6 +83,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
       "collect_top_k",
+      "grouped_count",
       "timestamp_add",
       "timestamp_diff"
     )
