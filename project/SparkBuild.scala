@@ -1575,11 +1575,11 @@ object CopyDependencies {
                 Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
               }
             }
-          }
+          }.dependsOn(LocalProject("connect-client-jvm") / assembly)
         } else {
           Def.task {}
         }
-      }.dependsOn(LocalProject("connect-client-jvm") / assembly).value
+      }.value
     },
     (Compile / packageBin / crossTarget) := destPath.value,
     (Compile / packageBin) := (Compile / packageBin).dependsOn(copyDeps).value
