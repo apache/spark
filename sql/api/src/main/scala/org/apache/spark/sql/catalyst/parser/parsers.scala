@@ -414,6 +414,16 @@ case class UnclosedCommentProcessor(
     }
   }
 
+  override def exitCompoundOrSingleStatement(
+      ctx: SqlBaseParser.CompoundOrSingleStatementContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleCompoundStatement(
+      ctx: SqlBaseParser.SingleCompoundStatementContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
   /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
   private def checkUnclosedComment(tokenStream: CommonTokenStream, command: String) = {
     assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])
