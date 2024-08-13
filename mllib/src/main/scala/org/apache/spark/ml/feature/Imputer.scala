@@ -155,12 +155,14 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     val spark = dataset.sparkSession
 
     val (inputColumns, _) = getInOutCols()
-    val cols = inputColumns.map { inputCol =>
+
+    val transformedColNames = Array.tabulate(inputColumns.length)(index => s"c_$index")
+    val cols = inputColumns.zip(transformedColNames).map { case (inputCol, transformedColName) =>
       when(col(inputCol).equalTo($(missingValue)), null)
         .when(col(inputCol).isNaN, null)
         .otherwise(col(inputCol))
         .cast(DoubleType)
-        .as(inputCol)
+        .as(transformedColName)
     }
     val numCols = cols.length
 
@@ -175,12 +177,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
       case Imputer.median =>
         // Function approxQuantile will ignore null automatically.
         // For a column only containing null, approxQuantile will return an empty array.
-        val quantileColNames = Array.tabulate(inputColumns.length)(index => s"c_$index")
-        val quantileDataset = dataset.select(inputColumns.zipWithIndex.map {
-          case (colName, index) => col(colName).alias(quantileColNames(index))
-        }.toImmutableArraySeq: _*)
-        quantileDataset
-          .stat.approxQuantile(quantileColNames, Array(0.5), $(relativeError))
+        dataset.select(cols.toImmutableArraySeq: _*)
+          .stat.approxQuantile(transformedColNames, Array(0.5), $(relativeError))
           .map(_.headOption.getOrElse(Double.NaN))
 
       case Imputer.mode =>
