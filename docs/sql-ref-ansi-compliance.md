@@ -452,7 +452,7 @@ Below is a list of all the keywords in Spark SQL.
 |COMPENSATION|non-reserved|non-reserved|non-reserved|
 |COMPUTE|non-reserved|non-reserved|non-reserved|
 |CONCATENATE|non-reserved|non-reserved|non-reserved|
-|CONDITION|reserved|reserved|reserved|
+|CONDITION|reserved|non-reserved|reserved|
 |CONSTRAINT|reserved|non-reserved|reserved|
 |CONTAINS|non-reserved|non-reserved|non-reserved|
 |CONTINUE|non-reserved|non-reserved|non-reserved|
