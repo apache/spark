@@ -404,7 +404,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SqlScriptingException] (
           runSqlScript(commands1)
         ),
-        errorClass = "BOOLEAN_STATEMENT_EMPTY_ROWS",
+        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
       )
 

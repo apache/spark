@@ -80,7 +80,7 @@ private[sql] object SqlScriptingErrors {
       stmt: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "BOOLEAN_STATEMENT_EMPTY_ROWS",
+      errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
