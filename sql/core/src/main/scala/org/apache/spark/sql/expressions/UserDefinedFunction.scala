@@ -180,7 +180,7 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     }
   }
 
-  override def name: String = givenName.getOrElse(super.name)
+  override def name: String = givenName.getOrElse(aggregator.name)
 }
 
 private[sql] object UserDefinedFunctionUtils {

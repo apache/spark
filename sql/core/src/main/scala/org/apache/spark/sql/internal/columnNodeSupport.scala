@@ -230,7 +230,6 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
   override protected def conf: SQLConf = SQLConf.get
 }
 
-
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */

@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
+import java.util
 import java.util.Locale
 
 import scala.concurrent.duration.MICROSECONDS
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -441,7 +442,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:/tmp/foo")
+        assert(location === "file:///tmp/foo")
       }
     }
   }
@@ -458,7 +459,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:/tmp/foo")
+        assert(location === "file:///tmp/foo")
       }
     }
   }
@@ -2104,15 +2105,10 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("REPLACE TABLE: v1 table") {
-    val e = intercept[AnalysisException] {
-      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
-    }
-    checkError(
-      exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      sqlState = "0A000",
-      parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
-        "operation" -> "REPLACE TABLE"))
+    sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    val v2Catalog = catalog("spark_catalog").asTableCatalog
+    val table = v2Catalog.loadTable(Identifier.of(Array("default"), "tbl"))
+    assert(table.properties().get(TableCatalog.PROP_PROVIDER) == classOf[SimpleScanSource].getName)
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
@@ -2378,6 +2374,8 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      checkAnswer(sql(s"SHOW COLUMNS FROM $t IN testcat.ns1.ns2"), Seq(Row("id"), Row("data")))
+      checkAnswer(sql(s"SHOW COLUMNS in $t"), Seq(Row("id"), Row("data")))
       checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
     }
   }
@@ -3516,6 +3514,9 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-49099: Switch current schema with custom spark_catalog") {
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
     withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryCatalog].getName) {
       sql("CREATE DATABASE test_db")
       sql("USE test_db")
@@ -3612,6 +3613,20 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49183: custom spark_catalog generates location for managed tables") {
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[SimpleDelegatingCatalog].getName) {
+      withTable("t") {
+        sql(s"CREATE TABLE t (i INT) USING $v2Format")
+        val table = catalog(SESSION_CATALOG_NAME).asTableCatalog
+          .loadTable(Identifier.of(Array("default"), "t"))
+        assert(!table.properties().containsKey(TableCatalog.PROP_EXTERNAL))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3632,4 +3647,18 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
   override def useNullableQuerySchema(): Boolean = false
+}
+
+class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val newProps = new util.HashMap[String, String]
+    newProps.putAll(properties)
+    newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
+    newProps.put(TableCatalog.PROP_IS_MANAGED_LOCATION, "true")
+    super.createTable(ident, columns, partitions, newProps)
+  }
 }

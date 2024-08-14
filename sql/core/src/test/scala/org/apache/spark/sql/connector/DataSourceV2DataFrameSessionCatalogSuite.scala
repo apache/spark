@@ -84,7 +84,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
       spark.range(20).write.format(v2Format).option("path", "/abc").saveAsTable(t1)
       val cat = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val tableInfo = cat.loadTable(Identifier.of(Array("default"), t1))
-      assert(tableInfo.properties().get("location") === "file:/abc")
+      assert(tableInfo.properties().get("location") === "file:///abc")
       assert(tableInfo.properties().get("provider") === v2Format)
     }
   }

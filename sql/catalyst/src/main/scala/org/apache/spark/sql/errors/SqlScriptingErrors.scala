@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
 
 /**
@@ -62,5 +63,15 @@ private[sql] object SqlScriptingErrors {
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
       messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+  }
+
+  def invalidBooleanStatement(
+      origin: Origin,
+      stmt: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      cause = null,
+      messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
 }

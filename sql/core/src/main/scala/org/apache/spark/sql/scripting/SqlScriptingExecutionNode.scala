@@ -22,6 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -62,7 +63,10 @@ trait NonLeafStatementExec extends CompoundStatementExec {
    * Evaluate the boolean condition represented by the statement.
    * @param session SparkSession that SQL script is executed within.
    * @param statement Statement representing the boolean condition to evaluate.
-   * @return Whether the condition evaluates to True.
+   * @return
+   *    The value (`true` or `false`) of condition evaluation;
+   *    or throw the error during the evaluation (eg: returning multiple rows of data
+   *    or non-boolean statement).
    */
   protected def evaluateBooleanCondition(
       session: SparkSession,
@@ -78,11 +82,15 @@ trait NonLeafStatementExec extends CompoundStatementExec {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
             case Array(row) => row.getBoolean(0)
-            case _ => false
+            case _ =>
+              throw SparkException.internalError(
+                s"Boolean statement ${statement.getText} is invalid. It returns more than one row.")
           }
-        case _ => false
+        case _ =>
+          throw SqlScriptingErrors.invalidBooleanStatement(statement.origin, statement.getText)
       }
-    case _ => false
+    case _ =>
+      throw SparkException.internalError("Boolean condition must be SingleStatementExec")
   }
 }
 
@@ -258,5 +266,60 @@ class IfElseStatementExec(
     conditions.foreach(c => c.reset())
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
+  }
+}
+
+/**
+ * Executable node for WhileStatement.
+ * @param condition Executable node for the condition.
+ * @param body Executable node for the body.
+ * @param session Spark session that SQL script is executed within.
+ */
+class WhileStatementExec(
+    condition: SingleStatementExec,
+    body: CompoundBodyExec,
+    session: SparkSession) extends NonLeafStatementExec {
+
+  private object WhileState extends Enumeration {
+    val Condition, Body = Value
+  }
+
+  private var state = WhileState.Condition
+  private var curr: Option[CompoundStatementExec] = Some(condition)
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = curr.nonEmpty
+
+      override def next(): CompoundStatementExec = state match {
+          case WhileState.Condition =>
+            assert(curr.get.isInstanceOf[SingleStatementExec])
+            val condition = curr.get.asInstanceOf[SingleStatementExec]
+            if (evaluateBooleanCondition(session, condition)) {
+              state = WhileState.Body
+              curr = Some(body)
+              body.reset()
+            } else {
+              curr = None
+            }
+            condition
+          case WhileState.Body =>
+            val retStmt = body.getTreeIterator.next()
+            if (!body.getTreeIterator.hasNext) {
+              state = WhileState.Condition
+              curr = Some(condition)
+              condition.reset()
+            }
+            retStmt
+        }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = WhileState.Condition
+    curr = Some(condition)
+    condition.reset()
+    body.reset()
   }
 }
