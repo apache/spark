@@ -373,8 +373,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeProperties,
         partitionSpec)
 
-    case SetTableLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
-      AlterTableSetLocationCommand(ident, partitionSpec, location)
+    case SetTableLocation(ResolvedV1TableIdentifier(ident), None, location) =>
+      AlterTableSetLocationCommand(ident, None, location)
+
+    // V2 catalog doesn't support setting partition location yet, we must use v1 command here.
+    case SetTableLocation(
+        ResolvedTable(catalog, _, t: V1Table, _),
+        Some(partitionSpec),
+        location) if isSessionCatalog(catalog) =>
+      AlterTableSetLocationCommand(t.v1Table.identifier, Some(partitionSpec), location)
 
     case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
       AlterViewAsCommand(ident, originalText, query)
