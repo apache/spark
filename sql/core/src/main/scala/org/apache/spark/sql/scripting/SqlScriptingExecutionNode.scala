@@ -83,7 +83,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
           df.limit(2).collect() match {
             case Array(row) =>
               if (row.isNullAt(0)) {
-                throw SqlScriptingErrors.booleanStatementEmptyRows(
+                throw SqlScriptingErrors.booleanStatementWithEmptyRow(
                   statement.origin, statement.getText)
               }
               row.getBoolean(0)
