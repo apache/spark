@@ -125,6 +125,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BOOLEAN_STATEMENT_EMPTY_ROWS" : {
+    "message" : [
+      "Boolean statement <invalidStatement> is invalid. It returns an empty row."
+    ],
+    "sqlState" : "21000"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
