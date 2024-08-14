@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
 from pyspark.errors import PySparkRuntimeError
@@ -77,12 +78,9 @@ class TransformWithStateInPandasTestsMixin:
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
         df_split = df.withColumn("split_values", split(df["value"], ","))
-        df_split = df_split.select(
-            df_split.split_values.getItem(0).alias("id"),
-            df_split.split_values.getItem(1).alias("temperature"),
-        )
-        df_final = df_split.withColumn("id", col("id").cast("string")).withColumn(
-            "temperature", col("temperature").cast("int")
+        df_final = df_split.select(
+            df_split.split_values.getItem(0).alias("id").cast("string"),
+            df_split.split_values.getItem(1).alias("temperature").cast("int"),
         )
         return df_final
 
@@ -124,6 +122,7 @@ class TransformWithStateInPandasTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
     def test_transform_with_state_in_pandas_basic(self):
@@ -141,7 +140,7 @@ class TransformWithStateInPandasTestsMixin:
 
         self._test_transform_with_state_in_pandas_basic(SimpleStatefulProcessor(), check_results)
 
-    def test_transform_with_state_in_pandas_sad_cases(self):
+    def test_transform_with_state_in_pandas_non_exist_value_state(self):
         def check_results(batch_df, _):
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="0"),
@@ -153,7 +152,11 @@ class TransformWithStateInPandasTestsMixin:
         )
 
     def test_transform_with_state_in_pandas_query_restarts(self):
-        input_path = tempfile.mkdtemp()
+        root_path = tempfile.mkdtemp()
+        input_path = root_path + "/input"
+        os.makedirs(input_path, exist_ok=True)
+        checkpoint_path = root_path + "/checkpoint"
+        output_path = root_path + "/output"
 
         self._prepare_test_resource1(input_path)
 
@@ -181,13 +184,14 @@ class TransformWithStateInPandasTestsMixin:
             .writeStream.queryName("this_query")
             .format("parquet")
             .outputMode("append")
-            .option("checkpointLocation", input_path + "/checkpoint")
-            .option("path", input_path + "/output")
+            .option("checkpointLocation", checkpoint_path)
+            .option("path", output_path)
         )
         q = base_query.start()
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
         q.stop()
@@ -198,8 +202,9 @@ class TransformWithStateInPandasTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
-        result_df = self.spark.read.parquet(input_path + "/output")
+        result_df = self.spark.read.parquet(output_path)
         assert set(result_df.sort("id").collect()) == {
             Row(id="0", countAsString="2"),
             Row(id="0", countAsString="3"),
@@ -222,8 +227,8 @@ class SimpleStatefulProcessor(StatefulProcessor):
         key_str = key[0]
         exists = self.num_violations_state.exists()
         if exists:
-            existing_violations_pdf = self.num_violations_state.get()
-            existing_violations = existing_violations_pdf.get("value")[0]
+            existing_violations_row = self.num_violations_state.get()
+            existing_violations = existing_violations_row[0]
             assert existing_violations == self.dict[0][key_str]
             self.batch_id = 1
         else:
@@ -251,12 +256,8 @@ class InvalidSimpleStatefulProcessor(StatefulProcessor):
         count = 0
         exists = self.num_violations_state.exists()
         assert not exists
-        # try to get a non-existing state
-        try:
-            self.num_violations_state.get()
-        except Exception as e:
-            assert isinstance(e, PySparkRuntimeError)
-            assert str(e) == "Error getting value state: state numViolations doesn't exist"
+        # try to get a state variable with no value
+        assert self.num_violations_state.get() is None
         self.num_violations_state.clear()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 

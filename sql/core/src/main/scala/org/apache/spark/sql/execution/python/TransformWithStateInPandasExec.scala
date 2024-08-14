@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expressi
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaValidationResult, StateStore, StateStoreOps}
@@ -76,6 +77,8 @@ case class TransformWithStateInPandasExec(
   private val groupingKeySchema = StructType(groupingKeyStructFields)
   private val groupingKeyExprEncoder = ExpressionEncoder(groupingKeySchema)
     .resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+
+  private val numOutputRows: SQLMetric = longMetric("numOutputRows")
 
   // The keys that may have a watermark attribute.
   override def keyExpressions: Seq[Attribute] = groupingAttributes
@@ -155,7 +158,10 @@ case class TransformWithStateInPandasExec(
           }
           setStoreMetrics(store)
           setOperatorMetrics()
-        })
+        }).map { row =>
+          numOutputRows += 1
+          row
+        }
     }
   }
 

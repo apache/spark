@@ -40,12 +40,15 @@ class ValueStateClient:
         status = response_message[0]
         if status == 0:
             return True
-        elif status == 1:
-            # server returns 1 if the state does not exist
+        elif status == 1 and "doesn't exist" in response_message[1]:
             return False
         else:
             raise PySparkRuntimeError(
-                f"Error checking value state exists: " f"{response_message[1]}"
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
+                    "func_name": "exists()",
+                    "object": "ValueState",
+                },
             )
 
     def get(self, state_name: str) -> Any:
@@ -60,9 +63,18 @@ class ValueStateClient:
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status == 0:
-            return self._stateful_processor_api_client._receive_and_deserialize()
+            if len(response_message[2]) == 0:
+                return None
+            row = self._stateful_processor_api_client._deserialize_from_bytes(response_message[2])
+            return row
         else:
-            raise PySparkRuntimeError(f"Error getting value state: {response_message[1]}")
+            raise PySparkRuntimeError(
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
+                    "func_name": "get()",
+                    "object": "ValueState",
+                },
+            )
 
     def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -70,7 +82,7 @@ class ValueStateClient:
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
         bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
-        update_call = stateMessage.ValueStateUpdate(schema=schema.json(), value=bytes)
+        update_call = stateMessage.ValueStateUpdate(value=bytes)
         value_state_call = stateMessage.ValueStateCall(
             stateName=state_name, valueStateUpdate=update_call
         )
@@ -81,7 +93,13 @@ class ValueStateClient:
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
+                    "func_name": "update()",
+                    "object": "ValueState",
+                },
+            )
 
     def clear(self, state_name: str) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -95,4 +113,10 @@ class ValueStateClient:
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(f"Error clearing value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
+                    "func_name": "clear()",
+                    "object": "ValueState",
+                },
+            )

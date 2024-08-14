@@ -1350,6 +1350,12 @@ public final class StateMessage {
      */
     com.google.protobuf.ByteString
         getErrorMessageBytes();
+
+    /**
+     * <code>bytes value = 3;</code>
+     * @return The value.
+     */
+    com.google.protobuf.ByteString getValue();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateResponse}
@@ -1365,6 +1371,7 @@ public final class StateMessage {
     }
     private StateResponse() {
       errorMessage_ = "";
+      value_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -1430,6 +1437,17 @@ public final class StateMessage {
       }
     }
 
+    public static final int VALUE_FIELD_NUMBER = 3;
+    private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
+    /**
+     * <code>bytes value = 3;</code>
+     * @return The value.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString getValue() {
+      return value_;
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -1450,6 +1468,9 @@ public final class StateMessage {
       if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(errorMessage_)) {
         com.google.protobuf.GeneratedMessageV3.writeString(output, 2, errorMessage_);
       }
+      if (!value_.isEmpty()) {
+        output.writeBytes(3, value_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -1465,6 +1486,10 @@ public final class StateMessage {
       }
       if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(errorMessage_)) {
         size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, errorMessage_);
+      }
+      if (!value_.isEmpty()) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(3, value_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -1485,6 +1510,8 @@ public final class StateMessage {
           != other.getStatusCode()) return false;
       if (!getErrorMessage()
           .equals(other.getErrorMessage())) return false;
+      if (!getValue()
+          .equals(other.getValue())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -1500,6 +1527,8 @@ public final class StateMessage {
       hash = (53 * hash) + getStatusCode();
       hash = (37 * hash) + ERRORMESSAGE_FIELD_NUMBER;
       hash = (53 * hash) + getErrorMessage().hashCode();
+      hash = (37 * hash) + VALUE_FIELD_NUMBER;
+      hash = (53 * hash) + getValue().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -1633,6 +1662,7 @@ public final class StateMessage {
         bitField0_ = 0;
         statusCode_ = 0;
         errorMessage_ = "";
+        value_ = com.google.protobuf.ByteString.EMPTY;
         return this;
       }
 
@@ -1672,6 +1702,9 @@ public final class StateMessage {
         if (((from_bitField0_ & 0x00000002) != 0)) {
           result.errorMessage_ = errorMessage_;
         }
+        if (((from_bitField0_ & 0x00000004) != 0)) {
+          result.value_ = value_;
+        }
       }
 
       @java.lang.Override
@@ -1693,6 +1726,9 @@ public final class StateMessage {
           errorMessage_ = other.errorMessage_;
           bitField0_ |= 0x00000002;
           onChanged();
+        }
+        if (other.getValue() != com.google.protobuf.ByteString.EMPTY) {
+          setValue(other.getValue());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -1730,6 +1766,11 @@ public final class StateMessage {
                 bitField0_ |= 0x00000002;
                 break;
               } // case 18
+              case 26: {
+                value_ = input.readBytes();
+                bitField0_ |= 0x00000004;
+                break;
+              } // case 26
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -1847,6 +1888,38 @@ public final class StateMessage {
         checkByteStringIsUtf8(value);
         errorMessage_ = value;
         bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+
+      private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>bytes value = 3;</code>
+       * @return The value.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString getValue() {
+        return value_;
+      }
+      /**
+       * <code>bytes value = 3;</code>
+       * @param value The value to set.
+       * @return This builder for chaining.
+       */
+      public Builder setValue(com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        value_ = value;
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bytes value = 3;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearValue() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        value_ = getDefaultInstance().getValue();
         onChanged();
         return this;
       }
@@ -8341,19 +8414,7 @@ public final class StateMessage {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>string schema = 1;</code>
-     * @return The schema.
-     */
-    java.lang.String getSchema();
-    /**
-     * <code>string schema = 1;</code>
-     * @return The bytes for schema.
-     */
-    com.google.protobuf.ByteString
-        getSchemaBytes();
-
-    /**
-     * <code>bytes value = 2;</code>
+     * <code>bytes value = 1;</code>
      * @return The value.
      */
     com.google.protobuf.ByteString getValue();
@@ -8371,7 +8432,6 @@ public final class StateMessage {
       super(builder);
     }
     private ValueStateUpdate() {
-      schema_ = "";
       value_ = com.google.protobuf.ByteString.EMPTY;
     }
 
@@ -8388,49 +8448,10 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate.Builder.class);
     }
 
-    public static final int SCHEMA_FIELD_NUMBER = 1;
-    @SuppressWarnings("serial")
-    private volatile java.lang.Object schema_ = "";
-    /**
-     * <code>string schema = 1;</code>
-     * @return The schema.
-     */
-    @java.lang.Override
-    public java.lang.String getSchema() {
-      java.lang.Object ref = schema_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        schema_ = s;
-        return s;
-      }
-    }
-    /**
-     * <code>string schema = 1;</code>
-     * @return The bytes for schema.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getSchemaBytes() {
-      java.lang.Object ref = schema_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        schema_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-
-    public static final int VALUE_FIELD_NUMBER = 2;
+    public static final int VALUE_FIELD_NUMBER = 1;
     private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
     /**
-     * <code>bytes value = 2;</code>
+     * <code>bytes value = 1;</code>
      * @return The value.
      */
     @java.lang.Override
@@ -8452,11 +8473,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(schema_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, schema_);
-      }
       if (!value_.isEmpty()) {
-        output.writeBytes(2, value_);
+        output.writeBytes(1, value_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -8467,12 +8485,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(schema_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, schema_);
-      }
       if (!value_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(2, value_);
+          .computeBytesSize(1, value_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -8489,8 +8504,6 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate other = (org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate) obj;
 
-      if (!getSchema()
-          .equals(other.getSchema())) return false;
       if (!getValue()
           .equals(other.getValue())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
@@ -8504,8 +8517,6 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + SCHEMA_FIELD_NUMBER;
-      hash = (53 * hash) + getSchema().hashCode();
       hash = (37 * hash) + VALUE_FIELD_NUMBER;
       hash = (53 * hash) + getValue().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
@@ -8639,7 +8650,6 @@ public final class StateMessage {
       public Builder clear() {
         super.clear();
         bitField0_ = 0;
-        schema_ = "";
         value_ = com.google.protobuf.ByteString.EMPTY;
         return this;
       }
@@ -8675,9 +8685,6 @@ public final class StateMessage {
       private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate result) {
         int from_bitField0_ = bitField0_;
         if (((from_bitField0_ & 0x00000001) != 0)) {
-          result.schema_ = schema_;
-        }
-        if (((from_bitField0_ & 0x00000002) != 0)) {
           result.value_ = value_;
         }
       }
@@ -8694,11 +8701,6 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate.getDefaultInstance()) return this;
-        if (!other.getSchema().isEmpty()) {
-          schema_ = other.schema_;
-          bitField0_ |= 0x00000001;
-          onChanged();
-        }
         if (other.getValue() != com.google.protobuf.ByteString.EMPTY) {
           setValue(other.getValue());
         }
@@ -8729,15 +8731,10 @@ public final class StateMessage {
                 done = true;
                 break;
               case 10: {
-                schema_ = input.readStringRequireUtf8();
+                value_ = input.readBytes();
                 bitField0_ |= 0x00000001;
                 break;
               } // case 10
-              case 18: {
-                value_ = input.readBytes();
-                bitField0_ |= 0x00000002;
-                break;
-              } // case 18
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -8755,81 +8752,9 @@ public final class StateMessage {
       }
       private int bitField0_;
 
-      private java.lang.Object schema_ = "";
-      /**
-       * <code>string schema = 1;</code>
-       * @return The schema.
-       */
-      public java.lang.String getSchema() {
-        java.lang.Object ref = schema_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          schema_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
-      }
-      /**
-       * <code>string schema = 1;</code>
-       * @return The bytes for schema.
-       */
-      public com.google.protobuf.ByteString
-          getSchemaBytes() {
-        java.lang.Object ref = schema_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          schema_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <code>string schema = 1;</code>
-       * @param value The schema to set.
-       * @return This builder for chaining.
-       */
-      public Builder setSchema(
-          java.lang.String value) {
-        if (value == null) { throw new NullPointerException(); }
-        schema_ = value;
-        bitField0_ |= 0x00000001;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string schema = 1;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearSchema() {
-        schema_ = getDefaultInstance().getSchema();
-        bitField0_ = (bitField0_ & ~0x00000001);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string schema = 1;</code>
-       * @param value The bytes for schema to set.
-       * @return This builder for chaining.
-       */
-      public Builder setSchemaBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) { throw new NullPointerException(); }
-        checkByteStringIsUtf8(value);
-        schema_ = value;
-        bitField0_ |= 0x00000001;
-        onChanged();
-        return this;
-      }
-
       private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>bytes value = 2;</code>
+       * <code>bytes value = 1;</code>
        * @return The value.
        */
       @java.lang.Override
@@ -8837,23 +8762,23 @@ public final class StateMessage {
         return value_;
       }
       /**
-       * <code>bytes value = 2;</code>
+       * <code>bytes value = 1;</code>
        * @param value The value to set.
        * @return This builder for chaining.
        */
       public Builder setValue(com.google.protobuf.ByteString value) {
         if (value == null) { throw new NullPointerException(); }
         value_ = value;
-        bitField0_ |= 0x00000002;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes value = 2;</code>
+       * <code>bytes value = 1;</code>
        * @return This builder for chaining.
        */
       public Builder clearValue() {
-        bitField0_ = (bitField0_ & ~0x00000002);
+        bitField0_ = (bitField0_ & ~0x00000001);
         value_ = getDefaultInstance().getValue();
         onChanged();
         return this;
@@ -9803,45 +9728,45 @@ public final class StateMessage {
       "state.StateVariableRequestH\000\022p\n\032implicit" +
       "GroupingKeyRequest\030\004 \001(\0132J.org.apache.sp" +
       "ark.sql.execution.streaming.state.Implic" +
-      "itGroupingKeyRequestH\000B\010\n\006method\"9\n\rStat" +
+      "itGroupingKeyRequestH\000B\010\n\006method\"H\n\rStat" +
       "eResponse\022\022\n\nstatusCode\030\001 \001(\005\022\024\n\014errorMe" +
-      "ssage\030\002 \001(\t\"\211\003\n\025StatefulProcessorCall\022X\n" +
-      "\016setHandleState\030\001 \001(\0132>.org.apache.spark" +
-      ".sql.execution.streaming.state.SetHandle" +
-      "StateH\000\022Y\n\rgetValueState\030\002 \001(\0132@.org.apa" +
+      "ssage\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"\211\003\n\025StatefulP" +
+      "rocessorCall\022X\n\016setHandleState\030\001 \001(\0132>.o" +
+      "rg.apache.spark.sql.execution.streaming." +
+      "state.SetHandleStateH\000\022Y\n\rgetValueState\030" +
+      "\002 \001(\0132@.org.apache.spark.sql.execution.s" +
+      "treaming.state.StateCallCommandH\000\022X\n\014get" +
+      "ListState\030\003 \001(\0132@.org.apache.spark.sql.e" +
+      "xecution.streaming.state.StateCallComman" +
+      "dH\000\022W\n\013getMapState\030\004 \001(\0132@.org.apache.sp" +
+      "ark.sql.execution.streaming.state.StateC" +
+      "allCommandH\000B\010\n\006method\"z\n\024StateVariableR" +
+      "equest\022X\n\016valueStateCall\030\001 \001(\0132>.org.apa" +
       "che.spark.sql.execution.streaming.state." +
-      "StateCallCommandH\000\022X\n\014getListState\030\003 \001(\013" +
-      "2@.org.apache.spark.sql.execution.stream" +
-      "ing.state.StateCallCommandH\000\022W\n\013getMapSt" +
-      "ate\030\004 \001(\0132@.org.apache.spark.sql.executi" +
-      "on.streaming.state.StateCallCommandH\000B\010\n" +
-      "\006method\"z\n\024StateVariableRequest\022X\n\016value" +
-      "StateCall\030\001 \001(\0132>.org.apache.spark.sql.e" +
-      "xecution.streaming.state.ValueStateCallH" +
-      "\000B\010\n\006method\"\340\001\n\032ImplicitGroupingKeyReque" +
-      "st\022X\n\016setImplicitKey\030\001 \001(\0132>.org.apache." +
-      "spark.sql.execution.streaming.state.SetI" +
-      "mplicitKeyH\000\022^\n\021removeImplicitKey\030\002 \001(\0132" +
-      "A.org.apache.spark.sql.execution.streami" +
-      "ng.state.RemoveImplicitKeyH\000B\010\n\006method\"5" +
-      "\n\020StateCallCommand\022\021\n\tstateName\030\001 \001(\t\022\016\n" +
-      "\006schema\030\002 \001(\t\"\341\002\n\016ValueStateCall\022\021\n\tstat" +
-      "eName\030\001 \001(\t\022H\n\006exists\030\002 \001(\01326.org.apache" +
-      ".spark.sql.execution.streaming.state.Exi" +
-      "stsH\000\022B\n\003get\030\003 \001(\01323.org.apache.spark.sq" +
-      "l.execution.streaming.state.GetH\000\022\\\n\020val" +
-      "ueStateUpdate\030\004 \001(\0132@.org.apache.spark.s" +
-      "ql.execution.streaming.state.ValueStateU" +
-      "pdateH\000\022F\n\005clear\030\005 \001(\01325.org.apache.spar" +
-      "k.sql.execution.streaming.state.ClearH\000B" +
-      "\010\n\006method\"\035\n\016SetImplicitKey\022\013\n\003key\030\001 \001(\014" +
-      "\"\023\n\021RemoveImplicitKey\"\010\n\006Exists\"\005\n\003Get\"1" +
-      "\n\020ValueStateUpdate\022\016\n\006schema\030\001 \001(\t\022\r\n\005va" +
-      "lue\030\002 \001(\014\"\007\n\005Clear\"\\\n\016SetHandleState\022J\n\005" +
-      "state\030\001 \001(\0162;.org.apache.spark.sql.execu" +
-      "tion.streaming.state.HandleState*K\n\013Hand" +
-      "leState\022\013\n\007CREATED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n" +
-      "\016DATA_PROCESSED\020\002\022\n\n\006CLOSED\020\003b\006proto3"
+      "ValueStateCallH\000B\010\n\006method\"\340\001\n\032ImplicitG" +
+      "roupingKeyRequest\022X\n\016setImplicitKey\030\001 \001(" +
+      "\0132>.org.apache.spark.sql.execution.strea" +
+      "ming.state.SetImplicitKeyH\000\022^\n\021removeImp" +
+      "licitKey\030\002 \001(\0132A.org.apache.spark.sql.ex" +
+      "ecution.streaming.state.RemoveImplicitKe" +
+      "yH\000B\010\n\006method\"5\n\020StateCallCommand\022\021\n\tsta" +
+      "teName\030\001 \001(\t\022\016\n\006schema\030\002 \001(\t\"\341\002\n\016ValueSt" +
+      "ateCall\022\021\n\tstateName\030\001 \001(\t\022H\n\006exists\030\002 \001" +
+      "(\01326.org.apache.spark.sql.execution.stre" +
+      "aming.state.ExistsH\000\022B\n\003get\030\003 \001(\01323.org." +
+      "apache.spark.sql.execution.streaming.sta" +
+      "te.GetH\000\022\\\n\020valueStateUpdate\030\004 \001(\0132@.org" +
+      ".apache.spark.sql.execution.streaming.st" +
+      "ate.ValueStateUpdateH\000\022F\n\005clear\030\005 \001(\01325." +
+      "org.apache.spark.sql.execution.streaming" +
+      ".state.ClearH\000B\010\n\006method\"\035\n\016SetImplicitK" +
+      "ey\022\013\n\003key\030\001 \001(\014\"\023\n\021RemoveImplicitKey\"\010\n\006" +
+      "Exists\"\005\n\003Get\"!\n\020ValueStateUpdate\022\r\n\005val" +
+      "ue\030\001 \001(\014\"\007\n\005Clear\"\\\n\016SetHandleState\022J\n\005s" +
+      "tate\030\001 \001(\0162;.org.apache.spark.sql.execut" +
+      "ion.streaming.state.HandleState*K\n\013Handl" +
+      "eState\022\013\n\007CREATED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016" +
+      "DATA_PROCESSED\020\002\022\n\n\006CLOSED\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -9858,7 +9783,7 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor,
-        new java.lang.String[] { "StatusCode", "ErrorMessage", });
+        new java.lang.String[] { "StatusCode", "ErrorMessage", "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor =
       getDescriptor().getMessageTypes().get(2);
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable = new
@@ -9918,7 +9843,7 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor,
-        new java.lang.String[] { "Schema", "Value", });
+        new java.lang.String[] { "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor =
       getDescriptor().getMessageTypes().get(12);
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable = new

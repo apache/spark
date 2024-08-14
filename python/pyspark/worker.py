@@ -850,7 +850,6 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
-        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_transform_with_state_pandas_udf(
             func, return_type, runner_conf
         )

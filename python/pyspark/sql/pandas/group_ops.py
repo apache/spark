@@ -420,9 +420,9 @@ class PandasGroupedOpsMixin:
         ...
         >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
         ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
-        ... # Below is a simple example of a stateful processor that counts the number of violations
-        ... # for a set of temperature sensors. A violation is defined when the temperature is above
-        ... # 100.
+        ... # Below is a simple example to find erroneous sensors from temperature sensor data. The
+        ... # processor returns a count of total readings, while keeping erroneous reading counts
+        ... # in streaming state. A violation is defined when the temperature is above 100.
         ... # The input data is a DataFrame with the following schema:
         ... #    `id: string, temperature: long`.
         ... # The output schema and state schema are defined as below.
@@ -442,8 +442,8 @@ class PandasGroupedOpsMixin:
         ...         count = 0
         ...         exists = self.num_violations_state.exists()
         ...         if exists:
-        ...             existing_violations_pdf = self.num_violations_state.get()
-        ...             existing_violations = existing_violations_pdf.get("value")[0]
+        ...             existing_violations_row = self.num_violations_state.get()
+        ...             existing_violations = existing_violations_row[0]
         ...         else:
         ...             existing_violations = 0
         ...         for pdf in rows:

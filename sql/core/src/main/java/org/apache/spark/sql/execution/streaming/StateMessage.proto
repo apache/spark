@@ -31,6 +31,7 @@ message StateRequest {
 message StateResponse {
   int32 statusCode = 1;
   string errorMessage = 2;
+  bytes value = 3;
 }
 
 message StatefulProcessorCall {
@@ -84,8 +85,7 @@ message Get {
 }
 
 message ValueStateUpdate {
-  string schema = 1;
-  bytes value = 2;
+  bytes value = 1;
 }
 
 message Clear {

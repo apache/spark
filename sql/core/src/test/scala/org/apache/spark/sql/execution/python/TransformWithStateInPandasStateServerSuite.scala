@@ -21,17 +21,19 @@ import java.net.ServerSocket
 
 import scala.collection.mutable
 
+import com.google.protobuf.ByteString
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{Clear, Exists, Get, HandleState, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{Clear, Exists, Get, HandleState, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.ValueState
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
   val valueStateName = "test"
@@ -39,6 +41,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var outputStream: DataOutputStream = _
   var valueState: ValueState[Row] = _
   var stateServer: TransformWithStateInPandasStateServer = _
+  var valueSchema: StructType = _
+  var valueDeserializer: ExpressionEncoder.Deserializer[Row] = _
 
   override def beforeEach(): Unit = {
     val serverSocket = mock(classOf[ServerSocket])
@@ -46,7 +50,11 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val groupingKeySchema = StructType(Seq())
     outputStream = mock(classOf[DataOutputStream])
     valueState = mock(classOf[ValueState[Row]])
-    val valueStateMap = mutable.HashMap[String, ValueState[Row]](valueStateName -> valueState)
+    valueSchema = StructType(Array(StructField("value", IntegerType)))
+    valueDeserializer = ExpressionEncoder(valueSchema).resolveAndBind().createDeserializer()
+    val valueStateMap = mutable.HashMap[String,
+      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])](valueStateName ->
+      (valueState, valueSchema, valueDeserializer))
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, outputStream, valueStateMap)
   }
@@ -108,6 +116,20 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       .setClear(Clear.newBuilder().build()).build()
     stateServer.handleValueStateRequest(message)
     verify(valueState).clear()
+    verify(outputStream).writeInt(0)
+  }
+
+  test("value state update") {
+    // Below byte array is a serialized row with a single integer value 1.
+    val byteArray: Array[Byte] = Array(0x80.toByte, 0x05.toByte, 0x95.toByte, 0x05.toByte,
+      0x00.toByte, 0x00.toByte, 0x00.toByte, 0x00.toByte, 0x00.toByte, 0x00.toByte, 0x00.toByte,
+      'K'.toByte, 0x01.toByte, 0x85.toByte, 0x94.toByte, '.'.toByte
+    )
+    val byteString: ByteString = ByteString.copyFrom(byteArray)
+    val message = ValueStateCall.newBuilder().setStateName(valueStateName)
+      .setValueStateUpdate(ValueStateUpdate.newBuilder().setValue(byteString).build()).build()
+    stateServer.handleValueStateRequest(message)
+    verify(valueState).update(any[Row])
     verify(outputStream).writeInt(0)
   }
 }

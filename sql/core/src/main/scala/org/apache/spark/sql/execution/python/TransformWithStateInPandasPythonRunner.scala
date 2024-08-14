@@ -61,7 +61,7 @@ class TransformWithStateInPandasPythonRunner(
   private val sqlConf = SQLConf.get
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
 
-  private var stateSocketSocketPort: Int = 0
+  private var stateServerSocketPort: Int = 0
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
@@ -78,7 +78,7 @@ class TransformWithStateInPandasPythonRunner(
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)
     // Also write the port number for state server
-    stream.writeInt(stateSocketSocketPort)
+    stream.writeInt(stateServerSocketPort)
     PythonRDD.writeUTF(groupingKeySchema.json, stream)
   }
 
@@ -91,7 +91,7 @@ class TransformWithStateInPandasPythonRunner(
     try {
       stateServerSocket = new ServerSocket( /* port = */0,
         /* backlog = */1)
-      stateSocketSocketPort = stateServerSocket.getLocalPort
+      stateServerSocketPort = stateServerSocket.getLocalPort
     } catch {
       case e: Throwable =>
         failed = true

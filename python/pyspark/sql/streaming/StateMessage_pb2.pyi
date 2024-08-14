@@ -32,7 +32,6 @@ class HandleState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     INITIALIZED: _ClassVar[HandleState]
     DATA_PROCESSED: _ClassVar[HandleState]
     CLOSED: _ClassVar[HandleState]
-
 CREATED: HandleState
 INITIALIZED: HandleState
 DATA_PROCESSED: HandleState
@@ -62,11 +61,13 @@ class StateRequest(_message.Message):
     ) -> None: ...
 
 class StateResponse(_message.Message):
-    __slots__ = ("statusCode", "errorMessage")
+    __slots__ = ("statusCode", "errorMessage", "value")
     STATUSCODE_FIELD_NUMBER: _ClassVar[int]
     ERRORMESSAGE_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
     statusCode: int
     errorMessage: str
+    value: bytes
     def __init__(
         self, statusCode: _Optional[int] = ..., errorMessage: _Optional[str] = ...
     ) -> None: ...
@@ -157,12 +158,10 @@ class Get(_message.Message):
     def __init__(self) -> None: ...
 
 class ValueStateUpdate(_message.Message):
-    __slots__ = ("schema", "value")
-    SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("value",)
     VALUE_FIELD_NUMBER: _ClassVar[int]
-    schema: str
     value: bytes
-    def __init__(self, schema: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, value: _Optional[bytes] = ...) -> None: ...
 
 class Clear(_message.Message):
     __slots__ = ()

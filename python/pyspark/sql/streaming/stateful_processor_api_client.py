@@ -23,7 +23,7 @@ from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkAttributeError, PySparkRuntimeError
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -69,6 +69,7 @@ class StatefulProcessorApiClient:
         if status == 0:
             self.handle_state = state
         else:
+            # TODO(SPARK-49233): Classify errors thrown by internal methods.
             raise PySparkRuntimeError(f"Error setting handle state: " f"{response_message[1]}")
 
     def set_implicit_key(self, key: Tuple) -> None:
@@ -83,12 +84,12 @@ class StatefulProcessorApiClient:
         response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
+            # TODO(SPARK-49233): Classify errors thrown by internal methods.
             raise PySparkRuntimeError(f"Error setting implicit key: " f"{response_message[1]}")
 
     def remove_implicit_key(self) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        print("calling remove_implicit_key on python side")
         remove_implicit_key = stateMessage.RemoveImplicitKey()
         request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
         message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
@@ -97,6 +98,7 @@ class StatefulProcessorApiClient:
         response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
+            # TODO(SPARK-49233): Classify errors thrown by internal methods.
             raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
 
     def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
@@ -115,7 +117,13 @@ class StatefulProcessorApiClient:
         response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(
+                errorClass="ERROR_OCCURRED_WHILE_CALLING",
+                messageParameters={
+                    "func_name": "StatefulProcessorHandle.getValueState",
+                    "error_msg": response_message[1],
+                },
+            )
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
@@ -127,14 +135,11 @@ class StatefulProcessorApiClient:
 
     def _receive_proto_message(self) -> Tuple[int, str]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-
-        serialized_msg = self._receive_str()
-        # proto3 will not serialize the message if the value is default, in this case 0
-        if len(serialized_msg) == 0:
-            return 0, ""
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
         message = stateMessage.StateResponse()
-        message.ParseFromString(serialized_msg.encode("utf-8"))
-        return message.statusCode, message.errorMessage
+        message.ParseFromString(bytes)
+        return message.statusCode, message.errorMessage, message.value
 
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
@@ -161,7 +166,5 @@ class StatefulProcessorApiClient:
         row_value = Row(*converted)
         return self.pickleSer.dumps(schema.toInternal(row_value))
 
-    def _receive_and_deserialize(self) -> Any:
-        length = read_int(self.sockfile)
-        bytes = self.sockfile.read(length)
-        return self.pickleSer.loads(bytes)
+    def _deserialize_from_bytes(self, value: bytes) -> Any:
+        return self.pickleSer.loads(value)

@@ -1185,7 +1185,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Read through an iterator of (iterator of pandas DataFram), serialize them to Arrow
+        Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
         result = [(b, t) for x in iterator for y, t in x for b in y]
