@@ -20,7 +20,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -176,15 +176,7 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         ScalaUDAF(udaf = a, children = arguments.map(apply)).toAggregateExpression(isDistinct)
 
       case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
-        ScalaUDF(
-          function = udf.f,
-          dataType = udf.dataType,
-          children = arguments.map(apply),
-          inputEncoders = udf.inputEncoders,
-          outputEncoder = udf.outputEncoder,
-          udfName = udf.givenName,
-          nullable = udf.deterministic,
-          udfDeterministic = udf.deterministic)
+        udf.createScalaUDF(arguments.map(apply))
 
       case Wrapper(expression, _) =>
         expression
