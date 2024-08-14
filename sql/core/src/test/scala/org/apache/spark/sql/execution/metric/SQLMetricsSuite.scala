@@ -896,6 +896,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         }))))
     )
   }
+
+  test("SQLMetric#toInfoUpdate") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
+    assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
 }
 
 case class CustomFileCommitProtocol(

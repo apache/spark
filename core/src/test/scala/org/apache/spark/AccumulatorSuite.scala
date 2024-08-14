@@ -113,7 +113,7 @@ private[spark] object AccumulatorSuite {
    * Make an `AccumulableInfo` out of an `AccumulatorV2` with the intent to use the
    * info as an accumulator update.
    */
-  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
+  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfoUpdate
 
   /**
    * Run one or more Spark jobs and verify that in at least one job the peak execution memory
