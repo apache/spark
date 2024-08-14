@@ -260,23 +260,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     WhileStatement(condition, body, Some(labelText))
   }
-
-//  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
-//  : SearchedCaseStatement = {
-//    SearchedCaseStatement(
-//      whenExpressions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
-//        SingleStatement(
-//          Project(
-//            Seq(Alias(expression(boolExpr), "condition")()),
-//            OneRowRelation()))
-//      }),
-//
-//    )
-//  }
-//
-//  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): AnyRef = {
-//
-//  }
+  
   override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
   : SearchedCaseStatement = {
     SearchedCaseStatement(
