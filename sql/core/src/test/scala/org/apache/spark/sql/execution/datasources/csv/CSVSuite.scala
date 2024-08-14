@@ -1794,7 +1794,7 @@ abstract class CSVSuite
         spark.read.schema(schema).csv(testFile(valueMalformedFile))
           .select("_corrupt_record").collect()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1285",
+      errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
       parameters = Map.empty
     )
     // workaround

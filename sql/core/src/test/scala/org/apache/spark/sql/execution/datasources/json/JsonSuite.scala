@@ -2207,7 +2207,7 @@ abstract class JsonSuite
         exception = intercept[AnalysisException] {
           spark.read.schema(schema).json(path).select("_corrupt_record").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1285",
+        errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
         parameters = Map.empty
       )
 
