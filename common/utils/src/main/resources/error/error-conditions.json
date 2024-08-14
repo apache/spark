@@ -3772,6 +3772,12 @@
     ],
     "sqlState" : "21000"
   },
+  "ROW_VALUE_IS_NULL" : {
+    "message" : [
+      "Found NULL in a row at the index <index>, expected a non-NULL value."
+    ],
+    "sqlState" : "22023"
+  },
   "RULE_ID_NOT_FOUND" : {
     "message" : [
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
@@ -7283,11 +7289,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2232" : {
-    "message" : [
-      "Value at index <index> is null."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {
