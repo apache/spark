@@ -133,7 +133,7 @@ class StatefulProcessorApiClient:
         self.sockfile.write(message)
         self.sockfile.flush()
 
-    def _receive_proto_message(self) -> Tuple[int, str]:
+    def _receive_proto_message(self) -> Tuple[int, str, bytes]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         length = read_int(self.sockfile)
