@@ -78,7 +78,7 @@ CREATE TABLE spark_catalog.default.tbl (
   b STRING,
   c INT)
 USING parquet
-LOCATION 'file:///path/to/table'
+LOCATION 'file:/path/to/table'
 
 
 -- !query
@@ -108,7 +108,7 @@ CREATE TABLE spark_catalog.default.tbl (
   b STRING,
   c INT)
 USING parquet
-LOCATION 'file:///path/to/table'
+LOCATION 'file:/path/to/table'
 
 
 -- !query
