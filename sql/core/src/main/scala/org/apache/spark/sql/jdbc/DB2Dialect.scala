@@ -154,6 +154,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   }
 
   override def classifyException(
+      catalogName: String,
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
@@ -167,9 +168,10 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(catalogName, e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(catalogName, e, errorClass, messageParameters, description)
     }
   }
 
