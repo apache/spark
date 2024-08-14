@@ -422,6 +422,11 @@ Python Software Foundation License
 python/pyspark/loose_version.py
 
 
+BSD 0-Clause
+------------
+org.tukaani:xz
+
+
 BSD 2-Clause
 ------------
 com.github.luben:zstd-jni
@@ -520,12 +525,6 @@ org.glassfish.hk2:hk2-api
 org.glassfish.hk2:hk2-locator
 org.glassfish.hk2:hk2-utils
 org.glassfish.hk2:osgi-resource-locator
-
-
-Public Domain
--------------
-org.tukaani:xz
-
 
 Creative Commons CC0 1.0 Universal Public Domain Dedication
 -----------------------------------------------------------
