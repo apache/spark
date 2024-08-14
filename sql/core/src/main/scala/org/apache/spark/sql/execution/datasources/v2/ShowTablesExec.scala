@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
 
@@ -50,6 +50,8 @@ case class ShowTablesExec(
   private def isTempView(ident: Identifier): Boolean = {
     catalog match {
       case s: V2SessionCatalog => s.isTempView(ident)
+      case d: DelegatingCatalogExtension if d.getDelegateCatalog().isInstanceOf[V2SessionCatalog] =>
+        d.getDelegateCatalog().asInstanceOf[V2SessionCatalog].isTempView(ident)
       case _ => false
     }
   }

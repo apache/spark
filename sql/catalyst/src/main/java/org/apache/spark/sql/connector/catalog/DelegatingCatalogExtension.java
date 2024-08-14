@@ -46,6 +46,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
+  public final CatalogPlugin getDelegateCatalog() {
+    return delegate;
+  }
+
+  @Override
   public String name() {
     return delegate.name();
   }

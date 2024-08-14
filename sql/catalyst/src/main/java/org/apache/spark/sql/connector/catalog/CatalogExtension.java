@@ -37,4 +37,6 @@ public interface CatalogExtension extends TableCatalog, FunctionCatalog, Support
    * {@link #initialize(String, CaseInsensitiveStringMap)} is called.
    */
   void setDelegateCatalog(CatalogPlugin delegate);
+
+  CatalogPlugin getDelegateCatalog();
 }

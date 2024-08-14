@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, DelegatingCatalogExtension, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1124,9 +1124,36 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     }
   }
 
+  test("SPARK-45854: listTables should not fail with a temp view and DelegatingCatalogExtension") {
+    withSQLConf(
+        s"spark.sql.catalog.${CatalogManager.SESSION_CATALOG_NAME}" ->
+        classOf[DelegatingCatalog].getName) {
+      assert(spark.catalog.currentCatalog() == CatalogManager.SESSION_CATALOG_NAME)
+      createTable("my_table")
+      createTempTable("my_temp_table")
+      assert(spark.catalog.listTables().collect().map(_.name).toSet ==
+        Set("my_table", "my_temp_table"))
+    }
+  }
+
+  test("SPARK-45854: SHOW TABLES should not fail with a temp view and DelegatingCatalogExtension") {
+    withSQLConf(
+        s"spark.sql.catalog.${CatalogManager.SESSION_CATALOG_NAME}" ->
+        classOf[DelegatingCatalog].getName) {
+      assert(spark.catalog.currentCatalog() == CatalogManager.SESSION_CATALOG_NAME)
+      createTable("my_table")
+      createTempTable("my_temp_table")
+      assert(spark.sql("SHOW TABLES").collect().map { row =>
+          (row.getString(1), row.getBoolean(2))
+        }.toSet == Set(("my_table", false), ("my_temp_table", true)))
+    }
+  }
+
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
     ScalaReflection.getConstructorParameterNames(obj.getClass).map { name =>
       obj.getClass.getMethod(name).invoke(obj)
     }
   }
 }
+
+class DelegatingCatalog extends DelegatingCatalogExtension
