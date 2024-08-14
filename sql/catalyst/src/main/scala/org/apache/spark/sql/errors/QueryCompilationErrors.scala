@@ -1678,13 +1678,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("name" -> name, "outputStr" -> outputStr))
   }
 
-  def indeterminateCollationError(): Throwable = {
-    new AnalysisException(
-      errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map.empty
-    )
-  }
-
   def orcNotUsedWithHiveEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1138",
@@ -3722,6 +3715,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
       )
+    )
+  }
+
+  def indeterminateCollationError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION",
+      messageParameters = Map.empty
     )
   }
 
