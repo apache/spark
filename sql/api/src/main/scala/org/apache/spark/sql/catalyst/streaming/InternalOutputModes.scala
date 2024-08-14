@@ -58,7 +58,7 @@ private[sql] object InternalOutputModes {
       case "update" =>
         OutputMode.Update
       case _ => throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_STREAMING_OUTPUT_MODE",
+          errorClass = "STREAMING_OUTPUT_MODE.INVALID",
           messageParameters = Map("outputMode" -> outputMode))
     }
   }

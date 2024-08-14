@@ -1059,12 +1059,6 @@
     ],
     "sqlState" : "42K03"
   },
-  "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE" : {
-    "message" : [
-      "Data source <className> does not support streaming output mode <outputMode>."
-    ],
-    "sqlState" : "42KDE"
-  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2946,12 +2940,6 @@
     ],
     "sqlState" : "42601"
   },
-  "INVALID_STREAMING_OUTPUT_MODE" : {
-    "message" : [
-      "Invalid streaming output mode: <outputMode>. Accepted output modes are 'Append', 'Complete', 'Update'."
-    ],
-    "sqlState" : "42KDE"
-  },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
       "Invalid subquery:"
@@ -4156,6 +4144,29 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_OUTPUT_MODE" : {
+    "message" : [
+      "Invalid streaming output mode: <outputMode>."
+    ],
+    "subClass" : {
+      "INVALID" : {
+        "message" : [
+          "Accepted output modes are 'Append', 'Complete', 'Update'."
+        ]
+      },
+      "UNSUPPORTED_DATASOURCE" : {
+        "message" : [
+          "This output mode is not supported in Data Source <className>."
+        ]
+      },
+      "UNSUPPORTED_OPERATION" : {
+        "message" : [
+          "This output mode is not supported for <operation> on streaming DataFrames/DataSets."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
       "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
@@ -4985,12 +4996,6 @@
       }
     },
     "sqlState" : "42K0E"
-  },
-  "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION" : {
-    "message" : [
-      "The output mode <outputMode> is not supported for <operation> on streaming DataFrames/DataSets."
-    ],
-    "sqlState" : "42KDE"
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [

@@ -607,7 +607,7 @@ class StreamingSessionWindowSuite extends StreamTest
           CheckAnswer() // this is just to trigger the exception
         )
       },
-      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
       sqlState = "42KDE",
       parameters = Map(
         "outputMode" -> OutputMode.Update().toString.toLowerCase(Locale.ROOT),
@@ -625,7 +625,7 @@ class StreamingSessionWindowSuite extends StreamTest
           CheckAnswer() // this is just to trigger the exception
         )
       },
-      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
       sqlState = "42KDE",
       parameters = Map(
         "outputMode" -> OutputMode.Update().toString.toLowerCase(Locale.ROOT),

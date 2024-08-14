@@ -1640,7 +1640,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def dataSourceOutputModeUnsupportedError(
       className: String, outputMode: OutputMode): AnalysisException = {
     new AnalysisException(
-      errorClass = "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE",
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
       messageParameters = Map(
         "className" -> className,
         "outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT)))
@@ -1649,7 +1649,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def unsupportedOutputModeForStreamingOperationError(
       outputMode: OutputMode, operation: String): AnalysisException = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
       messageParameters = Map(
         "outputMode" -> outputMode.toString().toLowerCase(Locale.ROOT),
         "operation" -> operation))

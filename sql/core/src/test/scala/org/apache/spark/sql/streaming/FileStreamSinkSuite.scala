@@ -280,7 +280,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           exception = intercept[AnalysisException] {
             df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
           },
-          errorClass = "DATA_SOURCE_UNSUPPORTED_STREAMING_OUTPUT_MODE",
+          errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
           sqlState = "42KDE",
           parameters = Map("className" -> "parquet", "outputMode" -> mode))
       }

@@ -1035,7 +1035,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           runQuery("complete")
         },
-        errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+        errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
         parameters = Map(
           "outputMode" -> "complete",

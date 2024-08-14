@@ -1753,7 +1753,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       outputMode: OutputMode,
       operation: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OUTPUT_MODE_FOR_STREAMING_OPERATION",
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
       messageParameters = Map(
         "outputMode" -> outputMode.toString().toLowerCase(Locale.ROOT),
         "operation" -> operation))
