@@ -403,22 +403,14 @@ object functions {
     corr(Column(columnName1), Column(columnName2))
   }
 
-  private val ONE = Column(internal.Literal(1, Option(IntegerType)))
-
   /**
    * Aggregate function: returns the number of items in a group.
    *
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(e: Column): Column = {
-    val withoutStar = e.node match {
-      // Turn count(*) into count(1)
-      case internal.UnresolvedStar(None, _, _) => ONE
-      case _ => e
-    }
-    Column.fn("count", withoutStar)
-  }
+  def count(e: Column): Column =
+    Column.fn("count", e)
 
   /**
    * Aggregate function: returns the number of items in a group.
