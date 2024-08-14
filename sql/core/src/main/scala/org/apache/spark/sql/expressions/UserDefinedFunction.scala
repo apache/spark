@@ -23,7 +23,8 @@ import scala.util.Try
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoders}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 import org.apache.spark.sql.types.DataType
@@ -197,7 +198,7 @@ private[sql] object UserDefinedFunctionUtils {
       children,
       udf.inputEncoders.map(_.collect {
         // At some point it would be nice if were to support this.
-        case e if e != AgnosticEncoders.UnboundRowEncoder => encoderFor(e)
+        case e if e != UnboundRowEncoder => encoderFor(e)
       }),
       udf.outputEncoder.map(encoderFor(_)),
       udfName = udf.givenName,

@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.expressions.UserDefinedFunctionUtils.toScalaUDF
+import org.apache.spark.sql.internal.ToScalaUDF
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -180,18 +181,14 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
 
     (0 to 22).foreach { i =>
       val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
-      val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
-      val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
-      val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
-      val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
+      val version = if (i == 0) "2.3.0" else "1.3.0"
       println(s"""
         |/**
         | * Register a deterministic Java UDF$i instance as user-defined function (UDF).
         | * @since 1.3.0
         | */
         |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
-        |  val func = $funcCall
-        |  registerJavaUDF(name, func, returnType, $i)
+        |  registerJavaUDF(name, ToScalaUDF(f), returnType, $i)
         |}""".stripMargin)
     }
     */
@@ -499,8 +496,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
-    val func = () => f.asInstanceOf[UDF0[Any]].call()
-    registerJavaUDF(name, func, returnType, 0)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 0)
   }
 
   /**
@@ -508,8 +504,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF1[_, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    registerJavaUDF(name, func, returnType, 1)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 1)
   }
 
   /**
@@ -517,8 +512,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF2[_, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 2)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 2)
   }
 
   /**
@@ -526,8 +520,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF3[_, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 3)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 3)
   }
 
   /**
@@ -535,8 +528,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF4[_, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 4)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 4)
   }
 
   /**
@@ -544,8 +536,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF5[_, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 5)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 5)
   }
 
   /**
@@ -553,8 +544,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF6[_, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 6)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 6)
   }
 
   /**
@@ -562,8 +552,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 7)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 7)
   }
 
   /**
@@ -571,8 +560,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 8)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 8)
   }
 
   /**
@@ -580,8 +568,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 9)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 9)
   }
 
   /**
@@ -589,8 +576,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 10)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 10)
   }
 
   /**
@@ -598,8 +584,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 11)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 11)
   }
 
   /**
@@ -607,8 +592,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 12)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 12)
   }
 
   /**
@@ -616,8 +600,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 13)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 13)
   }
 
   /**
@@ -625,8 +608,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 14)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 14)
   }
 
   /**
@@ -634,8 +616,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 15)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 15)
   }
 
   /**
@@ -643,8 +624,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 16)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 16)
   }
 
   /**
@@ -652,8 +632,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 17)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 17)
   }
 
   /**
@@ -661,8 +640,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 18)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 18)
   }
 
   /**
@@ -670,8 +648,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 19)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 19)
   }
 
   /**
@@ -679,8 +656,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 20)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 20)
   }
 
   /**
@@ -688,8 +664,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 21)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 21)
   }
 
   /**
@@ -697,8 +672,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 1.3.0
    */
   def register(name: String, f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    registerJavaUDF(name, func, returnType, 22)
+    registerJavaUDF(name, ToScalaUDF(f), returnType, 22)
   }
 
   // scalastyle:on line.size.limit
