@@ -62,7 +62,7 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
    */
   private def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
     val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
-    if (earlyEvalPossible) EvalInlineTables(table) else table
+    if (earlyEvalPossible) EvalInlineTables.eval(table) else table
   }
 
   /**
