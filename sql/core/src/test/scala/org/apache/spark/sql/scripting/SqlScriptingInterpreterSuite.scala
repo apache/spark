@@ -395,7 +395,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         """
           |BEGIN
           |  CREATE TABLE t1 (a BOOLEAN) USING parquet;
-          |  IF (select * from t1) THEN
+          |  IF (SELECT * FROM t1) THEN
           |    SELECT 46;
           |  END IF;
           |END
@@ -415,7 +415,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  CREATE TABLE t2 (a BOOLEAN) USING parquet;
           |  INSERT INTO t2 VALUES (true);
           |  INSERT INTO t2 VALUES (true);
-          |  IF (select * from t2) THEN
+          |  IF (SELECT * FROM t2) THEN
           |    SELECT 46;
           |  END IF;
           |END
