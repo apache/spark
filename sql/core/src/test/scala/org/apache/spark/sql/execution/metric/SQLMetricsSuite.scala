@@ -960,6 +960,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).isZero())
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5).isZero())
   }
+
+  test("SQLMetric#toInfoUpdate") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
+    assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
 }
 
 case class CustomFileCommitProtocol(

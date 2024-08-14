@@ -312,7 +312,7 @@ object InputOutputMetricsHelper {
 
       var maxOutputRows = 0L
       taskEnd.taskMetrics.withExternalAccums(_.foreach { accum =>
-        val info = accum.toInfo(Some(accum.value), None)
+        val info = accum.toInfoUpdate
         if (info.name.toString.contains("number of output rows")) {
           info.update match {
             case Some(n: Number) =>
