@@ -225,7 +225,6 @@ class IfElseStatementExec(
 
       override def next(): CompoundStatementExec = state match {
         case IfElseState.Condition =>
-          assert(curr.get.isInstanceOf[SingleStatementExec])
           val condition = curr.get.asInstanceOf[SingleStatementExec]
           if (evaluateBooleanCondition(session, condition)) {
             state = IfElseState.Body
@@ -293,7 +292,6 @@ class WhileStatementExec(
 
       override def next(): CompoundStatementExec = state match {
           case WhileState.Condition =>
-            assert(curr.get.isInstanceOf[SingleStatementExec])
             val condition = curr.get.asInstanceOf[SingleStatementExec]
             if (evaluateBooleanCondition(session, condition)) {
               state = WhileState.Body
