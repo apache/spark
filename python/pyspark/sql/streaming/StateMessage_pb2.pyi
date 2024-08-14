@@ -32,6 +32,7 @@ class HandleState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     INITIALIZED: _ClassVar[HandleState]
     DATA_PROCESSED: _ClassVar[HandleState]
     CLOSED: _ClassVar[HandleState]
+
 CREATED: HandleState
 INITIALIZED: HandleState
 DATA_PROCESSED: HandleState

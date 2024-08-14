@@ -18,14 +18,13 @@
 import os
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
-from pyspark.errors import PySparkRuntimeError
 from typing import Iterator
 
 import unittest
 from typing import cast
 
 from pyspark import SparkConf
-from pyspark.sql.functions import split, col
+from pyspark.sql.functions import split
 from pyspark.sql.types import (
     StringType,
     StructType,

@@ -23,7 +23,7 @@ from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
-from pyspark.errors import PySparkAttributeError, PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -135,6 +135,7 @@ class StatefulProcessorApiClient:
 
     def _receive_proto_message(self) -> Tuple[int, str]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
         message = stateMessage.StateResponse()
