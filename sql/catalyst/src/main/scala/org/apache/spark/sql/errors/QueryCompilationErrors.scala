@@ -3363,8 +3363,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def unresolvedColumnError(fieldName: Seq[String], fields: Array[String]): AnalysisException = {
-    unresolvedColumnError(toSQLId(fieldName), fields)
+  def unresolvedColumnError(fieldName: Seq[String], fields: Array[String], context: Origin): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      messageParameters = Map(
+        "objectName" -> toSQLId(fieldName),
+        "proposal" -> fields.map(toSQLId).mkString(", ")),
+      origin = context)
   }
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {

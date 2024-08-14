@@ -3931,7 +3931,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         context: Expression): ResolvedFieldName = {
       resolveFieldNamesOpt(table, fieldName, context)
         .getOrElse {
-          throw QueryCompilationErrors.unresolvedColumnError(fieldName, table.schema.fieldNames)
+          throw QueryCompilationErrors.unresolvedColumnError(fieldName, table.schema.fieldNames,
+            context.origin)
         }
     }
 

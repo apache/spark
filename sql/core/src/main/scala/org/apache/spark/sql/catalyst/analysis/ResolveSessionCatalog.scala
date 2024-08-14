@@ -90,7 +90,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           .map(_._2.dataType)
           .getOrElse {
             throw QueryCompilationErrors.unresolvedColumnError(
-              a.column.name, table.schema.fieldNames)
+              toSQLId(a.column.name), table.schema.fieldNames)
           }
       }
       // Add the current default column value string (if any) to the column metadata.

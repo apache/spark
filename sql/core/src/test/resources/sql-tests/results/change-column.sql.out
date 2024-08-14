@@ -224,7 +224,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`invalid_col`",
     "proposal" : "`a`, `b`, `c`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "ALTER TABLE test_change CHANGE invalid_col TYPE INT"
+  } ]
 }
 
 
