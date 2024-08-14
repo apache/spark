@@ -426,7 +426,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         ),
         errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
-        context = ExpectedContext(fragment = "(select * from t2)", start = 121, stop = 138)
+        context = ExpectedContext(fragment = "(SELECT * FROM t2)", start = 121, stop = 138)
       )
     }
   }
