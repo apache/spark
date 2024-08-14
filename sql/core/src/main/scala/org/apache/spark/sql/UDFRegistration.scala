@@ -145,7 +145,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val builder: Seq[Expression] => Expression = { children =>
       val actualParameterCount = children.length
       if (expectedParameterCount == actualParameterCount) {
-        udf.createScalaUDF(children)
+        named.createScalaUDF(children)
       } else {
         throw QueryCompilationErrors.wrongNumArgsError(
           name,

@@ -23,6 +23,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
@@ -109,7 +110,7 @@ private[spark] case class SparkUserDefinedFunction(
       f,
       dataType,
       exprs,
-      inputEncoders.map(_.map(e => encoderFor(e))),
+      inputEncoders.map(_.filter(_ != UnboundRowEncoder).map(e => encoderFor(e))),
       outputEncoder.map(e => encoderFor(e)),
       udfName = name,
       nullable = nullable,
