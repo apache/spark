@@ -260,7 +260,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     WhileStatement(condition, body, Some(labelText))
   }
-  
+
   override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext)
   : SearchedCaseStatement = {
     SearchedCaseStatement(
