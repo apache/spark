@@ -3363,7 +3363,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def unresolvedColumnError(fieldName: Seq[String], fields: Array[String], context: Origin): AnalysisException = {
+  def unresolvedColumnError(
+      fieldName: Seq[String], fields: Array[String], context: Origin): AnalysisException = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       messageParameters = Map(

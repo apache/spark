@@ -2845,7 +2845,8 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`non_exist`",
-          "proposal" -> "`id`, `data`"))
+          "proposal" -> "`id`, `data`"),
+        context = ExpectedContext(fragment = sql1, start = 0, stop = 40))
 
       val sql2 = s"CREATE index i1 ON $t(id)"
       checkError(

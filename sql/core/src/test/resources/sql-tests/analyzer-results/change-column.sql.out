@@ -174,13 +174,12 @@ org.apache.spark.sql.AnalysisException
     "proposal" : "`a`, `b`, `c`"
   },
   "queryContext" : [ {
-     "objectType" : "",
-      "objectName" : "",
-      "startIndex" : 1,
-      "stopIndex" : 51,
-      "fragment" : "ALTER TABLE test_change CHANGE invalid_col TYPE INT"
-    } ]
-  }
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "ALTER TABLE test_change CHANGE invalid_col TYPE INT"
+  } ]
 }
 
 

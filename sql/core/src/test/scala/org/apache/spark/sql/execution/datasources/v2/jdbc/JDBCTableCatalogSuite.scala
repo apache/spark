@@ -283,7 +283,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`bad_column`",
-          "proposal" -> "`C2`"))
+          "proposal" -> "`C2`"),
+        context = ExpectedContext(sqlText, 0, 51))
     }
     // Drop a column to not existing table and namespace
     Seq(
@@ -319,7 +320,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`bad_column`",
-          "proposal" -> "`ID`, `deptno`"))
+          "proposal" -> "`ID`, `deptno`"),
+        context = ExpectedContext(sqlText, 0, 64))
       // Update column to wrong type
       checkError(
         exception = intercept[ParseException] {
@@ -363,7 +365,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`bad_column`",
-          "proposal" -> "`ID`, `deptno`"))
+          "proposal" -> "`ID`, `deptno`"),
+        context = ExpectedContext(sqlText, 0, 66))
     }
     // Update column nullability in not existing table and namespace
     Seq(
@@ -455,7 +458,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`bad_column`",
-          "proposal" -> "`ID`"))
+          "proposal" -> "`ID`"),
+        context = ExpectedContext(sqlText, 0, 67))
     }
     // Update column comments in not existing table and namespace
     Seq(
@@ -490,7 +494,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`C2`",
-            "proposal" -> "`c1`, `c2`"))
+            "proposal" -> "`c1`, `c2`"),
+          context = ExpectedContext(sqlText, 0, 51))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -512,7 +517,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`C3`",
-            "proposal" -> "`c1`, `c3`"))
+            "proposal" -> "`c1`, `c3`"),
+          context = ExpectedContext(sqlText, 0, sqlText.length - 1))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -533,7 +539,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`C1`",
-            "proposal" -> "`c1`"))
+            "proposal" -> "`c1`"),
+          context = ExpectedContext(sqlText, 0, sqlText.length - 1))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -554,7 +561,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`C1`",
-            "proposal" -> "`c1`"))
+            "proposal" -> "`c1`"),
+          context = ExpectedContext(sqlText, 0, sqlText.length - 1))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {

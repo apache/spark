@@ -131,7 +131,8 @@ class AlterTableDropColumnSuite
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`does_not_exist`",
-          "proposal" -> "`id`"))
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = 57))
     }
   }
 
@@ -148,7 +149,8 @@ class AlterTableDropColumnSuite
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`does_not_exist`",
-          "proposal" -> "`id`"))
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = 63))
 
       // with if exists it should pass
       sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.does_not_exist")

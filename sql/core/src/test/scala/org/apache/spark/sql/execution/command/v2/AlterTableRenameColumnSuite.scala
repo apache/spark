@@ -157,7 +157,8 @@ class AlterTableRenameColumnSuite
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`does_not_exist`",
-          "proposal" -> "`id`"))
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = 64))
     }
   }
 
@@ -174,7 +175,8 @@ class AlterTableRenameColumnSuite
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`does_not_exist`",
-          "proposal" -> "`id`"))
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = 70))
     }
   }
 }

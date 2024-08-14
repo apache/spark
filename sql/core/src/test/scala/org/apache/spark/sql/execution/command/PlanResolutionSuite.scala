@@ -1337,7 +1337,8 @@ class PlanResolutionSuite extends AnalysisTest {
             sqlState = "42703",
             parameters = Map(
               "objectName" -> "`j`",
-              "proposal" -> "`i`, `s`, `point`"))
+              "proposal" -> "`i`, `s`, `point`"),
+            context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1422,7 +1423,8 @@ class PlanResolutionSuite extends AnalysisTest {
             sqlState = "42703",
             parameters = Map(
               "objectName" -> "`I`",
-              "proposal" -> "`i`, `s`, `point`"))
+              "proposal" -> "`i`, `s`, `point`"),
+            context = ExpectedContext(fragment = sql, start = 0, stop = 55))
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(
