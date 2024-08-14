@@ -250,8 +250,8 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet): Unit = {
     val tasks = taskSet.tasks
-    logInfo(log"Adding task set ${MDC(LogKeys.TASK_SET_ID, taskSet.id)} with " +
-      log"${MDC(LogKeys.NUM_TASKS, tasks.length)} tasks resource profile " +
+    logInfo(log"Adding task set " + taskSet.logId +
+      log" with ${MDC(LogKeys.NUM_TASKS, tasks.length)} tasks resource profile " +
       log"${MDC(LogKeys.RESOURCE_PROFILE_ID, taskSet.resourceProfileId)}")
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
@@ -364,8 +364,9 @@ private[spark] class TaskSchedulerImpl(
     }
     noRejectsSinceLastReset -= manager.taskSet
     manager.parent.removeSchedulable(manager)
-    logInfo(log"Removed TaskSet ${MDC(LogKeys.TASK_SET_NAME, manager.taskSet.id)}, whose tasks " +
-      log"have all completed, from pool ${MDC(LogKeys.POOL_NAME, manager.parent.name)}")
+    logInfo(log"Removed TaskSet " + manager.taskSet.logId +
+      log" whose tasks have all completed, from pool ${MDC(LogKeys.POOL_NAME, manager.parent.name)}"
+    )
   }
 
   /**
@@ -817,7 +818,7 @@ private[spark] class TaskSchedulerImpl(
             }
           case None =>
             logError(log"Ignoring update with state ${MDC(LogKeys.TASK_STATE, state)} for " +
-              log"TID ${MDC(LogKeys.TID, tid)} because its task set is gone (this is " +
+              log"TID ${MDC(LogKeys.TASK_ID, tid)} because its task set is gone (this is " +
               log"likely the result of receiving duplicate task finished status updates) or its " +
               log"executor has been marked as failed.")
         }
@@ -874,7 +875,7 @@ private[spark] class TaskSchedulerImpl(
          executorRunTime = acc.value.asInstanceOf[Long]
        }
      }
-     acc.toInfo(Some(acc.value), None)
+     acc.toInfoUpdate
    }
    val taskProcessRate = if (efficientTaskCalcualtionEnabled) {
      getTaskProcessRate(recordsRead, executorRunTime)

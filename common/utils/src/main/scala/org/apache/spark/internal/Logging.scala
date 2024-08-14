@@ -19,7 +19,6 @@ package org.apache.spark.internal
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.text.StringEscapeUtils
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -100,9 +99,11 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = StringEscapeUtils.unescapeJava(messageWithContext.message)
+  private lazy val cachedMessageWithContext: MessageWithContext = messageWithContext
 
-  def context: java.util.HashMap[String, String] = messageWithContext.context
+  def message: String = cachedMessageWithContext.message
+
+  def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
 }
 
 /**
@@ -144,7 +145,7 @@ trait Logging {
   implicit class LogStringContext(val sc: StringContext) {
     def log(args: MDC*): MessageWithContext = {
       val processedParts = sc.parts.iterator
-      val sb = new StringBuilder(processedParts.next())
+      val sb = new StringBuilder(StringContext.processEscapes(processedParts.next()))
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
@@ -155,7 +156,7 @@ trait Logging {
         }
 
         if (processedParts.hasNext) {
-          sb.append(processedParts.next())
+          sb.append(StringContext.processEscapes(processedParts.next()))
         }
       }
 
@@ -164,11 +165,17 @@ trait Logging {
   }
 
   protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
-    val threadContext = CloseableThreadContext.putAll(context)
+    // put into thread context only when structured logging is enabled
+    val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
+      Some(CloseableThreadContext.putAll(context))
+    } else {
+      None
+    }
+
     try {
       body
     } finally {
-      threadContext.close()
+      closeableThreadContextOpt.foreach(_.close())
     }
   }
 

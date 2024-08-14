@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
@@ -51,6 +53,19 @@ class SparkPlanInfo(
 
 private[execution] object SparkPlanInfo {
 
+  private def fromLogicalPlan(plan: LogicalPlan): SparkPlanInfo = {
+    val childrenInfo = plan match {
+      case LogicalQueryStage(_, physical) => Seq(fromSparkPlan(physical))
+      case _ => (plan.children ++ plan.subqueries).map(fromLogicalPlan)
+    }
+    new SparkPlanInfo(
+      plan.nodeName,
+      plan.simpleString(SQLConf.get.maxToStringFields),
+      childrenInfo,
+      Map[String, String](),
+      Seq.empty)
+  }
+
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
       case ReusedExchangeExec(_, child) => child :: Nil
@@ -58,6 +73,7 @@ private[execution] object SparkPlanInfo {
       case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
       case stage: QueryStageExec => stage.plan :: Nil
       case inMemTab: InMemoryTableScanExec => inMemTab.relation.cachedPlan :: Nil
+      case EmptyRelationExec(logical) => (logical :: Nil)
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
@@ -69,10 +85,17 @@ private[execution] object SparkPlanInfo {
       case fileScan: FileSourceScanLike => fileScan.metadata
       case _ => Map[String, String]()
     }
+    val childrenInfo = children.flatMap {
+      case child: SparkPlan =>
+        Some(fromSparkPlan(child))
+      case child: LogicalPlan =>
+        Some(fromLogicalPlan(child))
+      case _ => None
+    }
     new SparkPlanInfo(
       plan.nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
-      children.map(fromSparkPlan),
+      childrenInfo,
       metadata,
       metrics)
   }

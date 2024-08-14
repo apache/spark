@@ -1,3 +1,3 @@
 --IMPORT binary.sql
 
---SET spark.sql.binaryOutputStyle=BASE64;
+--SET spark.sql.binaryOutputStyle=BASE64

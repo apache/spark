@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -77,12 +79,12 @@ case class CallMethodViaReflection(
       )
     } else {
       val unexpectedParameter = children.zipWithIndex.collectFirst {
-        case (e, 0) if !(e.dataType == StringType && e.foldable) =>
+        case (e, 0) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("class"),
-              "inputType" -> toSQLType(StringType),
+              "inputType" -> toSQLType(StringTypeAnyCollation),
               "inputExpr" -> toSQLExpr(children.head)
             )
           )
@@ -90,12 +92,12 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",
             messageParameters = Map("exprName" -> toSQLId("class")))
-        case (e, 1) if !(e.dataType == StringType && e.foldable) =>
+        case (e, 1) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("method"),
-              "inputType" -> toSQLType(StringType),
+              "inputType" -> toSQLType(StringTypeAnyCollation),
               "inputExpr" -> toSQLExpr(children(1))
             )
           )
@@ -103,14 +105,16 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",
             messageParameters = Map("exprName" -> toSQLId("method")))
-        case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
+        case (e, idx) if idx > 1 &&
+          (!CallMethodViaReflection.typeMapping.contains(e.dataType)
+            && !e.dataType.isInstanceOf[StringType]) =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
               "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(
                 TypeCollection(BooleanType, ByteType, ShortType,
-                  IntegerType, LongType, FloatType, DoubleType, StringType)),
+                  IntegerType, LongType, FloatType, DoubleType, StringTypeAnyCollation)),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
           )
@@ -134,7 +138,7 @@ case class CallMethodViaReflection(
   }
 
   override def nullable: Boolean = true
-  override val dataType: DataType = StringType
+  override val dataType: DataType = SQLConf.get.defaultStringType
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
   override protected def evalInternal(input: InternalRow): Any = {
@@ -230,7 +234,10 @@ object CallMethodViaReflection {
         // Argument type must match. That is, either the method's argument type matches one of the
         // acceptable types defined in typeMapping, or it is a super type of the acceptable types.
         candidateTypes.zip(argTypes).forall { case (candidateType, argType) =>
-          typeMapping(argType).exists(candidateType.isAssignableFrom)
+          if (!argType.isInstanceOf[StringType]) {
+            typeMapping(argType).exists(candidateType.isAssignableFrom)
+          }
+          else candidateType.isAssignableFrom(classOf[String])
         }
       }
     }

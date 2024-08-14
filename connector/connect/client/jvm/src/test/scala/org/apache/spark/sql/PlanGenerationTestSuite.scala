@@ -71,7 +71,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connector/connect/server` module
+ * `sql/connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -88,7 +88,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /sql/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -700,8 +700,8 @@ class PlanGenerationTestSuite
   }
 
   test("select collated string") {
-    val schema = StructType(
-      StructField("s", StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID)) :: Nil)
+    val schema =
+      StructType(StructField("s", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
@@ -1780,6 +1780,10 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
+  functionTest("substring using columns") {
+    fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
+  }
+
   functionTest("substring_index") {
     fn.substring_index(fn.col("g"), ";", 5)
   }
@@ -2673,6 +2677,10 @@ class PlanGenerationTestSuite
     fn.url_decode(fn.col("g"))
   }
 
+  functionTest("try_url_decode") {
+    fn.try_url_decode(fn.col("g"))
+  }
+
   functionTest("url_encode") {
     fn.url_encode(fn.col("g"))
   }
@@ -3317,11 +3325,11 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connector/connect/common/src/main/protobuf/spark/connect
+  //  1. cd sql/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
-    "connect/common/src/test/resources/protobuf-tests/common.desc"
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/sql/connect/" +
+    "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
   //  are no other negative impacts. For the problem description, please refer to SPARK-45029

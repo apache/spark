@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
+import javax.annotation.concurrent.GuardedBy
 
-import scala.jdk.CollectionConverters._
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
@@ -195,8 +195,9 @@ object FunctionRegistryBase {
 
 trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging {
 
+  @GuardedBy("this")
   protected val functionBuilders =
-    new ConcurrentHashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
+    new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
   // Resolution of the function name is always case insensitive, but the database name
   // depends on the caller
@@ -219,10 +220,10 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   def internalRegisterFunction(
       name: FunctionIdentifier,
       info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = {
+      builder: FunctionBuilder): Unit = synchronized {
     val newFunction = (info, builder)
     functionBuilders.put(name, newFunction) match {
-      case previousFunction if previousFunction != null =>
+      case Some(previousFunction) if previousFunction != newFunction =>
         logWarning(log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
           log"previously registered function.")
       case _ =>
@@ -230,25 +231,34 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    val func = Option(functionBuilders.get(normalizeFuncName(name))).map(_._2).getOrElse {
-      throw QueryCompilationErrors.unresolvedRoutineError(name, Seq("system.builtin"))
+    val func = synchronized {
+      functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
+        throw QueryCompilationErrors.unresolvedRoutineError(name, Seq("system.builtin"))
+      }
     }
     func(children)
   }
 
-  override def listFunction(): Seq[FunctionIdentifier] =
-    functionBuilders.keys().asScala.toSeq
+  override def listFunction(): Seq[FunctionIdentifier] = synchronized {
+    functionBuilders.iterator.map(_._1).toList
+  }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] =
-    Option(functionBuilders.get(normalizeFuncName(name))).map(_._1)
+  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
+    functionBuilders.get(normalizeFuncName(name)).map(_._1)
+  }
 
-  override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] =
-    Option(functionBuilders.get(normalizeFuncName(name))).map(_._2)
+  override def lookupFunctionBuilder(
+      name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
+    functionBuilders.get(normalizeFuncName(name)).map(_._2)
+  }
 
-  override def dropFunction(name: FunctionIdentifier): Boolean =
-    Option(functionBuilders.remove(normalizeFuncName(name))).isDefined
+  override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
+    functionBuilders.remove(normalizeFuncName(name)).isDefined
+  }
 
-  override def clear(): Unit = functionBuilders.clear()
+  override def clear(): Unit = synchronized {
+    functionBuilders.clear()
+  }
 }
 
 /**
@@ -298,11 +308,7 @@ class SimpleFunctionRegistry
 
   override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
-    val iterator = functionBuilders.entrySet().iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      val name = entry.getKey
-      val (info, builder) = entry.getValue
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.internalRegisterFunction(name, info, builder)
     }
     registry
@@ -375,10 +381,10 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
-    expression[Rand]("random", true),
+    expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
-    expression[CaseWhen]("when"),
+    CaseWhen.registryEntry,
 
     // math functions
     expression[Acos]("acos"),
@@ -410,7 +416,7 @@ object FunctionRegistry {
     expression[Log1p]("log1p"),
     expression[Log2]("log2"),
     expression[Log]("ln"),
-    expression[Remainder]("mod", true),
+    expression[Remainder]("mod", true, Some("2.3.0")),
     expression[UnaryMinus]("negative", true),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
@@ -445,7 +451,7 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
-    expression[TryRemainder]("try_remainder"),
+    expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
@@ -455,6 +461,7 @@ object FunctionRegistry {
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
+    expression[TryUrlDecode]("try_url_decode"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -524,8 +531,8 @@ object FunctionRegistry {
     expressionBuilder("endswith", EndsWithExpressionBuilder),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
-    expression[Length]("char_length", true),
-    expression[Length]("character_length", true),
+    expression[Length]("char_length", true, Some("2.3.0")),
+    expression[Length]("character_length", true, Some("2.3.0")),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -553,7 +560,7 @@ object FunctionRegistry {
     expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
-    expression[StringLocate]("position", true),
+    expression[StringLocate]("position", true, Some("2.3.0")),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpExtractAll]("regexp_extract_all"),
@@ -595,6 +602,10 @@ object FunctionRegistry {
     expression[RegExpCount]("regexp_count"),
     expression[RegExpSubStr]("regexp_substr"),
     expression[RegExpInStr]("regexp_instr"),
+    expression[IsValidUTF8]("is_valid_utf8"),
+    expression[MakeValidUTF8]("make_valid_utf8"),
+    expression[ValidateUTF8]("validate_utf8"),
+    expression[TryValidateUTF8]("try_validate_utf8"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
@@ -695,7 +706,7 @@ object FunctionRegistry {
     expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
-    expression[Size]("cardinality", true),
+    expression[Size]("cardinality", true, Some("2.4.0")),
     expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
     expression[Shuffle]("shuffle"),
@@ -744,11 +755,11 @@ object FunctionRegistry {
     expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
-    expression[CurrentDatabase]("current_schema", true),
+    expression[CurrentDatabase]("current_schema", true, Some("3.4.0")),
     expression[CurrentCatalog]("current_catalog"),
     expression[CurrentUser]("current_user"),
-    expression[CurrentUser]("user", setAlias = true),
-    expression[CurrentUser]("session_user", setAlias = true),
+    expression[CurrentUser]("user", true, Some("3.4.0")),
+    expression[CurrentUser]("session_user", true, Some("4.0.0")),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
@@ -854,7 +865,11 @@ object FunctionRegistry {
     // Xml
     expression[XmlToStructs]("from_xml"),
     expression[SchemaOfXml]("schema_of_xml"),
-    expression[StructsToXml]("to_xml")
+    expression[StructsToXml]("to_xml"),
+
+    // Avro
+    expression[FromAvro]("from_avro"),
+    expression[ToAvro]("to_avro")
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -867,6 +882,36 @@ object FunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+
+  /** Registry for internal functions used by Connect and the Column API. */
+  private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
+
+  private def registerInternalExpression[T <: Expression : ClassTag](name: String): Unit = {
+    val (info, builder) = FunctionRegistryBase.build(name, None)
+    internal.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+  }
+
+  registerInternalExpression[Product]("product")
+  registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
+  registerInternalExpression[CollectTopK]("collect_top_k")
+  registerInternalExpression[TimestampAdd]("timestampadd")
+  registerInternalExpression[TimestampDiff]("timestampdiff")
+  registerInternalExpression[Bucket]("bucket")
+  registerInternalExpression[Years]("years")
+  registerInternalExpression[Months]("months")
+  registerInternalExpression[Days]("days")
+  registerInternalExpression[Hours]("hours")
+  registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
+  registerInternalExpression[PandasProduct]("pandas_product")
+  registerInternalExpression[PandasStddev]("pandas_stddev")
+  registerInternalExpression[PandasVariance]("pandas_var")
+  registerInternalExpression[PandasSkewness]("pandas_skew")
+  registerInternalExpression[PandasKurtosis]("pandas_kurt")
+  registerInternalExpression[PandasCovar]("pandas_covar")
+  registerInternalExpression[PandasMode]("pandas_mode")
+  registerInternalExpression[EWM]("ewm")
+  registerInternalExpression[NullIndex]("null_index")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(
@@ -1030,11 +1075,7 @@ class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan
 
   override def clone(): SimpleTableFunctionRegistry = synchronized {
     val registry = new SimpleTableFunctionRegistry
-    val iterator = functionBuilders.entrySet().iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      val name = entry.getKey
-      val (info, builder) = entry.getValue
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.internalRegisterFunction(name, info, builder)
     }
     registry

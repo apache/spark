@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.master.ui
 
+import scala.jdk.CollectionConverters._
 import scala.xml.Node
 
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config.UI.MASTER_UI_VISIBLE_ENV_VAR_PREFIXES
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
@@ -39,6 +41,9 @@ private[ui] class EnvironmentPage(
     val systemProperties = Utils.redact(conf, details("System Properties")).sorted
     val metricsProperties = Utils.redact(conf, details("Metrics Properties")).sorted
     val classpathEntries = details("Classpath Entries").sorted
+    val prefixes = conf.get(MASTER_UI_VISIBLE_ENV_VAR_PREFIXES)
+    val environmentVariables = System.getenv().asScala
+      .filter { case (k, _) => prefixes.exists(k.startsWith(_)) }.toSeq.sorted
 
     val runtimeInformationTable = UIUtils.listingTable(propertyHeader, propertyRow,
       jvmInformation, fixedWidth = true, headerClasses = headerClasses)
@@ -52,6 +57,8 @@ private[ui] class EnvironmentPage(
       metricsProperties, fixedWidth = true, headerClasses = headerClasses)
     val classpathEntriesTable = UIUtils.listingTable(classPathHeader, classPathRow,
       classpathEntries, fixedWidth = true, headerClasses = headerClasses)
+    val environmentVariablesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      environmentVariables, fixedWidth = true, headerClasses = headerClasses)
 
     val content =
       <div>
@@ -123,6 +130,17 @@ private[ui] class EnvironmentPage(
         </span>
         <div class="aggregated-classpathEntries collapsible-table collapsed">
           {classpathEntriesTable}
+        </div>
+        <span class="collapse-aggregated-environmentVariables collapse-table"
+            onClick="collapseTable('collapse-aggregated-environmentVariables',
+            'aggregated-environmentVariables')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>Environment Variables</a>
+          </h4>
+        </span>
+        <div class="aggregated-environmentVariables collapsible-table collapsed">
+          {environmentVariablesTable}
         </div>
       </span>
     UIUtils.basicSparkPage(request, content, "Environment")

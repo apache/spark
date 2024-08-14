@@ -76,6 +76,43 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select *, (select count(*) from y where x1 = y1 and y2 = 1 group by y2) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
+select *, (select count(*) from y where x1 = y1 and y2 = x1 + 1 group by y2) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
+select *, (select count(*) from y where x1 = y1 and cast(y2 as double) = x1 + 1
+           group by cast(y2 as double)) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
+select *, (select count(*) from y where y2 + 1 = x1 + x2 group by y2 + 1) from x
+-- !query schema
+struct<x1:int,x2:int,scalarsubquery(x1, x2):bigint>
+-- !query output
+1	1	NULL
+2	2	NULL
+
+
+-- !query
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1
 -- !query schema
 struct<>
@@ -120,7 +157,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-select *, (select count(*) from y where x1 = y1 and y2 = 1 group by y2) from x
+select *, (select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2) from x
 -- !query schema
 struct<>
 -- !query output
@@ -135,8 +172,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 11,
-    "stopIndex" : 71,
-    "fragment" : "(select count(*) from y where x1 = y1 and y2 = 1 group by y2)"
+    "stopIndex" : 81,
+    "fragment" : "(select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2)"
   } ]
 }
 

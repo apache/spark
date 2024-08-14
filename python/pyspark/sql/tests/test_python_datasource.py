@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from typing import Callable, Union
 
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, AnalysisException
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
@@ -154,7 +154,8 @@ class BasePythonDataSourceTestsMixin:
             read_func=lambda schema, partition: iter([Row(i=1, j=2), Row(j=3, k=4)])
         )
         with self.assertRaisesRegex(
-            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
+            PythonException,
+            r"\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\] Return schema mismatch in the result",
         ):
             self.spark.read.format("test").load().show()
 
@@ -372,6 +373,47 @@ class BasePythonDataSourceTestsMixin:
         d2 = d.copy()
         self.assertEqual(d2["BaR"], 3)
         self.assertEqual(d2["baz"], 3)
+
+    def test_data_source_type_mismatch(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "id int"
+
+            def reader(self, schema):
+                return TestReader()
+
+            def writer(self, schema, overwrite):
+                return TestWriter()
+
+        class TestReader:
+            def partitions(self):
+                return []
+
+            def read(self, partition):
+                yield (0,)
+
+        class TestWriter:
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceReader",
+        ):
+            self.spark.read.format("test").load().show()
+
+        df = self.spark.range(10)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceWriter",
+        ):
+            df.write.format("test").mode("append").saveAsTable("test_table")
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

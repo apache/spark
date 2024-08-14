@@ -106,17 +106,23 @@ class CatalogManager(
     }
   }
 
-  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+  private def assertNamespaceExist(namespace: Array[String]): Unit = {
     currentCatalog match {
-      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
-        v1SessionCatalog.setCurrentDatabase(namespace.head)
-      case _ if isSessionCatalog(currentCatalog) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: namespace)
       case _ =>
-        _currentNamespace = Some(namespace)
     }
+  }
+
+  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+      v1SessionCatalog.setCurrentDatabaseWithNameCheck(
+        namespace.head,
+        _ => assertNamespaceExist(namespace))
+    } else {
+      assertNamespaceExist(namespace)
+    }
+    _currentNamespace = Some(namespace)
   }
 
   private var _currentCatalogName: Option[String] = None

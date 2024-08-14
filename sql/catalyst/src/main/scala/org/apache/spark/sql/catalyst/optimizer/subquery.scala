@@ -801,7 +801,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
         }
-        if (resultWithZeroTups.isEmpty) {
+        if (!SQLConf.get.legacyDuplicateBetweenInput && currentChild.output.contains(origOutput)) {
+          // If we had multiple of the same scalar subqueries they will resolve to the same aliases.
+          currentChild
+        } else if (resultWithZeroTups.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
           // with zero tuples.
           planWithoutCountBug

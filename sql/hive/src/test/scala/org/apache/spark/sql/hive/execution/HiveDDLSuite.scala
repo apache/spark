@@ -154,14 +154,6 @@ class HiveDDLSuite
     fs.exists(filesystemPath)
   }
 
-  test("alter table: set properties") {
-    testSetProperties(isDatasourceTable = false)
-  }
-
-  test("alter table: unset properties") {
-    testUnsetProperties(isDatasourceTable = false)
-  }
-
   test("alter table: change column") {
     testChangeColumn(isDatasourceTable = false)
   }
@@ -771,15 +763,9 @@ class HiveDDLSuite
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         checkProperties(Map())
 
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
-          },
-          errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-          parameters = Map(
-            "properties" -> "`p`",
-            "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
-        )
+        // unset non-existent properties
+        sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+        checkProperties(Map())
       }
     }
   }
@@ -1373,7 +1359,7 @@ class HiveDDLSuite
             sql("DROP DATABASE default")
           },
           errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-          parameters = Map("database" -> "`default`")
+          parameters = Map("database" -> "`spark_catalog`.`default`")
         )
 
         // SQLConf.CASE_SENSITIVE does not affect the result
@@ -1387,7 +1373,7 @@ class HiveDDLSuite
             case _ => "_LEGACY_ERROR_TEMP_3065"
           },
           parameters = caseSensitive match {
-            case "false" => Map("database" -> "`default`")
+            case "false" => Map("database" -> "`spark_catalog`.`default`")
             case _ => Map(
               "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
               "msg" -> "MetaException(message:Can not drop default database)")
@@ -1887,16 +1873,6 @@ class HiveDDLSuite
           parameters = Map(
             "tableName" -> "spark_catalog.default.tbl",
             "invalidKeys" -> s"[${forbiddenPrefix}foo]")
-        )
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')")
-          },
-          errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-          parameters = Map(
-            "properties" -> (s"${(forbiddenPrefix.split("\\.") :+ "foo").
-              map(part => s"`$part`").mkString(".")}"),
-            "table" -> "`spark_catalog`.`default`.`tbl`")
         )
         checkError(
           exception = intercept[AnalysisException] {
@@ -3301,7 +3277,9 @@ class HiveDDLSuite
       }
       checkError(e,
         errorClass = "ROUTINE_ALREADY_EXISTS",
-        parameters = Map("routineName" -> "`f1`"))
+        parameters = Map("routineName" -> "`f1`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
 
       sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +

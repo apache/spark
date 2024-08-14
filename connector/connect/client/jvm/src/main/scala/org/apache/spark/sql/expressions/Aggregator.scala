@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.{Encoder, TypedColumn}
+import scala.reflect.runtime.universe._
+
+import org.apache.spark.connect.proto
+import org.apache.spark.sql.{encoderFor, Encoder, TypedColumn}
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
  * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
@@ -92,9 +96,71 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`. operations.
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset` operations.
+   * @since 4.0.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    throw new UnsupportedOperationException("toColumn is not implemented.")
+    val ttpe = getInputTypeTag[IN]
+    val inputEncoder = ScalaReflection.encoderFor(ttpe)
+    val udaf =
+      ScalaUserDefinedFunction(
+        this,
+        Seq(inputEncoder),
+        encoderFor(outputEncoder),
+        aggregate = true)
+
+    val builder = proto.TypedAggregateExpression.newBuilder()
+    builder.setScalarScalaUdf(udaf.udf)
+    val expr = proto.Expression.newBuilder().setTypedAggregateExpression(builder).build()
+
+    new TypedColumn(expr, encoderFor(outputEncoder))
+  }
+
+  private final def getInputTypeTag[T]: TypeTag[T] = {
+    val mirror = runtimeMirror(this.getClass.getClassLoader)
+    val tpe = mirror.classSymbol(this.getClass).toType
+    // Find the most generic (last in the tree) Aggregator class
+    val baseAgg =
+      tpe.baseClasses
+        .findLast(_.asClass.toType <:< typeOf[Aggregator[_, _, _]])
+        .getOrElse(throw new IllegalStateException("Could not find the Aggregator base class."))
+    val typeArgs = tpe.baseType(baseAgg).typeArgs
+    assert(
+      typeArgs.length == 3,
+      s"Aggregator should have 3 type arguments, " +
+        s"but found ${typeArgs.length}: ${typeArgs.mkString}.")
+    val inType = typeArgs.head
+
+    import scala.reflect.api._
+    def areCompatibleMirrors(one: Mirror[_], another: Mirror[_]): Boolean = {
+      def checkAllParents(target: JavaMirror, candidate: JavaMirror): Boolean = {
+        var current = candidate.classLoader
+        while (current != null) {
+          if (current == target.classLoader) {
+            return true
+          }
+          current = current.getParent
+        }
+        false
+      }
+
+      (one, another) match {
+        case (a: JavaMirror, b: JavaMirror) =>
+          a == b || checkAllParents(a, b) || checkAllParents(b, a)
+        case _ => one == another
+      }
+    }
+
+    TypeTag(
+      mirror,
+      new TypeCreator {
+        def apply[U <: Universe with Singleton](m: Mirror[U]): U#Type =
+          if (areCompatibleMirrors(m, mirror)) {
+            inType.asInstanceOf[U#Type]
+          } else {
+            throw new IllegalArgumentException(
+              s"Type tag defined in [$mirror] cannot be migrated to another mirror [$m].")
+          }
+      })
   }
 }

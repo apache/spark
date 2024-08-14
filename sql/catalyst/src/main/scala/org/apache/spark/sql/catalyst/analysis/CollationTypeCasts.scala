@@ -78,10 +78,26 @@ object CollationTypeCasts extends TypeCoercionRule {
       }
       raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
 
+    case framelessOffsetWindow @ (_: Lag | _: Lead) =>
+      val Seq(input, offset, default) = framelessOffsetWindow.children
+      val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
+      framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
+
+    case mapCreate : CreateMap if mapCreate.children.size % 2 == 0 =>
+      // We only take in mapCreate if it has even number of children, as otherwise it should fail
+      // with wrong number of arguments
+      val newKeys = collateToSingleType(mapCreate.keys)
+      val newValues = collateToSingleType(mapCreate.values)
+      mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight) =>
+      _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: ArrayAppend |
+      _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
+      _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
+      _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
+      _: ToNumber | _: TryToNumber) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

@@ -566,7 +566,7 @@ abstract class AvroSuite
       dataFileWriter.flush()
       dataFileWriter.close()
 
-      val df = spark.sqlContext.read.format("avro").load(nativeWriterPath)
+      val df = spark.read.format("avro").load(nativeWriterPath)
       assertResult(Row(field1, null, null, null))(df.selectExpr("field1.*").first())
       assertResult(Row(null, field2, null, null))(df.selectExpr("field2.*").first())
       assertResult(Row(null, null, field3, null))(df.selectExpr("field3.*").first())
@@ -575,7 +575,7 @@ abstract class AvroSuite
 
       df.write.format("avro").option("avroSchema", schema.toString).save(sparkWriterPath)
 
-      val df2 = spark.sqlContext.read.format("avro").load(nativeWriterPath)
+      val df2 = spark.read.format("avro").load(nativeWriterPath)
       assertResult(Row(field1, null, null, null))(df2.selectExpr("field1.*").first())
       assertResult(Row(null, field2, null, null))(df2.selectExpr("field2.*").first())
       assertResult(Row(null, null, field3, null))(df2.selectExpr("field3.*").first())
@@ -760,7 +760,7 @@ abstract class AvroSuite
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
       assert(snappySize > bzip2Size)
-      assert(bzip2Size > xzSize)
+      assert(xzSize > bzip2Size)
       assert(uncompressSize > zstandardSize)
     }
   }
@@ -918,6 +918,39 @@ abstract class AvroSuite
           Row(new java.math.BigDecimal("13.123"))
         )
       }
+    }
+  }
+
+  test("SPARK-49082: Widening type promotions in AvroDeserializer") {
+    withTempPath { tempPath =>
+      // Int -> Long
+      val intPath = s"$tempPath/int_data"
+      val intDf = Seq(1, Int.MinValue, Int.MaxValue).toDF("col")
+      intDf.write.format("avro").save(intPath)
+      checkAnswer(
+        spark.read.schema("col Long").format("avro").load(intPath),
+        Seq(Row(1L), Row(-2147483648L), Row(2147483647L))
+      )
+
+      // Int -> Double
+      checkAnswer(
+        spark.read.schema("col Double").format("avro").load(intPath),
+        Seq(Row(1D), Row(-2147483648D), Row(2147483647D))
+      )
+
+      // Float -> Double
+      val floatPath = s"$tempPath/float_data"
+      val floatDf = Seq(1F,
+        Float.MinValue, Float.MinPositiveValue, Float.MaxValue,
+        Float.NaN, Float.NegativeInfinity, Float.PositiveInfinity
+      ).toDF("col")
+      floatDf.write.format("avro").save(floatPath)
+      checkAnswer(
+        spark.read.schema("col Double").format("avro").load(floatPath),
+        Seq(Row(1D),
+          Row(-3.4028234663852886E38D), Row(1.401298464324817E-45D), Row(3.4028234663852886E38D),
+          Row(Double.NaN), Row(Double.NegativeInfinity), Row(Double.PositiveInfinity))
+      )
     }
   }
 

@@ -23,7 +23,7 @@ import threading
 import os
 import warnings
 from collections.abc import Sized
-from functools import reduce
+import functools
 from threading import RLock
 from typing import (
     Optional,
@@ -51,7 +51,6 @@ import urllib
 
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
-from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.plan import (
@@ -197,7 +196,7 @@ class SparkSession:
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
             raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
+                errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "enableHiveSupport"}
             )
 
         def _apply_options(self, session: "SparkSession") -> None:
@@ -222,7 +221,7 @@ class SparkSession:
                 not has_channel_builder and not has_spark_remote
             ):
                 raise PySparkValueError(
-                    error_class="SESSION_NEED_CONN_STR_OR_BUILDER", message_parameters={}
+                    errorClass="SESSION_NEED_CONN_STR_OR_BUILDER", messageParameters={}
                 )
 
             if has_channel_builder:
@@ -312,8 +311,8 @@ class SparkSession:
         session = SparkSession.getActiveSession()
         if session is None:
             raise PySparkRuntimeError(
-                error_class="NO_ACTIVE_SESSION",
-                message_parameters={},
+                errorClass="NO_ACTIVE_SESSION",
+                messageParameters={},
             )
         if session._session_id != session_id:
             raise PySparkAssertionError(
@@ -331,8 +330,8 @@ class SparkSession:
             session = cls._get_default_session()
             if session is None:
                 raise PySparkRuntimeError(
-                    error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
-                    message_parameters={},
+                    errorClass="NO_ACTIVE_OR_DEFAULT_SESSION",
+                    messageParameters={},
                 )
         return session
 
@@ -341,8 +340,8 @@ class SparkSession:
     def table(self, tableName: str) -> ParentDataFrame:
         if not isinstance(tableName, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
             )
 
         return self.read.table(tableName)
@@ -384,8 +383,8 @@ class SparkSession:
         """
         if not data:
             raise PySparkValueError(
-                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                message_parameters={},
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
             )
 
         (
@@ -399,7 +398,7 @@ class SparkSession:
             "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
             "spark.sql.timestampType",
         )
-        return reduce(
+        return functools.reduce(
             _merge_type,
             (
                 _infer_schema(
@@ -424,8 +423,8 @@ class SparkSession:
         assert data is not None
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         if samplingRatio is not None:
@@ -457,8 +456,8 @@ class SparkSession:
 
         elif schema is not None:
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-                message_parameters={
+                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                messageParameters={
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },
@@ -466,16 +465,16 @@ class SparkSession:
 
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
             raise PySparkValueError(
-                error_class="INVALID_NDARRAY_DIMENSION",
-                message_parameters={"dimensions": "1 or 2"},
+                errorClass="INVALID_NDARRAY_DIMENSION",
+                messageParameters={"dimensions": "1 or 2"},
             )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame(LocalRelation(table=None, schema=_schema.json()), self)
             else:
                 raise PySparkValueError(
-                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                    message_parameters={},
+                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                    messageParameters={},
                 )
 
         _table: Optional[pa.Table] = None
@@ -501,8 +500,8 @@ class SparkSession:
                         if isinstance(field_type, pa.StructType):
                             if len(field_type) == 0:
                                 raise PySparkValueError(
-                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                                    message_parameters={},
+                                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                                    messageParameters={},
                                 )
                             arrow_type = field_type.field(0).type
                             spark_type = MapType(StringType(), from_arrow_type(arrow_type))
@@ -527,8 +526,8 @@ class SparkSession:
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
                 raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                    message_parameters={"data_type": str(schema)},
+                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    messageParameters={"data_type": str(schema)},
                 )
             else:
                 # Any timestamps must be coerced to be compatible with Spark
@@ -597,8 +596,8 @@ class SparkSession:
             if data.ndim == 1:
                 if 1 != len(_cols):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(_cols)),
                             "actual_length": "1",
                         },
@@ -608,8 +607,8 @@ class SparkSession:
             else:
                 if data.shape[1] != len(_cols):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(_cols)),
                             "actual_length": str(data.shape[1]),
                         },
@@ -650,7 +649,7 @@ class SparkSession:
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
                     raise PySparkValueError(
-                        error_class="CANNOT_DETERMINE_TYPE", message_parameters={}
+                        errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
@@ -664,8 +663,8 @@ class SparkSession:
         # whether the Arrow Schema is compatible with the user provided Schema.
         if _num_cols is not None and _num_cols != _table.shape[1]:
             raise PySparkValueError(
-                error_class="AXIS_LENGTH_MISMATCH",
-                message_parameters={
+                errorClass="AXIS_LENGTH_MISMATCH",
+                messageParameters={
                     "expected_length": str(_num_cols),
                     "actual_length": str(_table.shape[1]),
                 },
@@ -705,8 +704,8 @@ class SparkSession:
                 _args = [F.lit(v) for v in args]
             else:
                 raise PySparkTypeError(
-                    error_class="INVALID_TYPE",
-                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
+                    errorClass="INVALID_TYPE",
+                    messageParameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
 
         _views: List[SubqueryAlias] = []
@@ -720,9 +719,12 @@ class SparkSession:
                 _views.append(SubqueryAlias(df._plan, name))
 
         cmd = SQL(sqlQuery, _args, _named_args, _views)
-        data, properties = self.client.execute_command(cmd.command(self._client))
+        data, properties, ei = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
-            return DataFrame(CachedRelation(properties["sql_command_result"]), self)
+            df = DataFrame(CachedRelation(properties["sql_command_result"]), self)
+            # A command result contains the execution.
+            df._execution_info = ei
+            return df
         else:
             return DataFrame(cmd, self)
 
@@ -815,6 +817,16 @@ class SparkSession:
     clearTags.__doc__ = PySparkSession.clearTags.__doc__
 
     def stop(self) -> None:
+        """
+        Release the current session and close the GRPC connection to the Spark Connect server.
+        Reset the active session so that calls to getOrCreate() creates a new session.
+        If the session was created in local mode, the Spark Connect server running locally is also
+        terminated.
+
+        This API is best-effort and idempotent, i.e., if any of the operations fail, the API will
+        not produce an error. Stopping an already stopped session is a no-op.
+        """
+
         # Whereas the regular PySpark session immediately terminates the Spark Context
         # itself, meaning that stopping all Spark sessions, this will only stop this one session
         # on the server.
@@ -824,8 +836,16 @@ class SparkSession:
         # other remote clients being used from other users.
         with SparkSession._lock:
             if not self.is_stopped and self.release_session_on_close:
-                self.client.release_session()
-            self.client.close()
+                try:
+                    self.client.release_session()
+                except Exception as e:
+                    warnings.warn(f"session.stop(): Session could not be released. Error: ${e}")
+
+            try:
+                self.client.close()
+            except Exception as e:
+                warnings.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
             if self is getattr(SparkSession._active_session, "session", None):
@@ -837,13 +857,17 @@ class SparkSession:
                 # meaning that you can stop local mode, and restart the Spark Connect
                 # client with a different remote address.
                 if PySparkSession._activeSession is not None:
-                    PySparkSession._activeSession.stop()
+                    try:
+                        PySparkSession._activeSession.stop()
+                    except Exception as e:
+                        warnings.warn(
+                            "session.stop(): Local Spark Connect Server could not be stopped. "
+                            f"Error: ${e}"
+                        )
                 del os.environ["SPARK_LOCAL_REMOTE"]
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
-
-    stop.__doc__ = PySparkSession.stop.__doc__
 
     @property
     def is_stopped(self) -> bool:
@@ -870,7 +894,7 @@ class SparkSession:
     def __getattr__(self, name: str) -> Any:
         if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext", "newSession"]:
             raise PySparkAttributeError(
-                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+                errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
         return object.__getattribute__(self, name)
 
@@ -898,7 +922,7 @@ class SparkSession:
 
     dataSource.__doc__ = PySparkSession.dataSource.__doc__
 
-    @property
+    @functools.cached_property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None
@@ -917,8 +941,8 @@ class SparkSession:
     ) -> None:
         if sum([file, pyfile, archive]) > 1:
             raise PySparkValueError(
-                error_class="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
-                message_parameters={
+                errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                messageParameters={
                     "arg_names": "'pyfile', 'archive' and/or 'file'",
                     "condition": "True together",
                 },
@@ -939,8 +963,8 @@ class SparkSession:
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         if urllib.parse.urlparse(dest_path).scheme:
             raise PySparkValueError(
-                error_class="NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME",
-                message_parameters={"arg_name": "dest_path"},
+                errorClass="NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME",
+                messageParameters={"arg_name": "dest_path"},
             )
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
@@ -959,39 +983,13 @@ class SparkSession:
         """
         Starts the Spark Connect server given the master (thread-unsafe).
 
-        At the high level, there are two cases. The first case is development case, e.g.,
-        you locally build Apache Spark, and run ``SparkSession.builder.remote("local")``:
-
-        1. This method automatically finds the jars for Spark Connect (because the jars for
-          Spark Connect are not bundled in the regular Apache Spark release).
-
-        2. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
+        1. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
           environment variable.
 
-        3. Starts a JVM (without Spark Context) first, and adds the Spark Connect server jars
-           into the current class loader. Otherwise, Spark Context with ``spark.plugins``
-           cannot be initialized because the JVM is already running without the jars in
-           the classpath before executing this Python process for driver side (in case of
-           PySpark application submission).
-
-        4. Starts a regular Spark session that automatically starts a Spark Connect server
+        2. Starts a regular Spark session that automatically starts a Spark Connect server
            via ``spark.plugins`` feature.
-
-        The second case is when you use Apache Spark release:
-
-        1. Users must specify either the jars or package, e.g., ``--packages
-          org.apache.spark:spark-connect_2.12:3.4.0``. The jars or packages would be specified
-          in SparkSubmit automatically. This method does not do anything related to this.
-
-        2. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
-          environment variable. It does not do anything for PySpark application submission as
-          well because jars or packages were already specified before executing this Python
-          process for driver side.
-
-        3. Starts a regular Spark session that automatically starts a Spark Connect server
-          with JVM via ``spark.plugins`` feature.
         """
-        from pyspark import SparkContext, SparkConf, __version__
+        from pyspark import SparkContext, SparkConf
 
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
@@ -1008,21 +1006,6 @@ class SparkSession:
                 # See also SPARK-42272.
                 overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
-            def create_conf(**kwargs: Any) -> SparkConf:
-                conf = SparkConf(**kwargs)
-                for k, v in overwrite_conf.items():
-                    conf.set(k, v)
-                for k, v in default_conf.items():
-                    if not conf.contains(k):
-                        conf.set(k, v)
-                return conf
-
-            # Check if we're using unreleased version that is in development.
-            # Also checks SPARK_TESTING for RC versions.
-            is_dev_mode = (
-                "dev" in LooseVersion(__version__).version or "SPARK_TESTING" in os.environ
-            )
-
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             try:
                 if origin_remote is not None:
@@ -1030,49 +1013,11 @@ class SparkSession:
                     # start the regular PySpark session.
                     del os.environ["SPARK_REMOTE"]
 
-                SparkContext._ensure_initialized(conf=create_conf(loadDefaults=False))
-
-                if is_dev_mode:
-                    # Try and catch for a possibility in production because pyspark.testing
-                    # does not exist in the canonical release.
-                    try:
-                        from pyspark.testing.utils import search_jar
-
-                        # Note that, in production, spark.jars.packages configuration should be
-                        # set by users. Here we're automatically searching the jars locally built.
-                        connect_jar = search_jar(
-                            "connector/connect/server", "spark-connect-assembly-", "spark-connect"
-                        )
-                        if connect_jar is None:
-                            warnings.warn(
-                                "Attempted to automatically find the Spark Connect jars because "
-                                "'SPARK_TESTING' environment variable is set, or the current "
-                                f"PySpark version is dev version ({__version__}). However, the jar"
-                                " was not found. Manually locate the jars and specify them, e.g., "
-                                "'spark.jars' configuration."
-                            )
-                        else:
-                            pyutils = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
-                            pyutils.addJarToCurrentClassLoader(connect_jar)
-
-                            # Required for local-cluster testing as their executors need the jars
-                            # to load the Spark plugin for Spark Connect.
-                            if master.startswith("local-cluster"):
-                                if "spark.jars" in overwrite_conf:
-                                    overwrite_conf[
-                                        "spark.jars"
-                                    ] = f"{overwrite_conf['spark.jars']},{connect_jar}"
-                                else:
-                                    overwrite_conf["spark.jars"] = connect_jar
-
-                    except ImportError:
-                        pass
-
                 # The regular PySpark session is registered as an active session
                 # so would not be garbage-collected.
-                PySparkSession(
-                    SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
-                )
+                conf = SparkConf(loadDefaults=True)
+                conf.setAll(list(overwrite_conf.items())).setAll(list(default_conf.items()))
+                PySparkSession(SparkContext.getOrCreate(conf))
 
                 # Lastly only keep runtime configurations because other configurations are
                 # disallowed to set in the regular Spark Connect session.
@@ -1087,8 +1032,8 @@ class SparkSession:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
             raise PySparkRuntimeError(
-                error_class="SESSION_OR_CONTEXT_EXISTS",
-                message_parameters={},
+                errorClass="SESSION_OR_CONTEXT_EXISTS",
+                messageParameters={},
             )
 
     @property

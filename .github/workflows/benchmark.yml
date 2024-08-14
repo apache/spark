@@ -27,17 +27,25 @@ on:
         required: true
         default: '*'
       jdk:
+        type: choice
         description: 'JDK version: 17 or 21'
         required: true
         default: '17'
+        options:
+        - '17'
+        - '21'
       scala:
+        type: choice
         description: 'Scala version: 2.13'
         required: true
         default: '2.13'
+        options:
+          - '2.13'
       failfast:
-        description: 'Failfast: true or false'
+        type: boolean
+        description: 'Failfast'
         required: true
-        default: 'true'
+        default: true
       num-splits:
         description: 'Number of job splits'
         required: true
@@ -50,7 +58,7 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     env:
-      SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
+      SPARK_BENCHMARK_NUM_SPLITS: ${{ inputs.num-splits }}
     steps:
     - name: Generate matrix
       id: set-matrix
@@ -59,7 +67,7 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
     name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
-    if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
+    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, '*')
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
@@ -83,9 +91,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/coursier
-          key: benchmark-coursier-${{ github.event.inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            benchmark-coursier-${{ github.event.inputs.jdk }}
+            benchmark-coursier-${{ inputs.jdk }}
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
         uses: actions/cache@v4
@@ -102,18 +110,18 @@ jobs:
       - name: Build tpcds-kit
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         run: cd tpcds-kit/tools && make OS=LINUX
-      - name: Install Java ${{ github.event.inputs.jdk }}
+      - name: Install Java ${{ inputs.jdk }}
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: ${{ github.event.inputs.jdk }}
+          java-version: ${{ inputs.jdk }}
       - name: Generate TPC-DS (SF=1) table data
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
 
   benchmark:
-    name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
+    name: "Run benchmarks: ${{ inputs.class }} (JDK ${{ inputs.jdk }}, Scala ${{ inputs.scala }}, ${{ matrix.split }} out of ${{ inputs.num-splits }} splits)"
     if: always()
     needs: [matrix-gen, tpcds-1g-gen]
     runs-on: ubuntu-latest
@@ -122,8 +130,8 @@ jobs:
       matrix:
         split: ${{fromJSON(needs.matrix-gen.outputs.matrix)}}
     env:
-      SPARK_BENCHMARK_FAILFAST: ${{ github.event.inputs.failfast }}
-      SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
+      SPARK_BENCHMARK_FAILFAST: ${{ inputs.failfast }}
+      SPARK_BENCHMARK_NUM_SPLITS: ${{ inputs.num-splits }}
       SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
       SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
@@ -150,16 +158,16 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
-        key: benchmark-coursier-${{ github.event.inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          benchmark-coursier-${{ github.event.inputs.jdk }}
-    - name: Install Java ${{ github.event.inputs.jdk }}
+          benchmark-coursier-${{ inputs.jdk }}
+    - name: Install Java ${{ inputs.jdk }}
       uses: actions/setup-java@v4
       with:
         distribution: zulu
-        java-version: ${{ github.event.inputs.jdk }}
+        java-version: ${{ inputs.jdk }}
     - name: Cache TPC-DS generated data
-      if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
+      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, '*')
       id: cache-tpcds-sf-1
       uses: actions/cache@v4
       with:
@@ -167,7 +175,7 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
       run: |
-        ./build/sbt -Pscala-${{ github.event.inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
+        ./build/sbt -Pscala-${{ inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
@@ -176,14 +184,14 @@ jobs:
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
           --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`,`find ~/.cache/coursier -name 'curator-test-*.jar'`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
-          "${{ github.event.inputs.class }}"
+          "${{ inputs.class }}"
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude-standard`
+        tar -cvf benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude-standard`
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
-        name: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}-${{ matrix.split }}
-        path: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar
+        name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
+        path: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
 

@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import java.time.{LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{Duration, LocalDateTime, Period, ZoneId, ZoneOffset}
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
@@ -332,6 +333,96 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("9223372036854", "$", TimestampType, 9223372036854000000L)
     testInvalidVariantGet("9223372036855", "$", TimestampType)
     testInvalidVariantGet("0", "$", TimestampNTZType)
+
+    // year-month interval corner + random cases
+    Seq(0, 2147483647, -2147483648, 4398201, -213494932).foreach(input => {
+      for (startField <- YearMonthIntervalType.YEAR to YearMonthIntervalType.MONTH) {
+        for (endField <- startField to YearMonthIntervalType.MONTH) {
+          val cleanInput = if (endField == 0) input / 12 else input
+          // numeric source
+          testVariantGet(
+            cleanInput.toString,
+            "$",
+            YearMonthIntervalType(startField.toByte, endField.toByte),
+            Cast(
+              Literal(cleanInput, IntegerType),
+              YearMonthIntervalType(startField.toByte, endField.toByte)
+            ).eval()
+          )
+          // String source
+          testVariantGet(
+            "\"" + Cast(Cast(
+              Literal(cleanInput, IntegerType),
+              YearMonthIntervalType(startField.toByte, endField.toByte)
+            ), StringType).eval().toString + "\"",
+            "$",
+            YearMonthIntervalType(startField.toByte, endField.toByte),
+            Cast(
+              Literal(cleanInput, IntegerType),
+              YearMonthIntervalType(startField.toByte, endField.toByte)
+            ).eval()
+          )
+        }
+      }
+    })
+
+    // When a variant is being cast to interval, the none of the newly written code is used
+    // (the cast to interval was simply enabled) and therefore, not all of the corner cases need
+    // to be tested.
+
+    // day-time interval corner cases. In the string source examples, the corner cases are cast to
+    // interval followed by another cast to string followed by another cast to interval since
+    // the cast from string to interval loses information.
+    testVariantGet("9223372036854.775807", "$", DayTimeIntervalType(0, 3),
+      Cast(Literal(Decimal("9223372036854.775807")), DayTimeIntervalType(0, 3)).eval()
+    )
+    testVariantGet(
+      "\"" + Cast(Cast(Literal(Decimal("9223372036854.775807")), DayTimeIntervalType(0, 3)),
+        StringType).eval().toString + "\"", "$", DayTimeIntervalType(0, 3),
+      Cast(
+        Cast(
+          Cast(Literal(Decimal("9223372036854.775807")), DayTimeIntervalType(0, 3)),
+          StringType
+        ),
+        DayTimeIntervalType(0, 3)
+      ).eval()
+    )
+    testVariantGet("-153722867280.912930", "$", DayTimeIntervalType(1, 2),
+      Cast(Literal(Decimal("-153722867280.912930")), DayTimeIntervalType(1, 2)).eval()
+    )
+    testVariantGet(
+      "\"" + Cast(Cast(Literal(Decimal("-153722867280.912930")), DayTimeIntervalType(1, 2)),
+        StringType).eval().toString + "\"", "$", DayTimeIntervalType(1, 2),
+      Cast(
+        Cast(
+          Cast(Literal(Decimal("-153722867280.912930")), DayTimeIntervalType(1, 2)),
+          StringType
+        ),
+        DayTimeIntervalType(1, 2)
+      ).eval()
+    )
+    testVariantGet("-2562047788.015215", "$", DayTimeIntervalType(0, 1),
+      Cast(Literal(Decimal("-2562047788.015215")), DayTimeIntervalType(0, 1)).eval()
+    )
+    testVariantGet(
+      "\"" + Cast(Cast(Literal(Decimal("-2562047788.015215")), DayTimeIntervalType(0, 1)),
+        StringType).eval().toString + "\"", "$", DayTimeIntervalType(0, 1),
+      Cast(
+        Cast(Cast(Literal(Decimal("-2562047788.015215")), DayTimeIntervalType(0, 1)), StringType),
+        DayTimeIntervalType(0, 1)
+      ).eval()
+    )
+    testVariantGet("-106751991.167300", "$", DayTimeIntervalType(0, 0),
+      Cast(Literal(Decimal("-106751991.167300")), DayTimeIntervalType(0, 0)).eval()
+    )
+    testVariantGet(
+      "\"" + Cast(Cast(Literal(Decimal("-106751991.167300")), DayTimeIntervalType(0, 0)),
+        StringType).eval().toString + "\"", "$", DayTimeIntervalType(0, 0),
+      Cast(
+        Cast(Cast(Literal(Decimal("-106751991.167300")), DayTimeIntervalType(0, 0)), StringType),
+        DayTimeIntervalType(0, 0)
+      ).eval()
+    )
 
     // Source type is double. Always use scientific notation to avoid decimal.
     testVariantGet("1E0", "$", BooleanType, true)
@@ -709,6 +800,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(StructsToJson(Map.empty, input), expected)
     }
 
+    def checkToJsonFail(value: Array[Byte], id: Int): Unit = {
+      val input = Literal(new VariantVal(value, emptyMetadata))
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(StructsToJson(Map.empty, input)),
+        "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT", Map("id" -> id.toString)
+      )
+    }
+
     def checkCast(value: Array[Byte], dataType: DataType, expected: Any): Unit = {
       val input = Literal(new VariantVal(value, emptyMetadata))
       checkEvaluation(Cast(input, dataType, evalMode = EvalMode.ANSI), expected)
@@ -726,6 +825,37 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkCast(Array(primitiveHeader(DATE), 1, 0, 0, 0), TimestampType,
         MICROS_PER_DAY + 8 * MICROS_PER_HOUR)
     }
+    // corner + random cases
+    Seq(0, 2147483647, -2147483648, 345344843, -4357342).foreach(input => {
+      for (startField <- YearMonthIntervalType.YEAR to YearMonthIntervalType.MONTH) {
+        for (endField <- startField to YearMonthIntervalType.MONTH) {
+          val headerByte = startField | (endField << 1)
+          checkToJson(Array(primitiveHeader(YEAR_MONTH_INTERVAL), headerByte.toByte,
+            (input & 0xFF).toByte, ((input >> 8) & 0xFF).toByte,
+            ((input >> 16) & 0xFF).toByte, ((input >> 24) & 0xFF).toByte),
+            "\"" + Literal(input, YearMonthIntervalType(startField.toByte, endField.toByte)) +
+              "\"")
+        }
+      }
+    })
+
+    // corner + random cases
+    Seq(0L, 9223372036854775807L, -9223372036854775808L, 2374234381L, -23467681L).foreach(input => {
+      for (startField <- DayTimeIntervalType.DAY to DayTimeIntervalType.SECOND) {
+        for (endField <- startField to DayTimeIntervalType.SECOND) {
+          val headerByte = startField | (endField << 2)
+          checkToJson(Array(primitiveHeader(DAY_TIME_INTERVAL), headerByte.toByte,
+            (input & 0xFF).toByte, ((input >> 8) & 0xFF).toByte,
+            ((input >> 16) & 0xFF).toByte, ((input >> 24) & 0xFF).toByte,
+            ((input >> 32) & 0xFF).toByte, ((input >> 40) & 0xFF).toByte,
+            ((input >> 48) & 0xFF).toByte, ((input >> 56) & 0xFF).toByte),
+            "\"" + Literal(input, DayTimeIntervalType(startField.toByte, endField.toByte)) +
+              "\"")
+        }
+      }
+    })
+
+    checkToJsonFail(Array(primitiveHeader(25)), 25)
 
     def littleEndianLong(value: Long): Array[Byte] =
       BigInt(value).toByteArray.reverse.padTo(8, 0.toByte)
@@ -838,6 +968,51 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("x" * 128, "\"" + ("x" * 128) + "\"")
     check(Array[Byte](1, 2, 3), "\"AQID\"")
     check(Literal(0, DateType), "\"1970-01-01\"")
+
+    // year-month interval corner + random cases
+    Seq(0, 2147483647, -2147483648, 753992, -5920283).foreach(input => {
+      for (startField <- YearMonthIntervalType.YEAR to YearMonthIntervalType.MONTH) {
+        for (endField <- startField to YearMonthIntervalType.MONTH) {
+          val lit = Literal(input, YearMonthIntervalType(startField.toByte, endField.toByte))
+          check(lit, "\"" + lit.toString + "\"")
+        }
+      }
+    })
+    // Size of YMInterval
+    assert(Cast(Literal.create(Period.ofMonths(0)), VariantType, evalMode = EvalMode.ANSI)
+      .eval().asInstanceOf[VariantVal].getValue.length == 6)
+
+    // Array of year-month intervals
+    val ymArrLit = Literal.create(
+      Array(Period.ofMonths(0), Period.ofMonths(2147483647), Period.ofMonths(-2147483647)),
+      ArrayType(YearMonthIntervalType(1, 1))
+    )
+    check(ymArrLit, """["INTERVAL '0' MONTH","INTERVAL""" +
+      """ '2147483647' MONTH","INTERVAL '-2147483647' MONTH"]""")
+
+    // day-time interval corner + random cases
+    Seq(0L, 9223372036854775807L, -9223372036854775808L, 47356878948217L, -23745867989934789L)
+      .foreach(input => {
+        for (startField <- DayTimeIntervalType.DAY to DayTimeIntervalType.SECOND) {
+          for (endField <- startField to DayTimeIntervalType.SECOND) {
+            val lit = Literal(input, DayTimeIntervalType(startField.toByte, endField.toByte))
+            check(lit, "\"" + lit.toString + "\"")
+          }
+        }
+      })
+    // Size of DTInterval
+    assert(Cast(Literal.create(Duration.ofSeconds(0)), VariantType, evalMode = EvalMode.ANSI)
+      .eval().asInstanceOf[VariantVal].getValue.length == 10)
+
+    // Array of day-time intervals
+    val dtArrLit = Literal.create(
+      Array(Duration.ofSeconds(0), Duration.ofSeconds(9223372036854L),
+        Duration.ofSeconds(-9223372036854L)),
+      ArrayType(DayTimeIntervalType(3, 3))
+    )
+    check(dtArrLit, """["INTERVAL '00' SECOND","INTERVAL""" +
+      """ '9223372036854' SECOND","INTERVAL '-9223372036854' SECOND"]""")
+
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       check(Literal(0L, TimestampType), "\"1970-01-01 00:00:00+00:00\"")
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
@@ -859,5 +1034,88 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Row(0)),
       StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
     check(struct, """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""")
+  }
+
+  test("schema_of_variant - unknown type") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    def checkErrorInSchemaOf(value: Array[Byte], id: Int): Unit = {
+      val input = Literal(new VariantVal(value, emptyMetadata))
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(SchemaOfVariant(input).replacement),
+        "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT", Map("id" -> id.toString)
+      )
+    }
+    checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
+  }
+
+  test("malformed interval type") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    def checkErrorInIntervalVariant(value: Array[Byte], id: Int): Unit = {
+      val input = Literal(new VariantVal(value, emptyMetadata))
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(StructsToJson(Map.empty, input)),
+        "MALFORMED_VARIANT")
+    }
+    checkErrorInIntervalVariant(Array(primitiveHeader(YEAR_MONTH_INTERVAL), 0, 0, 0, 0),
+      YEAR_MONTH_INTERVAL)
+    checkErrorInIntervalVariant(Array(primitiveHeader(DAY_TIME_INTERVAL), 0, 0, 0, 0, 0, 0, 0, 0),
+      DAY_TIME_INTERVAL)
+  }
+
+  test("schema_of_variant - schema merge") {
+    val nul = Literal(null, StringType)
+    val boolean = Literal.default(BooleanType)
+    val long = Literal.default(LongType)
+    val string = Literal.default(StringType)
+    val double = Literal.default(DoubleType)
+    val date = Literal.default(DateType)
+    val timestamp = Literal.default(TimestampType)
+    val timestampNtz = Literal.default(TimestampNTZType)
+    val float = Literal.default(FloatType)
+    val binary = Literal.default(BinaryType)
+    val decimal = Literal(Decimal("123.456"), DecimalType(6, 3))
+    val array1 = Literal(Array(0L))
+    val array2 = Literal(Array(0.0))
+    val struct1 = Literal.default(StructType.fromDDL("a string"))
+    val struct2 = Literal.default(StructType.fromDDL("a boolean, b bigint"))
+    // TypeCoercion.findTightestCommonType handles interval types in expected ways. It doesn't make
+    // sense to add merge intervals with other types
+    val dtInterval1 = Literal(0L, DayTimeIntervalType(1, 3))
+    val dtInterval2 = Literal(0L, DayTimeIntervalType(0, 2))
+    val ymInterval1 = Literal(0, YearMonthIntervalType(0, 0))
+    val ymInterval2 = Literal(0, YearMonthIntervalType(1, 1))
+    val inputs = Seq(nul, boolean, long, string, double, date, timestamp, timestampNtz, float,
+      binary, decimal, array1, array2, struct1, struct2, dtInterval1, dtInterval2, ymInterval1,
+      ymInterval2)
+
+    val results = mutable.HashMap.empty[(Literal, Literal), String]
+    for (i <- inputs) {
+      val inputType = if (i.value == null) "VOID" else i.dataType.sql
+      results.put((nul, i), inputType)
+      results.put((i, i), inputType)
+    }
+    results.put((long, double), "DOUBLE")
+    results.put((long, float), "FLOAT")
+    results.put((long, decimal), "DECIMAL(23,3)")
+    results.put((double, float), "DOUBLE")
+    results.put((double, decimal), "DOUBLE")
+    results.put((date, timestamp), "TIMESTAMP")
+    results.put((date, timestampNtz), "TIMESTAMP_NTZ")
+    results.put((timestamp, timestampNtz), "TIMESTAMP")
+    results.put((float, decimal), "DOUBLE")
+    results.put((array1, array2), "ARRAY<DOUBLE>")
+    results.put((struct1, struct2), "STRUCT<a: VARIANT, b: BIGINT>")
+    results.put((dtInterval1, dtInterval2), "INTERVAL DAY TO SECOND")
+    results.put((ymInterval1, ymInterval2), "INTERVAL YEAR TO MONTH")
+
+    for (i1 <- inputs) {
+      for (i2 <- inputs) {
+        val expected = results.getOrElse((i1, i2), results.getOrElse((i2, i1), "VARIANT"))
+        val array = CreateArray(Seq(Cast(i1, VariantType), Cast(i2, VariantType)))
+        checkEvaluation(SchemaOfVariant(Cast(array, VariantType)).replacement, s"ARRAY<$expected>")
+      }
+    }
   }
 }

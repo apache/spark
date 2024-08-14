@@ -94,6 +94,14 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_schema_with_collations_json_ser_de(self):
         super().test_schema_with_collations_json_ser_de()
 
+    @unittest.skip("This test is dedicated for PySpark Classic.")
+    def test_ym_interval_in_collect(self):
+        super().test_ym_interval_in_collect()
+
+    @unittest.skip("This test is dedicated for PySpark Classic.")
+    def test_cal_interval_in_collect(self):
+        super().test_cal_interval_in_collect()
+
 
 if __name__ == "__main__":
     import unittest

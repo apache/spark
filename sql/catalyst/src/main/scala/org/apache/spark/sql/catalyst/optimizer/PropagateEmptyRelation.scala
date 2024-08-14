@@ -58,7 +58,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     case _ => false
   }
 
-  protected def empty(plan: LogicalPlan): LocalRelation =
+  protected def empty(plan: LogicalPlan): LogicalPlan =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
   // Construct a project list from plan's output, while the value is always NULL.

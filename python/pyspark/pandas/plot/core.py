@@ -15,14 +15,17 @@
 # limitations under the License.
 #
 
+import bisect
 import importlib
+import math
 
 import pandas as pd
 import numpy as np
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
+from pyspark.sql.types import DoubleType
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -145,10 +148,9 @@ class HistogramPlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_hist(psdf, bins):
-        from pyspark.ml.feature import Bucketizer
-
         # 'data' is a Spark DataFrame that selects one column.
         assert isinstance(bins, (np.ndarray, np.generic))
+        assert len(bins) > 2, "the number of buckets must be higher than 2."
 
         sdf = psdf._internal.spark_frame
         scols = []
@@ -179,14 +181,31 @@ class HistogramPlotBase(NumericPlotBase):
         colnames = sdf.columns
         bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
+        # TODO(SPARK-49202): register this function in scala side
+        @F.udf(returnType=DoubleType())
+        def binary_search_for_buckets(value):
+            # Given bins = [1.0, 2.0, 3.0, 4.0]
+            # the intervals are:
+            #   [1.0, 2.0) -> 0.0
+            #   [2.0, 3.0) -> 1.0
+            #   [3.0, 4.0] -> 2.0 (the last bucket is a closed interval)
+            if value < bins[0] or value > bins[-1]:
+                raise ValueError(f"value {value} out of the bins bounds: [{bins[0]}, {bins[-1]}]")
+
+            if value == bins[-1]:
+                idx = len(bins) - 2
+            else:
+                idx = bisect.bisect(bins, value) - 1
+            return float(idx)
+
         output_df = None
         for group_id, (colname, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            # creates a Bucketizer to get corresponding bin of each value
-            bucketizer = Bucketizer(
-                splits=bins, inputCol=colname, outputCol=bucket_name, handleInvalid="skip"
-            )
+            # sdf.na.drop to match handleInvalid="skip" in Bucketizer
 
-            bucket_df = bucketizer.transform(sdf)
+            bucket_df = sdf.na.drop(subset=[colname]).withColumn(
+                bucket_name,
+                binary_search_for_buckets(F.col(colname).cast("double")),
+            )
 
             if output_df is None:
                 output_df = bucket_df.select(
@@ -463,22 +482,44 @@ class KdePlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
-        from pyspark.mllib.stat import KernelDensity
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
 
-        # 'sdf' is a Spark DataFrame that selects one column.
+        assert ind is not None, "'ind' must be a scalar array."
 
-        # Using RDD is slow so we might have to change it to Dataset based implementation
-        # once Spark has that implementation.
-        sample = sdf.rdd.map(lambda x: float(x[0]))
-        kd = KernelDensity()
-        kd.setSample(sample)
+        bandwidth = float(bw_method)
+        points = [float(i) for i in ind]
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
 
-        assert isinstance(bw_method, (int, float)), "'bw_method' must be set as a scalar number."
+        def norm_pdf(
+            mean: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
 
-        if bw_method is not None:
-            # Match the bandwidth with Spark.
-            kd.setBandwidth(float(bw_method))
-        return kd.estimate(list(map(float, ind)))
+        dataCol = F.col(sdf.columns[0]).cast("double")
+
+        estimated = [
+            F.avg(
+                norm_pdf(
+                    dataCol,
+                    F.lit(bandwidth),
+                    F.lit(log_std_plus_half_log2_pi),
+                    F.lit(point),
+                )
+            )
+            for point in points
+        ]
+
+        row = sdf.select(F.array(estimated)).first()
+        return row[0]
 
 
 class PandasOnSparkPlotAccessor(PandasObject):
@@ -574,7 +615,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
-        kind = {"density": "kde"}.get(kind, kind)
         if hasattr(plot_backend, "plot_pandas_on_spark"):
             # use if there's pandas-on-Spark specific method.
             return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
@@ -1065,7 +1105,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
-            ...                        freq='M'))
+            ...                        freq='ME'))
             >>> df.sales.plot.area()  # doctest: +SKIP
 
         For DataFrame
@@ -1077,7 +1117,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
-            ...                        freq='M'))
+            ...                        freq='ME'))
             >>> df.plot.area()  # doctest: +SKIP
         """
         from pyspark.pandas import DataFrame, Series

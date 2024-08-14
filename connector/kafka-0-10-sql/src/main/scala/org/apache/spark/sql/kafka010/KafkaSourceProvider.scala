@@ -26,7 +26,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -276,8 +276,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (params.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       logWarning(CUSTOM_GROUP_ID_ERROR_MESSAGE)
       if (params.contains(GROUP_ID_PREFIX)) {
-        logWarning("Option 'groupIdPrefix' will be ignored as " +
-          s"option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set.")
+        logWarning(log"Option groupIdPrefix will be ignored as " +
+          log"option kafka.${MDC(LogKeys.CONFIG, ConsumerConfig.GROUP_ID_CONFIG)} has been set.")
       }
     }
 

@@ -370,7 +370,7 @@ case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
     partitionValues: Seq[InternalRow] = Seq.empty,
-    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
+    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends HashPartitioningLike {
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -421,6 +421,9 @@ case class KeyGroupedPartitioning(
         .distinct
         .map(_.row)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(expressions = newChildren)
 }
 
 object KeyGroupedPartitioning {
@@ -434,8 +437,13 @@ object KeyGroupedPartitioning {
     val projectedOriginalPartitionValues =
       originalPartitionValues.map(project(expressions, projectionPositions, _))
 
-    KeyGroupedPartitioning(projectedExpressions, projectedPartitionValues.length,
-      projectedPartitionValues, projectedOriginalPartitionValues)
+    val finalPartitionValues = projectedPartitionValues
+        .map(InternalRowComparableWrapper(_, projectedExpressions))
+        .distinct
+        .map(_.row)
+
+    KeyGroupedPartitioning(projectedExpressions, finalPartitionValues.length,
+      finalPartitionValues, projectedOriginalPartitionValues)
   }
 
   def project(
@@ -761,8 +769,8 @@ case class CoalescedHashShuffleSpec(
  *
  * @param partitioning key grouped partitioning
  * @param distribution distribution
- * @param joinKeyPosition position of join keys among cluster keys.
- *                        This is set if joining on a subset of cluster keys is allowed.
+ * @param joinKeyPositions position of join keys among cluster keys.
+ *                         This is set if joining on a subset of cluster keys is allowed.
  */
 case class KeyGroupedShuffleSpec(
     partitioning: KeyGroupedPartitioning,
@@ -871,12 +879,22 @@ case class KeyGroupedShuffleSpec(
     if (results.forall(p => p.isEmpty)) None else Some(results)
   }
 
-  override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleEnabled &&
-    // Only support partition expressions are AttributeReference for now
-    partitioning.expressions.forall(_.isInstanceOf[AttributeReference])
+  override def canCreatePartitioning: Boolean =
+    SQLConf.get.v2BucketingShuffleEnabled &&
+      !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+      partitioning.expressions.forall { e =>
+        e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
+      }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
-    KeyGroupedPartitioning(clustering, partitioning.numPartitions, partitioning.partitionValues)
+    val newExpressions: Seq[Expression] = clustering.zip(partitioning.expressions).map {
+      case (c, e: TransformExpression) => TransformExpression(
+        e.function, Seq(c), e.numBucketsOpt)
+      case (c, _) => c
+    }
+    KeyGroupedPartitioning(newExpressions,
+      partitioning.numPartitions,
+      partitioning.partitionValues)
   }
 }
 

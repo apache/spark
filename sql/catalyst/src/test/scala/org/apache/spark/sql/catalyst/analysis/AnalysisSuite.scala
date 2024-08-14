@@ -1796,4 +1796,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(refs.head.resolved)
     assert(refs.head.isStreaming)
   }
+
+  test("SPARK-47927: ScalaUDF output nullability") {
+    val udf = ScalaUDF(
+      function = (i: Int) => i + 1,
+      dataType = IntegerType,
+      children = $"a" :: Nil,
+      nullable = false,
+      inputEncoders = Seq(Some(ExpressionEncoder[Int]().resolveAndBind())))
+    val plan = testRelation.select(udf.as("u")).select($"u").analyze
+    assert(plan.output.head.nullable)
+  }
 }

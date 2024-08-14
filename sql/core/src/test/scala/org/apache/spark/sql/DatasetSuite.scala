@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExam
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -542,25 +543,20 @@ class DatasetSuite extends QueryTest
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
-    val e1 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
-    }.getMessage
-    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+    def checkJoinWithJoinType(joinType: String): Unit = {
+      val semiErrorParameters = Map("joinType" -> JoinType(joinType).sql)
+      checkError(
+        exception = intercept[AnalysisException](
+          ds1.joinWith(ds2, $"a.value" === $"b.value", joinType)
+        ),
+        errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
+        sqlState = "42613",
+        parameters = semiErrorParameters
+      )
+    }
 
-    val e2 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "semi")
-    }.getMessage
-    assert(e2.contains("Invalid join type in joinWith: " + LeftSemi.sql))
-
-    val e3 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
-    }.getMessage
-    assert(e3.contains("Invalid join type in joinWith: " + LeftAnti.sql))
-
-    val e4 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
-    }.getMessage
-    assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
+    Seq("leftsemi", "left_semi", "semi", "leftanti", "left_anti", "anti")
+      .foreach(checkJoinWithJoinType(_))
   }
 
   test("groupBy function, keys") {
@@ -957,6 +953,25 @@ class DatasetSuite extends QueryTest
     assert(result2.length == 3)
   }
 
+  test("SPARK-48718: cogroup deserializer expr is resolved before dedup relation") {
+    val lhs = spark.createDataFrame(
+      List(Row(123L)).asJava,
+      StructType(Seq(StructField("GROUPING_KEY", LongType)))
+    )
+    val rhs = spark.createDataFrame(
+      List(Row(0L, 123L)).asJava,
+      StructType(Seq(StructField("ID", LongType), StructField("GROUPING_KEY", LongType)))
+    )
+
+    val lhsKV = lhs.groupByKey((r: Row) => r.getAs[Long]("GROUPING_KEY"))
+    val rhsKV = rhs.groupByKey((r: Row) => r.getAs[Long]("GROUPING_KEY"))
+    val cogrouped = lhsKV.cogroup(rhsKV)(
+      (a: Long, b: Iterator[Row], c: Iterator[Row]) => Iterator(0L)
+    )
+    val joined = rhs.join(cogrouped, col("ID") === col("value"), "left")
+    checkAnswer(joined, Row(0L, 123L, 0L) :: Nil)
+  }
+
   test("SPARK-34806: observation on datasets") {
     val namedObservation = Observation("named")
     val unnamedObservation = Observation()
@@ -1254,7 +1269,7 @@ class DatasetSuite extends QueryTest
     // Just check the error class here to avoid flakiness due to different parameters.
     assert(intercept[SparkRuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getErrorClass == "EXPRESSION_DECODING_FAILED")
+    }.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-12478: top level null field") {
@@ -1593,7 +1608,7 @@ class DatasetSuite extends QueryTest
 
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[SparkRuntimeException](Seq(ClassData("a", 1), null).toDS())
-    assert(e.getErrorClass == "EXPRESSION_ENCODING_FAILED")
+    assert(e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("dropDuplicates") {
@@ -2036,18 +2051,19 @@ class DatasetSuite extends QueryTest
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
-    val errorClass = "EXPRESSION_DECODING_FAILED"
-    val sqlState = "42846"
+    val errorClass = "NOT_NULL_ASSERT_VIOLATION"
+    val sqlState = "42000"
+    val parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n")
     checkError(
       exception = intercept[SparkRuntimeException](ds.collect()),
-      errorClass = "EXPRESSION_DECODING_FAILED",
-      sqlState = "42846",
-      parameters = Map("expressions" -> "assertnotnull(input[0, int, true])"))
+      errorClass = errorClass,
+      sqlState = sqlState,
+      parameters = parameters)
     checkError(
       exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
-      errorClass = "NOT_NULL_ASSERT_VIOLATION",
-      sqlState = "42000",
-      parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n"))
+      errorClass = errorClass,
+      sqlState = sqlState,
+      parameters = parameters)
 
     withTempPath { path =>
       Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
@@ -2055,14 +2071,14 @@ class DatasetSuite extends QueryTest
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       checkError(
         exception = intercept[SparkRuntimeException](ds.collect()),
-        errorClass = "EXPRESSION_DECODING_FAILED",
-        sqlState = "42846",
-        parameters = Map("expressions" -> "assertnotnull(input[0, int, true])"))
+        errorClass = errorClass,
+        sqlState = sqlState,
+        parameters = parameters)
       checkError(
         exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
-        errorClass = "NOT_NULL_ASSERT_VIOLATION",
-        sqlState = "42000",
-        parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n"))
+        errorClass = errorClass,
+        sqlState = sqlState,
+        parameters = parameters)
     }
   }
 
@@ -2080,11 +2096,8 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
-    checkError(
-      exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect()),
-      errorClass = "EXPRESSION_DECODING_FAILED",
-      sqlState = "42846",
-      parameters = Map("expressions" -> "newInstance(class scala.Tuple2)"))
+    val exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect())
+    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {

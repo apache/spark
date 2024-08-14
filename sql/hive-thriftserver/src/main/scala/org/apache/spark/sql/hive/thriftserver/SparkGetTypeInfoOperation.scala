@@ -28,16 +28,16 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * Spark's own GetTypeInfoOperation
  *
- * @param sqlContext    SQLContext to use
+ * @param session       SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  */
 private[hive] class SparkGetTypeInfoOperation(
-    val sqlContext: SQLContext,
+    val session: SparkSession,
     parentSession: HiveSession)
   extends GetTypeInfoOperation(parentSession)
   with SparkOperation
@@ -49,7 +49,7 @@ private[hive] class SparkGetTypeInfoOperation(
     logInfo(log"Listing type info with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = session.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     if (isAuthV2Enabled) {

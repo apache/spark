@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.{StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -79,6 +79,13 @@ abstract class StringRegexExpression extends BinaryExpression
     } else {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
+  }
+}
+
+private[catalyst] object StringRegexExpression {
+  def expressionToEscapeChar(e: Expression): Char = e match {
+    case StringLiteral(v) if v.length == 1 => v.charAt(0)
+    case _ => throw QueryCompilationErrors.invalidEscapeChar(e)
   }
 }
 
@@ -136,6 +143,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
+
+  def this(left: Expression, right: Expression, escapeChar: Expression) =
+    this(left, right, StringRegexExpression.expressionToEscapeChar(escapeChar))
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
@@ -258,6 +268,9 @@ case class ILike(
     right: Expression,
     escapeChar: Char) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  def this(left: Expression, right: Expression, escapeChar: Expression) =
+    this(left, right, StringRegexExpression.expressionToEscapeChar(escapeChar))
 
   override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -89,6 +89,13 @@ case class TestFunctionWithTypeCheckFailure(
 }
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
+
+case class SupportsNonDeterministicExpressionTestOperator(
+    actions: Seq[Expression],
+    allowNonDeterministicExpression: Boolean)
+  extends LeafNode with SupportsNonDeterministicExpression {
+  override def output: Seq[Attribute] = Seq()
+}
 
 class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   import TestRelations._
@@ -252,6 +259,25 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "prettyName" -> toSQLId("percent_rank"),
         "syntax" -> toSQLStmt("FILTER CLAUSE")),
       Array(ExpectedContext("percent_rank(a) FILTER (WHERE c > 1) OVER ()", 7, 50)))
+  }
+
+  test("window specification error") {
+    assertAnalysisErrorClass(
+      inputPlan = CatalystSqlParser.parsePlan(
+        """
+          |WITH sample_data AS (
+          |    SELECT 1 AS a, 10 AS b UNION ALL
+          |    SELECT 2 AS a, 20 AS b
+          |)
+          |SELECT
+          |    AVG(a) OVER (b) AS avg_a
+          |FROM sample_data
+          |GROUP BY a, b;
+          |""".stripMargin),
+      expectedErrorClass = "MISSING_WINDOW_SPECIFICATION",
+      expectedMessageParameters = Map(
+        "windowName" -> "b",
+        "docroot" -> SPARK_DOC_ROOT))
   }
 
   test("higher order function with filter predicate") {
@@ -1364,4 +1390,20 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     messageParameters = Map(
       "expr" -> "\"_w0\"",
       "exprType" -> "\"MAP<STRING, STRING>\""))
+
+  test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
+    val nonDeterministicExpressions = Seq(new Rand())
+    val tolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = true)
+    assertAnalysisSuccess(tolerantPlan)
+
+    val intolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = false)
+    assertAnalysisError(
+      intolerantPlan,
+      "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
+    )
+  }
 }

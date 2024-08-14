@@ -55,7 +55,7 @@ RUN ln -s $(basename $(ls /opt/spark/examples/jars/spark-examples_*.jar)) /opt/s
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 
-ENV SPARK_HOME /opt/spark
+ENV SPARK_HOME=/opt/spark
 
 WORKDIR /opt/spark/work-dir
 RUN chmod g+w /opt/spark/work-dir

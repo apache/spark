@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{Estimator, Model, Transformer}
@@ -27,7 +27,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -103,8 +103,8 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
   private def validateAndTransformField(
       schema: StructType,
       inputColName: String,
+      inputDataType: DataType,
       outputColName: String): StructField = {
-    val inputDataType = schema(inputColName).dataType
     require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
       s"The input column $inputColName must be either string type or numeric type, " +
         s"but got $inputDataType.")
@@ -124,10 +124,18 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
 
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
-        schema.fieldNames.contains(inputColName) match {
-          case true => Some(validateAndTransformField(schema, inputColName, outputColName))
-          case false if skipNonExistsCol => None
-          case _ => throw new SparkException(s"Input column $inputColName does not exist.")
+        try {
+          val dtype = SchemaUtils.getSchemaFieldType(schema, inputColName)
+          Some(
+            validateAndTransformField(schema, inputColName, dtype, outputColName)
+          )
+        } catch {
+          case e: SparkIllegalArgumentException if e.getErrorClass == "FIELD_NOT_FOUND" =>
+            if (skipNonExistsCol) {
+              None
+            } else {
+              throw new SparkException(s"Input column $inputColName does not exist.")
+            }
         }
     }
     StructType(schema.fields ++ outputFields)
@@ -431,11 +439,8 @@ class StringIndexerModel (
       val labelToIndex = labelsToIndexArray(i)
       val labels = labelsArray(i)
 
-      if (!dataset.schema.fieldNames.contains(inputColName)) {
-        logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
-          log"during transformation. Skip StringIndexerModel for this column.")
-        outputColNames(i) = null
-      } else {
+      try {
+        dataset.col(inputColName)
         val filteredLabels = getHandleInvalid match {
           case StringIndexer.KEEP_INVALID => labels :+ "__unknown"
           case _ => labels
@@ -449,9 +454,13 @@ class StringIndexerModel (
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
+      } catch {
+        case _: AnalysisException =>
+          logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
+            log"during transformation. Skip StringIndexerModel for this column.")
+          outputColNames(i) = null
       }
     }
-
     val filteredOutputColNames = outputColNames.filter(_ != null)
     val filteredOutputColumns = outputColumns.filter(_ != null)
 
@@ -496,10 +505,10 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
     private case class Data(labelsArray: Array[Array[String]])
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.labelsArray)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -508,7 +517,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
     private val className = classOf[StringIndexerModel].getName
 
     override def load(path: String): StringIndexerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       // We support loading old `StringIndexerModel` saved by previous Spark versions.

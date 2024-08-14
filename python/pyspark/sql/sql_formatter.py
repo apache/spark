@@ -63,8 +63,8 @@ class SQLStringFormatter(string.Formatter):
                 return jexpr.sql()
             else:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_PLAIN_COLUMN_REFERENCE",
-                    message_parameters={"val": str(val), "field_name": field_name},
+                    errorClass="VALUE_NOT_PLAIN_COLUMN_REFERENCE",
+                    messageParameters={"val": str(val), "field_name": field_name},
                 )
         elif isinstance(val, DataFrame):
             for df, n in self._temp_views:

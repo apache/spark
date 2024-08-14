@@ -327,31 +327,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   protected val reversedProperties = Seq(PROP_OWNER)
 
-  test("alter table: set properties (datasource table)") {
-    testSetProperties(isDatasourceTable = true)
-  }
-
-  test("alter table: unset properties (datasource table)") {
-    testUnsetProperties(isDatasourceTable = true)
-  }
-
-  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
-    val tableName = "test_table"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map(
-          "properties" -> "`test_prop1`, `test_prop2`",
-          "table" -> "`spark_catalog`.`default`.`test_table`")
-      )
-    }
-  }
-
   test("alter table: change column (datasource table)") {
     testChangeColumn(isDatasourceTable = true)
   }
@@ -1115,86 +1090,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "requiredType" -> "VIEW",
         "objectName" -> "spark_catalog.dbx.tab1")
     )
-  }
-
-  protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    def getProps: Map[String, String] = {
-      if (isUsingHiveMetastore) {
-        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
-      } else {
-        catalog.getTableMetadata(tableIdent).properties
-      }
-    }
-    assert(getProps.isEmpty)
-    // set table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
-    assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
-    // set table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
-    assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
-    // table to alter does not exist
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
-      },
-      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`does_not_exist`"),
-      context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25)
-    )
-  }
-
-  protected def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    def getProps: Map[String, String] = {
-      if (isUsingHiveMetastore) {
-        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
-      } else {
-        catalog.getTableMetadata(tableIdent).properties
-      }
-    }
-    // unset table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
-    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
-    assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
-    // unset table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
-    assert(getProps == Map("c" -> "lan", "x" -> "y"))
-    // table to alter does not exist
-    val sql1 = "ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')"
-    checkError(
-      exception = intercept[ParseException] {
-        sql(sql1)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values should not be specified for key(s): [c]"),
-      context = ExpectedContext(fragment = sql1, start = 0, stop = 59)
-    )
-    // property to unset does not exist
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
-      },
-      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      parameters = Map("properties" -> "`xyz`", "table" -> "`spark_catalog`.`dbx`.`tab1`")
-    )
-    // property to unset does not exist, but "IF EXISTS" is specified
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
-    assert(getProps == Map("x" -> "y"))
   }
 
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {
@@ -2260,7 +2155,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       )
 
       withGlobalTempView("src") {
-        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        val globalTempDB = spark.sharedState.globalTempDB
         sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
         sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
         val table = catalog.getTableMetadata(TableIdentifier("t4"))
@@ -2444,8 +2339,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TABLE t1(col STRING) USING parquet")
       sql("INSERT INTO t1 VALUES ('a')")
       checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_BINARY"))
-      sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_BINARY_LCASE")
-      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_BINARY_LCASE"))
+      sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_LCASE")
+      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_LCASE"))
 
       // Invalid "ALTER COLUMN" to Integer.
       val alterInt = "ALTER TABLE t1 ALTER COLUMN col TYPE INTEGER"
@@ -2455,7 +2350,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         },
         errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
         parameters = Map(
-          "originType" -> "\"STRING COLLATE UTF8_BINARY_LCASE\"",
+          "originType" -> "\"STRING COLLATE UTF8_LCASE\"",
           "originName" -> "`col`",
           "table" -> "`spark_catalog`.`default`.`t1`",
           "newType" -> "\"INT\"",
@@ -2468,8 +2363,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TABLE t2(col ARRAY<STRING>) USING parquet")
       sql("INSERT INTO t2 VALUES (ARRAY('a'))")
       checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_BINARY"))
-      sql("ALTER TABLE t2 ALTER COLUMN col TYPE ARRAY<STRING COLLATE UTF8_BINARY_LCASE>")
-      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_BINARY_LCASE"))
+      sql("ALTER TABLE t2 ALTER COLUMN col TYPE ARRAY<STRING COLLATE UTF8_LCASE>")
+      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_LCASE"))
 
       // `MapType` with collation.
       sql("CREATE TABLE t3(col MAP<STRING, STRING>) USING parquet")
@@ -2478,23 +2373,23 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql(
         """
           |ALTER TABLE t3 ALTER COLUMN col TYPE
-          |MAP<STRING, STRING COLLATE UTF8_BINARY_LCASE>""".stripMargin)
-      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("UTF8_BINARY_LCASE"))
+          |MAP<STRING, STRING COLLATE UTF8_LCASE>""".stripMargin)
+      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("UTF8_LCASE"))
 
       // Invalid change of map key collation.
       val alterMap =
         "ALTER TABLE t3 ALTER COLUMN col TYPE " +
-          "MAP<STRING COLLATE UTF8_BINARY_LCASE, STRING>"
+          "MAP<STRING COLLATE UTF8_LCASE, STRING>"
       checkError(
         exception = intercept[AnalysisException] {
           sql(alterMap)
         },
         errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
         parameters = Map(
-          "originType" -> "\"MAP<STRING, STRING COLLATE UTF8_BINARY_LCASE>\"",
+          "originType" -> "\"MAP<STRING, STRING COLLATE UTF8_LCASE>\"",
           "originName" -> "`col`",
           "table" -> "`spark_catalog`.`default`.`t3`",
-          "newType" -> "\"MAP<STRING COLLATE UTF8_BINARY_LCASE, STRING>\"",
+          "newType" -> "\"MAP<STRING COLLATE UTF8_LCASE, STRING>\"",
           "newName" -> "`col`"
         ),
         context = ExpectedContext(fragment = alterMap, start = 0, stop = alterMap.length - 1)
@@ -2504,8 +2399,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TABLE t4(col STRUCT<a:STRING>) USING parquet")
       sql("INSERT INTO t4 VALUES (NAMED_STRUCT('a', 'value'))")
       checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY"))
-      sql("ALTER TABLE t4 ALTER COLUMN col TYPE STRUCT<a:STRING COLLATE UTF8_BINARY_LCASE>")
-      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY_LCASE"))
+      sql("ALTER TABLE t4 ALTER COLUMN col TYPE STRUCT<a:STRING COLLATE UTF8_LCASE>")
+      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_LCASE"))
     }
   }
 
@@ -2514,7 +2409,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TABLE t1(col STRING, i INTEGER) USING parquet PARTITIONED BY (col)")
       checkError(
         exception = intercept[AnalysisException] {
-          sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_BINARY_LCASE")
+          sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_LCASE")
         },
         errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
         sqlState = "428FR",
@@ -2523,7 +2418,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TABLE t2(col STRING) USING parquet CLUSTERED BY (col) INTO 1 BUCKETS")
       checkError(
         exception = intercept[AnalysisException] {
-          sql("ALTER TABLE t2 ALTER COLUMN col TYPE STRING COLLATE UTF8_BINARY_LCASE")
+          sql("ALTER TABLE t2 ALTER COLUMN col TYPE STRING COLLATE UTF8_LCASE")
         },
         errorClass = "CANNOT_ALTER_COLLATION_BUCKET_COLUMN",
         sqlState = "428FR",

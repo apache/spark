@@ -32,16 +32,15 @@ import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1530,6 +1529,7 @@ object CodeGenerator extends Logging {
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName,
+      classOf[CollationAwareUTF8String].getName,
       classOf[CollationFactory].getName,
       classOf[CollationSupport].getName,
       QueryExecutionErrors.getClass.getName.stripSuffix("$")
@@ -1593,9 +1593,10 @@ object CodeGenerator extends Logging {
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo("Generated method too long to be JIT compiled: " +
-                log"${MDC(CLASS_NAME, cf.getThisClassName)}.${MDC(METHOD_NAME, method.getName)} " +
-                log"is ${MDC(BYTECODE_SIZE, byteCodeSize)} bytes")
+              logInfo(log"Generated method too long to be JIT compiled: " +
+                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
+                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
+                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
             }
 
             byteCodeSize
