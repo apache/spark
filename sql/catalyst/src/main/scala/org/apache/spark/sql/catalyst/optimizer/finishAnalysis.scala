@@ -85,7 +85,6 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
       case table: ResolvedInlineTable => eval(table)
-
     }
   }
 
