@@ -1032,8 +1032,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         store.get(dataToKeyRow(col1, col2), colFamilyName)
       }
 
-      def iterator(store: StateStore, colFamilyName: String): Seq[((String, Int), Int)] = {
-        store.iterator(colFamilyName).toSeq.map {
+      def iterator(store: StateStore, colFamilyName: String): Iterator[((String, Int), Int)] = {
+        store.iterator(colFamilyName).map {
           case unsafePair =>
             (keyRowToData(unsafePair.key), valueRowToData(unsafePair.value))
         }
