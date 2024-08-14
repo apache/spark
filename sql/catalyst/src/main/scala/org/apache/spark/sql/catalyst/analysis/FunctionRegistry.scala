@@ -912,7 +912,6 @@ object FunctionRegistry {
   registerInternalExpression[PandasMode]("pandas_mode")
   registerInternalExpression[EWM]("ewm")
   registerInternalExpression[NullIndex]("null_index")
-  registerInternalExpression[GroupedCount]("grouped_count")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

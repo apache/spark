@@ -27,7 +27,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -200,20 +200,31 @@ class StringIndexer @Since("1.4.0") (
 
   private def countByValue(
       dataset: Dataset[_],
-      inputCols: Array[String]): Seq[Map[String, Long]] = {
-    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq).map(grouped_count)
-
-    dataset
-      .select(array(selectedCols: _*))
-      .first()
-      .getSeq[Map[String, Long]](0)
+      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
+    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq)
+    val results = Array.fill(selectedCols.size)(new OpenHashMap[String, Long]())
+    dataset.select(posexplode(array(selectedCols: _*)).as(Seq("index", "value")))
+      .where(col("value").isNotNull)
+      .groupBy("index", "value")
+      .agg(count(lit(1)).as("count"))
+      .groupBy("index")
+      .agg(collect_list(struct("value", "count")))
+      .collect()
+      .foreach { row =>
+        val index = row.getInt(0)
+        val result = results(index)
+        row.getSeq[Row](1).foreach { case Row(label: String, count: Long) =>
+          result.update(label, count)
+        }
+      }
+    results
   }
 
   private def sortByFreq(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
     val (inputCols, _) = getInOutCols()
 
     val sortFunc = StringIndexer.getSortFunc(ascending = ascending)
-    val orgStrings = countByValue(dataset, inputCols)
+    val orgStrings = countByValue(dataset, inputCols).toImmutableArraySeq
     ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
       counts.toSeq.sortWith(sortFunc).map(_._1).toArray
     }.toArray
