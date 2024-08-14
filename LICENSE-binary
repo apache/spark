@@ -508,7 +508,6 @@ Eclipse Distribution License (EDL) 1.0
 com.sun.istack:istack-commons-runtime
 jakarta.xml.bind:jakarta.xml.bind-api
 org.glassfish.jaxb:jaxb-runtime
-org.glassfish.jaxb:txw2
 
 Eclipse Public License (EPL) 2.0
 --------------------------------
