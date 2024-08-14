@@ -248,6 +248,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  // TODO In SPARK-46302, the env SKIP_SPARK_RELEASE_VERSIONS has been added to
+  //  allow Maven tests to skip problematic release versions.
+  //  Related issues will be fixed in SPARK-46400, and testing will be resumed
+  //  after the fixed Spark 3.x version is released.
+  private val skipReleaseVersions =
+    sys.env.getOrElse("SKIP_SPARK_RELEASE_VERSIONS", "").split(",").toSet
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
@@ -262,7 +268,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION).toImmutableArraySeq
+        .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil
