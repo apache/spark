@@ -43,6 +43,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -3628,27 +3629,36 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-49211: V2 Catalog can also support built-in data sources") {
-    def checkParquet(tableName: String, path: String): Unit = {
-      withTable(tableName) {
-        sql("CREATE TABLE " + tableName +
-          " (name STRING) USING PARQUET LOCATION '" + path + "'")
-        sql("INSERT INTO " + tableName + " VALUES('Bob')")
-        val result = sql("SELECT * FROM " + tableName).collectAsList()
-        assert(result.size() == 1)
-        assert(result.get(0).getString(0) == "Bob")
+  def checkParquet(tableName: String, path: String): Unit = {
+    withTable(tableName) {
+      sql("CREATE TABLE " + tableName +
+        " (name STRING) USING PARQUET LOCATION '" + path + "'")
+      sql("INSERT INTO " + tableName + " VALUES('Bob')")
+      val df = sql("SELECT * FROM " + tableName)
+      assert(df.queryExecution.analyzed.exists {
+        case _@LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+        case _ => false
+      })
+      val result = df.collectAsList()
+      assert(result.size() == 1)
+      assert(result.get(0).getString(0) == "Bob")
+    }
+  }
+
+  test("SPARK-49211: V2 Catalog can support built-in data sources") {
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkParquet("spark_catalog.default.t", path.getAbsolutePath)
       }
     }
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
-        checkParquet("testcat3.default.t", path.getAbsolutePath)
-      }
-    }
-    withSQLConf(
-      V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
-      withTempPath { path =>
-        checkParquet("spark_catalog.default.t", path.getAbsolutePath)
+        checkParquet("testcat3.default.t2", path.getAbsolutePath)
       }
     }
   }
@@ -3691,8 +3701,6 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 
 
 class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
-  override def name: String = "testcat3"
-
   override def loadTable(ident: Identifier): Table = {
     val superTable = super.loadTable(ident)
     val tableIdent = {
