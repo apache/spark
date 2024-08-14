@@ -3636,12 +3636,10 @@ class DataSourceV2SQLSuiteV1Filter
       sql("INSERT INTO " + tableName + " VALUES('Bob')")
       val df = sql("SELECT * FROM " + tableName)
       assert(df.queryExecution.analyzed.exists {
-        case _@LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+        case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
         case _ => false
       })
-      val result = df.collectAsList()
-      assert(result.size() == 1)
-      assert(result.get(0).getString(0) == "Bob")
+      checkAnswer(df, Row("Bob"))
     }
   }
 
@@ -3655,10 +3653,11 @@ class DataSourceV2SQLSuiteV1Filter
         checkParquet("spark_catalog.default.t", path.getAbsolutePath)
       }
     }
+    spark.sessionState.catalogManager.v1SessionCatalog.invalidateAllCachedTables()
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
-        checkParquet("testcat3.default.t2", path.getAbsolutePath)
+        checkParquet("testcat3.default.t", path.getAbsolutePath)
       }
     }
   }

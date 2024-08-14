@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -88,11 +88,13 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def loadTable(ident: Identifier): Table = {
     try {
       val table = catalog.getTableMetadata(ident.asTableIdentifier)
+      val qualifiedIdent = catalog.qualifyIdentifier(table.identifier)
       // The custom session catalog may extend `DelegatingCatalogExtension` and rely on the returned
       // table here. To avoid breaking it we do not resolve the table provider and still return
       // `V1Table` if the custom session catalog is present.
       if (table.provider.isDefined && !hasCustomSessionCatalog) {
-        val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+        val qualifiedTableName =
+          FullQualifiedTableName(qualifiedIdent.catalog.get, table.database, table.identifier.table)
         // Check if the table is in the v1 table cache to skip the v2 table lookup.
         if (catalog.getCachedTable(qualifiedTableName) != null) {
           return V1Table(table)
