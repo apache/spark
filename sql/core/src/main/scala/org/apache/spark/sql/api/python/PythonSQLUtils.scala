@@ -20,9 +20,7 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.net.Socket
 import java.nio.channels.Channels
-
 import net.razorvine.pickle.{Pickler, Unpickler}
-
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
@@ -37,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -142,8 +141,9 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 
-  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(new EWM(e.expr, alpha, ignoreNA))
+  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column = {
+    Column.internalFn("ewm", lit(alpha), lit(ignoreNA))
+  }
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 

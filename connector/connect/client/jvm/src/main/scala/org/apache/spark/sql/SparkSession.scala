@@ -21,14 +21,11 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
-
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
-
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
@@ -41,7 +38,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ColumnNodeToExpressionConverter, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType

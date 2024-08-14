@@ -21,11 +21,9 @@ import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -39,7 +37,8 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -927,6 +926,16 @@ class SparkSession private(
 
   private[sql] def leafNodeDefaultParallelism: Int = {
     conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
+  }
+
+  private[sql] object Converter extends ColumnNodeToExpressionConverter {
+    override protected def parser: ParserInterface = sessionState.sqlParser
+    override protected def conf: SQLConf = sessionState.conf
+  }
+
+  private[sql] implicit class RichColumn(val column: Column) {
+    def expr: Expression = Converter(column.node)
+    def named: NamedExpression = NamedExpressionUtils.toNamed(expr)
   }
 }
 

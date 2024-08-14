@@ -18,12 +18,11 @@
 package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
-
 import org.apache.spark.annotation.{Private, Stable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -31,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{ColumnNode, TypedAggUtils, Wrapper}
+import org.apache.spark.sql.internal.{ColumnNode, NamedExpressionUtils, TypedAggUtils, Wrapper}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -42,14 +41,6 @@ private[spark] object Column {
   def apply(expr: Expression): Column = Column(Wrapper(expr))
 
   def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
-
-  private[sql] def generateAlias(e: Expression): String = {
-    e match {
-      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-        a.aggregateFunction.toString
-      case expr => toPrettySQL(expr)
-    }
-  }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, inputs: _*)
@@ -193,25 +184,7 @@ class Column(val node: ColumnNode) extends Logging {
   /**
    * Returns the expression for this column either with an existing or auto assigned name.
    */
-  private[sql] def named: NamedExpression = expr match {
-    case expr: NamedExpression => expr
-
-    // Leave an unaliased generator with an empty list of names since the analyzer will generate
-    // the correct defaults after the nested expression's type has been resolved.
-    case g: Generator => MultiAlias(g, Nil)
-
-    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
-    // NamedExpression under this Cast.
-    case c: Cast =>
-      c.transformUp {
-        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
-      } match {
-        case ne: NamedExpression => ne
-        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
-      }
-
-    case expr: Expression => UnresolvedAlias(expr, Some(Column.generateAlias))
-  }
+  private[sql] def named: NamedExpression = NamedExpressionUtils.toNamed(expr)
 
   /**
    * Provides a type hint about the expected return value of this column.  This information can

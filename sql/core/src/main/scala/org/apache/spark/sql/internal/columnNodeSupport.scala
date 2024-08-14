@@ -17,13 +17,15 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, analysis, expressions}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, toPrettySQL}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
@@ -245,4 +247,36 @@ private[sql] case class Wrapper(
   }
 
   override def sql: String = expression.sql
+}
+
+private[sql] object NamedExpressionUtils {
+  /**
+   * Returns the expression either with an existing or auto assigned name.
+   */
+  def toNamed(expr: Expression): NamedExpression = expr match {
+    case expr: NamedExpression => expr
+
+    // Leave an unaliased generator with an empty list of names since the analyzer will generate
+    // the correct defaults after the nested expression's type has been resolved.
+    case g: Generator => MultiAlias(g, Nil)
+
+    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
+    // NamedExpression under this Cast.
+    case c: expressions.Cast =>
+      c.transformUp {
+        case c @ expressions.Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
+      } match {
+        case ne: NamedExpression => ne
+        case _ => UnresolvedAlias(expr, Some(generateAlias))
+      }
+
+    case expr: Expression => UnresolvedAlias(expr, Some(generateAlias))
+  }
+
+  def generateAlias(e: Expression): String = {
+    e match {
+      case AggregateExpression(f: TypedAggregateExpression, _, _, _, _) => f.toString
+      case expr => toPrettySQL(expr)
+    }
+  }
 }

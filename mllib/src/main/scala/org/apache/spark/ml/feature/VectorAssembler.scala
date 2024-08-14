@@ -88,7 +88,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val schema = dataset.schema
 
     val vectorCols = $(inputCols).filter { c =>
-      dataset.col(c).expr.dataType match {
+      dataset.schema(c).dataType match {
         case _: VectorUDT => true
         case _ => false
       }
@@ -145,7 +145,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
     val args = $(inputCols).map { c =>
-      dataset(c).expr.dataType match {
+      dataset.schema(c).dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
