@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.TypedAggUtils
@@ -51,31 +52,28 @@ private[sql] object Column {
     }
   }
 
-  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
-    val metadataWithoutId = new MetadataBuilder()
-      .withMetadata(a.metadata)
-      .remove(Dataset.DATASET_ID_KEY)
-      .remove(Dataset.COL_POS_KEY)
-      .build()
-    a.withMetadata(metadataWithoutId)
-  }
-
   private[sql] def fn(name: String, inputs: Column*): Column = {
-    fn(name, isDistinct = false, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = false, inputs: _*)
   }
 
   private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
-    fn(name, isDistinct = isDistinct, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = isDistinct, isInternal = false, inputs)
   }
 
-  private[sql] def fn(
+  private[sql] def internalFn(name: String, inputs: Column*): Column = {
+    fn(name, isDistinct = false, isInternal = true, inputs)
+  }
+
+  private def fn(
       name: String,
       isDistinct: Boolean,
-      ignoreNulls: Boolean,
-      inputs: Column*): Column = withOrigin {
-    Column {
-      UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
-    }
+      isInternal: Boolean,
+      inputs: Seq[Column]): Column = withOrigin {
+    Column(UnresolvedFunction(
+      name :: Nil,
+      inputs.map(_.expr),
+      isDistinct = isDistinct,
+      isInternal = isInternal))
   }
 }
 
@@ -182,7 +180,7 @@ class Column(val expr: Expression) extends Logging {
   override def hashCode: Int = this.normalizedExpr().hashCode()
 
   private def normalizedExpr(): Expression = expr transform {
-    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+    case a: AttributeReference => DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
   }
 
   /** Creates a column based on the given expression. */

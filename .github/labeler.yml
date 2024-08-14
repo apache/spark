@@ -199,6 +199,7 @@ YARN:
 KUBERNETES:
   - changed-files:
     - any-glob-to-any-file: [
+     'bin/docker-image-tool.sh',
      'resource-managers/kubernetes/**/*'
     ]
 

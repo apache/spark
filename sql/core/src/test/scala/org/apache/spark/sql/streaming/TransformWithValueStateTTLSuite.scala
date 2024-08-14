@@ -258,9 +258,9 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
-        val metadataPathPostfix = "state/0/default/_metadata"
+        val metadataPathPostfix = "state/0/_stateSchema/default"
         val stateSchemaPath = new Path(checkpointDir.toString,
-          s"$metadataPathPostfix/schema")
+          s"$metadataPathPostfix")
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 

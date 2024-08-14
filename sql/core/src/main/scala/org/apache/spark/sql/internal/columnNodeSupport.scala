@@ -17,15 +17,18 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
 
 /**
  * Convert a [[ColumnNode]] into an [[Expression]].
@@ -38,7 +41,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
   override def apply(node: ColumnNode): Expression = CurrentOrigin.withOrigin(node.origin) {
     node match {
       case Literal(value, Some(dataType), _) =>
-        expressions.Literal.create(value, dataType)
+        val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
+        expressions.Literal(converter(value), dataType)
 
       case Literal(value, None, _) =>
         expressions.Literal(value)
@@ -62,13 +66,21 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       case UnresolvedRegex(unparsedIdentifier, planId, _) =>
         convertUnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn = false)
 
-      case UnresolvedFunction(functionName, arguments, isDistinct, isUDF, _) =>
+      case UnresolvedFunction(functionName, arguments, isDistinct, isUDF, isInternal, _) =>
         val nameParts = if (isUDF) {
           parser.parseMultipartIdentifier(functionName)
         } else {
           Seq(functionName)
         }
-        analysis.UnresolvedFunction(nameParts, arguments.map(apply), isDistinct)
+        analysis.UnresolvedFunction(
+          nameParts = nameParts,
+          arguments = arguments.map(apply),
+          isDistinct = isDistinct,
+          isInternal = isInternal)
+
+      case Alias(child, Seq(name), None, _) =>
+        expressions.Alias(apply(child), name)(
+          nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
 
       case Alias(child, Seq(name), metadata, _) =>
         expressions.Alias(apply(child), name)(explicitMetadata = metadata)
@@ -78,9 +90,9 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
 
       case Cast(child, dataType, evalMode, _) =>
         val convertedEvalMode = evalMode match {
-          case Some(Cast.EvalMode.Ansi) => expressions.EvalMode.ANSI
-          case Some(Cast.EvalMode.Legacy) => expressions.EvalMode.LEGACY
-          case Some(Cast.EvalMode.Try) => expressions.EvalMode.TRY
+          case Some(Cast.Ansi) => expressions.EvalMode.ANSI
+          case Some(Cast.Legacy) => expressions.EvalMode.LEGACY
+          case Some(Cast.Try) => expressions.EvalMode.TRY
           case _ => expressions.EvalMode.fromSQLConf(conf)
         }
         val cast = expressions.Cast(
@@ -101,20 +113,13 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         val frame = spec.frame match {
           case Some(WindowFrame(frameType, lower, upper)) =>
             val convertedFrameType = frameType match {
-              case WindowFrame.FrameType.Range => expressions.RangeFrame
-              case WindowFrame.FrameType.Row => expressions.RowFrame
+              case WindowFrame.Range => expressions.RangeFrame
+              case WindowFrame.Row => expressions.RowFrame
             }
-            val convertedLower = lower match {
-              case WindowFrame.CurrentRow => expressions.CurrentRow
-              case WindowFrame.Unbounded => expressions.UnboundedPreceding
-              case WindowFrame.Value(node) => apply(node)
-            }
-            val convertedUpper = upper match {
-              case WindowFrame.CurrentRow => expressions.CurrentRow
-              case WindowFrame.Unbounded => expressions.UnboundedFollowing
-              case WindowFrame.Value(node) => apply(node)
-            }
-            expressions.SpecifiedWindowFrame(convertedFrameType, convertedLower, convertedUpper)
+            expressions.SpecifiedWindowFrame(
+              convertedFrameType,
+              convertWindowFrameBoundary(lower),
+              convertWindowFrameBoundary(upper))
           case None =>
             expressions.UnspecifiedFrame
         }
@@ -149,7 +154,31 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
           },
           elseValue = otherwise.map(apply))
 
-      case Extension(expression: Expression, _) =>
+      case InvokeInlineUserDefinedFunction(
+          a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil, isDistinct, _) =>
+        TypedAggregateExpression(a)(a.bufferEncoder, a.outputEncoder)
+          .toAggregateExpression(isDistinct)
+
+      case InvokeInlineUserDefinedFunction(
+          a: UserDefinedAggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+          arguments, isDistinct, _) =>
+        ScalaAggregator(
+          agg = a.aggregator,
+          children = arguments.map(apply),
+          inputEncoder = encoderFor(a.inputEncoder),
+          bufferEncoder = encoderFor(a.aggregator.bufferEncoder),
+          aggregatorName = a.givenName,
+          nullable = a.nullable,
+          isDeterministic = a.deterministic).toAggregateExpression(isDistinct)
+
+      case InvokeInlineUserDefinedFunction(
+          a: UserDefinedAggregateFunction, arguments, isDistinct, _) =>
+        ScalaUDAF(udaf = a, children = arguments.map(apply)).toAggregateExpression(isDistinct)
+
+      case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
+        udf.createScalaUDF(arguments.map(apply))
+
+      case Wrapper(expression, _) =>
         expression
 
       case node =>
@@ -164,14 +193,23 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
 
   private def convertSortOrder(sortOrder: SortOrder): expressions.SortOrder = {
     val sortDirection = sortOrder.sortDirection match {
-      case SortOrder.SortDirection.Ascending => expressions.Ascending
-      case SortOrder.SortDirection.Descending => expressions.Descending
+      case SortOrder.Ascending => expressions.Ascending
+      case SortOrder.Descending => expressions.Descending
     }
     val nullOrdering = sortOrder.nullOrdering match {
-      case SortOrder.NullOrdering.NullsFirst => expressions.NullsFirst
-      case SortOrder.NullOrdering.NullsLast => expressions.NullsLast
+      case SortOrder.NullsFirst => expressions.NullsFirst
+      case SortOrder.NullsLast => expressions.NullsLast
     }
     expressions.SortOrder(apply(sortOrder.child), sortDirection, nullOrdering, Nil)
+  }
+
+  private def convertWindowFrameBoundary(boundary: WindowFrame.FrameBoundary): Expression = {
+    boundary match {
+      case WindowFrame.CurrentRow => expressions.CurrentRow
+      case WindowFrame.UnboundedPreceding => expressions.UnboundedPreceding
+      case WindowFrame.UnboundedFollowing => expressions.UnboundedFollowing
+      case WindowFrame.Value(node) => apply(node)
+    }
   }
 
   private def convertUnresolvedAttribute(
@@ -189,7 +227,7 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
   }
 }
 
-object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
+private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
   override protected def parser: ParserInterface = {
     SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
       new SparkSqlParser()
@@ -197,4 +235,21 @@ object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
   }
 
   override protected def conf: SQLConf = SQLConf.get
+}
+
+/**
+ * [[ColumnNode]] wrapper for an [[Expression]].
+ */
+private[sql] case class Wrapper(
+    expression: Expression,
+    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+  override def normalize(): Wrapper = {
+    val updated = expression.transform {
+      case a: AttributeReference =>
+        DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
+    }
+    copy(updated, ColumnNode.NO_ORIGIN)
+  }
+
+  override def sql: String = expression.sql
 }
