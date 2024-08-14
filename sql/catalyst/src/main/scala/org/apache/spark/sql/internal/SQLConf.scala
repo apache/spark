@@ -3722,7 +3722,7 @@ object SQLConf {
       .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true) // Disabled for now, see SPARK-46446
+      .createWithDefault(true)
 
   val DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")
