@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
+import org.apache.spark.sql.internal.UserDefinedFunctionLike
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -44,7 +45,7 @@ import org.apache.spark.sql.types.DataType
  * @since 1.3.0
  */
 @Stable
-sealed abstract class UserDefinedFunction {
+sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -96,7 +97,7 @@ private[spark] case class SparkUserDefinedFunction(
     dataType: DataType,
     inputEncoders: Seq[Option[Encoder[_]]] = Nil,
     outputEncoder: Option[Encoder[_]] = None,
-    name: Option[String] = None,
+    givenName: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
 
@@ -112,13 +113,13 @@ private[spark] case class SparkUserDefinedFunction(
       exprs,
       inputEncoders.map(_.filter(_ != UnboundRowEncoder).map(e => encoderFor(e))),
       outputEncoder.map(e => encoderFor(e)),
-      udfName = name,
+      udfName = givenName,
       nullable = nullable,
       udfDeterministic = deterministic)
   }
 
   override def withName(name: String): SparkUserDefinedFunction = {
-    copy(name = Option(name))
+    copy(givenName = Option(name))
   }
 
   override def asNonNullable(): SparkUserDefinedFunction = {
@@ -136,6 +137,8 @@ private[spark] case class SparkUserDefinedFunction(
       copy(deterministic = false)
     }
   }
+
+  override def name: String = givenName.getOrElse("UDF")
 }
 
 object SparkUserDefinedFunction {
@@ -170,7 +173,7 @@ object SparkUserDefinedFunction {
 private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
     inputEncoder: Encoder[IN],
-    name: Option[String] = None,
+    givenName: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
 
@@ -184,11 +187,11 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     val iEncoder = encoderFor(inputEncoder)
     val bEncoder = encoderFor(aggregator.bufferEncoder)
     ScalaAggregator(
-      exprs, aggregator, iEncoder, bEncoder, nullable, deterministic, aggregatorName = name)
+      exprs, aggregator, iEncoder, bEncoder, nullable, deterministic, aggregatorName = givenName)
   }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
-    copy(name = Option(name))
+    copy(givenName = Option(name))
   }
 
   override def asNonNullable(): UserDefinedAggregator[IN, BUF, OUT] = {
@@ -206,4 +209,6 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
       copy(deterministic = false)
     }
   }
+
+  override def name: String = givenName.getOrElse(aggregator.name)
 }

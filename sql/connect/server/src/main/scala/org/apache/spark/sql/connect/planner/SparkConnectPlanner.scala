@@ -1744,7 +1744,7 @@ class SparkConnectPlanner(
       UserDefinedAggregator(
         aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]],
         inputEncoder = ExpressionEncoder(udfPacket.inputEncoders.head),
-        name = Option(fun.getFunctionName),
+        givenName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
         deterministic = fun.getDeterministic)
     } else {
@@ -1753,7 +1753,7 @@ class SparkConnectPlanner(
         dataType = transformDataType(udf.getOutputType),
         inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
         outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-        name = Option(fun.getFunctionName),
+        givenName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
         deterministic = fun.getDeterministic)
     }
