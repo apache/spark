@@ -117,13 +117,8 @@ class StatefulProcessorApiClient:
         response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(
-                errorClass="ERROR_OCCURRED_WHILE_CALLING",
-                messageParameters={
-                    "func_name": "StatefulProcessorHandle.getValueState",
-                    "error_msg": response_message[1],
-                },
-            )
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message

@@ -16,8 +16,9 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING, Iterator, Union, cast
+from typing import Any, TYPE_CHECKING, Iterator, Optional, Union, cast
 
+from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.types import StructType, _create_row, _parse_datatype_string
@@ -49,7 +50,7 @@ class ValueState:
         """
         return self._value_state_client.exists(self._state_name)
 
-    def get(self) -> Any:
+    def get(self) -> Optional[Row]:
         """
         Get the state value if it exists. Returns None if the state variable does not have a value.
         """

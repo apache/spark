@@ -180,7 +180,8 @@ class TransformWithStateInPandasStateServer(
         if (valueStates(stateName)._1.exists()) {
           sendResponse(0)
         } else {
-          sendResponse(1, s"state $stateName doesn't exist")
+          // Send status code 2 to indicate that the value state doesn't have a value yet.
+          sendResponse(2, s"state $stateName doesn't exist")
         }
       case ValueStateCall.MethodCase.GET =>
         val valueOption = valueStates(stateName)._1.getOption()
@@ -199,7 +200,7 @@ class TransformWithStateInPandasStateServer(
         val valueStateTuple = valueStates(stateName)
         // The value row is serialized as a byte array, we need to convert it back to a Row
         val valueRow = PythonSQLUtils.toJVMRow(byteArray, valueStateTuple._2, valueStateTuple._3)
-        valueStates(stateName)._1.update(valueRow)
+        valueStateTuple._1.update(valueRow)
         sendResponse(0)
       case ValueStateCall.MethodCase.CLEAR =>
         valueStates(stateName)._1.clear()
@@ -210,9 +211,9 @@ class TransformWithStateInPandasStateServer(
   }
 
   private def sendResponse(
-    status: Int,
-    errorMessage: String = null,
-    byteString: ByteString = null): Unit = {
+      status: Int,
+      errorMessage: String = null,
+      byteString: ByteString = null): Unit = {
     val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
     if (status != 0 && errorMessage != null) {
       responseMessageBuilder.setErrorMessage(errorMessage)

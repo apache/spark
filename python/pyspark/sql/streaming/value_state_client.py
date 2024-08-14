@@ -40,15 +40,13 @@ class ValueStateClient:
         status = response_message[0]
         if status == 0:
             return True
-        elif status == 1 and "doesn't exist" in response_message[1]:
+        elif status == 2:
+            # Expect status code is 2 when state variable doesn't have a value.
             return False
         else:
+            # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(
-                errorClass="CALL_BEFORE_INITIALIZE",
-                messageParameters={
-                    "func_name": "exists()",
-                    "object": "ValueState",
-                },
+                f"Error checking value state exists: " f"{response_message[1]}"
             )
 
     def get(self, state_name: str) -> Any:
@@ -68,13 +66,8 @@ class ValueStateClient:
             row = self._stateful_processor_api_client._deserialize_from_bytes(response_message[2])
             return row
         else:
-            raise PySparkRuntimeError(
-                errorClass="CALL_BEFORE_INITIALIZE",
-                messageParameters={
-                    "func_name": "get()",
-                    "object": "ValueState",
-                },
-            )
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
 
     def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -93,13 +86,8 @@ class ValueStateClient:
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(
-                errorClass="CALL_BEFORE_INITIALIZE",
-                messageParameters={
-                    "func_name": "update()",
-                    "object": "ValueState",
-                },
-            )
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
     def clear(self, state_name: str) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -113,10 +101,5 @@ class ValueStateClient:
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status != 0:
-            raise PySparkRuntimeError(
-                errorClass="CALL_BEFORE_INITIALIZE",
-                messageParameters={
-                    "func_name": "clear()",
-                    "object": "ValueState",
-                },
-            )
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error clearing value state: " f"{response_message[1]}")
