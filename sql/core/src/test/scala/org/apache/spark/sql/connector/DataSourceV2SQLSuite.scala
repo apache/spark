@@ -3629,20 +3629,27 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-49211: V2 Catalog can also support built-in data sources") {
-    def checkParquet(tableName: String): Unit = {
+    def checkParquet(tableName: String, path: String): Unit = {
       withTable(tableName) {
         sql("CREATE TABLE " + tableName +
-          " (name STRING) USING PARQUET LOCATION '/tmp/test_path'")
-        sql("select * from " + tableName)
+          " (name STRING) USING PARQUET LOCATION '" + path + "'")
+        sql("INSERT INTO " + tableName + " VALUES('Bob')")
+        val result = sql("SELECT * FROM " + tableName).collectAsList()
+        assert(result.size() == 1)
+        assert(result.get(0).getString(0) == "Bob")
       }
     }
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
-      checkParquet("testcat3.default.t")
+      withTempPath { path =>
+        checkParquet("testcat3.default.t", path.getAbsolutePath)
+      }
     }
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
-      checkParquet("spark_catalog.default.t")
+      withTempPath { path =>
+        checkParquet("spark_catalog.default.t", path.getAbsolutePath)
+      }
     }
   }
 
@@ -3685,18 +3692,6 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 
 class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
   override def name: String = "testcat3"
-
-  override def createTable(
-      ident: Identifier,
-      columns: Array[ColumnV2],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    val newProps = new util.HashMap[String, String]
-    newProps.putAll(properties)
-    newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
-    newProps.put(TableCatalog.PROP_EXTERNAL, "true")
-    super.createTable(ident, columns, partitions, newProps)
-  }
 
   override def loadTable(ident: Identifier): Table = {
     val superTable = super.loadTable(ident)
