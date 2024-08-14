@@ -429,7 +429,6 @@ class RepeatStatementExec(
 
       override def next(): CompoundStatementExec = state match {
         case RepeatState.Condition =>
-          assert(curr.get.isInstanceOf[SingleStatementExec])
           val condition = curr.get.asInstanceOf[SingleStatementExec]
           if (!evaluateBooleanCondition(session, condition)) {
             state = RepeatState.Body
