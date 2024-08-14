@@ -91,7 +91,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     when(valueState.getOption()).thenReturn(Some(new GenericRowWithSchema(Array(1), schema)))
     stateServer.handleValueStateRequest(message)
     verify(valueState).getOption()
-    verify(outputStream).writeInt(0)
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 
   test("value state get - not exist") {
@@ -100,7 +100,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     when(valueState.getOption()).thenReturn(None)
     stateServer.handleValueStateRequest(message)
     verify(valueState).getOption()
-    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+    // We don't throw exception when value doesn't exist.
+    verify(outputStream).writeInt(0)
   }
 
   test("value state get - not initialized") {
