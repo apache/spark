@@ -1520,6 +1520,7 @@ case class ArrayContains(left: Expression, right: Expression)
 
 /**
  * Searches the specified array for the specified object using the binary search algorithm.
+ * This expression is dedicated only for PySpark and Spark-ML.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1531,6 +1532,8 @@ case class ArrayContains(left: Expression, right: Expression)
        1
       > SELECT _FUNC_(array(null, 1, 2, 3), 2);
        2
+      > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), 1.1F);
+       -2
   """,
   group = "array_funcs",
   since = "4.0.0")

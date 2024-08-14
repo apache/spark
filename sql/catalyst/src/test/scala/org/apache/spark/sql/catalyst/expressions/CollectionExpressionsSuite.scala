@@ -150,6 +150,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a1_1, Literal(1.toByte)), 1)
     val a1_2 = Literal.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
     checkEvaluation(ArrayBinarySearch(a1_2, Literal(null, ByteType)), null)
+    val a1_3 = Literal.create(Seq(1.toByte, 3.toByte, 4.toByte), ArrayType(ByteType))
+    checkEvaluation(ArrayBinarySearch(a1_3, Literal(2.toByte, ByteType)), -2)
 
     val a2_0 = Literal.create(Seq(1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_0, Literal(1.toShort)), 0)
@@ -157,6 +159,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a2_1, Literal(2.toShort)), 2)
     val a2_2 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_2, Literal(null, ShortType)), null)
+    val a2_3 = Literal.create(Seq(1.toShort, 3.toShort, 4.toShort), ArrayType(ShortType))
+    checkEvaluation(ArrayBinarySearch(a2_3, Literal(2.toShort, ShortType)), -2)
 
     val a3_0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     checkEvaluation(ArrayBinarySearch(a3_0, Literal(2)), 1)
@@ -164,6 +168,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a3_1, Literal(2)), 2)
     val a3_2 = Literal.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
     checkEvaluation(ArrayBinarySearch(a3_2, Literal(null, IntegerType)), null)
+    val a3_3 = Literal.create(Seq(1, 3, 4), ArrayType(IntegerType))
+    checkEvaluation(ArrayBinarySearch(a3_3, Literal(2, IntegerType)), -2)
 
     val a4_0 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType))
     checkEvaluation(ArrayBinarySearch(a4_0, Literal(2L)), 1)
@@ -171,6 +177,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a4_1, Literal(2L)), 2)
     val a4_2 = Literal.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
     checkEvaluation(ArrayBinarySearch(a4_2, Literal(null, LongType)), null)
+    val a4_3 = Literal.create(Seq(1L, 3L, 4L), ArrayType(LongType))
+    checkEvaluation(ArrayBinarySearch(a4_3, Literal(2L, LongType)), -2)
 
     val a5_0 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType))
     checkEvaluation(ArrayBinarySearch(a5_0, Literal(3.0F)), 2)
@@ -178,6 +186,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a5_1, Literal(1.0F)), 1)
     val a5_2 = Literal.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
     checkEvaluation(ArrayBinarySearch(a5_2, Literal(null, FloatType)), null)
+    val a5_3 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_3, Literal(1.1F, FloatType)), -2)
 
     val a6_0 = Literal.create(Seq(1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
     checkEvaluation(ArrayBinarySearch(a6_0, Literal(1.0d)), 0)
@@ -185,6 +195,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a6_1, Literal(1.0d)), 1)
     val a6_2 = Literal.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
     checkEvaluation(ArrayBinarySearch(a6_2, Literal(null, DoubleType)), null)
+    val a6_3 = Literal.create(Seq(1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayBinarySearch(a6_3, Literal(1.1d, DoubleType)), -2)
 
     // string
     val a7_0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))

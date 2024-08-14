@@ -694,7 +694,6 @@ object FunctionRegistry {
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
     expression[ArrayCompact]("array_compact"),
-    expression[ArrayBinarySearch]("array_binary_search"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
@@ -913,6 +912,7 @@ object FunctionRegistry {
   registerInternalExpression[PandasMode]("pandas_mode")
   registerInternalExpression[EWM]("ewm")
   registerInternalExpression[NullIndex]("null_index")
+  registerInternalExpression[ArrayBinarySearch]("array_binary_search")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(
