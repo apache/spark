@@ -48,6 +48,7 @@ trait AgnosticEncoder[T] extends Encoder[T] {
 }
 
 object AgnosticEncoders {
+
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
     extends AgnosticEncoder[Option[E]] {
     override def isPrimitive: Boolean = false
@@ -168,6 +169,7 @@ object AgnosticEncoders {
      parent: Class[T],
      override val clsTag: ClassTag[E])
     extends EnumEncoder[E]
+
   case class JavaEnumEncoder[E](override val clsTag: ClassTag[E]) extends EnumEncoder[E]
 
   protected abstract class LeafEncoder[E : ClassTag](override val dataType: DataType)
@@ -231,6 +233,14 @@ object AgnosticEncoders {
   case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)
   case class JavaDecimalEncoder(dt: DecimalType, override val lenientSerialization: Boolean)
     extends LeafEncoder[JBigDecimal](dt)
+
+  case class JavaSerializableEncoder[T](override val clsTag: ClassTag[T])
+    extends AgnosticEncoder[T] {
+    /** Returns the schema of encoding this type of object as a Row. */
+    override def dataType: DataType = BinaryType
+    override val isPrimitive: Boolean = clsTag.runtimeClass.isPrimitive
+  }
+
 
   val STRICT_DATE_ENCODER: DateEncoder = DateEncoder(lenientSerialization = false)
   val STRICT_LOCAL_DATE_ENCODER: LocalDateEncoder = LocalDateEncoder(lenientSerialization = false)

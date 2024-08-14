@@ -21,7 +21,7 @@ import java.math.BigInteger
 import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
 
 import scala.beans.{BeanProperty, BooleanBeanProperty}
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
@@ -32,6 +32,10 @@ import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, S
 class DummyBean {
   @BeanProperty var bigInteger: BigInteger = _
 }
+
+class ScalaSerializablePojo extends Serializable
+
+class JavaSerializablePojo extends java.io.Serializable
 
 class GenericCollectionBean {
   @BeanProperty var listOfListOfStrings: JList[JList[String]] = _
@@ -71,6 +75,10 @@ class LeafBean {
   @BeanProperty val readOnlyString = "read-only"
   @BeanProperty var genericNestedBean: JavaBeanWithGenericBase = _
   @BeanProperty var genericNestedBean2: JavaBeanWithGenericsABC[Integer] = _
+  @BeanProperty var scalaSerializableField: Serializable = _
+  @BeanProperty var javaSerializableField: java.io.Serializable = _
+  @BeanProperty var javaSerializablePojo: JavaSerializablePojo = _
+  @BeanProperty var scalaSerializablePojo: ScalaSerializablePojo = _
 
   var nonNullString: String = "value"
   @javax.annotation.Nonnull
@@ -220,6 +228,10 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
           encoderField("propertyC", BoxedIntEncoder)
         ))),
       encoderField("instant", STRICT_INSTANT_ENCODER),
+      encoderField("javaSerializableField",
+        JavaSerializableEncoder(classTag[java.io.Serializable])),
+      encoderField("javaSerializablePojo",
+        JavaSerializableEncoder(classTag[JavaSerializablePojo])),
       encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
       encoderField("localDateTime", LocalDateTimeEncoder),
       encoderField("monthEnum", JavaEnumEncoder(classTag[java.time.Month])),
@@ -233,6 +245,9 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("primitiveLong", PrimitiveLongEncoder),
       encoderField("primitiveShort", PrimitiveShortEncoder),
       encoderField("readOnlyString", StringEncoder, readOnly = true),
+      encoderField("scalaSerializableField", JavaSerializableEncoder(classTag[Serializable])),
+      encoderField("scalaSerializablePojo",
+        JavaSerializableEncoder(classTag[ScalaSerializablePojo])),
       encoderField("string", StringEncoder),
       encoderField("timestamp", STRICT_TIMESTAMP_ENCODER)
     ))

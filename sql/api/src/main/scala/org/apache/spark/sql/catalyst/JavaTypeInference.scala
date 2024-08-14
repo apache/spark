@@ -61,7 +61,8 @@ object JavaTypeInference {
   }
 
   private def encoderFor(t: Type, seenTypeSet: Set[Class[_]],
-    typeVariables: Map[TypeVariable[_], Type] = Map.empty): AgnosticEncoder[_] = t match {
+    typeVariables: Map[TypeVariable[_], Type] = Map.empty, considerClassAsBean: Boolean = true):
+  AgnosticEncoder[_] = t match {
 
     case c: Class[_] if c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
     case c: Class[_] if c == java.lang.Byte.TYPE => PrimitiveByteEncoder
@@ -127,6 +128,7 @@ object JavaTypeInference {
     case pt: ParameterizedType =>
       encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
 
+
     case c: Class[_] =>
       if (seenTypeSet.contains(c)) {
         throw ExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
@@ -135,27 +137,85 @@ object JavaTypeInference {
       // TODO: we should only collect properties that have getter and setter. However, some tests
       //   pass in scala case class as java bean class which doesn't have getter and setter.
       val properties = getJavaBeanReadableProperties(c)
-      // add type variables from inheritance hierarchy of the class
-      val classTV = JavaTypeUtils.getTypeArguments(c, classOf[Object]).asScala.toMap ++
-        typeVariables
-      // Note that the fields are ordered by name.
-      val fields = properties.map { property =>
-        val readMethod = property.getReadMethod
-        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c, classTV)
-        // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
-        val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
-        EncoderField(
-          property.getName,
-          encoder,
-          encoder.nullable && !hasNonNull,
-          Metadata.empty,
-          Option(readMethod.getName),
-          Option(property.getWriteMethod).map(_.getName))
-      }
-      JavaBeanEncoder(ClassTag(c), fields.toImmutableArraySeq)
+      // if the properties is empty and this is not a top level enclosing class, then we should
+      // not consider class as bean, as otherwise it will be treated as empty schema and loose
+      // the data on deser.
+      if (considerClassAsBean && properties.nonEmpty) {
 
-    case _ =>
+        // add type variables from inheritance hierarchy of the class
+        try {
+          val parentClassesTypeMap = JavaTypeUtils.getTypeArguments(c, classOf[Object]).asScala.
+            toMap
+          val classTV = parentClassesTypeMap ++ typeVariables
+          // Note that the fields are ordered by name.
+          val fields = properties.map { property =>
+            val readMethod = property.getReadMethod
+            val methodReturnType = readMethod.getGenericReturnType
+            val encoder = methodReturnType match {
+              case tv: TypeVariable[_] if !classTV.contains(tv) => try {
+                encoderFor(tv.getBounds.head, Set.empty, Map.empty, considerClassAsBean = false)
+              } catch {
+                case UseJavaSerializationEncoder() =>
+                  // Is it possible to generate class tag from tv.. Looks like not..
+                  JavaSerializableEncoder(classTag[java.io.Serializable])
+              }
+              case _ => try {
+                encoderFor(methodReturnType, seenTypeSet + c, classTV)
+              } catch {
+                case s: SparkUnsupportedOperationException if
+                  s.getErrorClass == QueryExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
+                try {
+                  encoderFor(methodReturnType, seenTypeSet + c, classTV,
+                    considerClassAsBean = false)
+                } catch {
+                  case UseJavaSerializationEncoder() =>
+                    JavaSerializableEncoder(methodReturnType match {
+                      case c: Class[_] => ClassTag(c)
+                      case _ => classTag[java.io.Serializable]
+                    })
+                }
+              }
+            }
+
+            // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+            val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
+            EncoderField(
+              property.getName,
+              encoder,
+              encoder.nullable && !hasNonNull,
+              Metadata.empty,
+              Option(readMethod.getName),
+              Option(property.getWriteMethod).map(_.getName))
+          }
+          // implies it cannot be assumed a BeanClass.
+          // Check if its super class or interface could be represented by an Encoder
+
+            JavaBeanEncoder(ClassTag(c), fields)
+
+        } catch {
+          case _: IllegalStateException =>
+            throw QueryExecutionErrors.cannotFindEncoderForTypeError(
+              t.getTypeName, "")
+        }
+      } else {
+        recursivelyGetAllInterfaces(c).map(typee => Try(encoderFor(typee))).collectFirst {
+            case Failure(UseJavaSerializationEncoder()) => JavaSerializableEncoder(ClassTag(c))
+          }.getOrElse(throw QueryExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName,
+          SPARK_DOC_ROOT))
+      }
+
+    case t =>
       throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString)
+  }
+
+  private def recursivelyGetAllInterfaces(clazz: Class[_]): Array[Type] = {
+    if (clazz eq null) {
+      Array.empty
+    } else {
+      val currentInterfaces = clazz.getInterfaces
+      currentInterfaces ++ (clazz.getSuperclass +: currentInterfaces).flatMap(
+        clz => recursivelyGetAllInterfaces(clz))
+    }
   }
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
@@ -163,5 +223,16 @@ object JavaTypeInference {
     beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
       .filterNot(_.getName == "declaringClass")
       .filter(_.getReadMethod != null)
+  }
+
+  object UseJavaSerializationEncoder {
+    def unapply(th: Throwable): Boolean = th match {
+      case s: SparkUnsupportedOperationException =>
+        s.getErrorClass == QueryExecutionErrors.ENCODER_NOT_FOUND_ERROR &&
+          s.getMessageParameters.asScala.get(QueryExecutionErrors.TYPE_NAME).contains(
+            classOf[java.io.Serializable].getTypeName)
+
+      case _ => false
+    }
   }
 }

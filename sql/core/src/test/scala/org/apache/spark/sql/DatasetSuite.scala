@@ -23,6 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -52,6 +53,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -2778,6 +2780,60 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("CDPD-73233. Bean class encoding with type parameter implementing Serializable") {
+    // just create encoder
+    Encoders.bean(classOf[MessageWrapper[_]])
+    val msg1 = new MessageWrapper[String]()
+    msg1.setMessage("test1")
+    val msg2 = new MessageWrapper[String]()
+    msg2.setMessage("test2")
+    val expectedData = mutable.Set("test1", "test2")
+    validateParamBeanDatasetWithDirectSerializableBound(Seq(msg1, msg2), expectedData)
+  }
+
+  test("CDPD-73233. Bean class encoding with type parameter indirectly extending" +
+    " Serializable class") {
+    // just create encoder
+    Encoders.bean(classOf[BigDecimalMessageWrapper[_]])
+    val msg1 = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
+    msg1.setMessage(new DerivedBigDecimalExtender(2.0d))
+    val msg2 = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
+    msg2.setMessage(new DerivedBigDecimalExtender(8.0d))
+    val expectedData = mutable.Set(new DerivedBigDecimalExtender(8.0d),
+      new DerivedBigDecimalExtender(2.0d))
+    validateParamBeanDatasetWithInDirectSerializableBound(Seq(msg1, msg2), expectedData)
+  }
+
+  private def validateParamBeanDatasetWithDirectSerializableBound[T <: java.io.Serializable](
+      data: Seq[MessageWrapper[T]],
+      expectedData: mutable.Set[T]): Unit = {
+    val ds = spark.createDataset(data)(Encoders.bean(classOf[MessageWrapper[T]]))
+    val df = ds.toDF()
+    val schema = df.schema
+    assertResult(1)(schema.size)
+    assertResult("message")(schema.head.name)
+    assertResult(BinaryType)(schema.head.dataType)
+    val numMessages = ds.collect()
+    assertResult(2)(numMessages.length)
+    numMessages.foreach(m => expectedData.remove(m.getMessage))
+    assert(expectedData.isEmpty)
+  }
+
+  private def validateParamBeanDatasetWithInDirectSerializableBound[T <: BigDecimalExtender](
+      data: Seq[BigDecimalMessageWrapper[T]],
+      expectedData: mutable.Set[T]): Unit = {
+    val ds = spark.createDataset(data)(Encoders.bean(classOf[BigDecimalMessageWrapper[T]]))
+    val df = ds.toDF()
+    val schema = df.schema
+    assertResult(1)(schema.size)
+    assertResult("message")(schema.head.name)
+    assertResult(BinaryType)(schema.head.dataType)
+    val numMessages = ds.collect()
+    assertResult(2)(numMessages.length)
+    numMessages.foreach(m => expectedData.remove(m.getMessage))
+    assert(expectedData.isEmpty)
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2921,3 +2977,27 @@ case class SaveModeArrayCase(modes: Array[SaveMode])
 
 case class K1(a: Long)
 case class K2(a: Long, b: Long)
+
+class MessageWrapper[T <: java.io.Serializable] extends java.io.Serializable {
+  private var message: T = _
+
+  def getMessage: T = message
+
+  def setMessage(message: T): Unit = {
+    this.message = message
+  }
+}
+
+class BigDecimalMessageWrapper[T <: BigDecimalExtender] extends java.io.Serializable {
+  private var message: T = _
+
+  def getMessage: T = message
+
+  def setMessage(message: T): Unit = {
+    this.message = message
+  }
+}
+
+class BigDecimalExtender(doub: Double) extends java.math.BigDecimal(doub * 2)
+
+class DerivedBigDecimalExtender (doub: Double) extends BigDecimalExtender(doub)
