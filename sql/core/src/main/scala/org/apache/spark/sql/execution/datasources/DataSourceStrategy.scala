@@ -36,19 +36,19 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -285,6 +285,12 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
         _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
+
+    case data @ AppendData(
+        DataSourceV2Relation(V1Table(table: CatalogTable), _, _, _, _), _, _, _, _, _) =>
+      InsertIntoStatement(UnresolvedCatalogRelation(table),
+        table.partitionColumnNames.map(name => name -> None).toMap,
+        Seq.empty, data.query, false, false)
 
     case UnresolvedCatalogRelation(tableMeta, options, false)
         if DDLUtils.isDatasourceTable(tableMeta) =>

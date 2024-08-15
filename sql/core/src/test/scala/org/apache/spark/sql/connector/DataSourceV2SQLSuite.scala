@@ -3649,15 +3649,30 @@ class DataSourceV2SQLSuiteV1Filter
     val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     spark.sessionState.catalogManager.reset()
     withSQLConf(
-      V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+        classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
         checkParquet(table1.toString, path.getAbsolutePath)
       }
     }
     val table2 = FullQualifiedTableName("testcat3", "default", "t")
-    withSQLConf(table2.toString -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
         checkParquet(table2.toString, path.getAbsolutePath)
+      }
+    }
+  }
+
+  test("SPARK-49211: V2 Catalog support CTAS") {
+    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        sql("CREATE TABLE " + table2.toString +
+          " USING PARQUET LOCATION '" + path.toString() +
+          "' AS SELECT 1, 2, 3")
+        checkAnswer(sql("SELECT * FROM " + table2.toString), Row(1, 2, 3))
       }
     }
   }
@@ -3700,6 +3715,15 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 
 
 class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
   override def loadTable(ident: Identifier): Table = {
     val superTable = super.loadTable(ident)
     val tableIdent = {
