@@ -7904,12 +7904,7 @@ object functions {
       | * @since 2.3.0
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
-<<<<<<< HEAD
-      |  val func = $funcCall
-      |  SparkUserDefinedFunction(func, returnType, $i)
-=======
       |  SparkUserDefinedFunction(ToScalaUDF(f), returnType, $i)
->>>>>>> apache/master
       |}""".stripMargin)
   }
 
