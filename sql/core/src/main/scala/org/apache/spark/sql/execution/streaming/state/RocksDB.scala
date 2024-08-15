@@ -25,7 +25,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ListBuffer
-import scala.jdk.CollectionConverters.{MapHasAsJava, MapHasAsScala}
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -501,9 +500,9 @@ class RocksDB(
    * - Sync the checkpoint dir files to DFS
    */
   def commit(
-      columnFamilyMapping: Map[String, Short],
-      maxColumnFamilyId: Short,
-      colFamilyIdsChanged: Boolean): Long = {
+      columnFamilyMapping: Map[String, Short] = Map.empty,
+      maxColumnFamilyId: Short = 0,
+      colFamilyIdsChanged: Boolean = false): Long = {
     val newVersion = loadedVersion + 1
     try {
 

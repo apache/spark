@@ -1094,6 +1094,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       var store = provider.getStore(0)
       val colFamily1: String = "abc"
       val colFamily2: String = "def"
+      val colFamily3: String = "ghi"
+      val colFamily4: String = "jkl"
+      val colFamily5: String = "mno"
       store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
@@ -1101,7 +1104,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       store.commit()
 
       store = provider.getStore(1)
-      val colFamily3: String = "ghi"
       store.removeColFamilyIfExists(colFamily2)
       store.commit()
 
@@ -1111,6 +1113,15 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(!provider.colFamilyNameToIdMap.containsKey(colFamily2))
       // maxColFamilyId should be 2, we should increment the id and then assign it.
       assert(provider.colFamilyNameToIdMap.get(colFamily3) === 3)
+      store.removeColFamilyIfExists(colFamily1)
+      store.removeColFamilyIfExists(colFamily3)
+      store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(provider.colFamilyNameToIdMap.get(colFamily4) == 4)
+      store.commit()
+      store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(provider.colFamilyNameToIdMap.get(colFamily5) == 5)
     }
   }
 
