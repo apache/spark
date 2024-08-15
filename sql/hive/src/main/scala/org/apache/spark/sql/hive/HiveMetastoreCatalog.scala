@@ -201,12 +201,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileType: String,
       isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
-    // scalastyle:off caselocale
-    val catalog = relation.tableMeta.identifier.catalog.getOrElse(
-      CatalogManager.SESSION_CATALOG_NAME).toLowerCase
-    // scalastyle:on caselocale
-    val tableIdentifier = FullQualifiedTableName(
-      catalog, relation.tableMeta.database, relation.tableMeta.identifier.table)
+    val tableIdentifier = FullQualifiedTableName(relation.tableMeta.identifier.catalog.get,
+      relation.tableMeta.database, relation.tableMeta.identifier.table)
 
     val lazyPruningEnabled = sparkSession.sessionState.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)

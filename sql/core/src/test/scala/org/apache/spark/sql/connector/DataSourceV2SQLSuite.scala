@@ -3653,7 +3653,6 @@ class DataSourceV2SQLSuiteV1Filter
         checkParquet("spark_catalog.default.t", path.getAbsolutePath)
       }
     }
-    spark.sessionState.catalogManager.v1SessionCatalog.invalidateAllCachedTables()
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>

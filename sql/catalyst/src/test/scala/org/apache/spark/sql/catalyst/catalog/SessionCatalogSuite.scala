@@ -1883,7 +1883,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
 
     withConfAndEmptyCatalog(conf) { catalog =>
-      val table = FullQualifiedTableName("spark_catalog", catalog.getCurrentDatabase, "test")
+      val table = FullQualifiedTableName(
+        CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "test")
 
       // First, make sure the test table is not cached.
       assert(catalog.getCachedTable(table) === null)
