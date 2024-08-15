@@ -18626,10 +18626,7 @@ def _create_lambda(f: Callable) -> Callable:
     internal = cast(JVMView, sc._jvm).org.apache.spark.sql.internal
 
     argnames = ["x", "y", "z"]
-    args = [
-        _unresolved_named_lambda_variable(arg)
-        for arg in argnames[: len(parameters)]
-    ]
+    args = [_unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]]
 
     result = f(*args)
 
@@ -18666,6 +18663,7 @@ def _invoke_higher_order_function(
     jfuns = [_create_lambda(f) for f in funs]
     jcols = [_to_java_column(c) for c in cols]
     return Column(sc._jvm.PythonSQLUtils.fn(name, _to_seq(sc, jcols + jfuns)))
+
 
 @overload
 def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
