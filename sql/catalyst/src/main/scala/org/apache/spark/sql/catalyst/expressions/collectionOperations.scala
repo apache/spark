@@ -1599,6 +1599,23 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
   @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
     elementType != BooleanType && !resultArrayElementNullable
 
+  @transient private lazy val comp: SerializableComparator[Any] = {
+    val ordering = array.dataType match {
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType.ordering(n)
+    }
+
+    (o1: Any, o2: Any) =>
+      (o1, o2) match {
+        case (null, null) => 0
+        case (null, _) => 1
+        case (_, null) => -1
+        case _ => ordering.compare(o1, o2)
+      }
+  }
+
+  @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
+  @transient private lazy val  comparatorObjectType = ObjectType(classOf[Comparator[Object]])
   override def replacement: Expression =
     if (canPerformFastBinarySearch) {
       StaticInvoke(
@@ -1615,13 +1632,15 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
         Seq(array, value),
         inputTypes)
     } else {
-      val elementObjectType = ObjectType(classOf[DataType])
       StaticInvoke(
         classOf[ArrayExpressionUtils],
         IntegerType,
         "binarySearch",
-        Seq(Literal(elementType, elementObjectType), array, value),
-        elementObjectType +: inputTypes)
+        Seq(Literal(elementType, elementObjectType),
+          Literal(comp, comparatorObjectType),
+          array,
+          value),
+        elementObjectType +: comparatorObjectType +: inputTypes)
   }
 
   override def prettyName: String = "array_binary_search"
