@@ -276,8 +276,12 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
       }
     }
 
-    private def compareElements(arrayLeft: ArrayData, arrayRight: ArrayData, dataType: DataType,
-                        position: Int, ordering: Ordering[Any]): Int = {
+    private def compareElements(
+        arrayLeft: ArrayData,
+        arrayRight: ArrayData,
+        dataType: DataType,
+        position: Int,
+        ordering: Ordering[Any]): Int = {
       val isNullLeft = arrayLeft.isNullAt(position)
       val isNullRight = arrayRight.isNullAt(position)
 

@@ -1000,7 +1000,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         withTable(tableName) {
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
-
             sql(s"create table $tableName" +
               s" (m map<string $collationSetup, string $collationSetup>)")
             sql(s"insert into $tableName values (map('aaa', 'AAA'))")
@@ -1071,20 +1070,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }
         }
       }
-    }
-  }
 
-  test("Check that order by on map fails") {
-    val tableName = "t"
-    withTable(tableName) {
-      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        sql(s"create table $tableName (m map<string, string>, c integer)")
-        sql(s"insert into $tableName values (map('aaa', 'aaa'), 1), (map('bbb', 'bbb'), 2)")
-        sql(s"select c from $tableName order by m")
+      test("Check that order by on map fails") {
+        val tableName = "t"
+        withTable(tableName) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $tableName" +
+              s" (m map<string $collationSetup, string $collationSetup>, " +
+              s"  c integer)")
+            sql(s"insert into $tableName values (map('aaa', 'AAA'), 1)")
+            sql(s"insert into $tableName values (map('BBb', 'bBB'), 2)")
+
+            // add rest
+          }
+        }
       }
     }
   }
-
 
   test("Support operations on complex types containing collated strings") {
     checkAnswer(sql("select reverse('abc' collate utf8_lcase)"), Seq(Row("cba")))
