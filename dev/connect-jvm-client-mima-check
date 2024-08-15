@@ -18,7 +18,7 @@
 #
 
 set -o pipefail
-set -e
+set -ex
 
 # Go to the Spark project root directory
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
@@ -35,10 +35,10 @@ fi
 rm -f .connect-mima-check-result
 
 echo "Build required modules..."
-build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
+build/sbt "-Popentelmetry-reporter sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
 
-CONNECT_TEST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
-SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
+CONNECT_TEST_CLASSPATH="$(build/sbt -Popentelmetry-reporter -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
+SQL_CLASSPATH="$(build/sbt -Popentelmetry-reporter -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
 
 echo "Do connect-client-jvm module mima check ..."
 

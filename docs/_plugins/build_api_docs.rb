@@ -123,7 +123,7 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs."
   cd(SPARK_PROJECT_ROOT)
 
-  command = "build/sbt -Pkinesis-asl unidoc"
+  command = "build/sbt -Pkinesis-asl -Popentelemetry-reporter unidoc"
   puts "Running '#{command}'..."
   system(command) || raise("Unidoc generation failed")
 

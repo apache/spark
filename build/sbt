@@ -82,6 +82,11 @@ shows precedence: JAVA_OPTS lowest, command line options highest.
 EOM
 }
 
+enableProfile () {
+  maven_profiles=( "${maven_profiles[@]}" "$1" )
+  export SBT_MAVEN_PROFILES="${maven_profiles[@]}"
+}
+
 process_my_args () {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -94,7 +99,7 @@ process_my_args () {
          -batch) exec </dev/null && shift ;;
 
     -sbt-create) sbt_create=true && shift ;;
-
+    -P*) enableProfile "$1" && shift ;;
               *) addResidual "$1" && shift ;;
     esac
   done
