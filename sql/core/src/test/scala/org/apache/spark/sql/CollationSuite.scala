@@ -989,19 +989,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "")) {
+  for (collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "")) {
     for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
-      val collationSetup = if (collation.isEmpty) "" else "collate " + collation
-      val supportsBinaryEquality = collation.isEmpty ||
+      val collationSetup = if (collation.isEmpty) "" else " COLLATE " + collation
+      val supportsBinaryEquality = collation.isEmpty || collation == "UNICODE" ||
         CollationFactory.fetchCollation(collation).supportsBinaryEquality
 
-      test(s"Group by on map containing $collationSetup strings ($codeGen)") {
+      test(s"Group by on map containing$collationSetup strings ($codeGen)") {
         val tableName = "t"
 
         withTable(tableName) {
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
             sql(s"create table $tableName" +
-              s" (m map<string $collationSetup, string $collationSetup>)")
+              s" (m map<string$collationSetup, string$collationSetup>)")
             sql(s"insert into $tableName values (map('aaa', 'AAA'))")
             sql(s"insert into $tableName values (map('AAA', 'aaa'))")
             sql(s"insert into $tableName values (map('aaa', 'AAA'))")
@@ -1026,8 +1026,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         withTable(tableName) {
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
             sql(s"create table $tableName" +
-              s" (m map<struct<fld1: string $collationSetup, fld2: string $collationSetup>, " +
-              s"struct<fld1: string $collationSetup, fld2: string $collationSetup>>)")
+              s" (m map<struct<fld1: string$collationSetup, fld2: string$collationSetup>, " +
+              s"struct<fld1: string$collationSetup, fld2: string$collationSetup>>)")
             sql(s"insert into $tableName values " +
               s"(map(struct('aaa', 'bbb'), struct('ccc', 'ddd')))")
             sql(s"insert into $tableName values " +
@@ -1047,13 +1047,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }
       }
 
-      test(s"Group by on map containing arrays with $collationSetup strings ($codeGen)") {
+      test(s"Group by on map containing arrays with$collationSetup strings ($codeGen)") {
         val tableName = "t"
 
         withTable(tableName) {
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
             sql(s"create table $tableName " +
-              s"(m map<array<string $collationSetup>, array<string $collationSetup>>)")
+              s"(m map<array<string$collationSetup>, array<string$collationSetup>>)")
             sql(s"insert into $tableName values (map(array('aaa', 'bbb'), array('ccc', 'ddd')))")
             sql(s"insert into $tableName values (map(array('AAA', 'BbB'), array('Ccc', 'ddD')))")
             sql(s"insert into $tableName values (map(array('AAA', 'BbB', 'Ccc'), array('ddD')))")
@@ -1071,17 +1071,35 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }
       }
 
-      test("Check that order by on map fails") {
+      test(s"Check that order by on map with$collationSetup strings fails ($codeGen)") {
         val tableName = "t"
         withTable(tableName) {
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
             sql(s"create table $tableName" +
-              s" (m map<string $collationSetup, string $collationSetup>, " +
+              s" (m map<string$collationSetup, string$collationSetup>, " +
               s"  c integer)")
             sql(s"insert into $tableName values (map('aaa', 'AAA'), 1)")
             sql(s"insert into $tableName values (map('BBb', 'bBB'), 2)")
 
-            // add rest
+            // `collationSetupError` is created because "COLLATE UTF8_BINARY" is omitted in data
+            // type in checkError
+            val collationSetupError = if (collation != "UTF8_BINARY") collationSetup else ""
+            val query = s"select c from $tableName order by m"
+            val ctx = "m"
+            checkError(
+              exception = intercept[AnalysisException](sql(query)),
+              errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+              parameters = Map(
+                "functionName" -> "`sortorder`",
+                "dataType" -> s"\"MAP<STRING$collationSetupError, STRING$collationSetupError>\"",
+                "sqlExpr" -> "\"m ASC NULLS FIRST\""
+              ),
+              context = ExpectedContext(
+                fragment = ctx,
+                start = query.length - ctx.length,
+                stop = query.length - 1
+              )
+            )
           }
         }
       }

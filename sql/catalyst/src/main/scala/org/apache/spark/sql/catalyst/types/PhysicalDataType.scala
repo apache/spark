@@ -234,6 +234,7 @@ case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
+  // maps are not orderable, we use `ordering` just to support group by queries
   override private[sql] def ordering = interpretedOrdering
   override private[sql] type InternalType = MapData
   @transient private[sql] lazy val tag = typeTag[InternalType]
