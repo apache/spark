@@ -52,6 +52,44 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
 case object StoreMaintenance extends RocksDBOpType("store_maintenance")
 
 /**
+ * Represents the result of loading a RocksDB instance.
+ *
+ * This class encapsulates the loaded RocksDB instance along with optional column family
+ * information. It provides a convenient way to access the loaded database and its metadata.
+ *
+ * @param db The loaded RocksDB instance.
+ * @param columnFamilyMapping An optional mapping of column family names to their corresponding
+ *                            numeric identifiers. If defined, it indicates that column families
+ *                            are being used in this RocksDB instance.
+ * @param maxColumnFamilyId An optional value representing the maximum column family identifier
+ *                          used in this RocksDB instance. This is useful for managing and
+ *                          allocating new column family IDs.
+ * @param hasColumnFamilyInfo A boolean flag indicating whether both columnFamilyMapping and
+ *                            maxColumnFamilyId are defined. This provides a quick way to check
+ *                            if the loaded instance has complete column family information.
+ */
+case class RocksDBLoadResult(
+    db: RocksDB,
+    columnFamilyMapping: Option[Map[String, Short]],
+    maxColumnFamilyId: Option[Short],
+    hasColumnFamilyInfo: Boolean
+)
+
+object RocksDBLoadResult {
+  def apply(
+      db: RocksDB,
+      columnFamilyMapping: Option[Map[String, Short]],
+      maxColumnFamilyId: Option[Short]): RocksDBLoadResult = {
+    RocksDBLoadResult(
+      db,
+      columnFamilyMapping,
+      maxColumnFamilyId,
+      columnFamilyMapping.isDefined && maxColumnFamilyId.isDefined
+    )
+  }
+}
+
+/**
  * Class representing a RocksDB instance that checkpoints version of data to DFS.
  * After a set of updates, a new version can be committed by calling `commit()`.
  * Any past version can be loaded by calling `load(version)`.
@@ -173,8 +211,7 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long, readOnly: Boolean = false):
-  (RocksDB, Option[Map[String, Short]], Option[Short]) = {
+  def load(version: Long, readOnly: Boolean = false): RocksDBLoadResult = {
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
@@ -241,7 +278,7 @@ class RocksDB(
       changelogWriter.foreach(_.abort())
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
-    (this, loadedMapping, maxColumnFamilyId)
+    RocksDBLoadResult(this, loadedMapping, maxColumnFamilyId)
   }
 
   /**
@@ -490,20 +527,21 @@ class RocksDB(
   }
 
   /**
-   * @param columnFamilyMapping A map of column family names to their corresponding VCF IDs.
-   * @param maxColumnFamilyId The maximum VCF ID used for column families.
-   * @param colFamilyIdsChanged A flag indicating whether column family IDs have changed.
-   *                            If they have, we need to create a snapshot regardless of whether
-   *                            changelog checkpointing is enabled or not
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
    * - Flush all changes to disk
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
+   *
+   * @param columnFamilyMapping A map of column family names to their corresponding VCF IDs.
+   * @param maxColumnFamilyId The maximum VCF ID used for column families.
+   * @param shouldForceSnapshot A flag indicating whether column family IDs have changed.
+   *                            If they have, we need to create a snapshot regardless of whether
+   *                            changelog checkpointing is enabled or not
    */
   def commit(
       columnFamilyMapping: Map[String, Short] = Map.empty,
       maxColumnFamilyId: Short = 0,
-      colFamilyIdsChanged: Boolean = false): Long = {
+      shouldForceSnapshot: Boolean = false): Long = {
     val newVersion = loadedVersion + 1
     try {
 
@@ -512,7 +550,7 @@ class RocksDB(
       var compactTimeMs = 0L
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
-      if (shouldCreateSnapshot(colFamilyIdsChanged)) {
+      if (shouldCreateSnapshot(shouldForceSnapshot)) {
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -602,8 +640,8 @@ class RocksDB(
     }
   }
 
-  private def shouldCreateSnapshot(colFamilyIdsChanged: Boolean): Boolean = {
-    if (enableChangelogCheckpointing && !colFamilyIdsChanged) {
+  private def shouldCreateSnapshot(shouldForceSnapshot: Boolean): Boolean = {
+    if (enableChangelogCheckpointing && !shouldForceSnapshot) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
       newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot

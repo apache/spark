@@ -627,14 +627,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           db.commit()
         }
       }
-      assert(db.load(10, readOnly = true)._1.iterator().map(toStr).toSet === version10Data)
+      assert(db.load(10, readOnly = true).db.iterator().map(toStr).toSet === version10Data)
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
       // Abort commit for next version and verify that reloading resets the files
       db.load(10)
       db.put("11", "11")
       db.rollback()
-      assert(db.load(10, readOnly = true)._1.iterator().map(toStr).toSet === version10Data)
+      assert(db.load(10, readOnly = true).db.iterator().map(toStr).toSet === version10Data)
     }
   }
 

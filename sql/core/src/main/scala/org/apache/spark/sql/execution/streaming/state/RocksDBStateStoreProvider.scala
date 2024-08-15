@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -63,13 +64,13 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
-      val colFamilyId = ColumnFamilyUtils.createColFamilyIfAbsent(colFamilyName, isInternal)
+      val newColFamilyId = ColumnFamilyUtils.createColFamilyIfAbsent(colFamilyName, isInternal)
 
-      colFamilyId.foreach { id =>
-        keyValueEncoderMap.putIfAbsent(colFamilyName,
-          (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies, Some(id)),
-            RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
-      }
+      keyValueEncoderMap.putIfAbsent(colFamilyName,
+        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
+          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
+          useMultipleValuesPerKey)))
+
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -204,10 +205,13 @@ private[sql] class RocksDBStateStoreProvider
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        val newVersion = rocksDB.commit(
-          colFamilyNameToIdMap.asScala.toMap,
-          maxColumnFamilyId.get().toShort,
-          columnFamilyIdsChanged.get())
+        val newVersion =
+          columnFamilyInfoLock.synchronized {
+            rocksDB.commit(
+              colFamilyNameToIdMap.asScala.toMap,
+              maxColumnFamilyId.get().toShort,
+              shouldForceSnapshot.get())
+          }
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
@@ -373,14 +377,14 @@ private[sql] class RocksDBStateStoreProvider
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      val (_, colFamilyMapping, maxColFamilyId) = rocksDB.load(version)
+      val loadResult = rocksDB.load(version)
       val store = new RocksDBStateStore(version)
-      (colFamilyMapping, maxColFamilyId) match {
-        case (Some(mapping), Some(id)) =>
-          columnFamilyIdsChanged.set(false)
-          colFamilyNameToIdMap.putAll(mapping.asJava)
-          maxColumnFamilyId.set(id)
-        case _ =>
+      if (loadResult.hasColumnFamilyInfo) {
+        columnFamilyInfoLock.synchronized {
+          shouldForceSnapshot.set(false)
+          colFamilyNameToIdMap.putAll(loadResult.columnFamilyMapping.get.asJava)
+          maxColumnFamilyId.set(loadResult.maxColumnFamilyId.get)
+        }
       }
       store
     }
@@ -458,14 +462,19 @@ private[sql] class RocksDBStateStoreProvider
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
+  private val columnFamilyInfoLock = new Object
+
   // make visible for testing
+  @GuardedBy("columnFamilyInfoLock")
   private[sql] val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
 
   private val defaultColFamilyId: Option[Short] = Some(0)
 
+  @GuardedBy("columnFamilyInfoLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(0)
 
-  private val columnFamilyIdsChanged: AtomicBoolean = new AtomicBoolean(false)
+  @GuardedBy("columnFamilyInfoLock")
+  private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
@@ -594,24 +603,25 @@ private[sql] class RocksDBStateStoreProvider
      * Create RocksDB column family, if not created already
      */
     def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false):
-      Option[Short] = {
+      Short = columnFamilyInfoLock.synchronized {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       if (!checkColFamilyExists(colFamilyName)) {
         val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
         colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
-        columnFamilyIdsChanged.set(true)
-        Option(newColumnFamilyId)
-      } else Some(colFamilyNameToIdMap.get(colFamilyName))
+        shouldForceSnapshot.set(true)
+        newColumnFamilyId
+      } else colFamilyNameToIdMap.get(colFamilyName)
     }
 
     /**
      * Remove RocksDB column family, if exists
      */
-    def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+    def removeColFamilyIfExists(colFamilyName: String):
+    Boolean = columnFamilyInfoLock.synchronized {
       verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
       if (checkColFamilyExists(colFamilyName)) {
         colFamilyNameToIdMap.remove(colFamilyName)
-        columnFamilyIdsChanged.set(true)
+        shouldForceSnapshot.set(true)
         true
       } else {
         false
@@ -624,7 +634,8 @@ private[sql] class RocksDBStateStoreProvider
      * @param colFamilyName - name of the column family
      * @return - true if the column family exists, false otherwise
      */
-    def checkColFamilyExists(colFamilyName: String): Boolean = {
+    def checkColFamilyExists(colFamilyName: String):
+    Boolean = columnFamilyInfoLock.synchronized {
       colFamilyNameToIdMap.containsKey(colFamilyName)
     }
   }
