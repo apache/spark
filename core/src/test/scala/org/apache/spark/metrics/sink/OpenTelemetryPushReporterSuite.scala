@@ -18,10 +18,9 @@
 package org.apache.spark.metrics.sink
 
 import com.codahale.metrics.MetricRegistry
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
-
-import org.scalatest.PrivateMethodTester
 
 class OpenTelemetryPushReporterSuite
     extends SparkFunSuite
