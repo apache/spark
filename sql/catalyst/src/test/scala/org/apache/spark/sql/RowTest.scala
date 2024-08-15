@@ -24,7 +24,7 @@ import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
@@ -87,8 +87,9 @@ class RowTest extends AnyFunSpec with Matchers {
       sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
     }
 
-    it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
-      intercept[SparkException] {
+    it("getAnyValAs() on type extending AnyVal throws an exception when accessing " +
+      "field that is null") {
+      intercept[SparkRuntimeException] {
         sampleRowWithoutCol3.getInt(sampleRowWithoutCol3.fieldIndex("col3"))
       }
     }

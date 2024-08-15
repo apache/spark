@@ -125,6 +125,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BOOLEAN_STATEMENT_WITH_EMPTY_ROW" : {
+    "message" : [
+      "Boolean statement <invalidStatement> is invalid. Expected single row with a value of the BOOLEAN type, but got an empty row."
+    ],
+    "sqlState" : "21000"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -387,12 +393,6 @@
       "Failed to set permissions on created path <path> back to <permission>."
     ],
     "sqlState" : "58030"
-  },
-  "CANNOT_SAVE_VARIANT" : {
-    "message" : [
-      "Cannot save variant data type into external storage."
-    ],
-    "sqlState" : "0A000"
   },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
@@ -3790,6 +3790,12 @@
     ],
     "sqlState" : "21000"
   },
+  "ROW_VALUE_IS_NULL" : {
+    "message" : [
+      "Found NULL in a row at the index <index>, expected a non-NULL value."
+    ],
+    "sqlState" : "22023"
+  },
   "RULE_ID_NOT_FOUND" : {
     "message" : [
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
@@ -5027,6 +5033,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
+    "message" : [
+      "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -5581,16 +5593,6 @@
   "_LEGACY_ERROR_TEMP_1052" : {
     "message" : [
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1053" : {
-    "message" : [
-      "ALTER COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1054" : {
-    "message" : [
-      "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1057" : {
@@ -6474,12 +6476,6 @@
       "Class <className> doesn't implement interface UserDefinedAggregateFunction."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1331" : {
-    "message" : [
-      "Missing field <fieldName> in table <table> with schema:",
-      "<schema>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1332" : {
     "message" : [
       "<errorMessage>"
@@ -7300,11 +7296,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2232" : {
-    "message" : [
-      "Value at index <index> is null."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {

@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
@@ -158,9 +159,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
     catalog.refreshTable(ident.asTableIdentifier)
   }
 
-  override def createTable(
+  private def createTable0(
       ident: Identifier,
-      columns: Array[Column],
+      schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -178,7 +179,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       CatalogTableType.MANAGED
     }
 
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
       // If the provider does not support external metadata, users should not be allowed to
       // specify custom schema when creating the data source table, since the schema will not
@@ -255,7 +255,18 @@ class V2SessionCatalog(catalog: SessionCatalog)
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    throw QueryCompilationErrors.createTableDeprecatedError()
+    if (Utils.isTesting) {
+      throw QueryCompilationErrors.createTableDeprecatedError()
+    }
+    createTable0(ident, schema, partitions, properties)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable0(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {

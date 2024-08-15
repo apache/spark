@@ -2,147 +2,147 @@
 aggregate without grouping
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 agg w/o group:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-agg w/o group wholestage off                      35342          35962         876         59.3          16.9       1.0X
-agg w/o group wholestage on                        2831           2851          16        740.7           1.4      12.5X
+agg w/o group wholestage off                      35098          35975        1240         59.8          16.7       1.0X
+agg w/o group wholestage on                        2835           2844           9        739.9           1.4      12.4X
 
 
 ================================================================================================
 stat functions
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 stddev:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-stddev wholestage off                              4117           4150          47         25.5          39.3       1.0X
-stddev wholestage on                                976            980           4        107.4           9.3       4.2X
+stddev wholestage off                              4102           4138          51         25.6          39.1       1.0X
+stddev wholestage on                                974            983           6        107.6           9.3       4.2X
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 kurtosis:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-kurtosis wholestage off                           19477          19555         110          5.4         185.7       1.0X
-kurtosis wholestage on                              986            994           6        106.3           9.4      19.8X
+kurtosis wholestage off                           21188          21367         253          4.9         202.1       1.0X
+kurtosis wholestage on                              992            993           2        105.7           9.5      21.4X
 
 
 ================================================================================================
 aggregate with linear keys
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Aggregate w keys:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        6889           6905          23         12.2          82.1       1.0X
-codegen = T, hashmap = F                           3899           3935          32         21.5          46.5       1.8X
-codegen = T, row-based hashmap = T                 1248           1254           6         67.2          14.9       5.5X
-codegen = T, vectorized hashmap = T                 825            837          12        101.7           9.8       8.4X
+codegen = F                                        6757           6835         110         12.4          80.5       1.0X
+codegen = T, hashmap = F                           3850           4003         160         21.8          45.9       1.8X
+codegen = T, row-based hashmap = T                 1222           1238          15         68.6          14.6       5.5X
+codegen = T, vectorized hashmap = T                 804            814           9        104.3           9.6       8.4X
 
 
 ================================================================================================
 aggregate with randomized keys
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Aggregate w keys:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        7875           7877           2         10.7          93.9       1.0X
-codegen = T, hashmap = F                           4903           4941          43         17.1          58.4       1.6X
-codegen = T, row-based hashmap = T                 1807           1818           9         46.4          21.5       4.4X
-codegen = T, vectorized hashmap = T                1300           1344          49         64.5          15.5       6.1X
+codegen = F                                        7331           7374          60         11.4          87.4       1.0X
+codegen = T, hashmap = F                           4664           4687          24         18.0          55.6       1.6X
+codegen = T, row-based hashmap = T                 1620           1627           7         51.8          19.3       4.5X
+codegen = T, vectorized hashmap = T                1113           1171          72         75.4          13.3       6.6X
 
 
 ================================================================================================
 aggregate with string key
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Aggregate w string key:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        2552           2573          30          8.2         121.7       1.0X
-codegen = T, hashmap = F                           1537           1545           9         13.6          73.3       1.7X
-codegen = T, row-based hashmap = T                  887            921          27         23.6          42.3       2.9X
-codegen = T, vectorized hashmap = T                 744            752           8         28.2          35.5       3.4X
+codegen = F                                        2485           2510          35          8.4         118.5       1.0X
+codegen = T, hashmap = F                           1519           1529          10         13.8          72.4       1.6X
+codegen = T, row-based hashmap = T                  994           1010          16         21.1          47.4       2.5X
+codegen = T, vectorized hashmap = T                 804            815          11         26.1          38.3       3.1X
 
 
 ================================================================================================
 aggregate with decimal key
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Aggregate w decimal key:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        2460           2464           6          8.5         117.3       1.0X
-codegen = T, hashmap = F                           1601           1611          14         13.1          76.4       1.5X
-codegen = T, row-based hashmap = T                  475            497          29         44.1          22.7       5.2X
-codegen = T, vectorized hashmap = T                 336            343           5         62.5          16.0       7.3X
+codegen = F                                        2018           2050          46         10.4          96.2       1.0X
+codegen = T, hashmap = F                           1305           1318          18         16.1          62.2       1.5X
+codegen = T, row-based hashmap = T                  499            505           6         42.0          23.8       4.0X
+codegen = T, vectorized hashmap = T                 313            317           4         67.0          14.9       6.4X
 
 
 ================================================================================================
 aggregate with multiple key types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Aggregate w multiple keys:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        4272           4302          43          4.9         203.7       1.0X
-codegen = T, hashmap = F                           2260           2262           2          9.3         107.8       1.9X
-codegen = T, row-based hashmap = T                 1652           1665          19         12.7          78.8       2.6X
-codegen = T, vectorized hashmap = T                1519           1527          11         13.8          72.4       2.8X
+codegen = F                                        4453           4457           6          4.7         212.3       1.0X
+codegen = T, hashmap = F                           2320           2333          20          9.0         110.6       1.9X
+codegen = T, row-based hashmap = T                 1821           1826           6         11.5          86.8       2.4X
+codegen = T, vectorized hashmap = T                1600           1652          74         13.1          76.3       2.8X
 
 
 ================================================================================================
 max function bytecode size of wholestagecodegen
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 max function bytecode size:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                         375            407          29          1.7         572.3       1.0X
-codegen = T, hugeMethodLimit = 10000                137            160          19          4.8         209.5       2.7X
-codegen = T, hugeMethodLimit = 1500                 132            143          13          5.0         201.8       2.8X
+codegen = F                                         358            384          22          1.8         545.8       1.0X
+codegen = T, hugeMethodLimit = 10000                134            160          24          4.9         204.1       2.7X
+codegen = T, hugeMethodLimit = 1500                 129            145          16          5.1         196.1       2.8X
 
 
 ================================================================================================
 cube
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 cube:                                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cube wholestage off                                1986           2005          26          2.6         378.9       1.0X
-cube wholestage on                                 1079           1106          46          4.9         205.8       1.8X
+cube wholestage off                                1962           1973          16          2.7         374.2       1.0X
+cube wholestage on                                 1054           1075          24          5.0         201.0       1.9X
 
 
 ================================================================================================
 hash and BytesToBytesMap
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 BytesToBytesMap:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeRowhash                                       146            146           1        143.7           7.0       1.0X
-murmur3 hash                                         53             54           0        392.5           2.5       2.7X
-fast hash                                            24             24           0        887.4           1.1       6.2X
+UnsafeRowhash                                       146            147           3        143.7           7.0       1.0X
+murmur3 hash                                         53             54           1        392.4           2.5       2.7X
+fast hash                                            24             24           0        887.7           1.1       6.2X
 arrayEqual                                          136            136           0        153.9           6.5       1.1X
-Java HashMap (Long)                                  62             67           6        337.2           3.0       2.3X
-Java HashMap (two ints)                              87             91           8        242.3           4.1       1.7X
-Java HashMap (UnsafeRow)                            505            509           4         41.5          24.1       0.3X
-LongToUnsafeRowMap (opt=false)                      351            352           2         59.8          16.7       0.4X
-LongToUnsafeRowMap (opt=true)                        76             77           1        274.8           3.6       1.9X
-BytesToBytesMap (off Heap)                          450            460           9         46.6          21.5       0.3X
-BytesToBytesMap (on Heap)                           462            473          10         45.4          22.0       0.3X
-Aggregate HashMap                                    30             30           1        699.0           1.4       4.9X
+Java HashMap (Long)                                  62             72           8        338.3           3.0       2.4X
+Java HashMap (two ints)                              85             88           2        245.8           4.1       1.7X
+Java HashMap (UnsafeRow)                            492            495           2         42.6          23.5       0.3X
+LongToUnsafeRowMap (opt=false)                      350            354           3         59.9          16.7       0.4X
+LongToUnsafeRowMap (opt=true)                        79             82           5        263.9           3.8       1.8X
+BytesToBytesMap (off Heap)                          459            471          12         45.7          21.9       0.3X
+BytesToBytesMap (on Heap)                           466            468           2         45.0          22.2       0.3X
+Aggregate HashMap                                    30             30           2        697.8           1.4       4.9X
 
 

@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
-import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
+import java.net.{ConnectException, HttpURLConnection, SocketException, URI, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
@@ -383,37 +383,37 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   /** Return the REST URL for creating a new submission. */
   private def getSubmitUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/create")
+    new URI(s"$baseUrl/create").toURL
   }
 
   /** Return the REST URL for killing an existing submission. */
   private def getKillUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/kill/$submissionId")
+    new URI(s"$baseUrl/kill/$submissionId").toURL
   }
 
   /** Return the REST URL for killing all submissions. */
   private def getKillAllUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/killall")
+    new URI(s"$baseUrl/killall").toURL
   }
 
   /** Return the REST URL for clear all existing submissions and applications. */
   private def getClearUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/clear")
+    new URI(s"$baseUrl/clear").toURL
   }
 
   /** Return the REST URL for requesting the readyz API. */
   private def getReadyzUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/readyz")
+    new URI(s"$baseUrl/readyz").toURL
   }
 
   /** Return the REST URL for requesting the status of an existing submission. */
   private def getStatusUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/status/$submissionId")
+    new URI(s"$baseUrl/status/$submissionId").toURL
   }
 
   /** Return the base URL for communicating with the server, including the protocol version. */
