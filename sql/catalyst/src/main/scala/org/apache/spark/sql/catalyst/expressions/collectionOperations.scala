@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
@@ -1522,7 +1523,6 @@ case class ArrayContains(left: Expression, right: Expression)
  * Searches the specified array for the specified object using the binary search algorithm.
  * This expression is dedicated only for PySpark and Spark-ML.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(array, value) - Return index (0-based) of the search value, " +
     "if it is contained in the array; otherwise, (-<insertion point> - 1).",
@@ -1537,11 +1537,11 @@ case class ArrayContains(left: Expression, right: Expression)
   """,
   group = "array_funcs",
   since = "4.0.0")
-// scalastyle:on line.size.limit
 case class ArrayBinarySearch(array: Expression, value: Expression)
   extends BinaryExpression
   with ImplicitCastInputTypes
   with NullIntolerant
+  with RuntimeReplaceable
   with QueryErrorsBase {
 
   override def left: Expression = array
@@ -1590,85 +1590,38 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
     }
   }
 
-  @transient lazy val elementType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
-  private def resultArrayElementNullable: Boolean =
+  @transient private lazy val elementType: DataType =
+    array.dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val resultArrayElementNullable: Boolean =
     array.dataType.asInstanceOf[ArrayType].containsNull
 
-  @transient private lazy val comp: Comparator[Any] = {
-    val ordering = array.dataType match {
-      case _ @ ArrayType(n, _) =>
-        PhysicalDataType.ordering(n)
-    }
+  @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
+  @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
+    elementType != BooleanType && !resultArrayElementNullable
 
-    (o1: Any, o2: Any) =>
-      (o1, o2) match {
-        case (null, null) => 0
-        case (null, _) => 1
-        case (_, null) => -1
-        case _ => ordering.compare(o1, o2)
-      }
-  }
-
-  private def binarySearchEval(array: Any, value: Any): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    java.util.Arrays.binarySearch(data, value.asInstanceOf[AnyRef], comp)
-  }
-
-  private def binarySearchCodegen(
-    ctx: CodegenContext, ev: ExprCode, data: String, value: String): String = {
-    val array = ctx.freshName("array")
-    val c = ctx.freshName("c")
-    val canPerformFastBinarySearch = CodeGenerator.isPrimitiveType(elementType) &&
-      elementType != BooleanType && !resultArrayElementNullable
+  override def replacement: Expression =
     if (canPerformFastBinarySearch) {
-      val javaType = CodeGenerator.javaType(elementType)
-      val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
-      s"""
-         |$javaType[] $array = $data.to${primitiveTypeName}Array();
-         |${ev.value} = java.util.Arrays.binarySearch($array, $value);
-       """.stripMargin
+      StaticInvoke(
+        classOf[ArrayExpressionUtils],
+        IntegerType,
+        "binarySearch",
+        Seq(array, value),
+        inputTypes)
+    } else if (isPrimitiveType) {
+      StaticInvoke(
+        classOf[ArrayExpressionUtils],
+        IntegerType,
+        "binarySearchNullSafe",
+        Seq(array, value),
+        inputTypes)
     } else {
-      val elementTypeTerm = ctx.addReferenceObj("elementTypeTerm", elementType)
-      val o1 = ctx.freshName("o1")
-      val o2 = ctx.freshName("o2")
-      val jt = CodeGenerator.javaType(elementType)
-      val comp = if (CodeGenerator.isPrimitiveType(elementType)) {
-        val bt = CodeGenerator.boxedType(elementType)
-        val v1 = ctx.freshName("v1")
-        val v2 = ctx.freshName("v2")
-        s"""
-           |$jt $v1 = (($bt) $o1).${jt}Value();
-           |$jt $v2 = (($bt) $o2).${jt}Value();
-           |int $c = ${ctx.genComp(elementType, v1, v2)};
-         """.stripMargin
-      } else {
-        s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
-      }
-      s"""
-         |Object[] $array = $data.toObjectArray($elementTypeTerm);
-         |${ev.value} = java.util.Arrays.binarySearch($array, $value, new java.util.Comparator() {
-         |  @Override public int compare(Object $o1, Object $o2) {
-         |    if ($o1 == null && $o2 == null) {
-         |      return 0;
-         |    } else if ($o1 == null) {
-         |      return -1;
-         |    } else if ($o2 == null) {
-         |      return 1;
-         |    }
-         |    $comp
-         |    return $c;
-         |  }
-         |});
-       """.stripMargin
-    }
-  }
-
-  override def nullSafeEval(arr: Any, value: Any): Any = {
-    binarySearchEval(arr, value)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (d, v) => binarySearchCodegen(ctx, ev, d, v))
+      val elementObjectType = ObjectType(classOf[DataType])
+      StaticInvoke(
+        classOf[ArrayExpressionUtils],
+        IntegerType,
+        "binarySearch",
+        Seq(Literal(elementType, elementObjectType), array, value),
+        elementObjectType +: inputTypes)
   }
 
   override def prettyName: String = "array_binary_search"
