@@ -40,7 +40,7 @@ def build_spark_if_necessary
 
   print_header "Building Spark."
   cd(SPARK_PROJECT_ROOT)
-  command = "build/sbt -Phive -Pkinesis-asl clean package"
+  command = "build/sbt -Phive -Pkinesis-asl -Popentelemetry-reporter clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")
   $spark_package_is_built = true
