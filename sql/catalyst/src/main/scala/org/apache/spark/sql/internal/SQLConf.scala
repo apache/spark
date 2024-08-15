@@ -759,14 +759,6 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
-  lazy val COLLATION_ENABLED =
-    buildConf("spark.sql.collation.enabled")
-      .doc("Collations feature is under development and its use should be done under this" +
-        "feature flag.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(Utils.isTesting)
-
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -974,6 +966,14 @@ object SQLConf {
       .doc("When true, the query optimizer will propagate a set of distinct attributes from the " +
         "current node and use it to optimize query.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
+    buildConf("spark.sql.parser.optimizeInsertIntoValuesParser")
+      .internal()
+      .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
+        "`insert into ... values` DML statements.")
       .booleanConf
       .createWithDefault(true)
 
@@ -3730,7 +3730,7 @@ object SQLConf {
       .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false) // Disabled for now, see SPARK-46446
+      .createWithDefault(true)
 
   val DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")
@@ -5118,13 +5118,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_SHOW_COLUMNS_CHECK_NAMESPACE = buildConf("spark.sql.legacy.showColumnsCheckNamespace")
+  val LEGACY_SHOW_COLUMNS_NO_CHECK = buildConf("spark.sql.legacy.showColumnsNoCheck")
     .internal()
-    .doc("When true, in `SHOW COLUMNS` syntax, if namespace is already specified in the table " +
+    .doc("When false, in `SHOW COLUMNS` syntax, if namespace is already specified in the table " +
       "name, it's checked against the given namespace after table/view is resolved.")
     .version("4.0.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -5420,8 +5420,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
-
-  def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
@@ -6032,7 +6030,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
 
-  def legacyShowColumnsCheckNamespace: Boolean = getConf(LEGACY_SHOW_COLUMNS_CHECK_NAMESPACE)
+  def legacyShowColumnsNoCheck: Boolean = getConf(LEGACY_SHOW_COLUMNS_NO_CHECK)
 
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 

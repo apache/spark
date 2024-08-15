@@ -256,6 +256,26 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
+      "INVALID_CHANGE_LOG_READER_VERSION" : {
+        "message" : [
+          "The change log reader version cannot be <version>."
+        ]
+      },
+      "INVALID_CHANGE_LOG_WRITER_VERSION" : {
+        "message" : [
+          "The change log writer version cannot be <version>."
+        ]
+      },
+      "ROCKSDB_STORE_PROVIDER_OUT_OF_MEMORY" : {
+        "message" : [
+          "Could not load RocksDB state store with id <stateStoreId> because of an out of memory exception."
+        ]
+      },
       "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
         "message" : [
           "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
@@ -367,12 +387,6 @@
       "Failed to set permissions on created path <path> back to <permission>."
     ],
     "sqlState" : "58030"
-  },
-  "CANNOT_SAVE_VARIANT" : {
-    "message" : [
-      "Cannot save variant data type into external storage."
-    ],
-    "sqlState" : "0A000"
   },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
@@ -624,6 +638,17 @@
       "Please make sure only one streaming job runs on a specific checkpoint location at a time."
     ],
     "sqlState" : "40000"
+  },
+  "CONFLICTING_PARTITION_COLUMN_NAMES" : {
+    "message" : [
+      "Conflicting partition column names detected:",
+      "<distinctPartColLists>",
+      "For partitioned table directories, data files should only live in leaf directories.",
+      "And directories at the same level should have the same partition column name.",
+      "Please check the following directories for unexpected files or inconsistent partition column names:",
+      "<suspiciousPaths>"
+    ],
+    "sqlState" : "KD009"
   },
   "CONNECT" : {
     "message" : [
@@ -1928,6 +1953,12 @@
       "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
     ],
     "sqlState" : "22003"
+  },
+  "INVALID_BOOLEAN_STATEMENT" : {
+    "message" : [
+      "Boolean statement is expected in the condition, but <invalidStatement> was found."
+    ],
+    "sqlState" : "22546"
   },
   "INVALID_BOUNDARY" : {
     "message" : [
@@ -3543,6 +3574,24 @@
     ],
     "sqlState" : "42805"
   },
+  "PARQUET_TYPE_ILLEGAL" : {
+    "message" : [
+      "Illegal Parquet type: <parquetType>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_RECOGNIZED" : {
+    "message" : [
+      "Unrecognized Parquet type: <field>."
+    ],
+    "sqlState" : "42846"
+  },
+  "PARQUET_TYPE_NOT_SUPPORTED" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
+    ],
+    "sqlState" : "42846"
+  },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
       "Syntax error, unexpected empty statement."
@@ -3716,6 +3765,12 @@
       "More than one row returned by a subquery used as a row."
     ],
     "sqlState" : "21000"
+  },
+  "ROW_VALUE_IS_NULL" : {
+    "message" : [
+      "Found NULL in a row at the index <index>, expected a non-NULL value."
+    ],
+    "sqlState" : "22023"
   },
   "RULE_ID_NOT_FOUND" : {
     "message" : [
@@ -4955,6 +5010,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
+    "message" : [
+      "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -5880,21 +5941,6 @@
   "_LEGACY_ERROR_TEMP_1171" : {
     "message" : [
       "createTableColumnTypes option column <col> not found in schema <schema>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1172" : {
-    "message" : [
-      "Parquet type not yet supported: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1173" : {
-    "message" : [
-      "Illegal Parquet type: <parquetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1174" : {
-    "message" : [
-      "Unrecognized Parquet type: <field>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1181" : {
@@ -7238,11 +7284,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2232" : {
-    "message" : [
-      "Value at index <index> is null."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {

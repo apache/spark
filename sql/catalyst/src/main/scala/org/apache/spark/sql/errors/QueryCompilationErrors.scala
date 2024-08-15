@@ -203,13 +203,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     invalidParameter("DOUBLE", "ewm", "alpha", invalidValue)
   }
 
-  def invalidStringParameter(
-      functionName: String,
-      parameter: String,
-      invalidValue: Expression): Throwable = {
-    invalidParameter("STRING", functionName, parameter, invalidValue)
-  }
-
   def invalidParameter(
       subClass: String,
       functionName: String,
@@ -349,12 +342,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
     )
-  }
-
-  def collationNotEnabledError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-      messageParameters = Map.empty)
   }
 
   def unresolvedUsingColForJoinError(
@@ -1686,12 +1673,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_SAVE_VARIANT",
-      messageParameters = Map.empty)
-  }
-
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
@@ -1998,19 +1979,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1172",
+      errorClass = "PARQUET_TYPE_NOT_SUPPORTED",
       messageParameters = Map("parquetType" -> parquetType))
   }
 
   def illegalParquetTypeError(parquetType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1173",
+      errorClass = "PARQUET_TYPE_ILLEGAL",
       messageParameters = Map("parquetType" -> parquetType))
   }
 
   def unrecognizedParquetTypeError(field: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1174",
+      errorClass = "PARQUET_TYPE_NOT_RECOGNIZED",
       messageParameters = Map("field" -> field))
   }
 

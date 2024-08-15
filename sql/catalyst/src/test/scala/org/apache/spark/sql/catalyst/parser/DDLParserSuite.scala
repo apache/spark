@@ -2584,12 +2584,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-33474: Support typed literals as partition spec values") {
-    def insertPartitionPlan(part: String): InsertIntoStatement = {
+    def insertPartitionPlan(part: String, optimizeInsertIntoCmds: Boolean): InsertIntoStatement = {
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some(part)),
         Seq.empty[String],
-        UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
+        if (optimizeInsertIntoCmds) {
+          ResolveInlineTables(UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))))
+        } else {
+          UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a"))))
+        },
         overwrite = false, ifPartitionNotExists = false)
     }
     val binaryStr = "Spark SQL"
@@ -2604,15 +2608,27 @@ class DDLParserSuite extends AnalysisTest {
     val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
     val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'$binaryHexStr') VALUES('a')"
 
-    comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-      comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    for (optimizeInsertIntoValues <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
+          optimizeInsertIntoValues.toString) {
+        comparePlans(parsePlan(dateTypeSql), insertPartitionPlan(
+          "2019-01-02", optimizeInsertIntoValues))
+        withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+          comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(
+            interval, optimizeInsertIntoValues))
+        }
+        comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan(
+          "INTERVAL '1-2' YEAR TO MONTH", optimizeInsertIntoValues))
+        comparePlans(parsePlan(dtIntervalTypeSql),
+          insertPartitionPlan(
+            "INTERVAL '1 02:03:04.128462' DAY TO SECOND", optimizeInsertIntoValues))
+        comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(
+          timestamp, optimizeInsertIntoValues))
+        comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(
+          binaryStr, optimizeInsertIntoValues))
+      }
     }
-    comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan("INTERVAL '1-2' YEAR TO MONTH"))
-    comparePlans(parsePlan(dtIntervalTypeSql),
-      insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
-    comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
-    comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
