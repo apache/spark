@@ -1269,91 +1269,100 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Title casing a string according to a new behaviour.
-   * Iterates over the string and title cases the first character in each word, and lowercases
-   * every other character.
-   * Handles lowercasing greek sigma(Σ) separately, taking into account if
-   * it should be a small final sigma(ς) or small non-final sigma(σ).
-   * Words are separated by ASCII space(\u0020).
+   * Title casing a string according to a new behaviour. Iterates over the string and title cases
+   * the first character in each word, and lowercases every other character. Handles lowercasing
+   * capital Greek letter sigma ('Σ') separately, taking into account if it should be a small final
+   * Greek sigma ('ς') or small non-final Greek sigma ('σ'). Words are separated by ASCII
+   * space(\u0020).
    *
    * @param target UTF8String to be title cased
    * @return title cased target
    */
   public static UTF8String toTitleCaseICU(UTF8String target) {
 
-    Iterator<Integer> codepointIterator = target.
-            codePointIterator(CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    Iterator<Integer> codepointIterator = target.codePointIterator(
+            CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
 
-    // building the title cased target with sb
-    StringBuilder sb=new StringBuilder();
-    // newWord is true if the current character is the beginning of a word, false otherwise
-    // it is true on the i-th character if i==0 or target at (i-1)-th character is ' '
+    // Building the title cased target with 'sb'.
+    StringBuilder sb = new StringBuilder();
+    // 'newWord' is true if the current character is the beginning of a word, false otherwise.
     boolean newWord = true;
-    // we are maintaining if the current character is preceded by a cased letter
-    // this is used when lowercasing Σ, to figure out if it should be lowercased into σ or ς
+    // We are maintaining if the current character is preceded by a cased letter.
+    // This is used when lowercasing capital Greek letter sigma ('Σ'), to figure out if it should be
+    // lowercased into σ or ς.
     boolean precededByCasedLetter = false;
 
-    // byte offset in target's byte array pointing to the beginning of the character that we
-    // need to process next(this is only actually used in appendLowerCasedGreekCapitalSigma)
+    // 'offset' is a byte offset in target's byte array pointing to the beginning of the character
+    // that we need to process next(this is only actually used in appendLowerCasedGreekCapitalSigma)
     int offset = 0;
 
     while(codepointIterator.hasNext()) {
       int codepoint = codepointIterator.next();
-      // appending the correctly cased character onto sb
+      // Appending the correctly cased character onto 'sb'.
       appendTitleCasedCodepoint(sb, codepoint, newWord, precededByCasedLetter, target, offset);
-      // updating newWord, precededByCasedLetter and offset to be ready for
-      // the next character that we will process
+      // Updating 'newWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
+      // that we will process.
       newWord = (codepoint == ASCII_SPACE_CODEPOINT);
-      if(!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)){
+      if(!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
         precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
       }
-      offset+= UTF8String.numBytesForFirstByte(target.getByte(offset));
+      offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
     }
     return UTF8String.fromString(sb.toString());
   }
 
-  private static void appendTitleCasedCodepoint(StringBuilder sb, int codepoint,
-                                                boolean isAfterAsciiSpace,
-                                                boolean precededByCasedLetter, UTF8String target,
-                                                int offset) {
+  private static void appendTitleCasedCodepoint(
+      StringBuilder sb,
+      int codepoint,
+      boolean isAfterAsciiSpace,
+      boolean precededByCasedLetter,
+      UTF8String target,
+      int offset) {
     if(isAfterAsciiSpace) {
-      // titlecasing a character if it is in the beginning of a new word
+      // Titlecasing a character if it is in the beginning of a new word.
       sb.append(codepointToTitleString(codepoint));
       return;
     }
     if(codepoint == CAPITAL_SIGMA) {
-      // handling Σ separately
+      // Handling capital Greek letter sigma ('Σ').
       appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, target, offset);
       return;
     }
-    // if it's not the beginning of a word, or a Σ, we lowercase the character
-    sb.append(toLowerCase(UTF8String.fromString(new String(Character.toChars(codepoint)))).
-            toString());
+    // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
+    // character.
+    sb.append(
+      toLowerCase(UTF8String.fromString(new String(Character.toChars(codepoint)))).toString());
   }
 
-  private static void appendLowerCasedGreekCapitalSigma(StringBuilder sb,
-                                                        boolean precededByCasedLetter,
-                                                        UTF8String target, int offset) {
-    int codepoint = (!followedByCasedLetter(target,offset) && precededByCasedLetter)?
-            SMALL_FINAL_SIGMA : SMALL_NON_FINAL_SIGMA;
+  private static void appendLowerCasedGreekCapitalSigma(
+      StringBuilder sb,
+      boolean precededByCasedLetter,
+      UTF8String target,
+      int offset) {
+    int codepoint;
+    if (!followedByCasedLetter(target,offset) && precededByCasedLetter) {
+      codepoint = SMALL_FINAL_SIGMA;
+    }
+    else {
+      codepoint = SMALL_NON_FINAL_SIGMA;
+    }
     sb.appendCodePoint(codepoint);
   }
 
   /**
-   * Checks if the character beginning at offset(in targets byte array) is followed
-   * by a cased letter
+   * Checks if the character beginning at 'offset'(in 'targets' byte array) is followed by a cased
+   * letter.
    *
    * @param target
    * @param offset
    * @return
    */
   private static boolean followedByCasedLetter(UTF8String target, int offset) {
-    // moving the offset one character forward, so we could start our linear search from there
-    offset+= UTF8String.numBytesForFirstByte(target.getByte(offset));
+    // Moving the offset one character forward, so we could start the linear search from there.
+    offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
     int len = target.numBytes();
 
     while(offset < len) {
-
       int codepoint = target.codePointFrom(offset);
 
       if(UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
@@ -1368,9 +1377,9 @@ public class CollationAwareUTF8String {
   /**
    * Titlecases a single character using the ICU root locale rules.
    *
-   * @param target is a character that is needed to be title cased
-   * @return a java String(whose length can be more than 1 character)
-   * which corresponds to the title case of the codepoint
+   * @param codepoint is a character that is needed to be title cased
+   * @return a java String(whose length can be more than 1 character) which corresponds to the title
+   * case of the codepoint
    */
   private static String codepointToTitleString(int codepoint) {
     return UCharacter.toTitleCase(new String(Character.toChars(codepoint)),null);

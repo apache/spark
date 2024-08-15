@@ -887,19 +887,20 @@ public class CollationSupportSuite {
     assertEquals(expected_utf8, CollationSupport.InitCap.exec(target_utf8, collationId, false));
     // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
-  private void assertInitCap(String target, String collationName, String expectedICU,
-                             String expectedNonICU)
-          throws SparkException {
+  private void assertInitCap(
+      String target,
+      String collationName,
+      String expectedICU,
+      String expectedNonICU) throws SparkException {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expectedICU_utf8 = UTF8String.fromString(expectedICU);
     UTF8String expectedNonICU_utf8 = UTF8String.fromString(expectedNonICU);
     int collationId = CollationFactory.collationNameToId(collationName);
     // Testing the new ICU-based implementation of the Lower function.
-    assertEquals(expectedICU_utf8,
-            CollationSupport.InitCap.exec(target_utf8, collationId, true));
+    assertEquals(expectedICU_utf8, CollationSupport.InitCap.exec(target_utf8, collationId, true));
     // Testing the old JVM-based implementation of the Lower function.
-    assertEquals(expectedNonICU_utf8,
-            CollationSupport.InitCap.exec(target_utf8, collationId, false));
+    assertEquals(expectedNonICU_utf8, CollationSupport.InitCap.exec(target_utf8, collationId,
+      false));
     // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
 
@@ -981,10 +982,11 @@ public class CollationSupportSuite {
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
-    // Characters that map to multiple characters when titlecased and lowercased
+    // Characters that map to multiple characters when titlecased and lowercased.
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ İOTA", "UTF8_BINARY", "Ss Fi Ffi Ff St İota", "ß ﬁ ﬃ ﬀ ﬆ İota");
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ OİOTA", "UTF8_BINARY", "Ss Fi Ffi Ff St Oi\u0307ota", "ß ﬁ ﬃ ﬀ ﬆ Oi̇ota");
-    // Lowercasing Σ when case-ignorable character present
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ OİOTA", "UTF8_BINARY",
+      "Ss Fi Ffi Ff St Oi\u0307ota", "ß ﬁ ﬃ ﬀ ﬆ Oi̇ota");
+    // Lowercasing Greek letter sigma ('Σ') when case-ignorable character present.
     assertInitCap("`Σ", "UTF8_BINARY", "`σ", "`σ");
     assertInitCap("1`Σ`` AΣ", "UTF8_BINARY", "1`σ`` Aς", "1`σ`` Aς");
     assertInitCap("a1`Σ``", "UTF8_BINARY", "A1`σ``", "A1`σ``");
@@ -996,17 +998,22 @@ public class CollationSupportSuite {
     assertInitCap("ΘΑ�ᵩΣ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θα�ᵩσ�οᵩςᵩ�", "Θα�ᵩσ�οᵩςᵩ�");
     assertInitCap("ΘΑ�ᵩΣᵩ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θα�ᵩσᵩ�οᵩςᵩ�", "Θα�ᵩσᵩ�οᵩςᵩ�");
     assertInitCap("ΘΑ�Σ�Ο�Σ�", "UTF8_BINARY", "Θα�σ�ο�σ�", "Θα�σ�ο�σ�");
-    // Ligatures
+    // Ligatures.
     assertInitCap("œ ǽ", "UTF8_BINARY", "Œ Ǽ", "Œ Ǽ");
-    // Disallowed bytes and invalid sequences
+    // Disallowed bytes and invalid sequences.
     assertInitCap(UTF8String.fromBytes(new byte[] { (byte)0xC0, (byte)0xC1, (byte)0xF5}).toString(),
-            "UTF8_BINARY", "���", "���");
-    assertInitCap(UTF8String.fromBytes(new byte[]{(byte)0xC0, (byte)0xC1, (byte)0xF5,
-            0x20, 0x61, 0x41, (byte)0xC0}).toString(), "UTF8_BINARY", "��� Aa�", "��� Aa�");
-    assertInitCap(UTF8String.fromBytes(new byte[]{(byte)0xC2,(byte)0xC2}).toString(), "UTF8_BINARY", "��", "��");
-    assertInitCap(UTF8String.fromBytes(new byte[]{0x61, 0x41, (byte)0xC2, (byte)0xC2, 0x41}).toString(),
-            "UTF8_BINARY", "Aa��a", "Aa��a");
-    // Surrogate pairs
+      "UTF8_BINARY", "���", "���");
+    assertInitCap(UTF8String.fromBytes(
+      new byte[]{(byte)0xC0, (byte)0xC1, (byte)0xF5, 0x20, 0x61, 0x41, (byte)0xC0}).toString(),
+      "UTF8_BINARY",
+      "��� Aa�", "��� Aa�");
+    assertInitCap(UTF8String.fromBytes(new byte[]{(byte)0xC2,(byte)0xC2}).toString(),
+      "UTF8_BINARY", "��", "��");
+    assertInitCap(UTF8String.fromBytes(
+      new byte[]{0x61, 0x41, (byte)0xC2, (byte)0xC2, 0x41}).toString(),
+      "UTF8_BINARY",
+      "Aa��a", "Aa��a");
+    // Surrogate pairs.
     assertInitCap("a🙃b🙃c", "UTF8_BINARY", "A🙃b🙃c", "A🙃b🙃c");
     assertInitCap("😀😆😃😄", "UTF8_BINARY", "😀😆😃😄", "😀😆😃😄");
   }
