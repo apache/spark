@@ -201,16 +201,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-      parameters = Map.empty
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      parameters = Map("version" -> "-1")
     )
     ex = intercept[SparkException] {
       provider.getReadStore(-1)
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-      parameters = Map.empty
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      parameters = Map("version" -> "-1")
     )
 
     val remoteDir = Utils.createTempDir().toString
@@ -230,12 +230,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(
-    "RocksDB: purge changelog and snapshots",
+    "RocksDB: purge changelog and snapshots with minVersionsToDelete = 0",
     TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true,
-      minVersionsToRetain = 3, minDeltasForSnapshot = 1)
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 0)
     withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       db.load(0)
       db.commit()
@@ -268,6 +268,51 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // 5 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
       assert(snapshotVersionsPresent(remoteDir) === Seq(5, 8))
       assert(changelogVersionsPresent(remoteDir) == (5 to 8))
+    }
+  }
+
+  testWithColumnFamilies(
+    "RocksDB: purge version files with minVersionsToDelete > 0",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val conf = dbConf.copy(
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3)
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      // Commit 5 versions
+      // stale versions: (1, 2)
+      // keep versions: (3, 4, 5)
+      for (version <- 0 to 4) {
+        // Should upload latest snapshot but not delete any files
+        // since number of stale versions < minVersionsToDelete
+        db.load(version)
+        db.commit()
+        db.doMaintenance()
+      }
+
+      // Commit 1 more version
+      // stale versions: (1, 2, 3)
+      // keep versions: (4, 5, 6)
+      db.load(5)
+      db.commit()
+
+      // Checkpoint directory before maintenance
+      if (isChangelogCheckpointingEnabled) {
+        assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+        assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+      } else {
+        assert(snapshotVersionsPresent(remoteDir) == (1 to 6))
+      }
+
+      // Should delete stale versions for zip files and change log files
+      // since number of stale versions >= minVersionsToDelete
+      db.doMaintenance()
+
+      // Checkpoint directory after maintenance
+      assert(snapshotVersionsPresent(remoteDir) == Seq(4, 5, 6))
+      if (isChangelogCheckpointingEnabled) {
+        assert(changelogVersionsPresent(remoteDir) == Seq(4, 5, 6))
+      }
     }
   }
 

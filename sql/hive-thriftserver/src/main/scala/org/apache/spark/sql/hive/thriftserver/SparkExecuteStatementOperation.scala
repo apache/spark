@@ -249,10 +249,11 @@ private[hive] class SparkExecuteStatementOperation(
       case e: Throwable =>
         // When cancel() or close() is called very quickly after the query is started,
         // then they may both call cleanup() before Spark Jobs are started. But before background
-        // task interrupted, it may have start some spark job, so we need to cancel again to
+        // task interrupted, it may have started some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
-          session.sparkContext.cancelJobGroup(statementId)
+          session.sparkContext.cancelJobGroup(statementId,
+            "The corresponding Thriftserver query has failed.")
         }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {

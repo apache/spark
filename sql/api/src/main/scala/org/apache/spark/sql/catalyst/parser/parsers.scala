@@ -249,20 +249,27 @@ class ParseException private(
   override def getMessage: String = {
     val builder = new StringBuilder
     builder ++= "\n" ++= message
-    start match {
-      case Origin(Some(l), Some(p), _, _, _, _, _, _, _) =>
-        builder ++= s" (line $l, pos $p)\n"
-        command.foreach { cmd =>
-          val (above, below) = cmd.split("\n").splitAt(l)
-          builder ++= "\n== SQL ==\n"
-          above.foreach(builder ++= _ += '\n')
-          builder ++= (0 until p).map(_ => "-").mkString("") ++= "^^^\n"
-          below.foreach(builder ++= _ += '\n')
-        }
-      case _ =>
-        command.foreach { cmd =>
-          builder ++= "\n== SQL ==\n" ++= cmd
-        }
+    if (queryContext.nonEmpty) {
+      builder ++= "\n"
+      queryContext.foreach { ctx =>
+        builder ++= ctx.summary()
+      }
+    } else {
+      start match {
+        case Origin(Some(l), Some(p), _, _, _, _, _, _, _) =>
+          builder ++= s" (line $l, pos $p)\n"
+          command.foreach { cmd =>
+            val (above, below) = cmd.split("\n").splitAt(l)
+            builder ++= "\n== SQL ==\n"
+            above.foreach(builder ++= _ += '\n')
+            builder ++= (0 until p).map(_ => "-").mkString("") ++= "^^^\n"
+            below.foreach(builder ++= _ += '\n')
+          }
+        case _ =>
+          command.foreach { cmd =>
+            builder ++= "\n== SQL ==\n" ++= cmd
+          }
+      }
     }
     builder.toString
   }

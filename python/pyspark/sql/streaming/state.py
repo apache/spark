@@ -100,8 +100,8 @@ class GroupState:
             return tuple(self._value)
         else:
             raise PySparkValueError(
-                error_class="STATE_NOT_EXISTS",
-                message_parameters={},
+                errorClass="STATE_NOT_EXISTS",
+                messageParameters={},
             )
 
     @property
@@ -134,8 +134,8 @@ class GroupState:
         """
         if newValue is None:
             raise PySparkTypeError(
-                error_class="CANNOT_BE_NONE",
-                message_parameters={"arg_name": "newValue"},
+                errorClass="CANNOT_BE_NONE",
+                messageParameters={"arg_name": "newValue"},
             )
 
         converted = []
@@ -177,8 +177,8 @@ class GroupState:
         if isinstance(durationMs, str):
             # TODO(SPARK-40437): Support string representation of durationMs.
             raise PySparkTypeError(
-                error_class="NOT_INT",
-                message_parameters={
+                errorClass="NOT_INT",
+                messageParameters={
                     "arg_name": "durationMs",
                     "arg_type": type(durationMs).__name__,
                 },
@@ -186,8 +186,8 @@ class GroupState:
 
         if self._timeout_conf != GroupStateTimeout.ProcessingTimeTimeout:
             raise PySparkRuntimeError(
-                error_class="CANNOT_WITHOUT",
-                message_parameters={
+                errorClass="CANNOT_WITHOUT",
+                messageParameters={
                     "condition1": "set timeout duration",
                     "condition2": "enabling processing time timeout in applyInPandasWithState",
                 },
@@ -195,8 +195,8 @@ class GroupState:
 
         if durationMs <= 0:
             raise PySparkValueError(
-                error_class="VALUE_NOT_POSITIVE",
-                message_parameters={
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
                     "arg_name": "durationMs",
                     "arg_value": type(durationMs).__name__,
                 },
@@ -212,8 +212,8 @@ class GroupState:
         """
         if self._timeout_conf != GroupStateTimeout.EventTimeTimeout:
             raise PySparkRuntimeError(
-                error_class="CANNOT_WITHOUT",
-                message_parameters={
+                errorClass="CANNOT_WITHOUT",
+                messageParameters={
                     "condition1": "set timeout duration",
                     "condition2": "enabling processing time timeout in applyInPandasWithState",
                 },
@@ -224,8 +224,8 @@ class GroupState:
 
         if timestampMs <= 0:
             raise PySparkValueError(
-                error_class="VALUE_NOT_POSITIVE",
-                message_parameters={
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
                     "arg_name": "timestampMs",
                     "arg_value": type(timestampMs).__name__,
                 },
@@ -236,8 +236,8 @@ class GroupState:
             and timestampMs < self._event_time_watermark_ms
         ):
             raise PySparkValueError(
-                error_class="INVALID_TIMEOUT_TIMESTAMP",
-                message_parameters={
+                errorClass="INVALID_TIMEOUT_TIMESTAMP",
+                messageParameters={
                     "timestamp": str(timestampMs),
                     "watermark": str(self._event_time_watermark_ms),
                 },
@@ -252,8 +252,8 @@ class GroupState:
         """
         if not self._watermark_present:
             raise PySparkRuntimeError(
-                error_class="CANNOT_WITHOUT",
-                message_parameters={
+                errorClass="CANNOT_WITHOUT",
+                messageParameters={
                     "condition1": "get event time watermark timestamp",
                     "condition2": "setting watermark before applyInPandasWithState",
                 },

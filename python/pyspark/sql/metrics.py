@@ -263,8 +263,8 @@ class CollectedMetrics:
 
         except ImportError:
             raise PySparkValueError(
-                error_class="PACKAGE_NOT_INSTALLED",
-                message_parameters={"package_name": "graphviz", "minimum_version": "0.20"},
+                errorClass="PACKAGE_NOT_INSTALLED",
+                messageParameters={"package_name": "graphviz", "minimum_version": "0.20"},
             )
 
 

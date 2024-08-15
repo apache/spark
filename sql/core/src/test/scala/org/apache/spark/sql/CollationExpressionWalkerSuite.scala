@@ -39,7 +39,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
 
   case object Utf8Binary extends CollationType
 
-  case object Utf8BinaryLcase extends CollationType
+  case object Utf8Lcase extends CollationType
 
   /**
    * Helper function to generate all necessary parameters
@@ -111,7 +111,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case BinaryType => collationType match {
         case Utf8Binary =>
           Literal.create("dummy string".getBytes)
-        case Utf8BinaryLcase =>
+        case Utf8Lcase =>
           Literal.create("DuMmY sTrInG".getBytes)
       }
       case BooleanType => Literal(true)
@@ -125,13 +125,13 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         collationType match {
           case Utf8Binary =>
             Literal.create("dummy string", StringType("UTF8_BINARY"))
-          case Utf8BinaryLcase =>
+          case Utf8Lcase =>
             Literal.create("DuMmY sTrInG", StringType("UTF8_LCASE"))
         }
       case VariantType => collationType match {
         case Utf8Binary =>
           ParseJson(Literal.create("{}", StringType("UTF8_BINARY")))
-        case Utf8BinaryLcase =>
+        case Utf8Lcase =>
           ParseJson(Literal.create("{}", StringType("UTF8_LCASE")))
       }
       case TypeCollection(typeCollection) =>
@@ -185,7 +185,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case BinaryType =>
         collationType match {
           case Utf8Binary => "Cast('dummy string' collate utf8_binary as BINARY)"
-          case Utf8BinaryLcase => "Cast('DuMmY sTrInG' collate utf8_lcase as BINARY)"
+          case Utf8Lcase => "Cast('DuMmY sTrInG' collate utf8_lcase as BINARY)"
         }
       case BooleanType => "True"
       case _: DatetimeType => "date'2016-04-08'"
@@ -196,7 +196,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case _: StringType | AnyDataType | _: AbstractStringType =>
         collationType match {
           case Utf8Binary => "'dummy string' COLLATE UTF8_BINARY"
-          case Utf8BinaryLcase => "'DuMmY sTrInG' COLLATE UTF8_LCASE"
+          case Utf8Lcase => "'DuMmY sTrInG' COLLATE UTF8_LCASE"
         }
       case NullType => "null"
       case VariantType => s"parse_json('{}')"
@@ -251,7 +251,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case _: StringType | AnyDataType | _: AbstractStringType =>
         collationType match {
           case Utf8Binary => "STRING"
-          case Utf8BinaryLcase => "STRING COLLATE UTF8_LCASE"
+          case Utf8Lcase => "STRING COLLATE UTF8_LCASE"
         }
       case VariantType => "VARIANT"
       case TypeCollection(typeCollection) =>
@@ -415,7 +415,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       collationType: CollationType): DataFrame = {
     val tblName = collationType match {
       case Utf8Binary => "tbl"
-      case Utf8BinaryLcase => "tbl_lcase"
+      case Utf8Lcase => "tbl_lcase"
     }
 
     sql(s"CREATE TABLE $tblName (" +
@@ -462,7 +462,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val inputDataLcase =
         generateData(
           replaceExpressions(inputTypes, headConstructor.getParameters.map(p => p.getType).toSeq),
-          Utf8BinaryLcase
+          Utf8Lcase
         )
       val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
 
@@ -539,7 +539,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       withTable("tbl", "tbl_lcase") {
 
         val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
-        val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8BinaryLcase)
+        val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8Lcase)
 
         val utf8BinaryResult = try {
           val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
@@ -548,37 +548,37 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         } catch {
           case e: Throwable => scala.util.Left(e)
         }
-        val utf8BinaryLcaseResult = try {
-          val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8BinaryLcase))
+        val utf8LcaseResult = try {
+          val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
           df.getRows(1, 0)
           scala.util.Right(df)
         } catch {
           case e: Throwable => scala.util.Left(e)
         }
 
-        assert(utf8BinaryResult.isLeft === utf8BinaryLcaseResult.isLeft)
+        assert(utf8BinaryResult.isLeft === utf8LcaseResult.isLeft)
 
         if (utf8BinaryResult.isRight) {
           val utf8BinaryResultChecked = utf8BinaryResult.getOrElse(null)
-          val utf8BinaryLcaseResultChecked = utf8BinaryLcaseResult.getOrElse(null)
+          val utf8LcaseResultChecked = utf8LcaseResult.getOrElse(null)
 
           val dt = utf8BinaryResultChecked.schema.fields.head.dataType
 
           dt match {
-            case st if utf8BinaryResultChecked != null && utf8BinaryLcaseResultChecked != null &&
+            case st if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
               hasStringType(st) =>
               // scalastyle:off caselocale
               assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
-                utf8BinaryLcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
+                utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
               // scalastyle:on caselocale
             case _ =>
               assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
-                utf8BinaryLcaseResultChecked.getRows(1, 0)(1))
+                utf8LcaseResultChecked.getRows(1, 0)(1))
           }
         }
         else {
           assert(utf8BinaryResult.getOrElse(new Exception()).getClass
-            == utf8BinaryResult.getOrElse(new Exception()).getClass)
+            == utf8LcaseResult.getOrElse(new Exception()).getClass)
         }
       }
     }
@@ -618,6 +618,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "reflect",
       "try_reflect",
       "java_method",
+      "hash",
+      "xxhash64",
       // need to skip as these are random functions
       "rand",
       "random",
@@ -630,11 +632,11 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     )
 
     for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      for (m <- "> .*;".r.findAllIn(funInfo.getExamples)) {
+      for (query <- "> .*;".r.findAllIn(funInfo.getExamples).map(s => s.substring(2))) {
         try {
-          val resultUTF8 = sql(m.substring(2))
+          val resultUTF8 = sql(query)
           withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-            val resultUTF8Lcase = sql(m.substring(2))
+            val resultUTF8Lcase = sql(query)
             assert(resultUTF8.collect() === resultUTF8Lcase.collect())
           }
         } catch {

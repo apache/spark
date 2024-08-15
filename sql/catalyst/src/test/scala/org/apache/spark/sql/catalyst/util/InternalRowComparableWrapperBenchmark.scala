@@ -61,7 +61,7 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       val leftPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
       val rightPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
       val merged = InternalRowComparableWrapper.mergePartitions(
-        leftPartitioning, rightPartitioning, expressions)
+        leftPartitioning.partitionValues, rightPartitioning.partitionValues, expressions)
       assert(merged.size == bucketNum)
     }
 

@@ -126,16 +126,20 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       case _ => None
     }
 
-    // For the OrderBy, consider whether or not the result of the subquery is required to be sorted.
-    // This is to maintain test determinism. This is affected by whether the subquery has a limit
-    // clause.
-    val requiresLimitOne = isScalarSubquery && (operatorInSubquery match {
+    // For some situation needs exactly one row as output, we force the
+    // subquery to have a limit of 1 and no offset value (in case it outputs
+    // empty result set).
+    val requiresExactlyOneRowOutput = isScalarSubquery && (operatorInSubquery match {
       case a: Aggregate => a.groupingExpressions.nonEmpty
-      case l: Limit => l.limitValue > 1
       case _ => true
     })
 
-    val orderByClause = if (requiresLimitOne || operatorInSubquery.isInstanceOf[Limit]) {
+    // For the OrderBy, consider whether or not the result of the subquery is required to be sorted.
+    // This is to maintain test determinism. This is affected by whether the subquery has a limit
+    // clause or an offset clause.
+    val orderByClause = if (
+      requiresExactlyOneRowOutput || operatorInSubquery.isInstanceOf[LimitAndOffset]
+    ) {
       Some(OrderByClause(projections))
     } else {
       None
@@ -143,16 +147,23 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
 
     // For the Limit clause, consider whether the subquery needs to return 1 row, or whether the
     // operator to be included is a Limit.
-    val limitClause = if (requiresLimitOne) {
-      Some(Limit(1))
+    val limitAndOffsetClause = if (requiresExactlyOneRowOutput) {
+      Some(LimitAndOffset(1, 0))
     } else {
       operatorInSubquery match {
-        case limit: Limit => Some(limit)
+        case lo: LimitAndOffset =>
+          if (lo.offsetValue == 0 && lo.limitValue == 0) {
+            None
+          } else {
+            Some(lo)
+          }
         case _ => None
       }
     }
 
-    Query(selectClause, fromClause, whereClause, groupByClause, orderByClause, limitClause)
+    Query(
+      selectClause, fromClause, whereClause, groupByClause, orderByClause, limitAndOffsetClause
+    )
   }
 
   /**
@@ -236,7 +247,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     val orderByClause = Some(OrderByClause(queryProjection))
 
     Query(selectClause, fromClause, whereClause, groupByClause = None,
-      orderByClause, limitClause = None)
+      orderByClause, limitAndOffsetClause = None)
   }
 
   private def getPostgresResult(stmt: Statement, sql: String): Array[Row] = {
@@ -340,6 +351,16 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       }
     }
 
+    def limitAndOffsetChoices(): Seq[LimitAndOffset] = {
+      val limitValues = Seq(0, 1, 10)
+      val offsetValues = Seq(0, 1, 10)
+      limitValues.flatMap(
+        limit => offsetValues.map(
+          offset => LimitAndOffset(limit, offset)
+        )
+      ).filter(lo => !(lo.limitValue == 0 && lo.offsetValue == 0))
+    }
+
     case class SubquerySpec(query: String, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
 
     val generatedQuerySpecs = scala.collection.mutable.Set[SubquerySpec]()
@@ -363,7 +384,8 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       val aggregates = combinations.map {
         case (af, groupBy) => Aggregate(Seq(af), if (groupBy) Seq(groupByColumn) else Seq())
       }
-      val subqueryOperators = Seq(Limit(1), Limit(10)) ++ aggregates
+
+      val subqueryOperators = limitAndOffsetChoices() ++ aggregates
 
       for {
         subqueryOperator <- subqueryOperators

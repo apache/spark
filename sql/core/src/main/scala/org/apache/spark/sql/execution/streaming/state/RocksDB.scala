@@ -185,6 +185,8 @@ class RocksDB(
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(version)
 
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
@@ -554,6 +556,11 @@ class RocksDB(
         }
       }
 
+      // Set maxVersion when checkpoint files are synced to DFS successfully
+      // We need to handle this explicitly in RocksDB as we could use different
+      // changeLogWriter instances in fileManager instance when committing
+      fileManager.setMaxSeenVersion(newVersion)
+
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
       commitLatencyMs ++= Map(
@@ -640,7 +647,7 @@ class RocksDB(
       uploadSnapshot()
     }
     val cleanupTime = timeTakenMs {
-      fileManager.deleteOldVersions(conf.minVersionsToRetain)
+      fileManager.deleteOldVersions(conf.minVersionsToRetain, conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
   }
@@ -896,6 +903,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
  */
 case class RocksDBConf(
     minVersionsToRetain: Int,
+    minVersionsToDelete: Long,
     minDeltasForSnapshot: Int,
     compactOnCommit: Boolean,
     enableChangelogCheckpointing: Boolean,
@@ -1078,6 +1086,7 @@ object RocksDBConf {
 
     RocksDBConf(
       storeConf.minVersionsToRetain,
+      storeConf.minVersionsToDelete,
       storeConf.minDeltasForSnapshot,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
       getBooleanConf(ENABLE_CHANGELOG_CHECKPOINTING_CONF),

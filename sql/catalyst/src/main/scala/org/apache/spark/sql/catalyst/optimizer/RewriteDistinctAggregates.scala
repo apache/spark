@@ -197,6 +197,17 @@ import org.apache.spark.util.collection.Utils
  * techniques.
  */
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
+  private def mustRewrite(
+      distinctAggs: Seq[AggregateExpression],
+      groupingExpressions: Seq[Expression]): Boolean = {
+    // If there are any distinct AggregateExpressions with filter, we need to rewrite the query.
+    // Also, if there are no grouping expressions and all distinct aggregate expressions are
+    // foldable, we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this case,
+    // non-grouping aggregation queries with distinct aggregate expressions will be incorrectly
+    // handled by the aggregation strategy, causing wrong results when working with empty tables.
+    distinctAggs.exists(_.filter.isDefined) || (groupingExpressions.isEmpty &&
+      distinctAggs.exists(_.aggregateFunction.children.forall(_.foldable)))
+  }
 
   private def mayNeedtoRewrite(a: Aggregate): Boolean = {
     val aggExpressions = collectAggregateExprs(a)
@@ -204,8 +215,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // We need at least two distinct aggregates or the single distinct aggregate group exists filter
     // clause for this rule because aggregation strategy can handle a single distinct aggregate
     // group without filter clause.
-    // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
+    distinctAggs.size > 1 || mustRewrite(distinctAggs, a.groupingExpressions)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
@@ -236,7 +246,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
-    if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
+    if (distinctAggGroups.size > 1 || mustRewrite(distinctAggs, a.groupingExpressions)) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)()
       val groupByMap = a.groupingExpressions.collect {

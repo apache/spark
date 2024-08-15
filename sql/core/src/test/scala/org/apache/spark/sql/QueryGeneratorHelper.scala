@@ -185,8 +185,16 @@ trait QueryGeneratorHelper {
       f"groupingExpr=[${groupingExpressions.mkString(",")}])"
   }
 
-  case class Limit(limitValue: Int) extends Operator with Clause {
-    override def toString: String = f"LIMIT $limitValue"
+  case class LimitAndOffset(limitValue: Int, offsetValue: Int) extends Operator with Clause {
+    override def toString: String = {
+      val limitClause = if (limitValue > 0) { s"LIMIT $limitValue" } else { "" }
+      val offsetClause = if (offsetValue > 0) { s"OFFSET $offsetValue" } else { "" }
+      if (limitClause.nonEmpty && offsetClause.nonEmpty) {
+        s"$limitClause $offsetClause"
+      } else {
+        s"$limitClause$offsetClause"
+      }
+    }
   }
 
   object SubqueryLocation extends Enumeration {
@@ -223,7 +231,7 @@ trait QueryGeneratorHelper {
       whereClause: Option[WhereClause] = None,
       groupByClause: Option[GroupByClause] = None,
       orderByClause: Option[OrderByClause] = None,
-      limitClause: Option[Limit] = None
+      limitAndOffsetClause: Option[LimitAndOffset] = None
   ) extends Operator {
 
     override def toString: String = {
@@ -232,7 +240,7 @@ trait QueryGeneratorHelper {
 
       f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
         f"${getOptionClauseString(groupByClause)}${getOptionClauseString(orderByClause)}" +
-        f"${getOptionClauseString(limitClause)}"
+        f"${getOptionClauseString(limitAndOffsetClause)}"
     }
   }
 }

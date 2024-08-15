@@ -286,6 +286,75 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
   }
 
+  test("pass clusterBy as options") {
+    Seq(1).toDF().write
+      .format("org.apache.spark.sql.test")
+      .clusterBy("col1", "col2")
+      .save()
+
+    val clusteringColumns = LastOptions.parameters(DataSourceUtils.CLUSTERING_COLUMNS_KEY)
+    assert(DataSourceUtils.decodePartitioningColumns(clusteringColumns) === Seq("col1", "col2"))
+  }
+
+  test("Clustering columns should match when appending to existing data source tables") {
+    import testImplicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    withTable("clusteredTable") {
+      df.write.mode("overwrite").clusterBy("a", "b").saveAsTable("clusteredTable")
+      // Misses some clustering columns
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").clusterBy("a").saveAsTable("clusteredTable")
+        },
+        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.clusteredtable",
+          "specifiedClusteringString" -> """[["a"]]""",
+          "existingClusteringString" -> """[["a"],["b"]]""")
+      )
+      // Wrong order
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").clusterBy("b", "a").saveAsTable("clusteredTable")
+        },
+        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.clusteredtable",
+          "specifiedClusteringString" -> """[["b"],["a"]]""",
+          "existingClusteringString" -> """[["a"],["b"]]""")
+      )
+      // Clustering columns not specified
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").saveAsTable("clusteredTable")
+        },
+        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.clusteredtable",
+          "specifiedClusteringString" -> "", "existingClusteringString" -> """[["a"],["b"]]""")
+      )
+      assert(sql("select * from clusteredTable").collect().length == 1)
+      // Inserts new data successfully when clustering columns are correctly specified in
+      // clusterBy(...).
+      Seq((4, 5, 6)).toDF("a", "b", "c")
+        .write
+        .mode("append")
+        .clusterBy("a", "b")
+        .saveAsTable("clusteredTable")
+
+      Seq((7, 8, 9)).toDF("a", "b", "c")
+        .write
+        .mode("append")
+        .clusterBy("a", "b")
+        .saveAsTable("clusteredTable")
+
+      checkAnswer(
+        sql("select a, b, c from clusteredTable"),
+        Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
+      )
+    }
+  }
+
   test ("SPARK-29537: throw exception when user defined a wrong base path") {
     withTempPath { p =>
       val path = new Path(p.toURI).toString
@@ -490,7 +559,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("doubleOpt") == "6.7")
   }
 
-  test("check jdbc() does not support partitioning, bucketBy or sortBy") {
+  test("check jdbc() does not support partitioning, bucketBy, clusterBy or sortBy") {
     val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
     var w = df.write.partitionBy("value")
@@ -502,6 +571,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "does not support bucketBy right now").foreach { s =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+    }
+
+    w = df.write.clusterBy("value")
+    e = intercept[AnalysisException](w.jdbc(null, null, null))
+    Seq("jdbc", "clustering").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
 
@@ -1045,7 +1120,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTempDir { src =>
           // Check CSV format
-          checkWriteDataColumnDuplication("csv", c0, c1, src)
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "csv", c0, c1, src)
           // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)

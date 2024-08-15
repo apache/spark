@@ -102,7 +102,7 @@ class LoggerTestsMixin:
             self.assertTrue(err_msg in log_json["msg"])
             self.assertTrue(err_msg in log_json["exception"]["msg"])
             self.assertEqual(log_json["context"]["fragment"], "__truediv__")
-            self.assertEqual(log_json["context"]["error_class"], "DIVIDE_BY_ZERO")
+            self.assertEqual(log_json["context"]["errorClass"], "DIVIDE_BY_ZERO")
             # Only the class name is different between classic and connect.
             # Py4JJavaError for classic, _MultiThreadedRendezvous for connect
             self.assertTrue(

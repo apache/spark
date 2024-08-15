@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -374,6 +374,13 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(version)
     }
     catch {
+      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+        throw e
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "ROCKSDB_STORE_PROVIDER",
+          e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
@@ -387,6 +394,13 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(version)
     }
     catch {
+      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+        throw e
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "ROCKSDB_STORE_PROVIDER",
+          e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
@@ -461,6 +475,11 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(endVersion)
     }
     catch {
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "ROCKSDB_STORE_PROVIDER",
+          e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }

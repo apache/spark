@@ -142,8 +142,8 @@ Mathematical Functions
     tanh
     try_add
     try_divide
+    try_mod
     try_multiply
-    try_remainder
     try_subtract
     unhex
     width_bucket

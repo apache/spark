@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import io
 from contextlib import redirect_stdout
+import datetime
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -217,8 +218,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "float",
             },
@@ -229,8 +230,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "NoneType",
             },
@@ -241,8 +242,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "DataFrame",
             },
@@ -637,6 +638,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df2 = self.spark.sql(sqlText, args={"val": 1})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
+        self.assert_eq(df.first()[0], datetime.datetime(2022, 12, 25, 10, 30))
+        self.assert_eq(df.first().date, datetime.datetime(2022, 12, 25, 10, 30))
+        self.assert_eq(df.first()[1], 1)
+        self.assert_eq(df.first().val, 1)
+
     def test_sql_with_pos_args(self):
         sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
         df = self.connect.sql(sqlText, args=[CF.array(CF.lit(1)), 7])
@@ -651,8 +657,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.check_error(
                 exception=pe.exception,
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "args", "arg_type": "set"},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": "args", "arg_type": "set"},
             )
 
     def test_deduplicate(self):
@@ -924,8 +930,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "exprs"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "exprs"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -933,8 +939,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OF_COLUMN",
-            message_parameters={"arg_name": "exprs"},
+            errorClass="NOT_LIST_OF_COLUMN",
+            messageParameters={"arg_name": "exprs"},
         )
 
     def test_with_columns(self):
@@ -1030,8 +1036,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_ITEM_FOR_CONTAINER",
-            message_parameters={
+            errorClass="INVALID_ITEM_FOR_CONTAINER",
+            messageParameters={
                 "arg_name": "parameters",
                 "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
@@ -1094,8 +1100,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.check_error(
             exception=pe.exception,
-            error_class="UNKNOWN_EXPLAIN_MODE",
-            message_parameters={"explain_mode": "unknown"},
+            errorClass="UNKNOWN_EXPLAIN_MODE",
+            messageParameters={"explain_mode": "unknown"},
         )
 
     def test_count(self) -> None:
@@ -1237,8 +1243,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={
+            errorClass="NOT_DICT",
+            messageParameters={
                 "arg_name": "metadata",
                 "arg_type": "list",
             },
@@ -1404,6 +1410,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertFalse(verify_col_name("`m```.s.`s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
+
+    def test_truncate_message(self):
+        cdf1 = self.connect.createDataFrame(
+            [
+                ("a B c"),
+                ("X y Z"),
+            ],
+            ["a" * 4096],
+        )
+        plan1 = cdf1._plan.to_proto(self.connect._client)
+
+        proto_string_1 = self.connect._client._proto_to_string(plan1, False)
+        self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
+        proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
+        self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
+
+        cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
+        plan2 = cdf2._plan.to_proto(self.connect._client)
+
+        proto_string_2 = self.connect._client._proto_to_string(plan2, False)
+        self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
+        proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
+        self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
 
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):

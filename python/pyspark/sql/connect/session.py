@@ -196,7 +196,7 @@ class SparkSession:
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
             raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
+                errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "enableHiveSupport"}
             )
 
         def _apply_options(self, session: "SparkSession") -> None:
@@ -221,7 +221,7 @@ class SparkSession:
                 not has_channel_builder and not has_spark_remote
             ):
                 raise PySparkValueError(
-                    error_class="SESSION_NEED_CONN_STR_OR_BUILDER", message_parameters={}
+                    errorClass="SESSION_NEED_CONN_STR_OR_BUILDER", messageParameters={}
                 )
 
             if has_channel_builder:
@@ -311,8 +311,8 @@ class SparkSession:
         session = SparkSession.getActiveSession()
         if session is None:
             raise PySparkRuntimeError(
-                error_class="NO_ACTIVE_SESSION",
-                message_parameters={},
+                errorClass="NO_ACTIVE_SESSION",
+                messageParameters={},
             )
         if session._session_id != session_id:
             raise PySparkAssertionError(
@@ -330,8 +330,8 @@ class SparkSession:
             session = cls._get_default_session()
             if session is None:
                 raise PySparkRuntimeError(
-                    error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
-                    message_parameters={},
+                    errorClass="NO_ACTIVE_OR_DEFAULT_SESSION",
+                    messageParameters={},
                 )
         return session
 
@@ -340,8 +340,8 @@ class SparkSession:
     def table(self, tableName: str) -> ParentDataFrame:
         if not isinstance(tableName, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
             )
 
         return self.read.table(tableName)
@@ -383,8 +383,8 @@ class SparkSession:
         """
         if not data:
             raise PySparkValueError(
-                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                message_parameters={},
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
             )
 
         (
@@ -423,8 +423,8 @@ class SparkSession:
         assert data is not None
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         if samplingRatio is not None:
@@ -456,8 +456,8 @@ class SparkSession:
 
         elif schema is not None:
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-                message_parameters={
+                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                messageParameters={
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },
@@ -465,16 +465,16 @@ class SparkSession:
 
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
             raise PySparkValueError(
-                error_class="INVALID_NDARRAY_DIMENSION",
-                message_parameters={"dimensions": "1 or 2"},
+                errorClass="INVALID_NDARRAY_DIMENSION",
+                messageParameters={"dimensions": "1 or 2"},
             )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame(LocalRelation(table=None, schema=_schema.json()), self)
             else:
                 raise PySparkValueError(
-                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                    message_parameters={},
+                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                    messageParameters={},
                 )
 
         _table: Optional[pa.Table] = None
@@ -500,8 +500,8 @@ class SparkSession:
                         if isinstance(field_type, pa.StructType):
                             if len(field_type) == 0:
                                 raise PySparkValueError(
-                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                                    message_parameters={},
+                                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                                    messageParameters={},
                                 )
                             arrow_type = field_type.field(0).type
                             spark_type = MapType(StringType(), from_arrow_type(arrow_type))
@@ -526,8 +526,8 @@ class SparkSession:
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
                 raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                    message_parameters={"data_type": str(schema)},
+                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    messageParameters={"data_type": str(schema)},
                 )
             else:
                 # Any timestamps must be coerced to be compatible with Spark
@@ -596,8 +596,8 @@ class SparkSession:
             if data.ndim == 1:
                 if 1 != len(_cols):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(_cols)),
                             "actual_length": "1",
                         },
@@ -607,8 +607,8 @@ class SparkSession:
             else:
                 if data.shape[1] != len(_cols):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(_cols)),
                             "actual_length": str(data.shape[1]),
                         },
@@ -649,7 +649,7 @@ class SparkSession:
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
                     raise PySparkValueError(
-                        error_class="CANNOT_DETERMINE_TYPE", message_parameters={}
+                        errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
@@ -663,8 +663,8 @@ class SparkSession:
         # whether the Arrow Schema is compatible with the user provided Schema.
         if _num_cols is not None and _num_cols != _table.shape[1]:
             raise PySparkValueError(
-                error_class="AXIS_LENGTH_MISMATCH",
-                message_parameters={
+                errorClass="AXIS_LENGTH_MISMATCH",
+                messageParameters={
                     "expected_length": str(_num_cols),
                     "actual_length": str(_table.shape[1]),
                 },
@@ -704,8 +704,8 @@ class SparkSession:
                 _args = [F.lit(v) for v in args]
             else:
                 raise PySparkTypeError(
-                    error_class="INVALID_TYPE",
-                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
+                    errorClass="INVALID_TYPE",
+                    messageParameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
 
         _views: List[SubqueryAlias] = []
@@ -894,7 +894,7 @@ class SparkSession:
     def __getattr__(self, name: str) -> Any:
         if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext", "newSession"]:
             raise PySparkAttributeError(
-                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+                errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
         return object.__getattribute__(self, name)
 
@@ -941,8 +941,8 @@ class SparkSession:
     ) -> None:
         if sum([file, pyfile, archive]) > 1:
             raise PySparkValueError(
-                error_class="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
-                message_parameters={
+                errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                messageParameters={
                     "arg_names": "'pyfile', 'archive' and/or 'file'",
                     "condition": "True together",
                 },
@@ -963,8 +963,8 @@ class SparkSession:
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         if urllib.parse.urlparse(dest_path).scheme:
             raise PySparkValueError(
-                error_class="NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME",
-                message_parameters={"arg_name": "dest_path"},
+                errorClass="NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME",
+                messageParameters={"arg_name": "dest_path"},
             )
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
@@ -1032,8 +1032,8 @@ class SparkSession:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
             raise PySparkRuntimeError(
-                error_class="SESSION_OR_CONTEXT_EXISTS",
-                message_parameters={},
+                errorClass="SESSION_OR_CONTEXT_EXISTS",
+                messageParameters={},
             )
 
     @property

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.lit
@@ -334,6 +334,31 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("write: write to new table with clusterBy") {
+    val tableIdentifier = "testcat.cluster_test"
+
+    withTable(tableIdentifier) {
+      runStreamAppendWithClusterBy(tableIdentifier)
+
+      val table = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+        .loadTable(Identifier.of(Array(), "cluster_test"))
+      assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+    }
+  }
+
+  test("write: write to existing table with matching clustering column using clusterBy") {
+    val tableIdentifier = "testcat.cluster_test"
+
+    withTable(tableIdentifier) {
+      sql(s"CREATE TABLE $tableIdentifier (id BIGINT, data STRING) CLUSTER BY (id)")
+      runStreamAppendWithClusterBy(tableIdentifier)
+
+      val table = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+        .loadTable(Identifier.of(Array(), "cluster_test"))
+      assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+    }
+  }
+
   test("explain with table on DSv1 data source") {
     val tblSourceName = "tbl_src"
     val tblTargetName = "tbl_target"
@@ -590,6 +615,24 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       spark.table(tableIdentifier),
       expectedOutputs.map { case (id, data) => Row(id, data) }
     )
+  }
+
+  private def runStreamAppendWithClusterBy(tableIdentifier: String): Unit = {
+    withTempDir { ckptDir =>
+      val inputData = MemoryStream[(Long, String)]
+      val inputDF = inputData.toDF().toDF("id", "data")
+
+      val query = inputDF
+        .writeStream
+        .clusterBy("id")
+        .option("checkpointLocation", ckptDir.getAbsolutePath)
+        .toTable(tableIdentifier)
+
+      inputData.addData(Seq((1L, "a"), (2L, "b"), (3L, "c")))
+
+      query.processAllAvailable()
+      query.stop()
+    }
   }
 }
 

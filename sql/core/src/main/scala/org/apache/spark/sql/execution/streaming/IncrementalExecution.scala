@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataWriter
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -201,19 +201,44 @@ class IncrementalExecution(
       // filepath, and write this path out in the OperatorStateMetadata file
       case statefulOp: StatefulOperator if isFirstBatch =>
         val stateSchemaVersion = statefulOp match {
-          case _: TransformWithStateExec => sparkSession.sessionState.conf.
-            getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+          case _: TransformWithStateExec =>
+            sparkSession.sessionState.conf.
+              getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
-        val stateSchemaPaths = statefulOp.
+        val schemaValidationResult = statefulOp.
           validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
+        val stateSchemaPaths = schemaValidationResult.map(_.schemaPath)
         // write out the state schema paths to the metadata file
         statefulOp match {
-          case stateStoreWriter: StateStoreWriter =>
-            val metadata = stateStoreWriter.operatorStateMetadata()
-            // TODO: [SPARK-48849] Populate metadata with stateSchemaPaths if metadata version is v2
-            val metadataWriter = new OperatorStateMetadataWriter(new Path(
-              checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+          case ssw: StateStoreWriter =>
+            val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
+            // validate metadata
+            if (isFirstBatch && currentBatchId != 0) {
+              // If we are restarting from a different checkpoint directory
+              // there may be a mismatch between the stateful operators in the
+              // physical plan and the metadata.
+              val oldMetadata = try {
+                OperatorStateMetadataReader.createReader(
+                  new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+                  hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
+              } catch {
+                case e: Exception =>
+                  logWarning(log"Error reading metadata path for stateful operator. This " +
+                    log"may due to no prior committed batch, or previously run on lower " +
+                    log"versions: ${MDC(ERROR, e.getMessage)}")
+                None
+              }
+              oldMetadata match {
+                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+                case None =>
+              }
+            }
+            val metadataWriter = OperatorStateMetadataWriter.createWriter(
+                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+                hadoopConf,
+                ssw.operatorStateMetadataVersion,
+                Some(currentBatchId))
             metadataWriter.write(metadata)
           case _ =>
         }
@@ -437,7 +462,9 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
-    private def checkOperatorValidWithMetadata(planWithStateOpId: SparkPlan): Unit = {
+    private def checkOperatorValidWithMetadata(
+        planWithStateOpId: SparkPlan,
+        batchId: Long): Unit = {
       // get stateful operators for current batch
       val opMapInPhysicalPlan: Map[Long, String] = planWithStateOpId.collect {
         case stateStoreWriter: StateStoreWriter =>
@@ -454,9 +481,13 @@ class IncrementalExecution(
           try {
             val reader = new StateMetadataPartitionReader(
               new Path(checkpointLocation).getParent.toString,
-              new SerializableConfiguration(hadoopConf))
-            ret = reader.stateMetadata.map { metadataTableEntry =>
-              metadataTableEntry.operatorId -> metadataTableEntry.operatorName
+              new SerializableConfiguration(hadoopConf), batchId)
+            val opMetadataList = reader.allOperatorStateMetadata
+            ret = opMetadataList.map {
+              case OperatorStateMetadataV1(operatorInfo, _) =>
+                operatorInfo.operatorId -> operatorInfo.operatorName
+              case OperatorStateMetadataV2(operatorInfo, _, _) =>
+                operatorInfo.operatorId -> operatorInfo.operatorName
             }.toMap
           } catch {
             case e: Exception =>
@@ -488,7 +519,7 @@ class IncrementalExecution(
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch
       if (isFirstBatch && currentBatchId != 0) {
-        checkOperatorValidWithMetadata(planWithStateOpId)
+        checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
       // The rule below doesn't change the plan but can cause the side effect that

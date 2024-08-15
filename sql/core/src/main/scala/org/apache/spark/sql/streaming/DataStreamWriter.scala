@@ -36,9 +36,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming._
@@ -166,6 +167,24 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   @scala.annotation.varargs
   def partitionBy(colNames: String*): DataStreamWriter[T] = {
     this.partitioningColumns = Option(colNames)
+    validatePartitioningAndClustering()
+    this
+  }
+
+  /**
+   * Clusters the output by the given columns. If specified, the output is laid out such that
+   * records with similar values on the clustering column are grouped together in the same file.
+   *
+   * Clustering improves query efficiency by allowing queries with predicates on the clustering
+   * columns to skip unnecessary data. Unlike partitioning, clustering can be used on very high
+   * cardinality columns.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colNames: String*): DataStreamWriter[T] = {
+    this.clusteringColumns = Option(colNames)
+    validatePartitioningAndClustering()
     this
   }
 
@@ -288,12 +307,21 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
     if (!catalog.asTableCatalog.tableExists(identifier)) {
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+      val properties = normalizedClusteringCols.map { cols =>
+        Map(
+          DataSourceUtils.CLUSTERING_COLUMNS_KEY -> DataSourceUtils.encodePartitioningColumns(cols))
+      }.getOrElse(Map.empty)
+      val partitioningOrClusteringTransform = normalizedClusteringCols.map { colNames =>
+        Array(ClusterByTransform(colNames.map(col => FieldReference(col)))).toImmutableArraySeq
+      }.getOrElse(partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq)
+
       /**
        * Note, currently the new table creation by this API doesn't fully cover the V2 table.
        * TODO (SPARK-33638): Full support of v2 table creation
        */
       val tableSpec = UnresolvedTableSpec(
-        Map.empty[String, String],
+        properties,
         Some(source),
         OptionList(Seq.empty),
         extraOptions.get("path"),
@@ -303,7 +331,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
         df.schema.asNullable.map(ColumnDefinition.fromV1Column(_, parser)),
-        partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq,
+        partitioningOrClusteringTransform,
         tableSpec,
         ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)
@@ -439,10 +467,22 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
+    // Do not allow the user to specify clustering columns in the options. Ignoring this option is
+    // consistent with the behavior of DataFrameWriter on non Path-based tables and with the
+    // behavior of DataStreamWriter on partitioning columns specified in options.
+    val optionsWithoutClusteringKey =
+      optionsWithPath.originalMap - DataSourceUtils.CLUSTERING_COLUMNS_KEY
+
+    val optionsWithClusteringColumns = normalizedClusteringCols match {
+      case Some(cols) => optionsWithoutClusteringKey + (
+        DataSourceUtils.CLUSTERING_COLUMNS_KEY ->
+          DataSourceUtils.encodePartitioningColumns(cols))
+      case None => optionsWithoutClusteringKey
+    }
     val ds = DataSource(
       df.sparkSession,
       className = source,
-      options = optionsWithPath.originalMap,
+      options = optionsWithClusteringColumns,
       partitionColumns = normalizedParCols.getOrElse(Nil))
     ds.createSink(outputMode)
   }
@@ -514,6 +554,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     cols.map(normalize(_, "Partition"))
   }
 
+  private def normalizedClusteringCols: Option[Seq[String]] = clusteringColumns.map { cols =>
+    cols.map(normalize(_, "Clustering"))
+  }
+
   /**
    * The given column name may not be equal to any of the existing column names if we were in
    * case-insensitive context. Normalize the given column name to the real one so that we don't
@@ -529,6 +573,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private def assertNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
       throw QueryCompilationErrors.operationNotSupportPartitioningError(operation)
+    }
+  }
+
+  // Validate that partitionBy isn't used with clusterBy.
+  private def validatePartitioningAndClustering(): Unit = {
+    if (clusteringColumns.nonEmpty && partitioningColumns.nonEmpty) {
+      throw QueryCompilationErrors.clusterByWithPartitionedBy()
     }
   }
 
@@ -554,6 +605,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 
   private var partitioningColumns: Option[Seq[String]] = None
+
+  private var clusteringColumns: Option[Seq[String]] = None
 }
 
 object DataStreamWriter {

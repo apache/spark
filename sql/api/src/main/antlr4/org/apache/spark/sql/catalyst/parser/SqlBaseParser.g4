@@ -63,12 +63,24 @@ compoundStatement
     : statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
+    | ifElseStatement
+    | whileStatement
     ;
 
 setStatementWithOptionalVarKeyword
-    : SET (VARIABLE | VAR)? assignmentList                      #setVariableWithOptionalKeyword
-    | SET (VARIABLE | VAR)? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
+    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+whileStatement
+    : beginLabel? WHILE booleanExpression DO compoundBody END WHILE endLabel?
+    ;
+
+ifElseStatement
+    : IF booleanExpression THEN conditionalBodies+=compoundBody
+        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSE elseBody=compoundBody)? END IF
     ;
 
 singleStatement
@@ -215,9 +227,9 @@ statement
         routineCharacteristics
         RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
-    | DECLARE (OR REPLACE)? VARIABLE?
+    | DECLARE (OR REPLACE)? variable?
         identifierReference dataType? variableDefaultExpression?       #createVariable
-    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
+    | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -272,8 +284,8 @@ setResetStatement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
-    | SET (VARIABLE | VAR) assignmentList                              #setVariable
-    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+    | SET variable assignmentList                                      #setVariable
+    | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
@@ -406,9 +418,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference REPLACE whereClause                                             #insertIntoReplaceWhere
+    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -436,6 +448,11 @@ namespaces
     : NAMESPACES
     | DATABASES
     | SCHEMAS
+    ;
+
+variable
+    : VARIABLE
+    | VAR
     ;
 
 describeFuncName
@@ -1517,6 +1534,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ESCAPED
@@ -1718,6 +1736,7 @@ ansiNonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WINDOW
     | YEAR
     | YEARS
@@ -1848,6 +1867,7 @@ nonReserved
     | DISTINCT
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ELSE
@@ -2087,6 +2107,7 @@ nonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WHEN
     | WHERE
     | WINDOW

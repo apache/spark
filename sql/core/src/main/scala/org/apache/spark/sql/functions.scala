@@ -21,23 +21,19 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.Try
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.ScalaReflection.encoderFor
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, ToScalaUDF}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
@@ -94,12 +90,6 @@ object functions {
 
   private def withExpr(expr: => Expression): Column = withOrigin {
     Column(expr)
-  }
-
-  private def withAggregateFunction(
-    func: => AggregateFunction,
-    isDistinct: Boolean = false): Column = withOrigin {
-    Column(func.toAggregateExpression(isDistinct))
   }
 
   /**
@@ -399,7 +389,7 @@ object functions {
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    withAggregateFunction { CollectTopK(e.expr, num, reverse) }
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
@@ -441,7 +431,7 @@ object functions {
    * @since 1.3.0
    */
   def count(columnName: String): TypedColumn[Any, Long] =
-    count(Column(columnName)).as(ExpressionEncoder[Long]())
+    count(Column(columnName)).as(AgnosticEncoders.PrimitiveLongEncoder)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -527,7 +517,7 @@ object functions {
    * @since 2.0.0
    */
   def first(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("first", false, ignoreNulls, e)
+    Column.fn("first", false, e, lit(ignoreNulls))
 
   /**
    * Aggregate function: returns the first value of a column in a group.
@@ -791,7 +781,7 @@ object functions {
    * @since 2.0.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("last", false, ignoreNulls, e)
+    Column.fn("last", false, e, lit(ignoreNulls))
 
   /**
    * Aggregate function: returns the last value of the column in a group.
@@ -1027,8 +1017,7 @@ object functions {
    * @group agg_funcs
    * @since 3.2.0
    */
-  def product(e: Column): Column =
-    withAggregateFunction { new Product(e.expr) }
+  def product(e: Column): Column = Column.internalFn("product", e)
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
@@ -1485,7 +1474,7 @@ object functions {
    * @since 3.2.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column =
-    Column.fn("lag", false, ignoreNulls, e, lit(offset), lit(defaultValue))
+    Column.fn("lag", false, e, lit(offset), lit(defaultValue), lit(ignoreNulls))
 
   /**
    * Window function: returns the value that is `offset` rows after the current row, and
@@ -1552,7 +1541,7 @@ object functions {
    * @since 3.2.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column =
-    Column.fn("lead", false, ignoreNulls, e, lit(offset), lit(defaultValue))
+    Column.fn("lead", false, e, lit(offset), lit(defaultValue), lit(ignoreNulls))
 
   /**
    * Window function: returns the value that is the `offset`th row of the window frame
@@ -1567,7 +1556,7 @@ object functions {
    * @since 3.1.0
    */
   def nth_value(e: Column, offset: Int, ignoreNulls: Boolean): Column =
-    Column.fn("nth_value", false, ignoreNulls, e, lit(offset))
+    Column.fn("nth_value", false, e, lit(offset), lit(ignoreNulls))
 
   /**
    * Window function: returns the value that is the `offset`th row of the window frame
@@ -1856,7 +1845,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def rand(seed: Long): Column = withExpr { Rand(seed) }
+  def rand(seed: Long): Column = Column.fn("rand", lit(seed))
 
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
@@ -1878,7 +1867,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def randn(seed: Long): Column = withExpr { Randn(seed) }
+  def randn(seed: Long): Column = Column.fn("randn", lit(seed))
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from
@@ -1950,7 +1939,7 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
+  def try_mod(left: Column, right: Column): Column = Column.fn("try_mod", left, right)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
@@ -3373,7 +3362,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = withExpr { Uuid(Some(Utils.random.nextLong)) }
+  def uuid(): Column = Column.fn("uuid", lit(Utils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -4729,14 +4718,8 @@ object functions {
    * @group predicate_funcs
    * @since 3.5.0
    */
-  def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
-    escapeChar.expr match {
-      case StringLiteral(v) if v.length == 1 =>
-        Like(str.expr, pattern.expr, v.charAt(0))
-      case _ =>
-        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
-    }
-  }
+  def like(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("like", str, pattern, escapeChar)
 
   /**
    * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
@@ -4754,14 +4737,8 @@ object functions {
    * @group predicate_funcs
    * @since 3.5.0
    */
-  def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
-    escapeChar.expr match {
-      case StringLiteral(v) if v.length == 1 =>
-        ILike(str.expr, pattern.expr, v.charAt(0))
-      case _ =>
-        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
-    }
-  }
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("ilike", str, pattern, escapeChar)
 
   /**
    * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
@@ -5705,11 +5682,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.2.0
    */
-  def session_window(timeColumn: Column, gapDuration: String): Column = {
-    withExpr {
-      SessionWindow(timeColumn.expr, gapDuration)
-    }.as("session_window")
-  }
+  def session_window(timeColumn: Column, gapDuration: String): Column =
+    session_window(timeColumn, lit(gapDuration))
 
   /**
    * Generates session window given a timestamp specifying column.
@@ -5743,7 +5717,7 @@ object functions {
    * @since 3.2.0
    */
   def session_window(timeColumn: Column, gapDuration: Column): Column =
-    Column.fn("session_window", timeColumn, gapDuration).as("session_window")
+    Column.fn("session_window", timeColumn, gapDuration)
 
   /**
    * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
@@ -5776,9 +5750,8 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    */
-  def timestamp_diff(unit: String, start: Column, end: Column): Column = withExpr {
-    TimestampDiff(unit, start.expr, end.expr)
-  }
+  def timestamp_diff(unit: String, start: Column, end: Column): Column =
+    Column.internalFn("timestampdiff", lit(unit), start, end)
 
   /**
    * Adds the specified number of units to the given timestamp.
@@ -5786,9 +5759,8 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    */
-  def timestamp_add(unit: String, quantity: Column, ts: Column): Column = withExpr {
-    TimestampAdd(unit, quantity.expr, ts.expr)
-  }
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
+    Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
    * Parses the `timestamp` expression with the `format` expression
@@ -6546,7 +6518,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
-    from_json(e, CharVarcharUtils.failIfHasCharVarchar(schema), options.asScala.toMap)
+    from_json(e, schema, options.asScala.toMap)
   }
 
   /**
@@ -6619,11 +6591,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = parseTypeWithFallback(
-      schema,
-      DataType.fromJson,
-      fallbackParser = DataType.fromDDL)
-    from_json(e, dataType, options)
+    from_json(e, lit(schema), options.asJava)
   }
 
   /**
@@ -7076,7 +7044,7 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr, Some(Utils.random.nextLong)) }
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(Utils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -7316,7 +7284,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(CharVarcharUtils.failIfHasCharVarchar(schema).sql), options.asScala.iterator)
+    from_xml(e, lit(schema.sql), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -7337,13 +7305,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    val dataType =
-      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
-    val structType = dataType match {
-      case t: StructType => t
-      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
-    }
-    from_xml(e, structType, options)
+    from_xml(e, lit(schema), options)
   }
 
   // scalastyle:off line.size.limit
@@ -7415,7 +7377,7 @@ object functions {
    * @group xml_funcs
    * @since 4.0.0
    */
-  def schema_of_xml(xml: Column): Column = withExpr(new SchemaOfXml(xml.expr))
+  def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
 
   // scalastyle:off line.size.limit
 
@@ -7434,9 +7396,8 @@ object functions {
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
-  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
-    withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
-  }
+  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column =
+    fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
 
   // scalastyle:off line.size.limit
 
@@ -7937,9 +7898,10 @@ object functions {
   /* Use the following code to generate:
 
   (0 to 10).foreach { x =>
-    val types = (1 to x).foldRight("RT")((i, s) => {s"A$i, $s"})
-    val typeTags = (1 to x).map(i => s"A$i: TypeTag").foldLeft("RT: TypeTag")(_ + ", " + _)
-    val inputEncoders = (1 to x).foldRight("Nil")((i, s) => {s"Try(ExpressionEncoder[A$i]()).toOption :: $s"})
+    val types = (1 to x).foldRight("RT")((i, s) => s"A$i, $s")
+    val typeSeq = "RT" +: (1 to x).map(i => s"A$i")
+    val typeTags = typeSeq.map(t => s"$t: TypeTag").mkString(", ")
+    val implicitTypeTags = typeSeq.map(t => s"implicitly[TypeTag[$t]]").mkString(", ")
     println(s"""
       |/**
       | * Defines a Scala closure of $x arguments as user-defined function (UDF).
@@ -7951,20 +7913,12 @@ object functions {
       | * @since 1.3.0
       | */
       |def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
-      |  val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-      |  val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-      |  val inputEncoders = $inputEncoders
-      |  val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-      |  if (nullable) udf else udf.asNonNullable()
+      |  SparkUserDefinedFunction(f, $implicitTypeTags)
       |}""".stripMargin)
   }
 
   (0 to 10).foreach { i =>
     val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
-    val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
-    val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
-    val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
-    val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
     println(s"""
       |/**
       | * Defines a Java UDF$i instance as user-defined function (UDF).
@@ -7976,8 +7930,7 @@ object functions {
       | * @since 2.3.0
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
-      |  val func = $funcCall
-      |  SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill($i)(None))
+      |  SparkUserDefinedFunction(ToScalaUDF(f), returnType, $i)
       |}""".stripMargin)
   }
 
@@ -8013,7 +7966,7 @@ object functions {
    * @note The input encoder is inferred from the input type IN.
    */
   def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
-    udaf(agg, ExpressionEncoder[IN]())
+    udaf(agg, encoderFor[IN])
   }
 
   /**
@@ -8060,11 +8013,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]])
   }
 
   /**
@@ -8077,11 +8026,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]])
   }
 
   /**
@@ -8094,11 +8039,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]])
   }
 
   /**
@@ -8111,11 +8052,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]])
   }
 
   /**
@@ -8128,11 +8065,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]])
   }
 
   /**
@@ -8145,11 +8078,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]])
   }
 
   /**
@@ -8162,11 +8091,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]])
   }
 
   /**
@@ -8179,11 +8104,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]])
   }
 
   /**
@@ -8196,11 +8117,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]])
   }
 
   /**
@@ -8213,11 +8130,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]])
   }
 
   /**
@@ -8230,11 +8143,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
-    val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(UDFRegistration.outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
-    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
-    if (nullable) udf else udf.asNonNullable()
+    SparkUserDefinedFunction(f, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]])
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -8251,8 +8160,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    val func = () => f.asInstanceOf[UDF0[Any]].call()
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(0)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 0)
   }
 
   /**
@@ -8265,8 +8173,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(1)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 1)
   }
 
   /**
@@ -8279,8 +8186,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(2)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 2)
   }
 
   /**
@@ -8293,8 +8199,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(3)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 3)
   }
 
   /**
@@ -8307,8 +8212,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(4)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 4)
   }
 
   /**
@@ -8321,8 +8225,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(5)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 5)
   }
 
   /**
@@ -8335,8 +8238,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(6)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 6)
   }
 
   /**
@@ -8349,8 +8251,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(7)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 7)
   }
 
   /**
@@ -8363,8 +8264,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(8)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 8)
   }
 
   /**
@@ -8377,8 +8277,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(9)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 9)
   }
 
   /**
@@ -8391,8 +8290,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(10)(None))
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 10)
   }
 
   // scalastyle:on parameter.number
@@ -8434,8 +8332,7 @@ object functions {
    */
   @scala.annotation.varargs
   @deprecated("Use call_udf")
-  def callUDF(udfName: String, cols: Column*): Column =
-    call_function(Seq(udfName), cols: _*)
+  def callUDF(udfName: String, cols: Column*): Column = call_udf(udfName, cols: _*)
 
   /**
    * Call an user-defined function.
@@ -8453,8 +8350,7 @@ object functions {
    * @since 3.2.0
    */
   @scala.annotation.varargs
-  def call_udf(udfName: String, cols: Column*): Column =
-    call_function(Seq(udfName), cols: _*)
+  def call_udf(udfName: String, cols: Column*): Column = Column.fn(udfName, cols: _*)
 
   /**
    * Call a SQL function.
@@ -8483,9 +8379,7 @@ object functions {
    * @group udf_funcs
    * @since 3.4.0
    */
-  def unwrap_udt(column: Column): Column = withExpr {
-    UnwrapUDT(column.expr)
-  }
+  def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those
@@ -8499,7 +8393,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def years(e: Column): Column = withExpr { Years(e.expr) }
+    def years(e: Column): Column = Column.internalFn("years", e)
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into months.
@@ -8507,7 +8401,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def months(e: Column): Column = withExpr { Months(e.expr) }
+    def months(e: Column): Column = Column.internalFn("months", e)
 
     /**
      * (Scala-specific) A transform for timestamps and dates to partition data into days.
@@ -8515,7 +8409,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def days(e: Column): Column = withExpr { Days(e.expr) }
+    def days(e: Column): Column = Column.internalFn("days", e)
 
     /**
      * (Scala-specific) A transform for timestamps to partition data into hours.
@@ -8523,7 +8417,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def hours(e: Column): Column = withExpr { Hours(e.expr) }
+    def hours(e: Column): Column = Column.internalFn("hours", e)
 
     /**
      * (Scala-specific) A transform for any type that partitions by a hash of the input column.
@@ -8531,14 +8425,7 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Column, e: Column): Column = withExpr {
-      numBuckets.expr match {
-        case lit @ Literal(_, IntegerType) =>
-          Bucket(lit, e.expr)
-        case _ =>
-          throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
-      }
-    }
+    def bucket(numBuckets: Column, e: Column): Column = Column.internalFn("bucket", numBuckets, e)
 
     /**
      * (Scala-specific) A transform for any type that partitions by a hash of the input column.
@@ -8546,8 +8433,6 @@ object functions {
      * @group partition_transforms
      * @since 4.0.0
      */
-    def bucket(numBuckets: Int, e: Column): Column = withExpr {
-      Bucket(Literal(numBuckets), e.expr)
-    }
+    def bucket(numBuckets: Int, e: Column): Column = bucket(lit(numBuckets), e)
   }
 }

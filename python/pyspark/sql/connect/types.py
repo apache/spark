@@ -101,26 +101,26 @@ class UnparsedDataType(DataType):
 
     def jsonValue(self) -> Dict[str, Any]:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "jsonValue"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "jsonValue"},
         )
 
     def needConversion(self) -> bool:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "needConversion"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "needConversion"},
         )
 
     def toInternal(self, obj: Any) -> Any:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "toInternal"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "toInternal"},
         )
 
     def fromInternal(self, obj: Any) -> Any:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "fromInternal"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "fromInternal"},
         )
 
 
@@ -199,8 +199,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.unparsed.data_type_string = data_type_string
     else:
         raise PySparkValueError(
-            error_class="UNSUPPORTED_OPERATION",
-            message_parameters={"operation": f"data type {data_type}"},
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": f"data type {data_type}"},
         )
     return ret
 
@@ -303,8 +303,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         return UserDefinedType.fromJson(json_value)
     else:
         raise PySparkValueError(
-            error_class="UNSUPPORTED_OPERATION",
-            message_parameters={"operation": f"data type {schema}"},
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": f"data type {schema}"},
         )
 
 

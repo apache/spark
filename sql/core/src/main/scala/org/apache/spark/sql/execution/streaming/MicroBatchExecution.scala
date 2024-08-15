@@ -280,10 +280,12 @@ class MicroBatchExecution(
     // intentionally
     state.set(TERMINATED)
     if (queryExecutionThread.isAlive) {
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      sparkSession.sparkContext.cancelJobGroup(runId.toString,
+        s"Query $prettyIdString was stopped")
       interruptAndAwaitExecutionThreadTermination()
       // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      sparkSession.sparkContext.cancelJobGroup(runId.toString,
+        s"Query $prettyIdString was stopped")
     }
     logInfo(log"Query ${MDC(LogKeys.PRETTY_ID_STRING, prettyIdString)} was stopped")
   }
