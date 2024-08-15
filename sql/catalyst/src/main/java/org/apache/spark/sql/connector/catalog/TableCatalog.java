@@ -46,7 +46,7 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * A reserved property to specify the location of the table. The files of the table
-   * should be under this location.
+   * should be under this location. The location is a Hadoop Path string.
    */
   String PROP_LOCATION = "location";
 

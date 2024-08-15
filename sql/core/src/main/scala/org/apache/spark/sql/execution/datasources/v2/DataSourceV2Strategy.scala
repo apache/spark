@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.commons.lang3.StringUtils
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -105,8 +106,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
-    tableSpec.withNewLocation(tableSpec.location.map(loc => CatalogUtils.makeQualifiedPath(
-      CatalogUtils.stringToURI(loc), hadoopConf).toString))
+    val newLoc = tableSpec.location.map { loc =>
+      val locationUri = CatalogUtils.stringToURI(loc)
+      val qualified = if (locationUri.isAbsolute) {
+        locationUri
+      } else if (new Path(locationUri).isAbsolute) {
+        CatalogUtils.makeQualifiedPath(locationUri, hadoopConf)
+      } else {
+        // Leave it to the catalog implementation to qualify relative paths.
+        locationUri
+      }
+      CatalogUtils.URIToString(qualified)
+    }
+    tableSpec.withNewLocation(newLoc)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
