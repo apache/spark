@@ -887,6 +887,21 @@ public class CollationSupportSuite {
     assertEquals(expected_utf8, CollationSupport.InitCap.exec(target_utf8, collationId, false));
     // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
+  private void assertInitCap(String target, String collationName, String expectedICU,
+                             String expectedNonICU)
+          throws SparkException {
+    UTF8String target_utf8 = UTF8String.fromString(target);
+    UTF8String expectedICU_utf8 = UTF8String.fromString(expectedICU);
+    UTF8String expectedNonICU_utf8 = UTF8String.fromString(expectedNonICU);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    // Testing the new ICU-based implementation of the Lower function.
+    assertEquals(expectedICU_utf8,
+            CollationSupport.InitCap.exec(target_utf8, collationId, true));
+    // Testing the old JVM-based implementation of the Lower function.
+    assertEquals(expectedNonICU_utf8,
+            CollationSupport.InitCap.exec(target_utf8, collationId, false));
+    // Note: results should be the same in these tests for both ICU and JVM-based implementations.
+  }
 
   @Test
   public void testInitCap() throws SparkException {
@@ -896,13 +911,13 @@ public class CollationSupportSuite {
     assertInitCap("", "UNICODE", "");
     assertInitCap("", "UNICODE_CI", "");
     // Basic tests
-    assertInitCap("ABCDE", "UTF8_BINARY", "Abcde");
+    assertInitCap("ABCDE", "UTF8_BINARY", "Abcde", "Abcde");
     assertInitCap("ABCDE", "UTF8_LCASE", "Abcde");
     assertInitCap("ABCDE", "UNICODE", "Abcde");
     assertInitCap("ABCDE", "UNICODE_CI", "Abcde");
     // Uppercase present
-    assertInitCap("AbCdE", "UTF8_BINARY", "Abcde");
-    assertInitCap("aBcDe", "UTF8_BINARY", "Abcde");
+    assertInitCap("AbCdE", "UTF8_BINARY", "Abcde", "Abcde");
+    assertInitCap("aBcDe", "UTF8_BINARY", "Abcde", "Abcde");
     assertInitCap("AbCdE", "UTF8_LCASE", "Abcde");
     assertInitCap("aBcDe", "UTF8_LCASE", "Abcde");
     assertInitCap("AbCdE", "UNICODE", "Abcde");
@@ -910,13 +925,13 @@ public class CollationSupportSuite {
     assertInitCap("AbCdE", "UNICODE_CI", "Abcde");
     assertInitCap("aBcDe", "UNICODE_CI", "Abcde");
     // Accent letters
-    assertInitCap("AbĆdE", "UTF8_BINARY", "Abćde");
+    assertInitCap("AbĆdE", "UTF8_BINARY", "Abćde", "Abćde");
     assertInitCap("AbĆdE", "UTF8_LCASE", "Abćde");
     assertInitCap("AbĆdE", "UNICODE", "Abćde");
     assertInitCap("AbĆdE", "UNICODE_CI", "Abćde");
     // Variable byte length characters
-    assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De");
-    assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe");
+    assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De", "Ab 世 De");
+    assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe", "Äbćδe");
     assertInitCap("aB 世 De", "UTF8_LCASE", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UTF8_LCASE", "Äbćδe");
     assertInitCap("aB 世 De", "UNICODE", "Ab 世 De");
@@ -924,48 +939,76 @@ public class CollationSupportSuite {
     assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
     // Case-variable character length
-    assertInitCap("İo", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("İo", "UTF8_BINARY", "İo","I\u0307o");
     assertInitCap("İo", "UTF8_LCASE", "İo");
     assertInitCap("İo", "UNICODE", "İo");
     assertInitCap("İo", "UNICODE_CI", "İo");
-    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o", "I\u0307o");
     assertInitCap("i\u0307o", "UTF8_LCASE", "I\u0307o");
     assertInitCap("i\u0307o", "UNICODE", "I\u0307o");
     assertInitCap("i\u0307o", "UNICODE_CI", "I\u0307o");
     // Different possible word boundaries
-    assertInitCap("a b c", "UTF8_BINARY", "A B C");
+    assertInitCap("a b c", "UTF8_BINARY", "A B C", "A B C");
     assertInitCap("a b c", "UNICODE", "A B C");
     assertInitCap("a b c", "UTF8_LCASE", "A B C");
     assertInitCap("a b c", "UNICODE_CI", "A B C");
-    assertInitCap("a.b,c", "UTF8_BINARY", "A.b,c");
+    assertInitCap("a.b,c", "UTF8_BINARY", "A.b,c", "A.b,c");
     assertInitCap("a.b,c", "UNICODE", "A.b,C");
     assertInitCap("a.b,c", "UTF8_LCASE", "A.b,C");
     assertInitCap("a.b,c", "UNICODE_CI", "A.b,C");
-    assertInitCap("a. b-c", "UTF8_BINARY", "A. B-c");
+    assertInitCap("a. b-c", "UTF8_BINARY", "A. B-c", "A. B-c");
     assertInitCap("a. b-c", "UNICODE", "A. B-C");
     assertInitCap("a. b-c", "UTF8_LCASE", "A. B-C");
     assertInitCap("a. b-c", "UNICODE_CI", "A. B-C");
-    assertInitCap("a?b世c", "UTF8_BINARY", "A?b世c");
+    assertInitCap("a?b世c", "UTF8_BINARY", "A?b世c", "A?b世c");
     assertInitCap("a?b世c", "UNICODE", "A?B世C");
     assertInitCap("a?b世c", "UTF8_LCASE", "A?B世C");
     assertInitCap("a?b世c", "UNICODE_CI", "A?B世C");
     // Titlecase characters that are different from uppercase characters
-    assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UNICODE", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UTF8_LCASE", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UNICODE_CI", "ǲǳǳ");
-    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY", "ǅaba ǈubav ǋegova", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_LCASE", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE_CI", "ǅaba ǈubav ǋegova");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UTF8_BINARY",
-      "ß ﬁ ﬃ ﬀ ﬆ Σημερινος Ασημενιος I\u0307ota");
+      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota","ß ﬁ ﬃ ﬀ ﬆ Σημερινος Ασημενιος I\u0307ota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UTF8_LCASE",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
+    // Characters that map to multiple characters when titlecased and lowercased
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ İOTA", "UTF8_BINARY", "Ss Fi Ffi Ff St İota", "ß ﬁ ﬃ ﬀ ﬆ İota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ OİOTA", "UTF8_BINARY", "Ss Fi Ffi Ff St Oi\u0307ota", "ß ﬁ ﬃ ﬀ ﬆ Oi̇ota");
+    // Lowercasing Σ when case-ignorable character present
+    assertInitCap("`Σ", "UTF8_BINARY", "`σ", "`σ");
+    assertInitCap("1`Σ`` AΣ", "UTF8_BINARY", "1`σ`` Aς", "1`σ`` Aς");
+    assertInitCap("a1`Σ``", "UTF8_BINARY", "A1`σ``", "A1`σ``");
+    assertInitCap("a`Σ``", "UTF8_BINARY", "A`ς``", "A`σ``");
+    assertInitCap("a`Σ``1", "UTF8_BINARY", "A`ς``1", "A`σ``1");
+    assertInitCap("a`Σ``A", "UTF8_BINARY", "A`σ``a", "A`σ``a");
+    assertInitCap("ΘΑ�Σ�ΟΣ�", "UTF8_BINARY", "Θα�σ�ος�", "Θα�σ�ος�");
+    assertInitCap("ΘΑᵩΣ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θαᵩς�οᵩςᵩ�", "Θαᵩς�οᵩςᵩ�");
+    assertInitCap("ΘΑ�ᵩΣ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θα�ᵩσ�οᵩςᵩ�", "Θα�ᵩσ�οᵩςᵩ�");
+    assertInitCap("ΘΑ�ᵩΣᵩ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θα�ᵩσᵩ�οᵩςᵩ�", "Θα�ᵩσᵩ�οᵩςᵩ�");
+    assertInitCap("ΘΑ�Σ�Ο�Σ�", "UTF8_BINARY", "Θα�σ�ο�σ�", "Θα�σ�ο�σ�");
+    // Ligatures
+    assertInitCap("œ ǽ", "UTF8_BINARY", "Œ Ǽ", "Œ Ǽ");
+    // Disallowed bytes and invalid sequences
+    assertInitCap(UTF8String.fromBytes(new byte[] { (byte)0xC0, (byte)0xC1, (byte)0xF5}).toString(),
+            "UTF8_BINARY", "���", "���");
+    assertInitCap(UTF8String.fromBytes(new byte[]{(byte)0xC0, (byte)0xC1, (byte)0xF5,
+            0x20, 0x61, 0x41, (byte)0xC0}).toString(), "UTF8_BINARY", "��� Aa�", "��� Aa�");
+    assertInitCap(UTF8String.fromBytes(new byte[]{(byte)0xC2,(byte)0xC2}).toString(), "UTF8_BINARY", "��", "��");
+    assertInitCap(UTF8String.fromBytes(new byte[]{0x61, 0x41, (byte)0xC2, (byte)0xC2, 0x41}).toString(),
+            "UTF8_BINARY", "Aa��a", "Aa��a");
+    // Surrogate pairs
+    assertInitCap("a🙃b🙃c", "UTF8_BINARY", "A🙃b🙃c", "A🙃b🙃c");
+    assertInitCap("😀😆😃😄", "UTF8_BINARY", "😀😆😃😄", "😀😆😃😄");
   }
 
   /**
