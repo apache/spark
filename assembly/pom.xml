@@ -171,62 +171,28 @@
       </plugin>
       <plugin>
         <!--
-          Here we download ammonite dependency required for Spark Connect REPL and copy
-          Spark Connect client to target's jars/connect-repl directory. Both jars will
-          only be loaded when we run Spark Connect shell, see also
-          AbstractCommandBuilder.buildClassPath and SPARK-48936.
+          Copy Spark Connect client jar and its dependencies for Spark Connect REPL.
         -->
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>get-ammonite-jar</id>
+            <id>copy-connect-client-repl-jars</id>
             <phase>package</phase>
             <goals>
               <goal>exec</goal>
             </goals>
             <configuration>
-              <executable>${basedir}/../build/mvn</executable>
+              <executable>cp</executable>
               <arguments>
-                <argument>dependency:copy</argument>
-                <argument>-Dartifact=com.lihaoyi:ammonite_${scala.version}:${ammonite.version}</argument>
-                <argument>-DoutputDirectory=${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
+                <argument>-r</argument>
+                <argument>${basedir}/../connector/connect/client/jvm/target/connect-repl</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/</argument>
               </arguments>
             </configuration>
           </execution>
           <execution>
-            <id>get-ammonite-pom</id>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <phase>package</phase>
-            <configuration>
-              <executable>${basedir}/../build/mvn</executable>
-              <arguments>
-                <argument>dependency:copy</argument>
-                <argument>-Dartifact=com.lihaoyi:ammonite_${scala.version}:${ammonite.version}:pom</argument>
-                <argument>-DoutputDirectory=${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>get-ammonite-deps</id>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <phase>package</phase>
-            <configuration>
-              <executable>${basedir}/../build/mvn</executable>
-              <arguments>
-                <argument>dependency:copy-dependencies</argument>
-                <argument>-DoutputDirectory=${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
-                <argument>--file</argument>
-                <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl/ammonite_${scala.version}-${ammonite.version}.pom</argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>get-connect-client-jar</id>
+            <id>copy-connect-client-jar</id>
             <phase>package</phase>
             <goals>
               <goal>exec</goal>

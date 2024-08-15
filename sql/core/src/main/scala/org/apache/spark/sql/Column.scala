@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.TypedAggUtils
@@ -49,15 +50,6 @@ private[sql] object Column {
         a.aggregateFunction.toString
       case expr => toPrettySQL(expr)
     }
-  }
-
-  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
-    val metadataWithoutId = new MetadataBuilder()
-      .withMetadata(a.metadata)
-      .remove(Dataset.DATASET_ID_KEY)
-      .remove(Dataset.COL_POS_KEY)
-      .build()
-    a.withMetadata(metadataWithoutId)
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
@@ -188,7 +180,7 @@ class Column(val expr: Expression) extends Logging {
   override def hashCode: Int = this.normalizedExpr().hashCode()
 
   private def normalizedExpr(): Expression = expr transform {
-    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+    case a: AttributeReference => DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
   }
 
   /** Creates a column based on the given expression. */

@@ -26,8 +26,6 @@ import com.ibm.icu.util.ULocale;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
-import static org.apache.spark.unsafe.Platform.copyMemory;
 import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 
 import java.text.CharacterIterator;
@@ -38,7 +36,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * Utility class for collation-aware UTF8String operations.
@@ -302,114 +299,82 @@ public class CollationAwareUTF8String {
     return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
-  /*
+  /**
    * Performs string replacement for ICU collations by searching for instances of the search
-   * string in the `src` string, with respect to the specified collation, and then replacing
+   * string in the `target` string, with respect to the specified collation, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
    * @param collationId the collation ID to use for string search
    * @return the position of the first occurrence of `match` in `set`
    */
-  public static UTF8String replace(final UTF8String src, final UTF8String search,
+  public static UTF8String replace(final UTF8String target, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(src, search, collationId);
+    String targetStr = target.toValidString();
+    String searchStr = search.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(targetStr, searchStr, collationId);
 
-    // Find the first occurrence of the search string.
-    int end = stringSearch.next();
-    if (end == StringSearch.DONE) {
-      // Search string was not found, so string is unchanged.
-      return src;
+    StringBuilder sb = new StringBuilder();
+    int start = 0;
+    int matchStart = stringSearch.first();
+    while (matchStart != StringSearch.DONE) {
+      sb.append(targetStr, start, matchStart);
+      sb.append(replace.toValidString());
+      start = matchStart + stringSearch.getMatchLength();
+      matchStart = stringSearch.next();
     }
-
-    // Initialize byte positions
-    int c = 0;
-    int byteStart = 0; // position in byte
-    int byteEnd = 0; // position in byte
-    while (byteEnd < src.numBytes() && c < end) {
-      byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-      c += 1;
-    }
-
-    // At least one match was found. Estimate space needed for result.
-    // The 16x multiplier here is chosen to match commons-lang3's implementation.
-    int increase = Math.max(0, Math.abs(replace.numBytes() - search.numBytes())) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
-    while (end != StringSearch.DONE) {
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
-      buf.append(replace);
-
-      // Move byteStart to the beginning of the current match
-      byteStart = byteEnd;
-      int cs = c;
-      // Move cs to the end of the current match
-      // This is necessary because the search string may contain 'multi-character' characters
-      while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
-        byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
-        cs += 1;
-      }
-      // Go to next match
-      end = stringSearch.next();
-      // Update byte positions
-      while (byteEnd < src.numBytes() && c < end) {
-        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-        c += 1;
-      }
-    }
-    buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
-      src.numBytes() - byteStart);
-    return buf.build();
+    sb.append(targetStr, start, targetStr.length());
+    return UTF8String.fromString(sb.toString());
   }
 
-  /*
+  /**
    * Performs string replacement for UTF8_LCASE collation by searching for instances of the search
-   * string in the src string, with respect to lowercased string versions, and then replacing
+   * string in the target string, with respect to lowercased string versions, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
-   * @param collationId the collation ID to use for string search
    * @return the position of the first occurrence of `match` in `set`
    */
-  public static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
+  public static UTF8String lowercaseReplace(final UTF8String target, final UTF8String search,
       final UTF8String replace) {
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
     UTF8String lowercaseSearch = lowerCaseCodePoints(search);
 
     int start = 0;
-    int end = lowercaseFind(src, lowercaseSearch, start);
+    int end = lowercaseFind(target, lowercaseSearch, start);
     if (end == -1) {
       // Search string was not found, so string is unchanged.
-      return src;
+      return target;
     }
 
     // At least one match was found. Estimate space needed for result.
     // The 16x multiplier here is chosen to match commons-lang3's implementation.
     int increase = Math.max(0, replace.numBytes() - search.numBytes()) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
+    final UTF8StringBuilder buf = new UTF8StringBuilder(target.numBytes() + increase);
     while (end != -1) {
-      buf.append(src.substring(start, end));
+      buf.append(target.substring(start, end));
       buf.append(replace);
       // Update character positions
-      start = end + lowercaseMatchLengthFrom(src, lowercaseSearch, end);
-      end = lowercaseFind(src, lowercaseSearch, start);
+      start = end + lowercaseMatchLengthFrom(target, lowercaseSearch, end);
+      end = lowercaseFind(target, lowercaseSearch, start);
     }
-    buf.append(src.substring(start, src.numChars()));
+    buf.append(target.substring(start, target.numChars()));
     return buf.build();
   }
 
@@ -703,23 +668,56 @@ public class CollationAwareUTF8String {
       final int start, final int collationId) {
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.numBytes() == 0) return MATCH_NOT_FOUND;
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-    stringSearch.setIndex(start);
-
-    return stringSearch.next();
+    // Initialize the string search with respect to the specified ICU collation.
+    String targetStr = target.toValidString();
+    String patternStr = pattern.toValidString();
+    StringSearch stringSearch =
+      CollationFactory.getStringSearch(targetStr, patternStr, collationId);
+    stringSearch.setOverlapping(true);
+    // Start the search from `start`-th code point (NOT necessarily from the `start`-th character).
+    int startIndex = targetStr.offsetByCodePoints(0, start);
+    stringSearch.setIndex(startIndex);
+    // Perform the search and return the next result, starting from the specified position.
+    int searchIndex = stringSearch.next();
+    if (searchIndex == StringSearch.DONE) {
+      return MATCH_NOT_FOUND;
+    }
+    // Convert the search index from character count to code point count.
+    int indexOf = targetStr.codePointCount(0, searchIndex);
+    if (indexOf < start) {
+      return MATCH_NOT_FOUND;
+    }
+    return indexOf;
   }
 
-  private static int find(UTF8String target, UTF8String pattern, int start,
-      int collationId) {
-    assert (pattern.numBytes() > 0);
+  private static int findIndex(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      int nextIndex = stringSearch.next();
+      if (nextIndex == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      } else if (nextIndex == index && index != 0) {
+        stringSearch.setIndex(stringSearch.getIndex() + stringSearch.getMatchLength());
+      } else {
+        count--;
+        index = nextIndex;
+      }
+    }
+    return index;
+  }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-    // Set search start position (start from character at start position)
-    stringSearch.setIndex(target.bytePosToChar(start));
-
-    // Return either the byte position or -1 if not found
-    return target.charPosToByte(stringSearch.next());
+  private static int findIndexReverse(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      index = stringSearch.previous();
+      if (index == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      }
+      count--;
+    }
+    return index + stringSearch.getMatchLength();
   }
 
   public static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
@@ -727,63 +725,30 @@ public class CollationAwareUTF8String {
     if (delimiter.numBytes() == 0 || count == 0 || string.numBytes() == 0) {
       return UTF8String.EMPTY_UTF8;
     }
+    String str = string.toValidString();
+    String delim = delimiter.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(str, delim, collationId);
+    stringSearch.setOverlapping(true);
     if (count > 0) {
-      int idx = -1;
-      while (count > 0) {
-        idx = find(string, delimiter, idx + 1, collationId);
-        if (idx >= 0) {
-          count --;
-        } else {
-          // can not find enough delim
-          return string;
-        }
-      }
-      if (idx == 0) {
+      // If the count is positive, we search for the count-th delimiter from the left.
+      int searchIndex = findIndex(stringSearch, count);
+      if (searchIndex == MATCH_NOT_FOUND) {
+        return string;
+      } else if (searchIndex == 0) {
         return UTF8String.EMPTY_UTF8;
+      } else {
+        return UTF8String.fromString(str.substring(0, searchIndex));
       }
-      byte[] bytes = new byte[idx];
-      copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-      return UTF8String.fromBytes(bytes);
-
     } else {
-      count = -count;
-
-      StringSearch stringSearch = CollationFactory
-        .getStringSearch(string, delimiter, collationId);
-
-      int start = string.numChars() - 1;
-      int lastMatchLength = 0;
-      int prevStart = -1;
-      while (count > 0) {
-        stringSearch.reset();
-        prevStart = -1;
-        int matchStart = stringSearch.next();
-        lastMatchLength = stringSearch.getMatchLength();
-        while (matchStart <= start) {
-          if (matchStart != StringSearch.DONE) {
-            // Found a match, update the start position
-            prevStart = matchStart;
-            matchStart = stringSearch.next();
-          } else {
-            break;
-          }
-        }
-
-        if (prevStart == -1) {
-          // can not find enough delim
+      // If the count is negative, we search for the count-th delimiter from the right.
+      int searchIndex = findIndexReverse(stringSearch, -count);
+      if (searchIndex == MATCH_NOT_FOUND) {
           return string;
-        } else {
-          start = prevStart - 1;
-          count--;
-        }
+      } else if (searchIndex == str.length()) {
+          return UTF8String.EMPTY_UTF8;
+      } else {
+          return UTF8String.fromString(str.substring(searchIndex));
       }
-
-      int resultStart = prevStart + lastMatchLength;
-      if (resultStart == string.numChars()) {
-        return UTF8String.EMPTY_UTF8;
-      }
-
-      return string.substring(resultStart, string.numChars());
     }
   }
 
@@ -1080,7 +1045,7 @@ public class CollationAwareUTF8String {
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
       int codePoint = trimIter.next();
-      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
+      trimChars.putIfAbsent(codePoint, new String(Character.toChars(codePoint)));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -1190,7 +1155,7 @@ public class CollationAwareUTF8String {
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
       int codePoint = trimIter.next();
-      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
+      trimChars.putIfAbsent(codePoint, new String(Character.toChars(codePoint)));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -1242,16 +1207,35 @@ public class CollationAwareUTF8String {
 
   public static UTF8String[] lowercaseSplitSQL(final UTF8String string, final UTF8String delimiter,
       final int limit) {
-      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
-      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
-        CollationSupport.lowercaseRegexFlags);
-      String[] splits = pattern.split(string.toString(), limit);
-      UTF8String[] res = new UTF8String[splits.length];
-      for (int i = 0; i < res.length; i++) {
-        res[i] = UTF8String.fromString(splits[i]);
+    if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+    if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+
+    List<UTF8String> strings = new ArrayList<>();
+    UTF8String lowercaseDelimiter = lowerCaseCodePoints(delimiter);
+    int startIndex = 0, nextMatch = 0, nextMatchLength;
+    while (nextMatch != MATCH_NOT_FOUND) {
+      if (limit > 0 && strings.size() == limit - 1) {
+        break;
       }
-      return res;
+      nextMatch = lowercaseFind(string, lowercaseDelimiter, startIndex);
+      if (nextMatch != MATCH_NOT_FOUND) {
+        nextMatchLength = lowercaseMatchLengthFrom(string, lowercaseDelimiter, nextMatch);
+        strings.add(string.substring(startIndex, nextMatch));
+        startIndex = nextMatch + nextMatchLength;
+      }
+    }
+    if (startIndex <= string.numChars()) {
+      strings.add(string.substring(startIndex, string.numChars()));
+    }
+    if (limit == 0) {
+      // Remove trailing empty strings
+      int i = strings.size() - 1;
+      while (i >= 0 && strings.get(i).numBytes() == 0) {
+        strings.remove(i);
+        i--;
+      }
+    }
+    return strings.toArray(new UTF8String[0]);
   }
 
   public static UTF8String[] icuSplitSQL(final UTF8String string, final UTF8String delimiter,
@@ -1259,7 +1243,7 @@ public class CollationAwareUTF8String {
     if (delimiter.numBytes() == 0) return new UTF8String[] { string };
     if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
     List<UTF8String> strings = new ArrayList<>();
-    String target = string.toString(), pattern = delimiter.toString();
+    String target = string.toValidString(), pattern = delimiter.toValidString();
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
     int start = 0, end;
     while ((end = stringSearch.next()) != StringSearch.DONE) {

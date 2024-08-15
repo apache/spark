@@ -432,6 +432,25 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49152: CreateTable should store location as qualified") {
+    val tbl = "testcat.table_name"
+
+    def testWithLocation(location: String, qualified: String): Unit = {
+      withTable(tbl) {
+        sql(s"CREATE TABLE $tbl USING foo LOCATION '$location'")
+        val loc = catalog("testcat").asTableCatalog
+          .loadTable(Identifier.of(Array.empty, "table_name"))
+          .properties().get(TableCatalog.PROP_LOCATION)
+        assert(loc === qualified)
+      }
+    }
+
+    testWithLocation("/absolute/path", "file:/absolute/path")
+    testWithLocation("s3://host/full/path", "s3://host/full/path")
+    testWithLocation("relative/path", "relative/path")
+    testWithLocation("/path/special+ char", "file:/path/special+ char")
+  }
+
   test("SPARK-37545: CreateTableAsSelect should store location as qualified") {
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
@@ -1353,8 +1372,7 @@ class DataSourceV2SQLSuiteV1Filter
             val identifier = Identifier.of(Array(), "reservedTest")
             val location = tableCatalog.loadTable(identifier).properties()
               .get(TableCatalog.PROP_LOCATION)
-            assert(location.startsWith("file:") && location.endsWith("foo"),
-              "path as a table property should not have side effects")
+            assert(location == "foo", "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
               "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("Path") == "noop",
@@ -2105,15 +2123,10 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("REPLACE TABLE: v1 table") {
-    val e = intercept[AnalysisException] {
-      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
-    }
-    checkError(
-      exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      sqlState = "0A000",
-      parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
-        "operation" -> "REPLACE TABLE"))
+    sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    val v2Catalog = catalog("spark_catalog").asTableCatalog
+    val table = v2Catalog.loadTable(Identifier.of(Array("default"), "tbl"))
+    assert(table.properties().get(TableCatalog.PROP_PROVIDER) == classOf[SimpleScanSource].getName)
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
@@ -2379,6 +2392,8 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      checkAnswer(sql(s"SHOW COLUMNS FROM $t IN testcat.ns1.ns2"), Seq(Row("id"), Row("data")))
+      checkAnswer(sql(s"SHOW COLUMNS in $t"), Seq(Row("id"), Row("data")))
       checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
     }
   }
@@ -3289,7 +3304,7 @@ class DataSourceV2SQLSuiteV1Filter
       val properties = table.properties
       assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
       assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
-      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:///tmp")
+      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
       assert(properties.containsKey(TableCatalog.PROP_OWNER))
       assert(properties.get(TableCatalog.PROP_EXTERNAL) == "true")
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}from") == "0")

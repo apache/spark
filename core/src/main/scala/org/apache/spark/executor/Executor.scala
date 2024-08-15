@@ -550,7 +550,7 @@ private[spark] class Executor(
       // Collect latest accumulator values to report back to the driver
       val accums: Seq[AccumulatorV2[_, _]] =
         Option(task).map(_.collectAccumulatorUpdates(taskFailed = true)).getOrElse(Seq.empty)
-      val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+      val accUpdates = accums.map(acc => acc.toInfoUpdate)
 
       setTaskFinishedAndClearInterruptStatus()
       (accums, accUpdates)
@@ -706,8 +706,6 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(TimeUnit.NANOSECONDS.toMillis(
           afterSerializationNs - beforeSerializationNs))
-        task.metrics.setPeakOnHeapExecutionMemory(taskMemoryManager.getPeakOnHeapExecutionMemory)
-        task.metrics.setPeakOffHeapExecutionMemory(taskMemoryManager.getPeakOffHeapExecutionMemory)
         // Expose task metrics using the Dropwizard metrics system.
         // Update task metrics counters
         executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
