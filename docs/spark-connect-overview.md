@@ -409,6 +409,6 @@ Majority of the Streaming API is supported, including
 [StreamingQueryListener](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html).
 
 APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
-and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are deprecated in all Spark Connect versions.
+and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are unsupported in Spark Connect.
 
 Support for more APIs is planned for upcoming Spark releases.
