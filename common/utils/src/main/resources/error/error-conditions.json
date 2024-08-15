@@ -3919,6 +3919,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE" : {
+    "message" : [
+      "Unknown time mode <timeMode>. Accepted timeMode modes are 'none', 'processingTime', 'eventTime'"
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."

@@ -16,32 +16,14 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+==================
+Stateful Processor
+==================
+.. currentmodule:: pyspark.sql.streaming
 
-This page gives an overview of all public Spark SQL API.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-    :maxdepth: 2
-
-    core_classes
-    spark_session
-    configuration
-    io
-    dataframe
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
-    udf
-    udtf
-    variant_val
-    protobuf
-    datasource
-    stateful_processor
+    StatefulProcessor.init
+    StatefulProcessor.handleInputRows
+    StatefulProcessor.close
