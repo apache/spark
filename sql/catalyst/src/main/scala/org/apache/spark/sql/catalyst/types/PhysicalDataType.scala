@@ -245,21 +245,21 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
     private[this] val valuesOrdering =
       PhysicalDataType(valueType).ordering.asInstanceOf[Ordering[Any]]
 
-    override def compare(x: MapData, y: MapData): Int = {
-      val lengthX = x.numElements()
-      val lengthY = y.numElements()
-      val keyArrayX = x.keyArray()
-      val valueArrayX = x.valueArray()
-      val keyArrayY = y.keyArray()
-      val valueArrayY = y.valueArray()
-      val minLength = math.min(lengthX, lengthY)
+    override def compare(left: MapData, right: MapData): Int = {
+      val lengthLeft = left.numElements()
+      val lengthRight = right.numElements()
+      val keyArrayLeft = left.keyArray()
+      val valueArrayLeft = left.valueArray()
+      val keyArrayRight = right.keyArray()
+      val valueArrayRight = right.valueArray()
+      val minLength = math.min(lengthLeft, lengthRight)
       var i = 0
       while (i < minLength) {
-        var comp = compareElements(keyArrayX, keyArrayY, keyType, i, keyOrdering)
+        var comp = compareElements(keyArrayLeft, keyArrayRight, keyType, i, keyOrdering)
         if (comp != 0) {
           return comp
         }
-        comp = compareElements(valueArrayX, valueArrayY, valueType, i, valuesOrdering)
+        comp = compareElements(valueArrayLeft, valueArrayRight, valueType, i, valuesOrdering)
         if (comp != 0) {
           return comp
         }
@@ -267,32 +267,30 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
         i += 1
       }
 
-      if (lengthX < lengthY) {
+      if (lengthLeft < lengthRight) {
         -1
-      }
-      else if (lengthX > lengthY) {
+      } else if (lengthLeft > lengthRight) {
         1
-      }
-      else {
+      } else {
         0
       }
     }
 
-    private def compareElements(arrayX: ArrayData, arrayY: ArrayData, dataType: DataType,
+    private def compareElements(arrayLeft: ArrayData, arrayRight: ArrayData, dataType: DataType,
                         position: Int, ordering: Ordering[Any]): Int = {
-      val isNullX = arrayX.isNullAt(position)
-      val isNullY = arrayY.isNullAt(position)
+      val isNullLeft = arrayLeft.isNullAt(position)
+      val isNullRight = arrayRight.isNullAt(position)
 
-      if (isNullX && isNullY) {
+      if (isNullLeft && isNullRight) {
         0
-      } else if (isNullX) {
+      } else if (isNullLeft) {
         -1
-      } else if (isNullY) {
+      } else if (isNullRight) {
         1
       } else {
         ordering.compare(
-          arrayX.get(position, dataType),
-          arrayY.get(position, dataType)
+          arrayLeft.get(position, dataType),
+          arrayRight.get(position, dataType)
         )
       }
     }
