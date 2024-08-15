@@ -231,6 +231,7 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>6.13.2</kubernetes-client.version>
+    <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -2871,6 +2872,11 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okio</groupId>
+        <artifactId>okio</artifactId>
+        <version>${okio.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
