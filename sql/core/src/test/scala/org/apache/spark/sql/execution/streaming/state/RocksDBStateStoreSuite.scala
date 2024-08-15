@@ -1026,15 +1026,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  // TODO SPARK-48796 after restart state id will not be the same
-  ignore(s"get, put, iterator, commit, load with multiple column families") {
+  test(s"get, put, iterator, commit, load with multiple column families") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
       def get(store: StateStore, col1: String, col2: Int, colFamilyName: String): UnsafeRow = {
         store.get(dataToKeyRow(col1, col2), colFamilyName)
       }
 
-      def iterator(store: StateStore, colFamilyName: String): Seq[((String, Int), Int)] = {
-        store.iterator(colFamilyName).toSeq.map {
+      def iterator(store: StateStore, colFamilyName: String): Iterator[((String, Int), Int)] = {
+        store.iterator(colFamilyName).map {
           case unsafePair =>
             (keyRowToData(unsafePair.key), valueRowToData(unsafePair.value))
         }
@@ -1087,6 +1086,37 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(iterator(store, colFamily2).toSet === Set((("a", 1), 1), (("b", 1), 2)))
 
       store.commit()
+    }
+  }
+
+
+  test("verify that column family id is assigned correctly after removal") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
+      var store = provider.getStore(0)
+      val colFamily1: String = "abc"
+      val colFamily2: String = "def"
+      val colFamily3: String = "ghi"
+      val colFamily4: String = "jkl"
+      val colFamily5: String = "mno"
+      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.commit()
+
+      store = provider.getStore(1)
+      store.removeColFamilyIfExists(colFamily2)
+      store.commit()
+
+      store = provider.getStore(2)
+      assert(store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema)) == 3)
+      store.removeColFamilyIfExists(colFamily1)
+      store.removeColFamilyIfExists(colFamily3)
+      assert(store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema)) == 4)
+      assert(store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema)) == 5)
     }
   }
 

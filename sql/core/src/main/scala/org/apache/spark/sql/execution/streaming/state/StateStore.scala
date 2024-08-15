@@ -126,6 +126,8 @@ trait StateStore extends ReadStateStore {
 
   /**
    * Create column family with given name, if absent.
+   *
+   * @return column family ID
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,
@@ -133,7 +135,7 @@ trait StateStore extends ReadStateStore {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
-      isInternal: Boolean = false): Unit
+      isInternal: Boolean = false): Short
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
@@ -605,6 +607,8 @@ object StateStore extends Logging {
   val PARTITION_ID_TO_CHECK_SCHEMA = 0
 
   val DEFAULT_COL_FAMILY_NAME = "default"
+
+  val DEFAULT_COL_FAMILY_ID: Short = 0
 
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
