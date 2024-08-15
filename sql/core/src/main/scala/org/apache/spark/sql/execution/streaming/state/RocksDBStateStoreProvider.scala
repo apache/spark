@@ -463,7 +463,7 @@ private[sql] class RocksDBStateStoreProvider
 
   private val defaultColFamilyId: Option[Short] = Some(0)
 
-  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(1)
+  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(0)
 
   private val columnFamilyIdsChanged: AtomicBoolean = new AtomicBoolean(false)
 
@@ -597,7 +597,7 @@ private[sql] class RocksDBStateStoreProvider
       Option[Short] = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       if (!checkColFamilyExists(colFamilyName)) {
-        val newColumnFamilyId = maxColumnFamilyId.getAndIncrement().toShort
+        val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
         colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
         columnFamilyIdsChanged.set(true)
         Option(newColumnFamilyId)
