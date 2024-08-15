@@ -186,10 +186,9 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
 
 private[sql] object UserDefinedFunctionUtils {
   /**
-   * Create a [[ScalaUDF]].
+   * Convert a UDF into an (executable) ScalaUDF expressions.
    *
-   * This function should be moved to [[ScalaUDF]] when we move [[SparkUserDefinedFunction]]
-   * to sql/api.
+   * This function should be moved to ScalaUDF when we move SparkUserDefinedFunction to sql/api.
    */
   def toScalaUDF(udf: SparkUserDefinedFunction, children: Seq[Expression]): ScalaUDF = {
     ScalaUDF(
