@@ -287,10 +287,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case data @ AppendData(
-        DataSourceV2Relation(V1Table(table: CatalogTable), _, _, _, _), _, _, _, _, _) =>
+        DataSourceV2Relation(
+          V1Table(table: CatalogTable), _, _, _, _), _, _, _, _, _) if !data.isByName =>
       InsertIntoStatement(UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
-        Seq.empty, data.query, false, false)
+        Seq.empty, data.query, false, data.isByName)
 
     case UnresolvedCatalogRelation(tableMeta, options, false)
         if DDLUtils.isDatasourceTable(tableMeta) =>

@@ -3629,21 +3629,21 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  def checkParquet(tableName: String, path: String): Unit = {
-    withTable(tableName) {
-      sql("CREATE TABLE " + tableName +
-        " (name STRING) USING PARQUET LOCATION '" + path + "'")
-      sql("INSERT INTO " + tableName + " VALUES('Bob')")
-      val df = sql("SELECT * FROM " + tableName)
-      assert(df.queryExecution.analyzed.exists {
-        case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
-        case _ => false
-      })
-      checkAnswer(df, Row("Bob"))
-    }
-  }
-
   test("SPARK-49211: V2 Catalog can support built-in data sources") {
+    def checkParquet(tableName: String, path: String): Unit = {
+      withTable(tableName) {
+        sql("CREATE TABLE " + tableName +
+          " (name STRING) USING PARQUET LOCATION '" + path + "'")
+        sql("INSERT INTO " + tableName + " VALUES('Bob')")
+        val df = sql("SELECT * FROM " + tableName)
+        assert(df.queryExecution.analyzed.exists {
+          case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+          case _ => false
+        })
+        checkAnswer(df, Row("Bob"))
+      }
+    }
+
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
     val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
@@ -3665,14 +3665,29 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-49211: V2 Catalog support CTAS") {
+    def checkCTAS(tableName: String, path: String): Unit = {
+      sql("CREATE TABLE " + tableName + " USING PARQUET LOCATION '" + path +
+        "' AS SELECT 1, 2, 3")
+      checkAnswer(sql("SELECT * FROM " + tableName), Row(1, 2, 3))
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    spark.sessionState.catalogManager.reset()
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+        classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkCTAS(table1.toString, path.getAbsolutePath)
+      }
+    }
+
     val table2 = FullQualifiedTableName("testcat3", "default", "t")
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
-        sql("CREATE TABLE " + table2.toString +
-          " USING PARQUET LOCATION '" + path.toString() +
-          "' AS SELECT 1, 2, 3")
-        checkAnswer(sql("SELECT * FROM " + table2.toString), Row(1, 2, 3))
+        checkCTAS(table2.toString, path.getAbsolutePath)
       }
     }
   }
