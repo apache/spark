@@ -305,6 +305,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
 
+          // Should be before `e.checkInputDataTypes()` to produce the correct error for unknown
+          // window expressions nested inside other expressions
+          case UnresolvedWindowExpression(_, WindowSpecReference(windowName)) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case checkRes: TypeCheckResult.DataTypeMismatch =>
