@@ -524,7 +524,8 @@ def main():
         else:
             test_env = "local"
 
-    extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
+    extra_profiles = (get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version) +
+                      ["-Popentelemetry-reporter"])
 
     print(
         "[info] Using build tool",
