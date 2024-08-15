@@ -969,6 +969,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
+    buildConf("spark.sql.parser.optimizeInsertIntoValuesParser")
+      .internal()
+      .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
+        "`insert into ... values` DML statements.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -3730,7 +3738,7 @@ object SQLConf {
       .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false) // Disabled for now, see SPARK-46446
+      .createWithDefault(true)
 
   val DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")

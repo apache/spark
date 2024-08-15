@@ -407,25 +407,44 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
   }
 
   test("if's condition must return a single row data") {
-    withTable("t") {
-      val commands =
+    withTable("t1", "t2") {
+      // empty row
+      val commands1 =
         """
           |BEGIN
-          |  CREATE TABLE t (a BOOLEAN) USING parquet;
-          |  INSERT INTO t VALUES (true);
-          |  INSERT INTO t VALUES (true);
-          |  IF (select * from t) THEN
+          |  CREATE TABLE t1 (a BOOLEAN) USING parquet;
+          |  IF (SELECT * FROM t1) THEN
+          |    SELECT 46;
+          |  END IF;
+          |END
+          |""".stripMargin
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          runSqlScript(commands1)
+        ),
+        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
+      )
+
+      // too many rows ( > 1 )
+      val commands2 =
+        """
+          |BEGIN
+          |  CREATE TABLE t2 (a BOOLEAN) USING parquet;
+          |  INSERT INTO t2 VALUES (true);
+          |  INSERT INTO t2 VALUES (true);
+          |  IF (SELECT * FROM t2) THEN
           |    SELECT 46;
           |  END IF;
           |END
           |""".stripMargin
       checkError(
         exception = intercept[SparkException] (
-          runSqlScript(commands)
+          runSqlScript(commands2)
         ),
         errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
-        context = ExpectedContext(fragment = "(select * from t)", start = 118, stop = 134)
+        context = ExpectedContext(fragment = "(SELECT * FROM t2)", start = 121, stop = 138)
       )
     }
   }
