@@ -74,7 +74,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           catalog, ident, "ALTER COLUMN with qualified column")
       }
       if (a.nullable.isDefined) {
-        throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError()
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          catalog, ident, "ALTER COLUMN ... SET NOT NULL")
       }
       if (a.position.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -88,8 +89,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
           .map(_._2.dataType)
           .getOrElse {
-            throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
-              quoteIfNeeded(colName), table)
+            throw QueryCompilationErrors.unresolvedColumnError(
+              toSQLId(a.column.name), table.schema.fieldNames)
           }
       }
       // Add the current default column value string (if any) to the column metadata.
