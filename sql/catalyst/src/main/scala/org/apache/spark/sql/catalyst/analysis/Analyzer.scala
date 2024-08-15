@@ -515,9 +515,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ).asInstanceOf[Seq[NamedExpression]]
     }
 
-    private[analysis] def resolve(
-      u: UnresolvedAlias
-    ): Expression = {
+    private[analysis] def resolve(u: UnresolvedAlias): Expression = {
       val UnresolvedAlias(child, optGenAliasFunc) = u
       child match {
         case ne: NamedExpression => ne
