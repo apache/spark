@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -203,9 +204,10 @@ private[sql] class RocksDBStateStoreProvider
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        rocksDB.updateColumnFamilyMapping(Some(colFamilyNameToIdMap.asScala))
-        rocksDB.updateMaxColumnFamilyId(Some(maxColumnFamilyId))
-        val newVersion = rocksDB.commit()
+        val newVersion = rocksDB.commit(
+          colFamilyNameToIdMap.asScala.toMap,
+          maxColumnFamilyId.get().toShort,
+          columnFamilyIdsChanged.get())
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
@@ -375,8 +377,9 @@ private[sql] class RocksDBStateStoreProvider
       val store = new RocksDBStateStore(version)
       (colFamilyMapping, maxColFamilyId) match {
         case (Some(mapping), Some(id)) =>
+          columnFamilyIdsChanged.set(false)
           colFamilyNameToIdMap.putAll(mapping.asJava)
-          maxColumnFamilyId = id
+          maxColumnFamilyId.set(id)
         case _ =>
       }
       store
@@ -460,7 +463,9 @@ private[sql] class RocksDBStateStoreProvider
 
   private val defaultColFamilyId: Option[Short] = Some(0)
 
-  private var maxColumnFamilyId: Short = 0
+  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(0)
+
+  private val columnFamilyIdsChanged: AtomicBoolean = new AtomicBoolean(false)
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
@@ -592,9 +597,9 @@ private[sql] class RocksDBStateStoreProvider
       Option[Short] = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       if (!checkColFamilyExists(colFamilyName)) {
-        val newColumnFamilyId = (maxColumnFamilyId + 1).toShort
-        maxColumnFamilyId = newColumnFamilyId
+        val newColumnFamilyId = (maxColumnFamilyId.getAndIncrement()).toShort
         colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
+        columnFamilyIdsChanged.set(true)
         Option(newColumnFamilyId)
       } else Some(colFamilyNameToIdMap.get(colFamilyName))
     }
@@ -606,6 +611,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
       if (checkColFamilyExists(colFamilyName)) {
         colFamilyNameToIdMap.remove(colFamilyName)
+        columnFamilyIdsChanged.set(true)
         true
       } else {
         false

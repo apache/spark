@@ -164,8 +164,6 @@ class RocksDB(
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
-  // if column family ids have changed since last load, we want to take a full snapshot
-  @volatile private var colFamilyIdsChanged = false
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
@@ -227,8 +225,6 @@ class RocksDB(
           }
         loadedMapping = metadata.columnFamilyMapping
         maxColumnFamilyId = metadata.maxColumnFamilyId
-        updateColumnFamilyMapping(loadedMapping)
-        updateMaxColumnFamilyId(maxColumnFamilyId)
 
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
@@ -251,38 +247,6 @@ class RocksDB(
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     (this, loadedMapping, maxColumnFamilyId)
-  }
-
-  private def getColumnFamilyMapping(): Map[String, Short] = {
-    colFamilyNameToIdMap.asScala.toMap
-  }
-
-  private def getMaxColumnFamilyId(): Short = {
-    maxColumnFamilyId.get().toShort
-  }
-
-  def updateColumnFamilyMapping(mapping: Option[Map[String, Short]]): Unit = {
-    mapping.foreach { map =>
-      // Check if map and colFamilyNameToIdMap are the same
-      // if so, we don't need to force a snapshot and put a map.
-      if (map.size == colFamilyNameToIdMap.size() &&
-        map.forall { case (key, value) =>
-          colFamilyNameToIdMap.containsKey(key) && colFamilyNameToIdMap.get(key) == value
-        }) {
-        // Maps are the same, no need to update
-      } else {
-        // Maps are different, update colFamilyNameToIdMap
-        colFamilyNameToIdMap.clear()  // Clear existing entries
-        colFamilyNameToIdMap.putAll(map.asJava)
-        colFamilyIdsChanged = true
-      }
-    }
-  }
-
-  def updateMaxColumnFamilyId(columnFamilyId: Option[Short]): Unit = {
-    columnFamilyId.foreach { id =>
-      maxColumnFamilyId.updateAndGet(currentMax => Math.max(currentMax, id.toInt))
-    }
   }
 
   /**
@@ -536,7 +500,10 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): Long = {
+  def commit(
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short,
+      colFamilyIdsChanged: Boolean): Long = {
     val newVersion = loadedVersion + 1
     try {
 
@@ -545,7 +512,7 @@ class RocksDB(
       var compactTimeMs = 0L
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
-      if (shouldCreateSnapshot()) {
+      if (shouldCreateSnapshot(colFamilyIdsChanged)) {
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -585,8 +552,8 @@ class RocksDB(
                 newVersion,
                 numKeysOnWritingVersion,
                 fileManager.captureFileMapReference(),
-                getColumnFamilyMapping(),
-                getMaxColumnFamilyId()))
+                columnFamilyMapping,
+                maxColumnFamilyId))
             lastSnapshotVersion = newVersion
           }
         }
@@ -635,7 +602,7 @@ class RocksDB(
     }
   }
 
-  private def shouldCreateSnapshot(): Boolean = {
+  private def shouldCreateSnapshot(colFamilyIdsChanged: Boolean): Boolean = {
     if (enableChangelogCheckpointing && !colFamilyIdsChanged) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
