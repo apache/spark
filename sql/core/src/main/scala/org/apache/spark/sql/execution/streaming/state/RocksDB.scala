@@ -73,9 +73,6 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false) extends Logging {
 
-  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
-  private val maxColumnFamilyId = new AtomicInteger(0)
-
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
