@@ -497,8 +497,8 @@ class RocksDB(
    * @param columnFamilyMapping A map of column family names to their corresponding VCF IDs.
    * @param maxColumnFamilyId The maximum VCF ID used for column families.
    * @param colFamilyIdsChanged A flag indicating whether column family IDs have changed.
-   *                            If they have, we need to commit regardless of changelog
-   *                            checkpointing being enabled or not
+   *                            If they have, we need to create a snapshot regardless of whether
+   *                            changelog checkpointing is enabled or not
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
    * - Flush all changes to disk
    * - Create a RocksDB checkpoint in a new local dir
