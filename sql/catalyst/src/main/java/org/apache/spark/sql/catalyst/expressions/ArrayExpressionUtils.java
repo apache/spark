@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.util.Arrays;
 import java.util.Comparator;
 
 import scala.math.Ordering;
@@ -47,11 +48,11 @@ public class ArrayExpressionUtils {
       boolean c2 = (Boolean) o2;
       return c1 == c2 ? 0 : (c1 ? 1 : -1);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(BooleanType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(BooleanType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(ArrayData data, byte value) {
-    return java.util.Arrays.binarySearch(data.toByteArray(), value);
+    return Arrays.binarySearch(data.toByteArray(), value);
   }
 
   public static int binarySearchNullSafe(ArrayData data, Byte value) {
@@ -67,11 +68,11 @@ public class ArrayExpressionUtils {
       byte c2 = (Byte) o2;
       return Byte.compare(c1, c2);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(ByteType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(ByteType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(ArrayData data, short value) {
-    return java.util.Arrays.binarySearch(data.toShortArray(), value);
+    return Arrays.binarySearch(data.toShortArray(), value);
   }
 
   public static int binarySearchNullSafe(ArrayData data, Short value) {
@@ -87,11 +88,11 @@ public class ArrayExpressionUtils {
       short c2 = (Short) o2;
       return Short.compare(c1, c2);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(ShortType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(ShortType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(ArrayData data, int value) {
-    return java.util.Arrays.binarySearch(data.toIntArray(), value);
+    return Arrays.binarySearch(data.toIntArray(), value);
   }
 
   public static int binarySearchNullSafe(ArrayData data, Integer value) {
@@ -107,11 +108,11 @@ public class ArrayExpressionUtils {
       int c2 = (Integer) o2;
       return Integer.compare(c1, c2);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(IntegerType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(IntegerType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(ArrayData data, long value) {
-    return java.util.Arrays.binarySearch(data.toLongArray(), value);
+    return Arrays.binarySearch(data.toLongArray(), value);
   }
 
   public static int binarySearchNullSafe(ArrayData data, Long value) {
@@ -127,11 +128,11 @@ public class ArrayExpressionUtils {
       long c2 = (Long) o2;
       return Long.compare(c1, c2);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(LongType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(LongType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(ArrayData data, float value) {
-    return java.util.Arrays.binarySearch(data.toFloatArray(), value);
+    return Arrays.binarySearch(data.toFloatArray(), value);
   }
 
   public static int binarySearchNullSafe(ArrayData data, Float value) {
@@ -147,11 +148,11 @@ public class ArrayExpressionUtils {
       float c2 = (Float) o2;
       return SQLOrderingUtil.compareFloats(c1, c2);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(FloatType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(FloatType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(ArrayData data, double value) {
-    return java.util.Arrays.binarySearch(data.toDoubleArray(), value);
+    return Arrays.binarySearch(data.toDoubleArray(), value);
   }
 
   public static int binarySearchNullSafe(ArrayData data, Double value) {
@@ -167,7 +168,7 @@ public class ArrayExpressionUtils {
       double c2 = (Double) o2;
       return SQLOrderingUtil.compareDoubles(c1, c2);
     };
-    return java.util.Arrays.binarySearch(data.toObjectArray(DoubleType$.MODULE$), value, comp);
+    return Arrays.binarySearch(data.toObjectArray(DoubleType$.MODULE$), value, comp);
   }
 
   public static int binarySearch(DataType elementType, ArrayData data, Object value) {
@@ -183,6 +184,6 @@ public class ArrayExpressionUtils {
       }
       return ordering.compare(o1, o2);
     };
-    return java.util.Arrays.binarySearch(array, value, comp);
+    return Arrays.binarySearch(array, value, comp);
   }
 }
