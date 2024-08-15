@@ -18,6 +18,10 @@
 ARG base_img
 
 FROM ${base_img:-spark}
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Python Image"
+LABEL org.opencontainers.image.version=""
 WORKDIR /
 
 # Reset to root to run installation tasks

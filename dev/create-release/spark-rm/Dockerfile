@@ -17,6 +17,10 @@
 
 # Image for building Spark releases. Based on Ubuntu 22.04.
 FROM ubuntu:jammy-20240227
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Release Manager Image"
+LABEL org.opencontainers.image.version=""
 
 ENV FULL_REFRESH_DATE 20240318
 
