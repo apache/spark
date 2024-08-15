@@ -178,7 +178,8 @@ private[sql] object PythonSQLUtils extends Logging {
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
-  def lambdaFunction(function: Column, variables: Seq[Column]): Column = {
+  @scala.annotation.varargs
+  def lambdaFunction(function: Column, variables: Column*): Column = {
     val arguments = variables.map(_.node.asInstanceOf[internal.UnresolvedNamedLambdaVariable])
     Column(internal.LambdaFunction(function.node, arguments))
   }
@@ -191,6 +192,9 @@ private[sql] object PythonSQLUtils extends Logging {
     expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
     Column(Wrapper(expr))
   }
+
+  @scala.annotation.varargs
+  def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 }
 
 /**

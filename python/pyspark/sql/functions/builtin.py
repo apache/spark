@@ -18665,7 +18665,7 @@ def _invoke_higher_order_function(
     sc = _get_active_spark_context()
     jfuns = [_create_lambda(f) for f in funs]
     jcols = [_to_java_column(c) for c in cols]
-    return Column(sc._jvm.Column.pysparkFn(name, _to_seq(sc, jcols + jfuns)))
+    return Column(sc._jvm.PythonSQLUtils.fn(name, _to_seq(sc, jcols + jfuns)))
 
 @overload
 def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:

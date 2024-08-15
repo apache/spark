@@ -1583,6 +1583,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
+      case c: CollectMetrics if containsStar(c.metrics) =>
+        c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
@@ -1891,8 +1893,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } catch {
           case e: AnalysisException =>
             AnalysisContext.get.outerPlan.map {
-              // Only Project and Aggregate can host star expressions.
-              case u @ (_: Project | _: Aggregate) =>
+              // Only Project, Aggregate, CollectMetrics can host star expressions.
+              case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
                 Try(s.expand(u.children.head, resolver)) match {
                   case Success(expanded) => expanded.map(wrapOuterReference)
                   case Failure(_) => throw e
