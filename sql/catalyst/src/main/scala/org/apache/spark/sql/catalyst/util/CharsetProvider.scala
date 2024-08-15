@@ -14,16 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- package org.apache.spark.sql.catalyst.util
- import java.nio.charset.{Charset, CharsetDecoder, CharsetEncoder, CodingErrorAction, IllegalCharsetNameException, UnsupportedCharsetException}
- import java.util.Locale
+package org.apache.spark.sql.catalyst.util
 
- import org.apache.spark.sql.errors.QueryExecutionErrors
+import java.nio.charset.{Charset, CharsetDecoder, CharsetEncoder, CodingErrorAction, IllegalCharsetNameException, UnsupportedCharsetException}
+import java.util.Locale
+
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 private[sql] object CharsetProvider {
 
-  final lazy val VALID_CHARSETS =
-    Set("US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
+  final lazy val VALID_CHARSETS = Set(
+    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32",
+    "GB2312", "GBK", "GB18030", "BIG5")
 
   def forName(
       charset: String,
