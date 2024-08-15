@@ -52,7 +52,15 @@ object SchemaConverters extends Logging {
 
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
-   *
+ *
+   * @param avroSchema The Avro schema to convert.
+   * @param useStableIdForUnionType If true, Avro schema is deserialized into Spark SQL schema,
+   *                                and the Avro Union type is transformed into a structure where
+   *                                the field names remain consistent with their respective types.
+   * @param stableIdPrefixForUnionType The prefix to use to configure the prefix for fields of
+   *                                   Avro Union type
+   * @param recursiveFieldMaxDepth The maximum depth to recursively process fields in Avro schema.
+   *                               -1 means not supported.
    * @since 4.0.0
    */
   def toSqlType(

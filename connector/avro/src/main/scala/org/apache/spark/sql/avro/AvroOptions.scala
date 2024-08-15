@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -142,7 +143,7 @@ private[sql] class AvroOptions(
     parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
 
   if (recursiveFieldMaxDepth > RECURSIVE_FIELD_MAX_DEPTH_LIMIT) {
-    throw AvroOptionsError.avroInvalidOptionValue(
+    throw QueryCompilationErrors.avroOptionsException(
       RECURSIVE_FIELD_MAX_DEPTH,
       s"Should not be greater than $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.")
   }
@@ -202,24 +203,3 @@ private[sql] object AvroOptions extends DataSourceOptions {
 
   val RECURSIVE_FIELD_MAX_DEPTH_LIMIT: Int = 15
 }
-
-abstract class AvroOptionsException(
-  errorClass: String,
-  messageParameters: Map[String, String],
-  cause: Throwable)
-  extends SparkRuntimeException(
-    errorClass,
-    messageParameters,
-    cause)
-
-object AvroOptionsError {
-  def avroInvalidOptionValue(optionName: String, message: String): AvroInvalidOptionValue = {
-    new AvroInvalidOptionValue(optionName, message)
-  }
-}
-
-class AvroInvalidOptionValue(optionName: String, message: String)
-  extends AvroOptionsException(
-    "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
-    Map("optionName" -> optionName, "message" -> message),
-    cause = null)
