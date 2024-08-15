@@ -189,13 +189,12 @@ class StringIndexer @Since("1.4.0") (
   private def getSelectedCols(dataset: Dataset[_], inputCols: Seq[String]): Seq[Column] = {
     inputCols.map { colName =>
       val col = dataset.col(colName)
-      if (col.expr.dataType == StringType) {
-        col
-      } else {
-        // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
-        // we replace NaNs with null in advance.
-        when(!isnan(col), col).cast(StringType)
-      }
+      // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
+      // we replace NaNs with null in advance.
+      val fpTypes = Seq(DoubleType, FloatType).map(_.catalogString)
+      when(typeof(col).isin(fpTypes: _*) && isnan(col), lit(null))
+        .otherwise(col)
+        .cast(StringType)
     }
   }
 

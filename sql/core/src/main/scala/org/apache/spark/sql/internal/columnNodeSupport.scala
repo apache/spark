@@ -16,21 +16,24 @@
  */
 package org.apache.spark.sql.internal
 
+import scala.language.implicitConversions
+
 import org.apache.spark.SparkException
+import org.apache.spark.sql.{Column, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, analysis, expressions}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, toPrettySQL}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
 import org.apache.spark.sql.expressions.UserDefinedFunctionUtils.toScalaUDF
+import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
  * Convert a [[ColumnNode]] into an [[Expression]].
@@ -174,7 +177,13 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         toScalaUDF(udf, arguments.map(apply))
 
       case Wrapper(expression, _) =>
-        expression
+        val transformed = expression.transformDown {
+          case ColumnNodeExpression(node) => apply(node)
+        }
+        transformed match {
+          case f: AggregateFunction => f.toAggregateExpression()
+          case _ => transformed
+        }
 
       case node =>
         throw SparkException.internalError("Unsupported ColumnNode: " + node)
@@ -249,7 +258,25 @@ private[sql] case class Wrapper(
   override def sql: String = expression.sql
 }
 
-private[sql] object NamedExpressionUtils {
+private[sql] case class ColumnNodeExpression(node: ColumnNode) extends Unevaluable {
+  override def nullable: Boolean = true
+  override def dataType: DataType = NullType
+  override def children: Seq[Expression] = Nil
+  override protected def withNewChildrenInternal(c: IndexedSeq[Expression]): Expression = this
+}
+
+private[spark] object ExpressionUtils {
+  /**
+   * Create an Expression backed Column.
+   */
+  implicit def column(e: Expression): Column = Column(Wrapper(e))
+
+  /**
+   * Create an ColumnNode backed Expression. Please not that this has to be converted to an actual
+   * Expression before it is used.
+   */
+  implicit def expression(c: Column): Expression = ColumnNodeExpression(c.node)
+
   /**
    * Returns the expression either with an existing or auto assigned name.
    */

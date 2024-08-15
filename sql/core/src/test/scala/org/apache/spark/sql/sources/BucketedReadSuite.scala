@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import scala.util.Random
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -221,7 +222,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df)
 
       // Case 4: InSet
-      val inSetExpr = expressions.InSet($"j".expr,
+      val inSetExpr = expressions.InSet(
+        UnresolvedAttribute("j"),
         Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,

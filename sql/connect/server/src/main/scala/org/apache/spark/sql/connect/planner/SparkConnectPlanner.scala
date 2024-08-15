@@ -108,6 +108,7 @@ class SparkConnectPlanner(
   @Since("4.0.0")
   @DeveloperApi
   def session: SparkSession = sessionHolder.session
+  import sessionHolder.session.RichColumn
 
   private[connect] def parser = session.sessionState.sqlParser
 

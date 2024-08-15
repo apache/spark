@@ -35,6 +35,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.ExpressionUtils.generateAlias
+import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -56,6 +58,7 @@ class RelationalGroupedDataset protected[sql](
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
   import RelationalGroupedDataset._
+  import df.sparkSession._
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     @scala.annotation.nowarn("cat=deprecation")
@@ -250,7 +253,7 @@ class RelationalGroupedDataset protected[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map {
       case typed: TypedColumn[_, _] =>
-        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
+        withInputType(typed.expr, df.exprEnc, df.logicalPlan.output)
       case c => c.expr
     })
   }
@@ -808,7 +811,7 @@ private[sql] object RelationalGroupedDataset {
 
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
-    case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
+    case a: AggregateExpression => UnresolvedAlias(a, Some(generateAlias))
     case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }

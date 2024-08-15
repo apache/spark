@@ -26,6 +26,7 @@ import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{lit, percentile_approx => pa}
 import org.apache.spark.sql.hive.execution.TestingTypedCount
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
@@ -116,8 +117,7 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
       output = output
     )
 
-    def typed_count(column: Column): Column =
-      Column(TestingTypedCount(column.expr).toAggregateExpression())
+    def typed_count(column: Column): Column = TestingTypedCount(column)
 
     val df = spark.range(N)
 

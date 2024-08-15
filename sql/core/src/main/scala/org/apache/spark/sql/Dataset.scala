@@ -61,6 +61,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Data
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -220,7 +221,7 @@ class Dataset[T] private[sql](
     queryExecution.sparkSession
   }
 
-  import sparkSession._
+  import sparkSession.RichColumn
 
   // A globally unique id of this Dataset.
   private[sql] val id = Dataset.curId.getAndIncrement()
@@ -1643,7 +1644,8 @@ class Dataset[T] private[sql](
    */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
     implicit val encoder: ExpressionEncoder[U1] = encoderFor(c1.encoder)
-    val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
+    val tc1 = withInputType(c1.named, exprEnc, logicalPlan.output)
+    val project = Project(tc1 :: Nil, logicalPlan)
 
     if (!encoder.isSerializedAsStructForTopLevel) {
       new Dataset[U1](sparkSession, project, encoder)
@@ -1660,8 +1662,7 @@ class Dataset[T] private[sql](
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(c => encoderFor(c.encoder))
-    val namedColumns =
-      columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
+    val namedColumns = columns.map(c => withInputType(c.named, exprEnc, logicalPlan.output))
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(execution, ExpressionEncoder.tuple(encoders))
   }

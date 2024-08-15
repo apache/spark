@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, 
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -64,13 +65,12 @@ case class UserDefinedPythonFunction(
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
-  def apply(exprs: Column*): Column = {
-    fromUDFExpr(builder(exprs.map(_.expr)))
-  }
+  def apply(exprs: Column*): Column = builder(exprs.map(expression))
 
   /**
    * Returns a [[Column]] that will evaluate the UDF expression with the given input.
    */
+  // TODO this is used in PySpark!
   def fromUDFExpr(expr: Expression): Column = {
     expr match {
       case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
@@ -157,7 +157,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
+    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }

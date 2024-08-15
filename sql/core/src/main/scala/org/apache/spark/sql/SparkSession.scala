@@ -21,9 +21,11 @@ import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
+
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -933,9 +935,17 @@ class SparkSession private(
     override protected def conf: SQLConf = sessionState.conf
   }
 
+  private[sql] def expression(e: Column): Expression = Converter(e.node)
+
   private[sql] implicit class RichColumn(val column: Column) {
+    /**
+     * Returns the expression for this column.
+     */
     def expr: Expression = Converter(column.node)
-    def named: NamedExpression = NamedExpressionUtils.toNamed(expr)
+    /**
+     * Returns the expression for this column either with an existing or auto assigned name.
+     */
+    def named: NamedExpression = ExpressionUtils.toNamed(expr)
   }
 }
 
