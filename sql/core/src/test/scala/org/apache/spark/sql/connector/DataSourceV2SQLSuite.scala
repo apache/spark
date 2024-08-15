@@ -2859,19 +2859,12 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(sql1)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "non_exist",
-          "table" -> "testcat.tbl",
-          "schema" ->
-            """root
-              | |-- id: long (nullable = true)
-              | |-- data: string (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(
-          fragment = sql1,
-          start = 0,
-          stop = 40))
+          "objectName" -> "`non_exist`",
+          "proposal" -> "`id`, `data`"),
+        context = ExpectedContext(fragment = sql1, start = 0, stop = 40))
 
       val sql2 = s"CREATE index i1 ON $t(id)"
       checkError(
