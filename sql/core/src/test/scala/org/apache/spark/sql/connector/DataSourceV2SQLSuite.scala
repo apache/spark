@@ -21,13 +21,11 @@ import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
 import java.util
 import java.util.Locale
-
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
-
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
@@ -3646,17 +3644,18 @@ class DataSourceV2SQLSuiteV1Filter
   test("SPARK-49211: V2 Catalog can support built-in data sources") {
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     spark.sessionState.catalogManager.reset()
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
-        checkParquet("spark_catalog.default.t", path.getAbsolutePath)
+        checkParquet(table1.toString, path.getAbsolutePath)
       }
     }
-    withSQLConf(
-      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    withSQLConf(table2.toString -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
-        checkParquet("testcat3.default.t", path.getAbsolutePath)
+        checkParquet(table2.toString, path.getAbsolutePath)
       }
     }
   }
