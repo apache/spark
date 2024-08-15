@@ -600,30 +600,36 @@ class StreamingSessionWindowSuite extends StreamTest
     val inputData = MemoryStream[(String, Long)]
     val sessionUpdates = sessionWindowQuery(inputData)
 
-    val e = intercept[AnalysisException] {
-      testStream(sessionUpdates, OutputMode.Update())(
-        AddData(inputData, ("hello", 40L)),
-        CheckAnswer() // this is just to trigger the exception
-      )
-    }
-    Seq("Update output mode", "not supported", "for session window").foreach { m =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        testStream(sessionUpdates, OutputMode.Update())(
+          AddData(inputData, ("hello", 40L)),
+          CheckAnswer() // this is just to trigger the exception
+        )
+      },
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      sqlState = "42KDE",
+      parameters = Map(
+        "outputMode" -> OutputMode.Update().toString.toLowerCase(Locale.ROOT),
+        "operation" -> "session window streaming aggregations"))
   }
 
   testWithAllOptions("update mode - session window - no key") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = sessionWindowQueryOnGlobalKey(inputData)
 
-    val e = intercept[AnalysisException] {
-      testStream(windowedAggregation, OutputMode.Update())(
-        AddData(inputData, 40),
-        CheckAnswer() // this is just to trigger the exception
-      )
-    }
-    Seq("Update output mode", "not supported", "for session window").foreach { m =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        testStream(windowedAggregation, OutputMode.Update())(
+          AddData(inputData, 40),
+          CheckAnswer() // this is just to trigger the exception
+        )
+      },
+      errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      sqlState = "42KDE",
+      parameters = Map(
+        "outputMode" -> OutputMode.Update().toString.toLowerCase(Locale.ROOT),
+        "operation" -> "session window streaming aggregations"))
   }
 
   // Test that session window works with mean, median, std dev, variance, UDAFs

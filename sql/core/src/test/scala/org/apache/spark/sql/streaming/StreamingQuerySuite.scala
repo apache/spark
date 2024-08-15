@@ -1256,7 +1256,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       inputData2.toDF().createOrReplaceTempView("s2")
       val unioned = spark.sql(
         "select s1.value from s1 union select s2.value from s2")
-      checkExceptionMessage(unioned)
+      checkAppendOutputModeException(unioned)
     }
   }
 
@@ -1265,7 +1265,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     withTempView("deduptest") {
       inputData.toDF().toDF("value").createOrReplaceTempView("deduptest")
       val distinct = spark.sql("select distinct value from deduptest")
-      checkExceptionMessage(distinct)
+      checkAppendOutputModeException(distinct)
     }
   }
 
@@ -1448,16 +1448,20 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  private def checkExceptionMessage(df: DataFrame): Unit = {
+  private def checkAppendOutputModeException(df: DataFrame): Unit = {
     withTempDir { outputDir =>
       withTempDir { checkpointDir =>
-        val exception = intercept[AnalysisException](
-          df.writeStream
-            .option("checkpointLocation", checkpointDir.getCanonicalPath)
-            .start(outputDir.getCanonicalPath))
-        assert(exception.getMessage.contains(
-          "Append output mode not supported when there are streaming aggregations on streaming " +
-            "DataFrames/DataSets without watermark"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.writeStream
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+              .start(outputDir.getCanonicalPath)
+          },
+          errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+          sqlState = "42KDE",
+          parameters = Map(
+            "outputMode" -> "append",
+            "operation" -> "streaming aggregations without watermark"))
       }
     }
   }
