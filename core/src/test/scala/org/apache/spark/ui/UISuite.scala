@@ -18,7 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
-import java.net.URI
+import java.net.{URI, URL}
 import java.util.Locale
 
 import scala.io.Source
@@ -261,8 +261,10 @@ class UISuite extends SparkFunSuite {
 
       // Try a request with bad content in a parameter to make sure the security filter
       // is being added to new handlers.
-      val badRequest = new URI(
-        s"http://$localhost:${serverInfo.boundPort}$path/root?bypass&invalid<=foo").toURL
+      // scalastyle:off URLConstructor
+      val badRequest = new URL(
+        s"http://$localhost:${serverInfo.boundPort}$path/root?bypass&invalid<=foo")
+      // scalastyle:on URLConstructor
       assert(TestUtils.httpResponseCode(badRequest) === HttpServletResponse.SC_OK)
       assert(servlet.lastRequest.getParameter("invalid<") === null)
       assert(servlet.lastRequest.getParameter("invalid&lt;") !== null)
