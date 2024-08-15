@@ -3673,8 +3673,8 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
-    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     spark.sessionState.catalogManager.reset()
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key ->
         classOf[V2CatalogSupportBuiltinDataSource].getName) {
