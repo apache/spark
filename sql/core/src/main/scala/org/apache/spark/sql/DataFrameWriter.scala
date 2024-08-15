@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -473,7 +474,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-    val table = catalog.asTableCatalog.loadTable(ident) match {
+    val table = catalog.asTableCatalog.loadTableForWrite(ident) match {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
@@ -504,7 +505,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     runCommand(df.sparkSession) {
       InsertIntoStatement(
-        table = UnresolvedRelation(tableIdent),
+        table = UnresolvedRelation(tableIdent).forWrite,
         partitionSpec = Map.empty[String, Option[String]],
         Nil,
         query = df.logicalPlan,
@@ -588,7 +589,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined
+    val canUseV2 = lookupV2Provider().isDefined ||
+      df.sparkSession.sessionState.conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
@@ -609,7 +611,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveAsTable(
       catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): Unit = {
-    val tableOpt = try Option(catalog.loadTable(ident)) catch {
+    val tableOpt = try Option(catalog.loadTableForWrite(ident)) catch {
       case _: NoSuchTableException => None
     }
 
@@ -670,7 +672,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val catalog = df.sparkSession.sessionState.catalog
     val qualifiedIdent = catalog.qualifyIdentifier(tableIdent)
     val tableExists = catalog.tableExists(qualifiedIdent)
-    val tableName = qualifiedIdent.unquotedString
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>

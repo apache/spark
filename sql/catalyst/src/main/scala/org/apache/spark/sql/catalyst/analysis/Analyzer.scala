@@ -1321,7 +1321,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 cachedConnectRelation
               }.getOrElse(cachedRelation)
             }.orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
+              val forWrite = "true".equalsIgnoreCase(u.options.get(UnresolvedRelation.FOR_WRITE))
+              val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec, forWrite)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>

@@ -455,7 +455,7 @@ class AstBuilder extends DataTypeAstBuilder
         = visitInsertIntoTable(table)
         withIdentClause(relationCtx, ident => {
           val insertIntoStatement = InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options),
+            createUnresolvedRelation(relationCtx, ident, options, forWrite = true),
             partition,
             cols,
             query,
@@ -473,7 +473,7 @@ class AstBuilder extends DataTypeAstBuilder
         = visitInsertOverwriteTable(table)
         withIdentClause(relationCtx, ident => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options),
+            createUnresolvedRelation(relationCtx, ident, options, forWrite = true),
             partition,
             cols,
             query,
@@ -482,9 +482,10 @@ class AstBuilder extends DataTypeAstBuilder
             byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
+        val options = Option(ctx.optionsClause())
         withIdentClause(ctx.identifierReference, ident => {
           OverwriteByExpression.byPosition(
-            createUnresolvedRelation(ctx.identifierReference, ident, Option(ctx.optionsClause())),
+            createUnresolvedRelation(ctx.identifierReference, ident, options, forWrite = true),
             query,
             expression(ctx.whereClause().booleanExpression()))
         })
@@ -569,7 +570,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = createUnresolvedRelation(ctx.identifierReference)
+    val table = createUnresolvedRelation(ctx.identifierReference, forWrite = true)
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
@@ -581,7 +582,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = createUnresolvedRelation(ctx.identifierReference)
+    val table = createUnresolvedRelation(ctx.identifierReference, forWrite = true)
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -604,7 +605,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
     val withSchemaEvolution = ctx.EVOLUTION() != null
-    val targetTable = createUnresolvedRelation(ctx.target)
+    val targetTable = createUnresolvedRelation(ctx.target, forWrite = true)
     val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
     val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
 
@@ -3115,10 +3116,17 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def createUnresolvedRelation(
       ctx: IdentifierReferenceContext,
-      optionsClause: Option[OptionsClauseContext] = None): LogicalPlan = withOrigin(ctx) {
+      optionsClause: Option[OptionsClauseContext] = None,
+      forWrite: Boolean = false): LogicalPlan = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
-    withIdentClause(ctx, parts =>
-      new UnresolvedRelation(parts, options, isStreaming = false))
+    withIdentClause(ctx, parts => {
+      val relation = new UnresolvedRelation(parts, options, isStreaming = false)
+      if (forWrite) {
+        relation.forWrite
+      } else {
+        relation
+      }
+    })
   }
 
   /**
@@ -3127,9 +3135,15 @@ class AstBuilder extends DataTypeAstBuilder
   private def createUnresolvedRelation(
       ctx: ParserRuleContext,
       ident: Seq[String],
-      optionsClause: Option[OptionsClauseContext]): UnresolvedRelation = withOrigin(ctx) {
+      optionsClause: Option[OptionsClauseContext],
+      forWrite: Boolean): UnresolvedRelation = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
-    new UnresolvedRelation(ident, options, isStreaming = false)
+    val relation = new UnresolvedRelation(ident, options, isStreaming = false)
+    if (forWrite) {
+      relation.forWrite
+    } else {
+      relation
+    }
   }
 
   private def resolveOptions(
@@ -5005,7 +5019,7 @@ class AstBuilder extends DataTypeAstBuilder
       if (query.isDefined) {
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
-        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident, None),
+        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident, None, forWrite = false),
           ident, isLazy, options)
       }
     })

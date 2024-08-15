@@ -111,6 +111,17 @@ public interface TableCatalog extends CatalogPlugin {
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
+   * A variant of {@link #loadTable(Identifier)} that indicates it's for data writing.
+   * Implementations can override this method to do additional handling for data writing, such as
+   * checking write permissions.
+   *
+   * @since 4.0.0
+   */
+  default Table loadTableForWrite(Identifier ident) throws NoSuchTableException {
+    return loadTable(ident);
+  }
+
+  /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
    * <p>
    * If the catalog supports views and contains a view for the identifier and not a table, this

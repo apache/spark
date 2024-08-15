@@ -403,9 +403,10 @@ private[sql] object CatalogV2Util {
   def loadTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      forWrite: Boolean = false): Option[Table] =
     try {
-      Option(getTable(catalog, ident, timeTravelSpec))
+      Option(getTable(catalog, ident, timeTravelSpec, forWrite))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
@@ -414,8 +415,10 @@ private[sql] object CatalogV2Util {
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Table = {
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      forWrite: Boolean = false): Table = {
     if (timeTravelSpec.nonEmpty) {
+      assert(!forWrite, "Should not write to a table with time travel")
       timeTravelSpec.get match {
         case v: AsOfVersion =>
           catalog.asTableCatalog.loadTable(ident, v.version)
@@ -423,7 +426,11 @@ private[sql] object CatalogV2Util {
           catalog.asTableCatalog.loadTable(ident, ts.timestamp)
       }
     } else {
-      catalog.asTableCatalog.loadTable(ident)
+      if (forWrite) {
+        catalog.asTableCatalog.loadTableForWrite(ident)
+      } else {
+        catalog.asTableCatalog.loadTable(ident)
+      }
     }
   }
 

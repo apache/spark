@@ -124,10 +124,21 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
+  def forWrite: UnresolvedRelation = {
+    val newOptions = new java.util.HashMap[String, String]
+    newOptions.put(UnresolvedRelation.FOR_WRITE, "true")
+    newOptions.putAll(options)
+    copy(options = new CaseInsensitiveStringMap(newOptions))
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
 object UnresolvedRelation {
+  // An internal option of `UnresolvedRelation` to indicate that we look up this relation for data
+  // writing.
+  val FOR_WRITE = "__for_write__"
+
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,

@@ -3703,6 +3703,63 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49246: read-only catalog") {
+    def checkWriteOperations(catalog: String): Unit = {
+      withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
+        val input = sql("SELECT 1")
+        val tbl = s"$catalog.default.t"
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (i INT)")
+          val df = sql(s"SELECT * FROM $tbl")
+          assert(df.collect().isEmpty)
+          assert(df.schema == new StructType().add("i", "int"))
+
+          intercept[RuntimeException](sql(s"INSERT INTO $tbl SELECT 1"))
+          intercept[RuntimeException](sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT 1"))
+          intercept[RuntimeException] (sql(s"INSERT OVERWRITE $tbl SELECT 1"))
+          intercept[RuntimeException] (sql(s"DELETE FROM $tbl WHERE i = 0"))
+          intercept[RuntimeException] (sql(s"UPDATE $tbl SET i = 0"))
+          intercept[RuntimeException] {
+            sql(
+              s"""
+                |MERGE INTO $tbl USING (SELECT 1 i) AS source
+                |ON source.i = $tbl.i
+                |WHEN NOT MATCHED THEN INSERT *
+                |""".stripMargin)
+          }
+
+          intercept[RuntimeException](input.write.insertInto(tbl))
+          intercept[RuntimeException](input.write.mode("append").saveAsTable(tbl))
+          intercept[RuntimeException](input.writeTo(tbl).append())
+          intercept[RuntimeException](input.writeTo(tbl).overwrite(df.col("i") === 1))
+          intercept[RuntimeException](input.writeTo(tbl).overwritePartitions())
+        }
+
+        // Test CTAS
+        withTable(tbl) {
+          intercept[RuntimeException](sql(s"CREATE TABLE $tbl AS SELECT 1 i"))
+        }
+        withTable(tbl) {
+          intercept[RuntimeException](sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"))
+        }
+        withTable(tbl) {
+          intercept[RuntimeException](input.write.saveAsTable(tbl))
+        }
+        withTable(tbl) {
+          intercept[RuntimeException](input.writeTo(tbl).create())
+        }
+        withTable(tbl) {
+          intercept[RuntimeException](input.writeTo(tbl).createOrReplace())
+        }
+      }
+    }
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    checkWriteOperations(SESSION_CATALOG_NAME)
+    checkWriteOperations("read_only_cat")
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3771,3 +3828,17 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
   }
 }
 
+class ReadOnlyCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def loadTableForWrite(ident: Identifier): Table = {
+    throw new RuntimeException("cannot write")
+  }
+}

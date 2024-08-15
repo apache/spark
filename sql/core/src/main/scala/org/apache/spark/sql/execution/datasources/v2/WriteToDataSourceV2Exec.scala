@@ -84,7 +84,7 @@ case class CreateTableAsSelectExec(
     }
     val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
+      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTableForWrite(ident))
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -164,7 +164,7 @@ case class ReplaceTableAsSelectExec(
     }
     val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
+      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTableForWrite(ident))
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }

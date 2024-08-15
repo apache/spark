@@ -188,7 +188,7 @@ class MergeIntoWriter[T] private[sql] (
     }
 
     val merge = MergeIntoTable(
-      UnresolvedRelation(tableName),
+      UnresolvedRelation(tableName).forWrite,
       logicalPlan,
       on.expr,
       matchedActions,
