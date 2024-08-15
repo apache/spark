@@ -1246,7 +1246,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
       table.map {
-        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) =>
+        // To utilize this code path to execute V1 commands, e.g. INSERT,
+        // either it must be session catalog, or tracksPartitionsInCatalog
+        // must be false so it does not require use catalog to manage partitions.
+        // Obviously we cannot execute V1Table by V1 code path if the table
+        // is not from session catalog and the table still requires its catalog
+        // to manage partitions.
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog)
+          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
           if (isStreaming) {
             if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
               throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
@@ -1583,6 +1590,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
+      case c: CollectMetrics if containsStar(c.metrics) =>
+        c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
@@ -1891,8 +1900,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } catch {
           case e: AnalysisException =>
             AnalysisContext.get.outerPlan.map {
-              // Only Project and Aggregate can host star expressions.
-              case u @ (_: Project | _: Aggregate) =>
+              // Only Project, Aggregate, CollectMetrics can host star expressions.
+              case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
                 Try(s.expand(u.children.head, resolver)) match {
                   case Success(expanded) => expanded.map(wrapOuterReference)
                   case Failure(_) => throw e
@@ -1930,6 +1939,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
       exprs.flatMap(_.collect { case s: Star => s })
 
+    private def isCountStarExpansionAllowed(arguments: Seq[Expression]): Boolean = arguments match {
+      case Seq(UnresolvedStar(None)) => true
+      case Seq(_: ResolvedStar) => true
+      case _ => false
+    }
+
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
@@ -1937,7 +1952,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
           f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
-          f0.arguments == Seq(UnresolvedStar(None)) =>
+          isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
           f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
@@ -3930,7 +3945,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         fieldName: Seq[String],
         context: Expression): ResolvedFieldName = {
       resolveFieldNamesOpt(table, fieldName, context)
-        .getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
+        .getOrElse {
+          throw QueryCompilationErrors.unresolvedColumnError(fieldName, table.schema.fieldNames,
+            context.origin)
+        }
     }
 
     private def resolveFieldNamesOpt(

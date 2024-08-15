@@ -25,10 +25,10 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, ToScalaUDF}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -403,22 +403,14 @@ object functions {
     corr(Column(columnName1), Column(columnName2))
   }
 
-  private val ONE = Column(internal.Literal(1, Option(IntegerType)))
-
   /**
    * Aggregate function: returns the number of items in a group.
    *
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(e: Column): Column = {
-    val withoutStar = e.node match {
-      // Turn count(*) into count(1)
-      case internal.UnresolvedStar(None, _, _) => ONE
-      case _ => e
-    }
-    Column.fn("count", withoutStar)
-  }
+  def count(e: Column): Column =
+    Column.fn("count", e)
 
   /**
    * Aggregate function: returns the number of items in a group.
@@ -427,7 +419,7 @@ object functions {
    * @since 1.3.0
    */
   def count(columnName: String): TypedColumn[Any, Long] =
-    count(Column(columnName)).as(AgnosticEncoders.PrimitiveLongEncoder)
+    count(Column(columnName)).as(PrimitiveLongEncoder)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -7901,10 +7893,6 @@ object functions {
 
   (0 to 10).foreach { i =>
     val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
-    val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
-    val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
-    val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
-    val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
     println(s"""
       |/**
       | * Defines a Java UDF$i instance as user-defined function (UDF).
@@ -7916,8 +7904,7 @@ object functions {
       | * @since 2.3.0
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
-      |  val func = $funcCall
-      |  SparkUserDefinedFunction(func, returnType, $i)
+      |  SparkUserDefinedFunction(ToScalaUDF(f), returnType, $i)
       |}""".stripMargin)
   }
 
@@ -8147,8 +8134,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    val func = () => f.asInstanceOf[UDF0[Any]].call()
-    SparkUserDefinedFunction(func, returnType, 0)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 0)
   }
 
   /**
@@ -8161,8 +8147,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    SparkUserDefinedFunction(func, returnType, 1)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 1)
   }
 
   /**
@@ -8175,8 +8160,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 2)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 2)
   }
 
   /**
@@ -8189,8 +8173,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 3)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 3)
   }
 
   /**
@@ -8203,8 +8186,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 4)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 4)
   }
 
   /**
@@ -8217,8 +8199,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 5)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 5)
   }
 
   /**
@@ -8231,8 +8212,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 6)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 6)
   }
 
   /**
@@ -8245,8 +8225,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 7)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 7)
   }
 
   /**
@@ -8259,8 +8238,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 8)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 8)
   }
 
   /**
@@ -8273,8 +8251,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 9)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 9)
   }
 
   /**
@@ -8287,8 +8264,7 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, 10)
+    SparkUserDefinedFunction(ToScalaUDF(f), returnType, 10)
   }
 
   // scalastyle:on parameter.number

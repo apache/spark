@@ -18574,10 +18574,7 @@ def _unresolved_named_lambda_variable(name: str) -> Column:
     from py4j.java_gateway import JVMView
 
     sc = _get_active_spark_context()
-    internal = cast(JVMView, sc._jvm).org.apache.spark.sql.internal
-    return Column(
-        cast(JVMView, sc._jvm).Column(internal.UnresolvedNamedLambdaVariable.apply(name))
-    )
+    return Column(cast(JVMView, sc._jvm).PythonSQLUtils.unresolvedNamedLambdaVariable(name))
 
 
 def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
@@ -18629,10 +18626,7 @@ def _create_lambda(f: Callable) -> Callable:
     internal = cast(JVMView, sc._jvm).org.apache.spark.sql.internal
 
     argnames = ["x", "y", "z"]
-    args = [
-        _unresolved_named_lambda_variable(arg)
-        for arg in argnames[: len(parameters)]
-    ]
+    args = [_unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]]
 
     result = f(*args)
 
@@ -18642,10 +18636,9 @@ def _create_lambda(f: Callable) -> Callable:
             messageParameters={"func_name": f.__name__, "return_type": type(result).__name__},
         )
 
-    jexpr = result._jc.node()
-    jargs = _to_seq(sc, [arg._jc.node() for arg in args])
-
-    return cast(JVMView, sc._jvm).Column(internal.LambdaFunction.apply(jexpr, jargs))
+    jexpr = result._jc
+    jargs = _to_seq(sc, [arg._jc for arg in args])
+    return cast(JVMView, sc._jvm).PythonSQLUtils.lambdaFunction(jexpr, jargs)
 
 
 def _invoke_higher_order_function(
@@ -18669,7 +18662,8 @@ def _invoke_higher_order_function(
     sc = _get_active_spark_context()
     jfuns = [_create_lambda(f) for f in funs]
     jcols = [_to_java_column(c) for c in cols]
-    return Column(sc._jvm.Column.pysparkFn(name, _to_seq(sc, jcols + jfuns)))
+    return Column(sc._jvm.PythonSQLUtils.fn(name, _to_seq(sc, jcols + jfuns)))
+
 
 @overload
 def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
@@ -18962,10 +18956,10 @@ def aggregate(
     +----+
     """
     if finish is not None:
-        return _invoke_higher_order_function("array_agg", [col, initialValue], [merge, finish])
+        return _invoke_higher_order_function("aggregate", [col, initialValue], [merge, finish])
 
     else:
-        return _invoke_higher_order_function("array_agg", [col, initialValue], [merge])
+        return _invoke_higher_order_function("aggregate", [col, initialValue], [merge])
 
 
 @_try_remote_functions

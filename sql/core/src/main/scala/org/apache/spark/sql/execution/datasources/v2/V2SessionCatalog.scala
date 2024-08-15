@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
@@ -92,7 +93,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       // table here. To avoid breaking it we do not resolve the table provider and still return
       // `V1Table` if the custom session catalog is present.
       if (table.provider.isDefined && !hasCustomSessionCatalog) {
-        val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+        val qualifiedTableName = FullQualifiedTableName(
+          table.identifier.catalog.get, table.database, table.identifier.table)
         // Check if the table is in the v1 table cache to skip the v2 table lookup.
         if (catalog.getCachedTable(qualifiedTableName) != null) {
           return V1Table(table)
@@ -158,9 +160,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
     catalog.refreshTable(ident.asTableIdentifier)
   }
 
-  override def createTable(
+  private def createTable0(
       ident: Identifier,
-      columns: Array[Column],
+      schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -178,7 +180,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       CatalogTableType.MANAGED
     }
 
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
       // If the provider does not support external metadata, users should not be allowed to
       // specify custom schema when creating the data source table, since the schema will not
@@ -255,7 +256,18 @@ class V2SessionCatalog(catalog: SessionCatalog)
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    throw QueryCompilationErrors.createTableDeprecatedError()
+    if (Utils.isTesting) {
+      throw QueryCompilationErrors.createTableDeprecatedError()
+    }
+    createTable0(ident, schema, partitions, properties)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable0(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {

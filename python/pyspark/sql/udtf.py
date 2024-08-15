@@ -382,11 +382,7 @@ class UserDefinedTableFunction:
 
         assert sc._jvm is not None
         jcols = [_to_java_column(arg) for arg in args] + [
-            sc._jvm.Column(
-                sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
-                    key, _to_java_expr(value)
-                )
-            )
+            sc._jvm.PythonSQLUtils.namedArgumentExpression(key, _to_java_column(value))
             for key, value in kwargs.items()
         ]
 

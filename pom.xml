@@ -210,7 +210,7 @@
     <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.8.0</commons-cli.version>
+    <commons-cli.version>1.9.0</commons-cli.version>
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.14.1</tink.version>
     <datasketches.version>6.0.0</datasketches.version>
@@ -231,6 +231,7 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>6.13.2</kubernetes-client.version>
+    <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1608,7 +1609,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.9</version>
+        <version>1.10</version>
       </dependency>
       <!-- See SPARK-23654 for info on this dependency;
       It is used to keep javax.activation at v1.1.1 after dropping
@@ -2871,6 +2872,11 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okio</groupId>
+        <artifactId>okio</artifactId>
+        <version>${okio.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
