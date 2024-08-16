@@ -189,6 +189,9 @@ class JSONOptions(
   // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
+  val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
+    SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
+
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
     val streamReadConstraints = StreamReadConstraints
@@ -284,6 +287,7 @@ object JSONOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

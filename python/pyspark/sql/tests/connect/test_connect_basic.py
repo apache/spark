@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import io
 from contextlib import redirect_stdout
+import datetime
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -636,6 +637,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.sql(sqlText, args={"val": 1})
         df2 = self.spark.sql(sqlText, args={"val": 1})
         self.assert_eq(df.toPandas(), df2.toPandas())
+
+        self.assert_eq(df.first()[0], datetime.datetime(2022, 12, 25, 10, 30))
+        self.assert_eq(df.first().date, datetime.datetime(2022, 12, 25, 10, 30))
+        self.assert_eq(df.first()[1], 1)
+        self.assert_eq(df.first().val, 1)
 
     def test_sql_with_pos_args(self):
         sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
@@ -1404,6 +1410,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertFalse(verify_col_name("`m```.s.`s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
+
+    def test_truncate_message(self):
+        cdf1 = self.connect.createDataFrame(
+            [
+                ("a B c"),
+                ("X y Z"),
+            ],
+            ["a" * 4096],
+        )
+        plan1 = cdf1._plan.to_proto(self.connect._client)
+
+        proto_string_1 = self.connect._client._proto_to_string(plan1, False)
+        self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
+        proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
+        self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
+
+        cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
+        plan2 = cdf2._plan.to_proto(self.connect._client)
+
+        proto_string_2 = self.connect._client._proto_to_string(plan2, False)
+        self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
+        proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
+        self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
 
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):

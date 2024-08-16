@@ -1576,7 +1576,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     },
     StringType,
     inputEncoders = Seq.fill(1)(None),
-    name = Some(name)) {
+    givenName = Some(name)) {
 
     override def apply(exprs: Column*): Column = {
       assert(exprs.length == 1, "Defined UDF only has one column")

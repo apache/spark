@@ -199,6 +199,7 @@ YARN:
 KUBERNETES:
   - changed-files:
     - any-glob-to-any-file: [
+     'bin/docker-image-tool.sh',
      'resource-managers/kubernetes/**/*'
     ]
 
@@ -225,7 +226,7 @@ DEPLOY:
 CONNECT:
   - changed-files:
     - any-glob-to-any-file: [
-     'connect/**/*',
+     'sql/connect/**/*',
      'connector/connect/**/*',
      'python/pyspark/sql/**/connect/**/*',
      'python/pyspark/ml/**/connect/**/*'

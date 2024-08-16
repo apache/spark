@@ -83,6 +83,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   private volatile int numBytesValid = -1;
 
+  /**
+   * The ASCII-ness of the UTF8Strings can be cached to avoid repeated checks, because that
+   * operation requires full string scan. Full ASCII strings contain only ASCII characters.
+   */
+  private enum IsFullAscii {
+    UNKNOWN, FULL_ASCII, NOT_ASCII
+  }
+
+  /**
+   * Internal flag to indicate whether the string is full ASCII or not. Initially, the ASCII-ness
+   * is UNKNOWN, and will be set to either FULL_ASCII or NOT_ASCII after the first check.
+   */
+  private volatile IsFullAscii isFullAscii = IsFullAscii.UNKNOWN;
+
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
 
@@ -788,12 +802,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean isFullAscii() {
+    if (isFullAscii == IsFullAscii.UNKNOWN) {
+      isFullAscii = getIsFullAscii();
+    }
+    return isFullAscii == IsFullAscii.FULL_ASCII;
+  }
+
+  private IsFullAscii getIsFullAscii() {
     for (var i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
-        return false;
+        return IsFullAscii.NOT_ASCII;
       }
     }
-    return true;
+    return IsFullAscii.FULL_ASCII;
   }
 
   private UTF8String toLowerCaseSlow() {

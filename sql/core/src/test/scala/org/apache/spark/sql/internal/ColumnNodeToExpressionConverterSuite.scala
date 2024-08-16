@@ -17,14 +17,19 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.{analysis, expressions, InternalRow}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, AgnosticEncoders}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for [[ColumnNode]] to [[Expression]] conversions.
@@ -48,6 +53,14 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   private def normalizeExpression(e: Expression): Expression = e.transform {
     case a: expressions.Alias =>
       a.copy()(exprId = ExprId(0), a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+    case a: expressions.AttributeReference =>
+      a.withExprId(ExprId(0))
+    case d: analysis.UnresolvedDeserializer =>
+      d.copy(inputAttributes = d.inputAttributes.map(_.withExprId(ExprId(0))))
+    case a: expressions.aggregate.AggregateExpression =>
+      a.copy(resultId = ExprId(0))
+    case expressions.UnresolvedNamedLambdaVariable(Seq(name)) =>
+      expressions.UnresolvedNamedLambdaVariable(name.takeWhile(_ != '_') :: Nil)
   }
 
   test("literal") {
@@ -55,6 +68,16 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     testConversion(
       Literal("foo", Option(StringType)),
       expressions.Literal.create("foo", StringType))
+    val dataType = new StructType()
+      .add("_1", DoubleType)
+      .add("_2", StringType)
+      .add("_3", DoubleType)
+      .add("_4", StringType)
+    testConversion(
+      Literal((12.0, "north", 60.0, "west"), Option(dataType)),
+      expressions.Literal(
+        InternalRow(12.0, UTF8String.fromString("north"), 60.0, UTF8String.fromString("west")),
+        dataType))
   }
 
   test("attribute") {
@@ -113,7 +136,13 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   test("alias") {
     testConversion(
       Alias(Literal("qwe"), "newA" :: Nil),
-      expressions.Alias(expressions.Literal("qwe"), "newA")())
+      expressions.Alias(expressions.Literal("qwe"), "newA")(
+        nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
+    val metadata = new MetadataBuilder().putLong("q", 10).build()
+    testConversion(
+      Alias(UnresolvedAttribute("a"), "b" :: Nil, Option(metadata)),
+      expressions.Alias(analysis.UnresolvedAttribute("a"), "b")(
+        explicitMetadata = Option(metadata)))
     testConversion(
       Alias(UnresolvedAttribute("complex"), "newA" :: "newB" :: Nil),
       analysis.MultiAlias(analysis.UnresolvedAttribute("complex"), Seq("newA", "newB")))
@@ -121,7 +150,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
 
   private def testCast(
       dataType: DataType,
-      colEvalMode: Cast.EvalMode.Value,
+      colEvalMode: Cast.EvalMode,
       catEvalMode: expressions.EvalMode.Value): Unit = {
     testConversion(
       Cast(UnresolvedAttribute("attr"), dataType, Option(colEvalMode)),
@@ -133,14 +162,14 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
       Cast(UnresolvedAttribute("str"), DoubleType),
       expressions.Cast(analysis.UnresolvedAttribute("str"), DoubleType))
 
-    testCast(LongType, Cast.EvalMode.Legacy, expressions.EvalMode.LEGACY)
-    testCast(BinaryType, Cast.EvalMode.Try, expressions.EvalMode.TRY)
-    testCast(ShortType, Cast.EvalMode.Ansi, expressions.EvalMode.ANSI)
+    testCast(LongType, Cast.Legacy, expressions.EvalMode.LEGACY)
+    testCast(BinaryType, Cast.Try, expressions.EvalMode.TRY)
+    testCast(ShortType, Cast.Ansi, expressions.EvalMode.ANSI)
   }
 
   private def testSortOrder(
-      colDirection: SortOrder.SortDirection.SortDirection,
-      colNullOrdering: SortOrder.NullOrdering.NullOrdering,
+      colDirection: SortOrder.SortDirection,
+      colNullOrdering: SortOrder.NullOrdering,
       catDirection: expressions.SortDirection,
       catNullOrdering: expressions.NullOrdering): Unit = {
     testConversion(
@@ -154,29 +183,29 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
 
   test("sortOrder") {
     testSortOrder(
-      SortOrder.SortDirection.Ascending,
-      SortOrder.NullOrdering.NullsFirst,
+      SortOrder.Ascending,
+      SortOrder.NullsFirst,
       expressions.Ascending,
       expressions.NullsFirst)
     testSortOrder(
-      SortOrder.SortDirection.Ascending,
-      SortOrder.NullOrdering.NullsLast,
+      SortOrder.Ascending,
+      SortOrder.NullsLast,
       expressions.Ascending,
       expressions.NullsLast)
     testSortOrder(
-      SortOrder.SortDirection.Descending,
-      SortOrder.NullOrdering.NullsFirst,
+      SortOrder.Descending,
+      SortOrder.NullsFirst,
       expressions.Descending,
       expressions.NullsFirst)
     testSortOrder(
-      SortOrder.SortDirection.Descending,
-      SortOrder.NullOrdering.NullsLast,
+      SortOrder.Descending,
+      SortOrder.NullsLast,
       expressions.Descending,
       expressions.NullsLast)
   }
 
   private def testWindowFrame(
-      colFrameType: WindowFrame.FrameType.FrameType,
+      colFrameType: WindowFrame.FrameType,
       colLower: WindowFrame.FrameBoundary,
       colUpper: WindowFrame.FrameBoundary,
       catFrameType: expressions.FrameType,
@@ -189,8 +218,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
           Seq(UnresolvedAttribute("b"), UnresolvedAttribute("c")),
           Seq(SortOrder(
             UnresolvedAttribute("d"),
-            SortOrder.SortDirection.Descending,
-            SortOrder.NullOrdering.NullsLast)),
+            SortOrder.Descending,
+            SortOrder.NullsLast)),
           Option(WindowFrame(colFrameType, colLower, colUpper)))),
       expressions.WindowExpression(
         analysis.UnresolvedFunction(
@@ -225,15 +254,15 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
           Nil,
           expressions.UnspecifiedFrame)))
     testWindowFrame(
-      WindowFrame.FrameType.Row,
+      WindowFrame.Row,
       WindowFrame.Value(Literal(-10)),
-      WindowFrame.Unbounded,
+      WindowFrame.UnboundedFollowing,
       expressions.RowFrame,
       expressions.Literal(-10),
       expressions.UnboundedFollowing)
     testWindowFrame(
-      WindowFrame.FrameType.Range,
-      WindowFrame.Unbounded,
+      WindowFrame.Range,
+      WindowFrame.UnboundedPreceding,
       WindowFrame.CurrentRow,
       expressions.RangeFrame,
       expressions.UnboundedPreceding,
@@ -286,13 +315,89 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         Seq(expressions.DropField("col_c"))))
   }
 
+  private def toAny(a: AgnosticEncoder[_]): AgnosticEncoder[Any] =
+    a.asInstanceOf[AgnosticEncoder[Any]]
+
+  test("udf") {
+    val int2LongSum = new aggregate.TypedSumLong[Int]((i: Int) => i.toLong)
+    val bufferEncoder = encoderFor(int2LongSum.bufferEncoder)
+    val outputEncoder = encoderFor(int2LongSum.outputEncoder)
+    val bufferAttrs = bufferEncoder.namedExpressions.map {
+      _.toAttribute.asInstanceOf[expressions.AttributeReference]
+    }
+
+    // Aggregator applied on the entire Dataset.
+    testConversion(
+      InvokeInlineUserDefinedFunction(int2LongSum, Nil),
+      aggregate.SimpleTypedAggregateExpression(
+        aggregator = int2LongSum.asInstanceOf[Aggregator[Any, Any, Any]],
+        inputDeserializer = None,
+        inputClass = None,
+        inputSchema = None,
+        bufferSerializer = bufferEncoder.namedExpressions,
+        aggBufferAttributes = bufferAttrs,
+        bufferDeserializer = analysis.UnresolvedDeserializer(
+          bufferEncoder.deserializer,
+          bufferAttrs),
+        outputSerializer = outputEncoder.serializer,
+        outputExternalType = LongType,
+        dataType = LongType,
+        nullable = false
+      ).toAggregateExpression())
+
+    // Aggregator applied on an input.
+    testConversion(
+      InvokeInlineUserDefinedFunction(
+        UserDefinedAggregator(
+          aggregator = int2LongSum,
+          inputEncoder = AgnosticEncoders.PrimitiveIntEncoder,
+          nullable = false,
+          givenName = Option("int2LongSum")),
+        UnresolvedAttribute("i_col") :: Nil),
+      aggregate.ScalaAggregator(
+        children = analysis.UnresolvedAttribute("i_col") :: Nil,
+        agg = int2LongSum,
+        inputEncoder = encoderFor(PrimitiveIntEncoder),
+        bufferEncoder = encoderFor(PrimitiveLongEncoder),
+        nullable = false,
+        aggregatorName = Option("int2LongSum")).toAggregateExpression())
+
+    // Regular function
+    val concat = (a: String, b: String) => a + b
+    testConversion(
+      InvokeInlineUserDefinedFunction(
+        SparkUserDefinedFunction(
+          f = concat,
+          inputEncoders = None :: Option(encoderFor(StringEncoder)) :: Nil,
+          outputEncoder = Option(encoderFor(StringEncoder)),
+          dataType = StringType,
+          nullable = false,
+          deterministic = false),
+        Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))),
+      expressions.ScalaUDF(
+        function = concat,
+        dataType = StringType,
+        children = Seq(analysis.UnresolvedAttribute("a"), analysis.UnresolvedAttribute("b")),
+        inputEncoders = Seq(None, Option(encoderFor(Encoders.STRING))),
+        outputEncoder = Option(encoderFor(Encoders.STRING)),
+        udfName = None,
+        nullable = false,
+        udfDeterministic = false))
+  }
+
   test("extension") {
     testConversion(
-      Extension(analysis.UnresolvedAttribute("bar")),
+      Wrapper(analysis.UnresolvedAttribute("bar")),
       analysis.UnresolvedAttribute("bar"))
   }
 
   test("unsupported") {
-    intercept[SparkException](Converter(Extension("kaboom")))
+    intercept[SparkException](Converter(Nope()))
   }
+}
+
+private[internal] case class Nope(override val origin: Origin = CurrentOrigin.get)
+  extends ColumnNode {
+  override private[internal] def normalize(): Nope = this
+  override def sql: String = "nope"
 }

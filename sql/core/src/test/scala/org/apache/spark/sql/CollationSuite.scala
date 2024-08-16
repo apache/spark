@@ -34,7 +34,8 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
-import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -157,6 +158,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable bucketing on collated string column") {
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(bucketColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
@@ -579,6 +581,42 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-49138: ArrayAppend and CreateMap coercion testing") {
+    val df_array_append = sql(s"SELECT array_append(array('a', 'b'), 'c' COLLATE UNICODE)")
+    // array_append expression
+    checkAnswer(df_array_append, Seq(Row(Seq("a", "b", "c"))))
+    assert(df_array_append.schema.head.dataType == ArrayType(StringType("UNICODE"), true))
+
+    // make sure we fail this query even when collations are in
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c')")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map("functionName" -> "`map`", "expectedNum" -> "2n (n > 0)",
+        "actualNum" -> "3", "docroot" -> "https://spark.apache.org/docs/latest")
+    )
+
+    // make sure we fail this query even when collations are in
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c' COLLATE UNICODE, 'c')")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
+      parameters = Map(
+        "explicitTypes" ->
+          s"`string collate UTF8_LCASE`, `string collate UNICODE`"
+      )
+    )
+
+    // map creation keys respects proper collation
+    val df_create_map = sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c', 'c')")
+    checkAnswer(df_create_map, Seq(Row(Map("a" -> "b", "c" -> "c"))))
+    assert(df_create_map.schema.head.dataType ==
+      MapType(StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), false))
+  }
+
   test("SPARK-47692: Parameter marker with EXECUTE IMMEDIATE implicit casting") {
     sql(s"DECLARE stmtStr1 = 'SELECT collation(:var1 || :var2)';")
     sql(s"DECLARE stmtStr2 = 'SELECT collation(:var1 || (\\\'a\\\' COLLATE UNICODE))';")
@@ -722,6 +760,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable partition on collated string column") {
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(partitionColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {

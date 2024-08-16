@@ -70,7 +70,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val inputFeatures = $(inputCols).map(c => dataset.schema(c))
+    val inputFeatures = $(inputCols).map(c => SchemaUtils.getSchemaField(dataset.schema, c))
     val featureEncoders = getFeatureEncoders(inputFeatures.toImmutableArraySeq)
     val featureAttrs = getFeatureAttrs(inputFeatures.toImmutableArraySeq)
 
@@ -102,11 +102,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
       Vectors.sparse(size, indices.result(), values.result()).compressed
     }
 
-    val featureCols = inputFeatures.map { f =>
+    val featureCols = inputFeatures.zip($(inputCols)).map { case (f, inputCol) =>
       f.dataType match {
-        case DoubleType => dataset(f.name)
-        case _: VectorUDT => dataset(f.name)
-        case _: NumericType | BooleanType => dataset(f.name).cast(DoubleType)
+        case DoubleType => dataset(inputCol)
+        case _: VectorUDT => dataset(inputCol)
+        case _: NumericType | BooleanType => dataset(inputCol).cast(DoubleType)
       }
     }
     import org.apache.spark.util.ArrayImplicits._

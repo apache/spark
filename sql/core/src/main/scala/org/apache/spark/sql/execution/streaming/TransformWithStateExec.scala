@@ -160,8 +160,13 @@ case class TransformWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
-    copy(child = newLeft, initialState = newRight)
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec = {
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+  }
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
@@ -396,8 +401,16 @@ case class TransformWithStateExec(
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
     val metadataReader = OperatorStateMetadataReader.createReader(
-      metadataPath, hadoopConf, operatorStateMetadataVersion)
-    val operatorStateMetadata = metadataReader.read()
+      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
+    val operatorStateMetadata = try {
+      metadataReader.read()
+    } catch {
+        // If this is the first time we are running the query, there will be no metadata
+        // and this error is expected. In this case, we return None.
+        case ex: Exception if batchId == 0 =>
+          None
+    }
+
     val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
       case Some(metadata) =>
         metadata match {
@@ -439,8 +452,9 @@ case class TransformWithStateExec(
       new Path(getStateInfo.checkpointLocation,
         s"${getStateInfo.operatorId.toString}")
 
-    val storeNamePath = new Path(stateCheckpointPath, storeName)
-    new Path(new Path(storeNamePath, "_metadata"), "schema")
+    val stateSchemaPath = new Path(stateCheckpointPath, "_stateSchema")
+    val storeNamePath = new Path(stateSchemaPath, storeName)
+    storeNamePath
   }
 
   override def validateNewMetadata(

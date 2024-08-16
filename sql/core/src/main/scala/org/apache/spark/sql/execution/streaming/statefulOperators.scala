@@ -602,11 +602,11 @@ case class StateStoreSaveExec(
           // Update and output only rows being evicted from the StateStore
           // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
-            assert(watermarkPredicateForDataForLateEvents.isDefined,
-              "Watermark needs to be defined for streaming aggregation query in append mode")
-
-            assert(watermarkPredicateForKeysForEviction.isDefined,
-              "Watermark needs to be defined for streaming aggregation query in append mode")
+            if (watermarkPredicateForDataForLateEvents.isEmpty ||
+              watermarkPredicateForKeysForEviction.isEmpty) {
+              throw QueryExecutionErrors.unsupportedStreamingOperatorWithoutWatermark(
+                "Append", "aggregations")
+            }
 
             allUpdatesTimeMs += timeTakenMs {
               val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
@@ -688,7 +688,8 @@ case class StateStoreSaveExec(
               }
             }
 
-          case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
+          case _ => throw QueryExecutionErrors.unsupportedOutputModeForStreamingOperationError(
+            outputMode.get, "streaming aggregations")
         }
     }
   }
@@ -903,8 +904,10 @@ case class SessionWindowStateStoreSaveExec(
         // Update and output only rows being evicted from the StateStore
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
-          assert(watermarkPredicateForDataForEviction.isDefined,
-              "Watermark needs to be defined for session window query in append mode")
+          if (watermarkPredicateForDataForEviction.isEmpty) {
+            throw QueryExecutionErrors.unsupportedStreamingOperatorWithoutWatermark(
+              "Append", "session window aggregations")
+          }
 
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
@@ -934,7 +937,8 @@ case class SessionWindowStateStoreSaveExec(
             }
           }
 
-        case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
+        case _ => throw throw QueryExecutionErrors.unsupportedOutputModeForStreamingOperationError(
+          outputMode.get, "session window streaming aggregations")
       }
     }
   }

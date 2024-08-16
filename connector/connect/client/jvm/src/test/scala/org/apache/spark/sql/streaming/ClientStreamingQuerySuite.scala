@@ -42,6 +42,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   private val testDataPath = Paths
     .get(
       IntegrationTestUtils.sparkHome,
+      "sql",
       "connect",
       "common",
       "src",
