@@ -181,10 +181,6 @@ class RocksDB(
 
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
-  def getColFamilyNameToIdMap: Map[String, Short] = {
-    colFamilyNameToIdMap.asScala.toMap
-  }
-
   /**
    * Check whether the column family name is for internal column families.
    *
@@ -585,7 +581,7 @@ class RocksDB(
       var compactTimeMs = 0L
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
-      if (shouldCreateSnapshot()) {
+      if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -641,6 +637,9 @@ class RocksDB(
           } finally {
             changelogWriter = None
           }
+          if (shouldForceSnapshot.get()) {
+            uploadSnapshot()
+          }
         } else {
           assert(changelogWriter.isEmpty)
           uploadSnapshot()
@@ -676,7 +675,7 @@ class RocksDB(
   }
 
   private def shouldCreateSnapshot(): Boolean = {
-    if (enableChangelogCheckpointing && !shouldForceSnapshot.get()) {
+    if (enableChangelogCheckpointing) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
       newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot

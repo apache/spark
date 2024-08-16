@@ -1062,12 +1062,21 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       put(store, ("a", 1), 1, colFamily2)
       assert(valueRowToData(get(store, "a", 1, colFamily2)) === 1)
 
+      // calling commit on this store creates version 1
       store.commit()
 
       // reload version 0
       store = provider.getStore(0)
-      assert(get(store, "a", 1, colFamily1) === null)
-      assert(iterator(store, colFamily1).isEmpty)
+
+      val e = intercept[Exception]{
+        get(store, "a", 1, colFamily1)
+      }
+      checkError(
+        exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        sqlState = Some("42802"),
+        parameters = Map("operationType" -> "get", "colFamilyName" -> colFamily1)
+      )
 
       store = provider.getStore(1)
       // version 1 data recovered correctly
