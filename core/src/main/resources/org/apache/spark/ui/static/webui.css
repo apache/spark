@@ -361,6 +361,10 @@ a.downloadbutton {
   width: 170px;
 }
 
+.shuffle-write-time-checkbox-div {
+  width: 155px;
+}
+
 .result-serialization-time-checkbox-div {
   width: 185px;
 }
