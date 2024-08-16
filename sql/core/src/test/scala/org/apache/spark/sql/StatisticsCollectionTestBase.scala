@@ -25,13 +25,14 @@ import java.time.LocalDateTime
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
@@ -269,7 +270,8 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
-    val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
+    val qualifiedTableName = FullQualifiedTableName(
+      CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
     catalog.getCachedTable(qualifiedTableName)
   }
 
