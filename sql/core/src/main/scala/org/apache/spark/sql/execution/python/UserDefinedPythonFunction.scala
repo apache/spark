@@ -70,13 +70,8 @@ case class UserDefinedPythonFunction(
   /**
    * Returns a [[Column]] that will evaluate the UDF expression with the given input.
    */
-  // TODO this is used in PySpark!
-  def fromUDFExpr(expr: Expression): Column = {
-    expr match {
-      case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
-      case _ => Column(expr)
-    }
-  }
+  // TODO we should tru to get rid of this.
+  def fromUDFExpr(expr: Expression): Column = expr
 }
 
 /**

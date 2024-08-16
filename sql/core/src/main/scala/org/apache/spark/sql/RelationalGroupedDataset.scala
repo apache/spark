@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.internal.ExpressionUtils.generateAlias
+import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
@@ -511,7 +511,7 @@ class RelationalGroupedDataset protected[sql](
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
       val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(Column(_))
+      val groupingCols = groupingNamedExpressions.map(column)
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
       Dataset.ofRows(

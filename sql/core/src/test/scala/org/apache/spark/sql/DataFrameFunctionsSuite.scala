@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -980,8 +981,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       val qualifiedDF = df.as("foo")
 
       // Fields are UnresolvedAttribute
-      val zippedDF1 =
-        qualifiedDF.select(Column(ArraysZip(Seq($"foo.val1".expr, $"foo.val2".expr))) as "zipped")
+      val zippedDF1 = qualifiedDF.select(arrays_zip($"foo.val1", $"foo.val2") as "zipped")
       val maybeAlias1 = zippedDF1.queryExecution.logical.expressions.head
       assert(maybeAlias1.isInstanceOf[Alias])
       val maybeArraysZip1 = maybeAlias1.children.head
@@ -995,8 +995,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames1.toSeq === Seq("val1", "val2"))
 
       // Fields are resolved NamedExpression
-      val zippedDF2 =
-        df.select(Column(ArraysZip(Seq(df("val1").expr, df("val2").expr))) as "zipped")
+      val zippedDF2 = df.select(arrays_zip(df("val1"), df("foo")) as "zipped")
       val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
       assert(maybeAlias2.isInstanceOf[Alias])
       val maybeArraysZip2 = maybeAlias2.children.head
@@ -1011,8 +1010,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames2.toSeq === Seq("val1", "val2"))
 
       // Fields are unresolved NamedExpression
-      val zippedDF3 = df.select(
-        Column(ArraysZip(Seq(($"val1" as "val3").expr, ($"val2" as "val4").expr))) as "zipped")
+      val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
       val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
       assert(maybeAlias3.isInstanceOf[Alias])
       val maybeArraysZip3 = maybeAlias3.children.head
@@ -1026,8 +1024,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames3.toSeq === Seq("val3", "val4"))
 
       // Fields are neither UnresolvedAttribute nor NamedExpression
-      val zippedDF4 = df.select(
-        Column(ArraysZip(Seq(array_sort($"val1").expr, array_sort($"val2").expr))) as "zipped")
+      val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"foo")) as "zipped")
       val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
       assert(maybeAlias4.isInstanceOf[Alias])
       val maybeArraysZip4 = maybeAlias4.children.head
@@ -5485,7 +5482,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
       val c = if (codegenFallback) {
-        Column(CodegenFallbackExpr(v.expr))
+        column(CodegenFallbackExpr(v.expr))
       } else {
         v
       }

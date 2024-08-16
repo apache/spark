@@ -22,19 +22,16 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{ColumnNode, Wrapper}
+import org.apache.spark.sql.internal.ColumnNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 private[spark] object Column {
 
   def apply(colName: String): Column = new Column(colName)
-
-  def apply(expr: Expression): Column = Column(Wrapper(expr)) // TODO!
 
   def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
 
