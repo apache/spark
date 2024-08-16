@@ -555,6 +555,130 @@ public class CollationAwareUTF8String {
       BreakIterator.getWordInstance(locale)));
   }
 
+  /**
+   * Title casing a string according to a new behaviour. Iterates over the string and title cases
+   * the first character in each word, and lowercases every other character. Handles lowercasing
+   * capital Greek letter sigma ('Σ') separately, taking into account if it should be a small final
+   * Greek sigma ('ς') or small non-final Greek sigma ('σ'). Words are separated by ASCII
+   * space(\u0020).
+   *
+   * @param target UTF8String to be title cased
+   * @return title cased target
+   */
+  public static UTF8String toTitleCaseICU(UTF8String target) {
+
+    // In the default UTF8String implementation, `toLowerCase` method implicitly does UTF8String
+    // validation (replacing invalid UTF-8 byte sequences with Unicode replacement character
+    // U+FFFD), but now we have to do the validation manually.
+    target = target.makeValid();
+
+    // Building the title cased target with 'sb'.
+    StringBuilder sb = new StringBuilder();
+
+    // 'newWord' is true if the current character is the beginning of a word, false otherwise.
+    boolean newWord = true;
+    // We are maintaining if the current character is preceded by a cased letter.
+    // This is used when lowercasing capital Greek letter sigma ('Σ'), to figure out if it should be
+    // lowercased into σ or ς.
+    boolean precededByCasedLetter = false;
+
+    // 'offset' is a byte offset in target's byte array pointing to the beginning of the character
+    // that we need to process next.
+    int offset = 0;
+    int len = target.numBytes();
+
+    while(offset < len) {
+      // We will actually call 'codePointFrom()' 2 times for each character in the worst case (once
+      // here, and once in 'followedByCasedLetter'). Example of a string where we call it 2 times
+      // for almost every character is 'ΣΣΣΣΣ' (a string consisting only of Greek capital sigma)
+      // and 'Σ`````' (a string consisting of a Greek capital sigma, followed by case-ignorable
+      // characters).
+      int codepoint = target.codePointFrom(offset);
+      // Appending the correctly cased character onto 'sb'.
+      appendTitleCasedCodepoint(sb, codepoint, newWord, precededByCasedLetter, target, offset);
+      // Updating 'newWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
+      // that we will process.
+      newWord = (codepoint == ASCII_SPACE_CODEPOINT);
+      if(!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
+        precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
+      }
+      offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
+    }
+    return UTF8String.fromString(sb.toString());
+  }
+
+  private static void appendTitleCasedCodepoint(
+          StringBuilder sb,
+          int codepoint,
+          boolean isAfterAsciiSpace,
+          boolean precededByCasedLetter,
+          UTF8String target,
+          int offset) {
+    if(isAfterAsciiSpace) {
+      // Titlecasing a character if it is in the beginning of a new word.
+      sb.append(codepointToTitleString(codepoint));
+      return;
+    }
+    if(codepoint == CAPITAL_SIGMA) {
+      // Handling capital Greek letter sigma ('Σ').
+      appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, target, offset);
+      return;
+    }
+    // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
+    // character.
+    sb.append(
+            toLowerCase(UTF8String.fromString(new String(Character.toChars(codepoint)))).toString());
+  }
+
+  private static void appendLowerCasedGreekCapitalSigma(
+          StringBuilder sb,
+          boolean precededByCasedLetter,
+          UTF8String target,
+          int offset) {
+    int codepoint;
+    if (!followedByCasedLetter(target,offset) && precededByCasedLetter) {
+      codepoint = SMALL_FINAL_SIGMA;
+    }
+    else {
+      codepoint = SMALL_NON_FINAL_SIGMA;
+    }
+    sb.appendCodePoint(codepoint);
+  }
+
+  /**
+   * Checks if the character beginning at 'offset'(in 'targets' byte array) is followed by a cased
+   * letter.
+   */
+  private static boolean followedByCasedLetter(UTF8String target, int offset) {
+    // Moving the offset one character forward, so we could start the linear search from there.
+    offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
+    int len = target.numBytes();
+
+    while(offset < len) {
+      int codepoint = target.codePointFrom(offset);
+
+      if(UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
+        offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
+        continue;
+      }
+      return UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
+    }
+    return false;
+  }
+
+  /**
+   * Titlecases a single character using the ICU root locale rules.
+   *
+   * @param codepoint is a character that is needed to be title cased
+   * @return a java String(whose length can be more than 1 character) which corresponds to the title
+   * case of the codepoint
+   */
+  private static String codepointToTitleString(int codepoint) {
+    // This operation is expensive. In worst case we can have n/2 calls of this function when doing
+    // toTitleCaseICU.
+    return UCharacter.toTitleCase(new String(Character.toChars(codepoint)),null);
+  }
+
   /*
    * Returns the position of the first occurrence of the match string in the set string,
    * counting ASCII commas as delimiters. The match string is compared in a collation-aware manner,
@@ -1270,129 +1394,6 @@ public class CollationAwareUTF8String {
       }
     }
     return strings.toArray(new UTF8String[0]);
-  }
-
-  /**
-   * Title casing a string according to a new behaviour. Iterates over the string and title cases
-   * the first character in each word, and lowercases every other character. Handles lowercasing
-   * capital Greek letter sigma ('Σ') separately, taking into account if it should be a small final
-   * Greek sigma ('ς') or small non-final Greek sigma ('σ'). Words are separated by ASCII
-   * space(\u0020).
-   *
-   * @param target UTF8String to be title cased
-   * @return title cased target
-   */
-  public static UTF8String toTitleCaseICU(UTF8String target) {
-
-    // In the previous implementation, when UTF8String.toLowerCase() was called, it implicitly did
-    // UTF8String validation(replacing invalid UTF-8 byte sequences with Unicode replacement
-    // character U+FFFD), but now we have to do the validation manually.
-    target = target.makeValid();
-
-    // Building the title cased target with 'sb'.
-    StringBuilder sb = new StringBuilder();
-    // 'newWord' is true if the current character is the beginning of a word, false otherwise.
-    boolean newWord = true;
-    // We are maintaining if the current character is preceded by a cased letter.
-    // This is used when lowercasing capital Greek letter sigma ('Σ'), to figure out if it should be
-    // lowercased into σ or ς.
-    boolean precededByCasedLetter = false;
-
-    // 'offset' is a byte offset in target's byte array pointing to the beginning of the character
-    // that we need to process next.
-    int offset = 0;
-    int len = target.numBytes();
-
-    while(offset < len) {
-      // We will actually call 'codePointFrom()' 2 times for each character in the worst case (once
-      // here, and once in 'followedByCasedLetter'). Example of a string where we call it 2 times
-      // for almost every character is 'ΣΣΣΣΣ' (a string consisting only of Greek capital sigma)
-      // and 'Σ`````' (a string consisting of a Greek capital sigma, followed by case-ignorable
-      // characters).
-      int codepoint = target.codePointFrom(offset);
-      // Appending the correctly cased character onto 'sb'.
-      appendTitleCasedCodepoint(sb, codepoint, newWord, precededByCasedLetter, target, offset);
-      // Updating 'newWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
-      // that we will process.
-      newWord = (codepoint == ASCII_SPACE_CODEPOINT);
-      if(!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
-        precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
-      }
-      offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
-    }
-    return UTF8String.fromString(sb.toString());
-  }
-
-  private static void appendTitleCasedCodepoint(
-      StringBuilder sb,
-      int codepoint,
-      boolean isAfterAsciiSpace,
-      boolean precededByCasedLetter,
-      UTF8String target,
-      int offset) {
-    if(isAfterAsciiSpace) {
-      // Titlecasing a character if it is in the beginning of a new word.
-      sb.append(codepointToTitleString(codepoint));
-      return;
-    }
-    if(codepoint == CAPITAL_SIGMA) {
-      // Handling capital Greek letter sigma ('Σ').
-      appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, target, offset);
-      return;
-    }
-    // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
-    // character.
-    sb.append(
-      toLowerCase(UTF8String.fromString(new String(Character.toChars(codepoint)))).toString());
-  }
-
-  private static void appendLowerCasedGreekCapitalSigma(
-      StringBuilder sb,
-      boolean precededByCasedLetter,
-      UTF8String target,
-      int offset) {
-    int codepoint;
-    if (!followedByCasedLetter(target,offset) && precededByCasedLetter) {
-      codepoint = SMALL_FINAL_SIGMA;
-    }
-    else {
-      codepoint = SMALL_NON_FINAL_SIGMA;
-    }
-    sb.appendCodePoint(codepoint);
-  }
-
-  /**
-   * Checks if the character beginning at 'offset'(in 'targets' byte array) is followed by a cased
-   * letter.
-   */
-  private static boolean followedByCasedLetter(UTF8String target, int offset) {
-    // Moving the offset one character forward, so we could start the linear search from there.
-    offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
-    int len = target.numBytes();
-
-    while(offset < len) {
-      int codepoint = target.codePointFrom(offset);
-
-      if(UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
-        offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
-        continue;
-      }
-      return UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
-    }
-    return false;
-  }
-
-  /**
-   * Titlecases a single character using the ICU root locale rules.
-   *
-   * @param codepoint is a character that is needed to be title cased
-   * @return a java String(whose length can be more than 1 character) which corresponds to the title
-   * case of the codepoint
-   */
-  private static String codepointToTitleString(int codepoint) {
-    // This operation is expensive. In worst case we can have n/2 calls of this function when doing
-    // toTitleCaseICU.
-    return UCharacter.toTitleCase(new String(Character.toChars(codepoint)),null);
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
