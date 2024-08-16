@@ -3493,7 +3493,7 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       partitions: Array[Transform],
       properties: jutil.Map[String, String]): Table = {
     super.createTable(ident, columns, partitions, properties)
-    null
+    loadTable(ident)
   }
 
   override def loadTable(ident: Identifier): Table = {

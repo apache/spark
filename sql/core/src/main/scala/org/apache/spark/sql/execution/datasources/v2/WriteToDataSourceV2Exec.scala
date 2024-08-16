@@ -81,9 +81,9 @@ case class CreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val table = Option(catalog.createTable(
+    val table = catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
+      partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
