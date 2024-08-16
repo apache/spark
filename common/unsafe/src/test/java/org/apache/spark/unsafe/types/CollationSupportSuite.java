@@ -981,8 +981,8 @@ public class CollationSupportSuite {
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
-      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡςΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
+      "Ss Fi Ffi Ff St Σημερςινος Ασημενιος İota");
     // Characters that map to multiple characters when titlecased and lowercased.
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ İOTA", "UTF8_BINARY", "Ss Fi Ffi Ff St İota", "ß ﬁ ﬃ ﬀ ﬆ İota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ OİOTA", "UTF8_BINARY",

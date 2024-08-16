@@ -464,8 +464,8 @@ public class CollationAwareUTF8String {
     int lowercaseCodePoint = getLowercaseCodePoint(codePoint);
     if (lowercaseCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      sb.appendCodePoint(0x0069);
-      sb.appendCodePoint(0x0307);
+      sb.appendCodePoint(LOWERCASE_I);
+      sb.appendCodePoint(DOT_ABOVE);
     } else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
       sb.appendCodePoint(lowercaseCodePoint);
@@ -487,6 +487,9 @@ public class CollationAwareUTF8String {
   private static final int CAPITAL_SIGMA = 0x03A3;
   private static final int SMALL_NON_FINAL_SIGMA = 0x03C3;
   private static final int SMALL_FINAL_SIGMA = 0x03C2;
+  private static final int CAPITAL_I_WITH_DOT_ABOVE = 0x0130;
+  private static final int LOWERCASE_I = 0x0069;
+  private static final int DOT_ABOVE = 0x0307;
 
   /**
    * Returns the lowercase version of the provided code point, with special handling for
@@ -495,7 +498,7 @@ public class CollationAwareUTF8String {
    * the position in the string relative to other characters in lowercase).
    */
   private static int getLowercaseCodePoint(final int codePoint) {
-    if (codePoint == 0x0130) {
+    if (codePoint == CAPITAL_I_WITH_DOT_ABOVE) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
       return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
     }
@@ -625,9 +628,13 @@ public class CollationAwareUTF8String {
       return;
     }
     // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
-    // character.
-    sb.append(
-            toLowerCase(UTF8String.fromString(new String(Character.toChars(codepoint)))).toString());
+    // character. We specially handle 'CAPITAL_I_WITH_DOT_ABOVE'.
+    if (codepoint == CAPITAL_I_WITH_DOT_ABOVE) {
+      sb.appendCodePoint(LOWERCASE_I);
+      sb.appendCodePoint(DOT_ABOVE);
+      return;
+    }
+    sb.appendCodePoint(UCharacter.toLowerCase(codepoint));
   }
 
   private static void appendLowerCasedGreekCapitalSigma(
