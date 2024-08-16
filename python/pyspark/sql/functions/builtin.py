@@ -18656,12 +18656,13 @@ def _invoke_higher_order_function(
 
     :return: a Column
     """
+    from py4j.java_gateway import JVMView
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
     sc = _get_active_spark_context()
     jfuns = [_create_lambda(f) for f in funs]
     jcols = [_to_java_column(c) for c in cols]
-    return Column(sc._jvm.PythonSQLUtils.fn(name, _to_seq(sc, jcols + jfuns)))
+    return Column(cast(JVMView, sc._jvm).PythonSQLUtils.fn(name, _to_seq(sc, jcols + jfuns)))
 
 
 @overload
