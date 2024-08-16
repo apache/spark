@@ -650,6 +650,7 @@ $(document).ready(function () {
             }
             executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
             executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
+            reselectCheckboxesBasedOnTaskTableState();
           });
 
         // Prepare data for speculation metrics
