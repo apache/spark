@@ -963,10 +963,10 @@ jobs:
       run: cd tpcds-kit/tools && make OS=LINUX
     - name: Generate TPC-DS (SF=1) table data
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      run: build/sbt "-Popentelemetry-reporter sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+      run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
     - name: Run TPC-DS queries (Sort merge join)
       run: |
-        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "-Popentelemetry-reporter sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
@@ -974,14 +974,14 @@ jobs:
           spark.sql.join.preferSortMergeJoin=true
     - name: Run TPC-DS queries (Broadcast hash join)
       run: |
-        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "-Popentelemetry-reporter sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=10485760
     - name: Run TPC-DS queries (Shuffled hash join)
       run: |
-        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "-Popentelemetry-reporter sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
@@ -989,7 +989,7 @@ jobs:
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Run TPC-DS queries on collated data
       run: |
-        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "-Popentelemetry-reporter sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v4
@@ -1138,7 +1138,7 @@ jobs:
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.9.0/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
-          build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Popentelemetry-reporter -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
         uses: actions/upload-artifact@v4
