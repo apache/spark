@@ -24,9 +24,10 @@ import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -303,7 +304,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       ArrayType(DecimalType(2, 2), true))
     // Test write null values.
     df.select(df.queryExecution.analyzed.output.map { a =>
-      Column(Literal.create(null, a.dataType)).as(a.name)
+      lit(null).cast(a.dataType).as(a.name)
     }: _*).write.jdbc(jdbcUrl, "public.barcopy2", new Properties)
   }
 
