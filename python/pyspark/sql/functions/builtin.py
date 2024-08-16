@@ -18623,7 +18623,6 @@ def _create_lambda(f: Callable) -> Callable:
     parameters = _get_lambda_parameters(f)
 
     sc = _get_active_spark_context()
-    internal = cast(JVMView, sc._jvm).org.apache.spark.sql.internal
 
     argnames = ["x", "y", "z"]
     args = [_unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]]
