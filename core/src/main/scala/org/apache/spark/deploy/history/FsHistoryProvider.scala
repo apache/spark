@@ -1286,12 +1286,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         hybridStore = store
       } catch {
-        case _: IOException if !retried =>
+        case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
           logWarning(log"Exception occurred while rebuilding log path " +
             log"${MDC(PATH, attempt.logPath)} - " +
-            log"trying again...")
+            log"trying again...", ioe)
           store.close()
           memoryManager.release(appId, attempt.info.attemptId)
           retried = true
@@ -1359,11 +1359,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
       } catch {
-        case _: IOException if !retried =>
+        case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
           logWarning(log"Exception occurred while rebuilding app ${MDC(APP_ID, appId)} - " +
-            log"trying again...")
+            log"trying again...", ioe)
           lease.rollback()
           retried = true
 
@@ -1387,11 +1387,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())
         store = s
       } catch {
-        case _: IOException if !retried =>
+        case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
           logWarning(log"Exception occurred while rebuilding log path " +
-            log"${MDC(LogKeys.PATH, attempt.logPath)} - trying again...")
+            log"${MDC(LogKeys.PATH, attempt.logPath)} - trying again...", ioe)
           retried = true
 
         case e: Exception =>
