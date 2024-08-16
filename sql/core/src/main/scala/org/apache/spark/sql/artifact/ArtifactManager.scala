@@ -32,8 +32,8 @@ import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkUnsupp
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.artifact.util.ArtifactUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 

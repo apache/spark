@@ -287,15 +287,11 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
 
-      // Artifact Manager
+      // Artifact Manager, client has a totally different implementation.
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.artifact.ArtifactManager$"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.artifact.util.ArtifactUtils"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.artifact.util.ArtifactUtils$")) ++
+        "org.apache.spark.sql.artifact.ArtifactManager$")) ++
       mergeIntoWriterExcludeRules
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)

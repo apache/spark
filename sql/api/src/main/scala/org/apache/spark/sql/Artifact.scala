@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql
 
-import java.io.{ByteArrayInputStream, File, InputStream, PrintStream}
+import java.io.{ByteArrayInputStream, InputStream, PrintStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.Artifact.LocalData
+import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.MavenUtils
 
 
-class Artifact private(val path: Path, val storage: LocalData) {
+private[sql] class Artifact private(val path: Path, val storage: LocalData) {
   require(!path.isAbsolute, s"Bad path: $path")
 
   lazy val size: Long = storage match {
@@ -36,7 +37,7 @@ class Artifact private(val path: Path, val storage: LocalData) {
   }
 }
 
-object Artifact {
+private[sql] object Artifact {
   val CLASS_PREFIX: Path = Paths.get("classes")
   val JAR_PREFIX: Path = Paths.get("jars")
   val CACHE_PREFIX: Path = Paths.get("cache")
@@ -120,29 +121,13 @@ object Artifact {
     jars.map(p => Paths.get(p)).map(path => newJarArtifact(path.getFileName, new LocalFile(path)))
   }
 
-  private def concatenatePaths(basePath: Path, otherPath: Path): Path = {
-    // We avoid using the `.resolve()` method here to ensure that we're concatenating the two
-    // paths even if `otherPath` is absolute.
-    val concatenatedPath = Paths.get(basePath.toString, otherPath.toString)
-    // Note: The normalized resulting path may still reference parent directories if the
-    // `otherPath` contains sufficient number of parent operators (i.e "..").
-    // Example: `basePath` = "/base", `otherPath` = "subdir/../../file.txt"
-    // Then, `concatenatedPath` = "/base/subdir/../../file.txt"
-    // and `normalizedPath` = "/base/file.txt".
-    val normalizedPath = concatenatedPath.normalize()
-    // Verify that the prefix of the `normalizedPath` starts with `basePath/`.
-    require(
-      normalizedPath != basePath && normalizedPath.startsWith(s"$basePath${File.separator}"))
-    normalizedPath
-  }
-
   private def newArtifact(
       prefix: Path,
       requiredSuffix: String,
       targetFilePath: Path,
       storage: LocalData): Artifact = {
     require(targetFilePath.toString.endsWith(requiredSuffix))
-    new Artifact(concatenatePaths(prefix, targetFilePath), storage)
+    new Artifact(ArtifactUtils.concatenatePaths(prefix, targetFilePath), storage)
   }
 
   /**
