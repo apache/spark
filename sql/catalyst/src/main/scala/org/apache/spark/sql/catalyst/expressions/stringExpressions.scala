@@ -1261,9 +1261,9 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
         case _: StringTrim =>
           CollationSupport.StringTrim.genCode(srcString.value)
         case _: StringTrimLeft =>
-          CollationSupport.StringTrimLeft.genCode(srcString.value)
+          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
         case _: StringTrimRight =>
-          CollationSupport.StringTrimRight.genCode(srcString.value)
+          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
       }
       ev.copy(code = code"""
          |${srcString.code}

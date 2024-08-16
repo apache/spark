@@ -229,7 +229,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (" ", "UNICODE_CI_RTRIM", Array[Byte](1, 0)),
       ("aa ", "UNICODE_CI_RTRIM", Array[Byte](42, 42, 1, 6, 0)),
       ("AA ", "UNICODE_CI_RTRIM", Array[Byte](42, 42, 1, 6, 0)),
-      ("aA ", "UNICODE_CI_RTRIM", Array[Byte](42, 42, 1, 6, 0)),
+      ("aA ", "UNICODE_CI_RTRIM", Array[Byte](42, 42, 1, 6, 0))
     )
     for ((input, collation, expected) <- testCases) {
       val str = Literal.create(input, StringType(collation))

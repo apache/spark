@@ -272,7 +272,7 @@ class CollationStringExpressionsSuite
       StringTranslateTestCase("Translate", "Rn", "\u0000\u0000", "UNICODE", "Traslate"),
       StringTranslateTestCase("Translate ", "Rn", "\u0000\u0000", "UNICODE_RTRIM", "Traslate "),
       StringTranslateTestCase("Translate", "Rn", "1234", "UNICODE_CI", "T1a2slate"),
-      StringTranslateTestCase(" Translate ", "Rn", "1234", "UNICODE_CI_TRIM", " T1a2slate "),
+      StringTranslateTestCase(" Translate ", "Rn", "1234", "UNICODE_CI_TRIM", " T1a2slate ")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1134,7 +1134,7 @@ class CollationStringExpressionsSuite
       StringTrimLeftTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
       StringTrimLeftTestCase("xxasdxx ", Some("y"), "UNICODE_RTRIM", "xxasdxx"),
       StringTrimLeftTestCase("  asd  ", None, "UNICODE_CI", "asd  "),
-      StringTrimLeftTestCase("  asd  ", None, "UNICODE_CI_TRIM", "asd  ")
+      StringTrimLeftTestCase("  asd  ", None, "UNICODE_CI_TRIM", "asd")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1165,7 +1165,7 @@ class CollationStringExpressionsSuite
       StringTrimRightTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
       StringTrimRightTestCase("xxasdxx ", Some("y"), "UNICODE_RTRIM", "xxasdxx"),
       StringTrimRightTestCase("  asd  ", None, "UNICODE_CI", "  asd"),
-      StringTrimRightTestCase("  asd  ", None, "UNICODE_CI_TRIM", "  asd")
+      StringTrimRightTestCase("  asd  ", None, "UNICODE_CI_TRIM", "asd")
     )
     testCases.foreach(t => {
       // Unit test.
