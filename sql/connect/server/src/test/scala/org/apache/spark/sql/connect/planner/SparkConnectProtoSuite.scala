@@ -1093,8 +1093,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  private val testSupportedCollations =
+    Seq("UTF8_BINARY", "UTF8_BINARY_TRIM", "UTF8_LCASE", "UTF8_LCASE_TRIM",
+      "UNICODE", "UNICODE_TRIM", "UNICODE_CI", "UNICODE_CI_TRIM")
+
   test("SPARK-47144: Collated string") {
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").map(collationName =>
+    testSupportedCollations.map(collationName =>
       Seq(
         s"select 'abc' collate $collationName",
         s"select collation('abc' collate $collationName)").map(query =>

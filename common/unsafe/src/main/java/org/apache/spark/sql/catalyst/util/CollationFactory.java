@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
+import java.util.function.UnaryOperator;
 
 import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
@@ -96,6 +97,8 @@ public final class CollationFactory {
     public final String provider;
     public final Collator collator;
     public final Comparator<UTF8String> comparator;
+    public final UnaryOperator<UTF8String> trimmer;
+    public final TrimSensitivity trimSensitivity;
 
     /**
      * Version of the collation. This is the version of the ICU library Collator.
@@ -131,7 +134,12 @@ public final class CollationFactory {
      * Binary Ordering implies support for Binary Equality.
      */
     public final boolean supportsBinaryOrdering;
-
+    /**
+     * Support for Trimming implies that it is possible to trim UTF8Strings according to the
+     * collation rules. This allows for the usage of `trimmer` call on UTF8Strings in order to
+     * ensure that the UTF8String is trimmed according to the trimming sensitivity of the collation.
+     */
+    public final boolean supportsTrimming;
     /**
      * Support for Lowercase Equality implies that it is possible to check equality on byte by
      * byte level, but only after calling "UTF8String.lowerCaseCodePoints" on both arguments.
@@ -139,6 +147,16 @@ public final class CollationFactory {
      * expressions, as this particular collation is not supported by the external ICU library.
      */
     public final boolean supportsLowercaseEquality;
+
+    /**
+     * Trimming sensitivity of the collation. This is used to determine how the collation should
+     * handle leading and trailing whitespaces. There are four possible values for this field:
+     * NONE (no trimming of the string), TRIM (trim both leading and trailing whitespaces),
+     * LTRIM (trim only the leading whitespaces), and RTRIM (trim only the trailing whitespaces).
+     */
+    public enum TrimSensitivity {
+      NONE, TRIM, LTRIM, RTRIM
+    }
 
     public Collation(
         String collationName,
@@ -149,7 +167,8 @@ public final class CollationFactory {
         ToLongFunction<UTF8String> hashFunction,
         boolean supportsBinaryEquality,
         boolean supportsBinaryOrdering,
-        boolean supportsLowercaseEquality) {
+        boolean supportsLowercaseEquality,
+        TrimSensitivity trimSensitivity) {
       this.collationName = collationName;
       this.provider = provider;
       this.collator = collator;
@@ -158,6 +177,7 @@ public final class CollationFactory {
       this.hashFunction = hashFunction;
       this.supportsBinaryEquality = supportsBinaryEquality;
       this.supportsBinaryOrdering = supportsBinaryOrdering;
+      this.supportsTrimming = trimSensitivity != TrimSensitivity.NONE;
       this.supportsLowercaseEquality = supportsLowercaseEquality;
 
       // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
@@ -172,6 +192,24 @@ public final class CollationFactory {
       } else {
         this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
       }
+
+      switch(trimSensitivity) {
+        case NONE:
+          this.trimmer = UnaryOperator.identity();
+          break;
+        case TRIM:
+          this.trimmer = UTF8String::trim;
+          break;
+        case LTRIM:
+          this.trimmer = UTF8String::trimLeft;
+          break;
+        case RTRIM:
+          this.trimmer = UTF8String::trimRight;
+          break;
+        default:
+          throw new IllegalArgumentException("Invalid trim sensitivity: " + trimSensitivity);
+      }
+      this.trimSensitivity = trimSensitivity;
     }
 
     /**
@@ -183,10 +221,10 @@ public final class CollationFactory {
      * bit 31:    1 for INDETERMINATE (requires all other bits to be 1 as well), 0 otherwise.
      * bit 30:    0 for predefined, 1 for user-defined.
      * Following bits are specified for predefined collations:
-     * bit 29:    0 for UTF8_BINARY, 1 for ICU collations.
+     * bit 29:    0 for UTF8 collations, 1 for ICU collations.
      * bit 28-24: Reserved.
      * bit 23-22: Reserved for version.
-     * bit 21-18: Reserved for space trimming.
+     * bit 21-18: 0 for no trimming, 1 for TRIM, 2 for LTRIM, 3 for RTRIM.
      * bit 17-0:  Depend on collation family.
      * ---
      * INDETERMINATE collation ID binary layout:
@@ -198,10 +236,10 @@ public final class CollationFactory {
      * bit 30:   1
      * bit 29-0: Undefined, reserved for future use.
      * ---
-     * UTF8_BINARY collation ID binary layout:
+     * UTF8 collation ID binary layout:
      * bit 31-24: Zeroes.
      * bit 23-22: Zeroes, reserved for version.
-     * bit 21-18: Zeroes, reserved for space trimming.
+     * bit 21-18: 0 for no trimming, 1 for TRIM, 2 for LTRIM, 3 for RTRIM.
      * bit 17-3:  Zeroes.
      * bit 2:     0, reserved for accent sensitivity.
      * bit 1:     0, reserved for uppercase and case-insensitive.
@@ -212,7 +250,7 @@ public final class CollationFactory {
      * bit 29:    1
      * bit 28-24: Zeroes.
      * bit 23-22: Zeroes, reserved for version.
-     * bit 21-18: Zeroes, reserved for space trimming.
+     * bit 21-18: 0 for no trimming, 1 for TRIM, 2 for LTRIM, 3 for RTRIM.
      * bit 17:    0 = case-sensitive, 1 = case-insensitive.
      * bit 16:    0 = accent-sensitive, 1 = accent-insensitive.
      * bit 15-14: Zeroes, reserved for punctuation sensitivity.
@@ -239,11 +277,10 @@ public final class CollationFactory {
       }
 
       /**
-       * Bit 29 in collation ID having value 0 for UTF8_BINARY family and 1 for ICU family of
-       * collations.
+       * Bit 29 in collation ID having value 0 for UTF8 family and 1 for ICU family of collations.
        */
       protected enum ImplementationProvider {
-        UTF8_BINARY, ICU
+        UTF8, ICU
       }
 
       /**
@@ -267,6 +304,22 @@ public final class CollationFactory {
       protected static final int IMPLEMENTATION_PROVIDER_MASK = 0b1;
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
+
+      /**
+       * Bit 21-18 in collation ID having value 0 for no trimming, 1 for TRIM, 2 for LTRIM and
+       * 3 for RTRIM.
+       */
+      protected TrimSensitivity trimSensitivity;
+
+      /**
+       * Offset in binary collation ID layout.
+       */
+      protected static final int TRIM_SENSITIVITY_OFFSET = 18;
+
+      /**
+       * Bitmask corresponding to width in bits in binary collation ID layout.
+       */
+      protected static final int TRIM_SENSITIVITY_MASK = 0b1111;
 
       /**
        * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
@@ -308,7 +361,7 @@ public final class CollationFactory {
           // Build `Collation` instance and put into cache.
           CollationSpec spec;
           ImplementationProvider implementationProvider = getImplementationProvider(collationId);
-          if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
+          if (implementationProvider == ImplementationProvider.UTF8) {
             spec = CollationSpecUTF8.fromCollationId(collationId);
           } else {
             spec = CollationSpecICU.fromCollationId(collationId);
@@ -317,6 +370,15 @@ public final class CollationFactory {
           collationMap.put(collationId, collation);
           return collation;
         }
+      }
+
+      /**
+       * Entry point for retrieving the trimming-unaware equivalent `Collation` instance.
+       */
+      private static Collation fetchCollationIgnoreTrim(int collationId) {;
+        return fetchCollation(
+          SpecifierUtils.removeSpec(collationId, TRIM_SENSITIVITY_OFFSET, TRIM_SENSITIVITY_MASK)
+        );
       }
 
       /**
@@ -364,31 +426,77 @@ public final class CollationFactory {
        */
       private static final int CASE_SENSITIVITY_MASK = 0b1;
 
+      /**
+       * Predefined collations within UTF8 family.
+       */
       private static final int UTF8_BINARY_COLLATION_ID =
-        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED).collationId;
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.NONE).collationId;
+      private static final int UTF8_BINARY_TRIM_COLLATION_ID =
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.TRIM).collationId;
+      private static final int UTF8_BINARY_LTRIM_COLLATION_ID =
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.LTRIM).collationId;
+      private static final int UTF8_BINARY_RTRIM_COLLATION_ID =
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.RTRIM).collationId;
       private static final int UTF8_LCASE_COLLATION_ID =
-        new CollationSpecUTF8(CaseSensitivity.LCASE).collationId;
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.NONE).collationId;
+      private static final int UTF8_LCASE_TRIM_COLLATION_ID =
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.TRIM).collationId;
+      private static final int UTF8_LCASE_LTRIM_COLLATION_ID =
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.LTRIM).collationId;
+      private static final int UTF8_LCASE_RTRIM_COLLATION_ID =
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.RTRIM).collationId;
+
       protected static Collation UTF8_BINARY_COLLATION =
-        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED).buildCollation();
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.NONE).buildCollation();
+      protected static Collation UTF8_BINARY_TRIM_COLLATION =
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.TRIM).buildCollation();
+      protected static Collation UTF8_BINARY_LTRIM_COLLATION =
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.LTRIM).buildCollation();
+      protected static Collation UTF8_BINARY_RTRIM_COLLATION =
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, TrimSensitivity.RTRIM).buildCollation();
       protected static Collation UTF8_LCASE_COLLATION =
-        new CollationSpecUTF8(CaseSensitivity.LCASE).buildCollation();
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.NONE).buildCollation();
+      protected static Collation UTF8_LCASE_TRIM_COLLATION =
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.TRIM).buildCollation();
+      protected static Collation UTF8_LCASE_LTRIM_COLLATION =
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.LTRIM).buildCollation();
+      protected static Collation UTF8_LCASE_RTRIM_COLLATION =
+        new CollationSpecUTF8(CaseSensitivity.LCASE, TrimSensitivity.RTRIM).buildCollation();
 
       private final int collationId;
 
-      private CollationSpecUTF8(CaseSensitivity caseSensitivity) {
-        this.collationId =
-          SpecifierUtils.setSpecValue(0, CASE_SENSITIVITY_OFFSET, caseSensitivity);
+      private CollationSpecUTF8(CaseSensitivity caseSensitivity, TrimSensitivity trimSensitivity) {
+        this.trimSensitivity = trimSensitivity;
+        int collationId = 0;
+        collationId =
+          SpecifierUtils.setSpecValue(collationId, CASE_SENSITIVITY_OFFSET, caseSensitivity);
+        collationId =
+          SpecifierUtils.setSpecValue(collationId, TRIM_SENSITIVITY_OFFSET, trimSensitivity);
+        this.collationId = collationId;
       }
 
       private static int collationNameToId(String originalName, String collationName)
           throws SparkException {
-        if (UTF8_BINARY_COLLATION.collationName.equals(collationName)) {
-          return UTF8_BINARY_COLLATION_ID;
-        } else if (UTF8_LCASE_COLLATION.collationName.equals(collationName)) {
-          return UTF8_LCASE_COLLATION_ID;
-        } else {
-          // Throw exception with original (before case conversion) collation name.
-          throw collationInvalidNameException(originalName);
+        switch(collationName) {
+          case "UTF8_BINARY":
+            return UTF8_BINARY_COLLATION_ID;
+          case "UTF8_BINARY_TRIM":
+            return UTF8_BINARY_TRIM_COLLATION_ID;
+          case "UTF8_BINARY_LTRIM":
+            return UTF8_BINARY_LTRIM_COLLATION_ID;
+          case "UTF8_BINARY_RTRIM":
+            return UTF8_BINARY_RTRIM_COLLATION_ID;
+          case "UTF8_LCASE":
+            return UTF8_LCASE_COLLATION_ID;
+          case "UTF8_LCASE_TRIM":
+            return UTF8_LCASE_TRIM_COLLATION_ID;
+          case "UTF8_LCASE_LTRIM":
+            return UTF8_LCASE_LTRIM_COLLATION_ID;
+          case "UTF8_LCASE_RTRIM":
+            return UTF8_LCASE_RTRIM_COLLATION_ID;
+          default:
+            // Throw exception with original (before case conversion) collation name.
+            throw collationInvalidNameException(originalName);
         }
       }
 
@@ -396,37 +504,83 @@ public final class CollationFactory {
         // Extract case sensitivity from collation ID.
         int caseConversionOrdinal = SpecifierUtils.getSpecValue(collationId,
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
-        // Verify only case sensitivity bits were set settable in UTF8_BINARY family of collations.
-        assert (SpecifierUtils.removeSpec(collationId,
-          CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK) == 0);
-        return new CollationSpecUTF8(CaseSensitivity.values()[caseConversionOrdinal]);
+        // Extract trim sensitivity from collation ID.
+        int trimConversionOrdinal = SpecifierUtils.getSpecValue(collationId,
+          TRIM_SENSITIVITY_OFFSET, TRIM_SENSITIVITY_MASK);
+        // Verify only case & trim sensitivity bits were set settable in UTF8 family of collations.
+        collationId =
+          SpecifierUtils.removeSpec(collationId, CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
+        collationId =
+          SpecifierUtils.removeSpec(collationId, TRIM_SENSITIVITY_OFFSET, TRIM_SENSITIVITY_MASK);
+        assert (collationId == 0);
+        CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseConversionOrdinal];
+        TrimSensitivity trimSensitivity = TrimSensitivity.values()[trimConversionOrdinal];
+        return new CollationSpecUTF8(caseSensitivity, trimSensitivity);
       }
 
       @Override
       protected Collation buildCollation() {
+        String collationName;
+        Comparator<UTF8String> comparator;
+        ToLongFunction<UTF8String> hashFunction;
+        boolean supportsBinaryEquality = false;
+        boolean supportsBinaryOrdering = false;
+        boolean supportsLowercaseEquality = false;
         if (collationId == UTF8_BINARY_COLLATION_ID) {
-          return new Collation(
-            "UTF8_BINARY",
-            PROVIDER_SPARK,
-            null,
-            UTF8String::binaryCompare,
-            "1.0",
-            s -> (long) s.hashCode(),
-            /* supportsBinaryEquality = */ true,
-            /* supportsBinaryOrdering = */ true,
-            /* supportsLowercaseEquality = */ false);
+          collationName = "UTF8_BINARY";
+          comparator = UTF8String::binaryCompare;
+          hashFunction = s -> (long) s.hashCode();
+          supportsBinaryEquality = true;
+          supportsBinaryOrdering = true;
+        } else if (collationId == UTF8_BINARY_TRIM_COLLATION_ID) {
+          collationName = "UTF8_BINARY_TRIM";
+          comparator = (s1, s2) -> s1.trim().binaryCompare(s2.trim());
+          hashFunction = s -> (long) s.trim().hashCode();
+        } else if (collationId == UTF8_BINARY_LTRIM_COLLATION_ID) {
+          collationName = "UTF8_BINARY_LTRIM";
+          comparator = (s1, s2) -> s1.trimLeft().binaryCompare(s2.trimLeft());
+          hashFunction = s -> (long) s.trimLeft().hashCode();
+        } else if (collationId == UTF8_BINARY_RTRIM_COLLATION_ID) {
+          collationName = "UTF8_BINARY_RTRIM";
+          comparator = (s1, s2) -> s1.trimRight().binaryCompare(s2.trimRight());
+          hashFunction = s -> (long) s.trimRight().hashCode();
+        } else if (collationId == UTF8_LCASE_COLLATION_ID) {
+          collationName = "UTF8_LCASE";
+          comparator = CollationAwareUTF8String::compareLowerCase;
+          hashFunction = s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode();
+          supportsLowercaseEquality = true;
+        } else if (collationId == UTF8_LCASE_TRIM_COLLATION_ID) {
+          collationName = "UTF8_LCASE_TRIM";
+          comparator = (s1, s2) ->
+            CollationAwareUTF8String.compareLowerCase(s1.trim(), s2.trim());
+          hashFunction = s ->
+            (long) CollationAwareUTF8String.lowerCaseCodePoints(s.trim()).hashCode();
+        } else if (collationId == UTF8_LCASE_LTRIM_COLLATION_ID) {
+          collationName = "UTF8_LCASE_LTRIM";
+          comparator = (s1, s2) ->
+            CollationAwareUTF8String.compareLowerCase(s1.trimLeft(), s2.trimLeft());
+          hashFunction = s ->
+            (long) CollationAwareUTF8String.lowerCaseCodePoints(s.trimLeft()).hashCode();
+        } else if (collationId == UTF8_LCASE_RTRIM_COLLATION_ID) {
+          collationName = "UTF8_LCASE_RTRIM";
+          comparator = (s1, s2) ->
+            CollationAwareUTF8String.compareLowerCase(s1.trimRight(), s2.trimRight());
+          hashFunction = s ->
+            (long) CollationAwareUTF8String.lowerCaseCodePoints(s.trimRight()).hashCode();
         } else {
-          return new Collation(
-            "UTF8_LCASE",
-            PROVIDER_SPARK,
-            null,
-            CollationAwareUTF8String::compareLowerCase,
-            "1.0",
-            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode(),
-            /* supportsBinaryEquality = */ false,
-            /* supportsBinaryOrdering = */ false,
-            /* supportsLowercaseEquality = */ true);
+            throw new IllegalArgumentException("Invalid collation ID: " + collationId);
         }
+        return new Collation(
+          collationName,
+          PROVIDER_SPARK,
+          null,
+          comparator,
+          "1.0",
+          hashFunction,
+          supportsBinaryEquality,
+          supportsBinaryOrdering,
+          supportsLowercaseEquality,
+          this.trimSensitivity);
       }
     }
 
@@ -541,10 +695,22 @@ public final class CollationFactory {
         }
       }
 
-      private static final int UNICODE_COLLATION_ID =
-        new CollationSpecICU("UNICODE", CaseSensitivity.CS, AccentSensitivity.AS).collationId;
-      private static final int UNICODE_CI_COLLATION_ID =
-        new CollationSpecICU("UNICODE", CaseSensitivity.CI, AccentSensitivity.AS).collationId;
+      private static final int UNICODE_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CS, AccentSensitivity.AS, TrimSensitivity.NONE).collationId;
+      private static final int UNICODE_TRIM_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CS, AccentSensitivity.AS, TrimSensitivity.TRIM).collationId;
+      private static final int UNICODE_LTRIM_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CS, AccentSensitivity.AS, TrimSensitivity.LTRIM).collationId;
+      private static final int UNICODE_RTRIM_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CS, AccentSensitivity.AS, TrimSensitivity.RTRIM).collationId;
+      private static final int UNICODE_CI_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CI, AccentSensitivity.AS, TrimSensitivity.NONE).collationId;
+      private static final int UNICODE_CI_TRIM_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CI, AccentSensitivity.AS, TrimSensitivity.TRIM).collationId;
+      private static final int UNICODE_CI_LTRIM_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CI, AccentSensitivity.AS, TrimSensitivity.LTRIM).collationId;
+      private static final int UNICODE_CI_RTRIM_COLLATION_ID = new CollationSpecICU("UNICODE",
+        CaseSensitivity.CI, AccentSensitivity.AS, TrimSensitivity.RTRIM).collationId;
 
       private final CaseSensitivity caseSensitivity;
       private final AccentSensitivity accentSensitivity;
@@ -552,19 +718,23 @@ public final class CollationFactory {
       private final int collationId;
 
       private CollationSpecICU(String locale, CaseSensitivity caseSensitivity,
-          AccentSensitivity accentSensitivity) {
+          AccentSensitivity accentSensitivity, TrimSensitivity trimSensitivity) {
         this.locale = locale;
         this.caseSensitivity = caseSensitivity;
         this.accentSensitivity = accentSensitivity;
+        this.trimSensitivity = trimSensitivity;
         // Construct collation ID from locale, case-sensitivity and accent-sensitivity specifiers.
         int collationId = ICULocaleToId.get(locale);
         // Mandatory ICU implementation provider.
         collationId = SpecifierUtils.setSpecValue(collationId, IMPLEMENTATION_PROVIDER_OFFSET,
           ImplementationProvider.ICU);
+        // Optional case, accent, and trim sensitivity specifiers.
         collationId = SpecifierUtils.setSpecValue(collationId, CASE_SENSITIVITY_OFFSET,
           caseSensitivity);
         collationId = SpecifierUtils.setSpecValue(collationId, ACCENT_SENSITIVITY_OFFSET,
           accentSensitivity);
+        collationId = SpecifierUtils.setSpecValue(collationId, TRIM_SENSITIVITY_OFFSET,
+          trimSensitivity);
         this.collationId = collationId;
       }
 
@@ -586,6 +756,21 @@ public final class CollationFactory {
           String locale = collationName.substring(0, lastPos);
           int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
 
+          // Try to find trim sensitivity at the end of the collation name.
+          TrimSensitivity trimSensitivity = TrimSensitivity.NONE;
+          if (collationName.endsWith("_TRIM")) {
+            collationId = SpecifierUtils.setSpecValue(collationId,
+              TRIM_SENSITIVITY_OFFSET, TrimSensitivity.TRIM);
+            collationName = collationName.substring(0, collationName.length() - 5);
+          } else if (collationName.endsWith("_LTRIM")) {
+            collationId = SpecifierUtils.setSpecValue(collationId,
+              TRIM_SENSITIVITY_OFFSET, TrimSensitivity.LTRIM);
+            collationName = collationName.substring(0, collationName.length() - 6);
+          } else if (collationName.endsWith("_RTRIM")) {
+            collationId = SpecifierUtils.setSpecValue(collationId,
+              TRIM_SENSITIVITY_OFFSET, TrimSensitivity.RTRIM);
+            collationName = collationName.substring(0, collationName.length() - 6);
+          }
           // Try all combinations of AS/AI and CS/CI.
           CaseSensitivity caseSensitivity;
           AccentSensitivity accentSensitivity;
@@ -622,6 +807,8 @@ public final class CollationFactory {
             CASE_SENSITIVITY_OFFSET, caseSensitivity);
           collationId = SpecifierUtils.setSpecValue(collationId,
             ACCENT_SENSITIVITY_OFFSET, accentSensitivity);
+          collationId = SpecifierUtils.setSpecValue(collationId,
+            TRIM_SENSITIVITY_OFFSET, trimSensitivity);
           return collationId;
         }
       }
@@ -632,20 +819,25 @@ public final class CollationFactory {
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         int accentSensitivityOrdinal = SpecifierUtils.getSpecValue(collationId,
           ACCENT_SENSITIVITY_OFFSET, ACCENT_SENSITIVITY_MASK);
+        int trimSensitivityOrdinal = SpecifierUtils.getSpecValue(collationId,
+          TRIM_SENSITIVITY_OFFSET, TRIM_SENSITIVITY_MASK);
         collationId = SpecifierUtils.removeSpec(collationId,
           IMPLEMENTATION_PROVIDER_OFFSET, IMPLEMENTATION_PROVIDER_MASK);
         collationId = SpecifierUtils.removeSpec(collationId,
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         collationId = SpecifierUtils.removeSpec(collationId,
           ACCENT_SENSITIVITY_OFFSET, ACCENT_SENSITIVITY_MASK);
+        collationId = SpecifierUtils.removeSpec(collationId,
+          TRIM_SENSITIVITY_OFFSET, TRIM_SENSITIVITY_MASK);
         // Locale ID remains after removing all other specifiers.
         int localeId = collationId;
         // Verify locale ID is valid against `ICULocaleNames` array.
         assert(localeId >= 0 && localeId < ICULocaleNames.length);
         CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseSensitivityOrdinal];
         AccentSensitivity accentSensitivity = AccentSensitivity.values()[accentSensitivityOrdinal];
+        TrimSensitivity trimSensitivity = TrimSensitivity.values()[trimSensitivityOrdinal];
         String locale = ICULocaleNames[localeId];
-        return new CollationSpecICU(locale, caseSensitivity, accentSensitivity);
+        return new CollationSpecICU(locale, caseSensitivity, accentSensitivity, trimSensitivity);
       }
 
       @Override
@@ -672,16 +864,41 @@ public final class CollationFactory {
         Collator collator = Collator.getInstance(resultLocale);
         // Freeze ICU collator to ensure thread safety.
         collator.freeze();
+        // Comparator and hash function depend on trimming sensitivity.
+        Comparator<UTF8String> comparator;
+        ToLongFunction<UTF8String> hashFunction;
+        if (trimSensitivity == TrimSensitivity.NONE) {
+          comparator = (s1, s2) -> collator.compare(s1.toValidString(), s2.toValidString());
+          hashFunction = s -> (long) collator.getCollationKey(s.toValidString()).hashCode();
+        } else if (trimSensitivity == TrimSensitivity.TRIM) {
+          comparator = (s1, s2) ->
+            collator.compare(s1.trim().toValidString(), s2.trim().toValidString());
+          hashFunction = s ->
+            (long) collator.getCollationKey(s.trim().toValidString()).hashCode();
+        } else if (trimSensitivity == TrimSensitivity.LTRIM) {
+          comparator = (s1, s2) ->
+            collator.compare(s1.trimLeft().toValidString(), s2.trimLeft().toValidString());
+          hashFunction = s ->
+            (long) collator.getCollationKey(s.trimLeft().toValidString()).hashCode();
+        } else if (trimSensitivity == TrimSensitivity.RTRIM) {
+          comparator = (s1, s2) ->
+            collator.compare(s1.trimRight().toValidString(), s2.trimRight().toValidString());
+          hashFunction = s ->
+            (long) collator.getCollationKey(s.trimRight().toValidString()).hashCode();
+        } else {
+          throw new IllegalArgumentException("Invalid trim sensitivity: " + trimSensitivity);
+        }
         return new Collation(
           collationName(),
           PROVIDER_ICU,
           collator,
-          (s1, s2) -> collator.compare(s1.toValidString(), s2.toValidString()),
+          comparator,
           ICU_COLLATOR_VERSION,
-          s -> (long) collator.getCollationKey(s.toValidString()).hashCode(),
+          hashFunction,
           /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
-          /* supportsLowercaseEquality = */ false);
+          /* supportsLowercaseEquality = */ false,
+          this.trimSensitivity);
       }
 
       /**
@@ -701,6 +918,10 @@ public final class CollationFactory {
         if (accentSensitivity != AccentSensitivity.AS) {
           builder.append('_');
           builder.append(accentSensitivity.toString());
+        }
+        if (trimSensitivity != TrimSensitivity.NONE) {
+          builder.append('_');
+          builder.append(trimSensitivity.toString());
         }
         return builder.toString();
       }
@@ -736,12 +957,36 @@ public final class CollationFactory {
 
   public static final int UTF8_BINARY_COLLATION_ID =
     Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION_ID;
+  public static final int UTF8_BINARY_TRIM_COLLATION_ID =
+    Collation.CollationSpecUTF8.UTF8_BINARY_TRIM_COLLATION_ID;
+  public static final int UTF8_BINARY_LTRIM_COLLATION_ID =
+    Collation.CollationSpecUTF8.UTF8_BINARY_LTRIM_COLLATION_ID;
+  public static final int UTF8_BINARY_RTRIM_COLLATION_ID =
+    Collation.CollationSpecUTF8.UTF8_BINARY_RTRIM_COLLATION_ID;
   public static final int UTF8_LCASE_COLLATION_ID =
     Collation.CollationSpecUTF8.UTF8_LCASE_COLLATION_ID;
+  public static final int UTF8_LCASE_TRIM_COLLATION_ID =
+    Collation.CollationSpecUTF8.UTF8_LCASE_TRIM_COLLATION_ID;
+  public static final int UTF8_LCASE_LTRIM_COLLATION_ID =
+    Collation.CollationSpecUTF8.UTF8_LCASE_LTRIM_COLLATION_ID;
+  public static final int UTF8_LCASE_RTRIM_COLLATION_ID =
+    Collation.CollationSpecUTF8.UTF8_LCASE_RTRIM_COLLATION_ID;
   public static final int UNICODE_COLLATION_ID =
     Collation.CollationSpecICU.UNICODE_COLLATION_ID;
+  public static final int UNICODE_TRIM_COLLATION_ID =
+    Collation.CollationSpecICU.UNICODE_TRIM_COLLATION_ID;
+  public static final int UNICODE_LTRIM_COLLATION_ID =
+    Collation.CollationSpecICU.UNICODE_LTRIM_COLLATION_ID;
+  public static final int UNICODE_RTRIM_COLLATION_ID =
+    Collation.CollationSpecICU.UNICODE_RTRIM_COLLATION_ID;
   public static final int UNICODE_CI_COLLATION_ID =
     Collation.CollationSpecICU.UNICODE_CI_COLLATION_ID;
+  public static final int UNICODE_CI_TRIM_COLLATION_ID =
+    Collation.CollationSpecICU.UNICODE_CI_TRIM_COLLATION_ID;
+  public static final int UNICODE_CI_LTRIM_COLLATION_ID =
+    Collation.CollationSpecICU.UNICODE_CI_LTRIM_COLLATION_ID;
+  public static final int UNICODE_CI_RTRIM_COLLATION_ID =
+    Collation.CollationSpecICU.UNICODE_CI_RTRIM_COLLATION_ID;
   public static final int INDETERMINATE_COLLATION_ID =
     Collation.CollationSpec.INDETERMINATE_COLLATION_ID;
 
@@ -810,8 +1055,16 @@ public final class CollationFactory {
     return Collation.CollationSpec.fetchCollation(collationId);
   }
 
+  public static Collation fetchCollationIgnoreTrim(int collationId) {
+    return Collation.CollationSpec.fetchCollationIgnoreTrim(collationId);
+  }
+
   public static Collation fetchCollation(String collationName) throws SparkException {
     return fetchCollation(collationNameToId(collationName));
+  }
+
+  public static Collation fetchCollationIgnoreTrim(String collationName) throws SparkException {
+    return fetchCollationIgnoreTrim(collationNameToId(collationName));
   }
 
   public static String[] getICULocaleNames() {
@@ -820,6 +1073,10 @@ public final class CollationFactory {
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
+    if (collation.supportsTrimming) {
+      input = collation.trimmer.apply(input);
+      collation = fetchCollationIgnoreTrim(collationId);
+    }
     if (collation.supportsBinaryEquality) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
@@ -832,6 +1089,10 @@ public final class CollationFactory {
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
+    if (collation.supportsTrimming) {
+      input = collation.trimmer.apply(input);
+      collation = fetchCollationIgnoreTrim(collationId);
+    }
     if (collation.supportsBinaryEquality) {
       return input.getBytes();
     } else if (collation.supportsLowercaseEquality) {
@@ -859,10 +1120,21 @@ public final class CollationFactory {
       validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS"};
     }
 
-    // Split modifiers and locale name.
+    // Split modifiers from locale name.
+    List<String> modifiers = new ArrayList<>();
+
+    // Trim sensitivity modifiers.
+    String[] trimModifiers = new String[]{"_TRIM", "_LTRIM", "_RTRIM"};
+    for (String trimModifier : trimModifiers) {
+      if (collationName.endsWith(trimModifier)) {
+        modifiers.add(trimModifier);
+        collationName = collationName.substring(0, collationName.length() - trimModifier.length());
+      }
+    }
+
+    // Case and accent sensitivity modifiers.
     final int MODIFIER_LENGTH = 3;
     String localeName = collationName.toUpperCase();
-    List<String> modifiers = new ArrayList<>();
     while (Arrays.stream(validModifiers).anyMatch(localeName::endsWith)) {
       modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
       localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
@@ -881,12 +1153,21 @@ public final class CollationFactory {
       modifiers = modifiers.stream().filter(m -> !m.equals("_AI")).toList();
     }
 
+    if (modifiers.contains("_TRIM") && modifiers.contains(("_LTRIM"))) {
+      modifiers = modifiers.stream().filter(m -> !m.equals("_LTRIM")).toList();
+    }
+
+    if (modifiers.contains("_TRIM") && modifiers.contains(("_RTRIM"))) {
+      modifiers = modifiers.stream().filter(m -> !m.equals("_RTRIM")).toList();
+    }
+
+    // Sort root names by descending Levenshtein distance from the final locale name.
     final String finalLocaleName = localeName;
     Comparator<String> distanceComparator = (c1, c2) -> {
       int distance1 = UTF8String.fromString(c1.toUpperCase())
-              .levenshteinDistance(UTF8String.fromString(finalLocaleName));
+        .levenshteinDistance(UTF8String.fromString(finalLocaleName));
       int distance2 = UTF8String.fromString(c2.toUpperCase())
-              .levenshteinDistance(UTF8String.fromString(finalLocaleName));
+        .levenshteinDistance(UTF8String.fromString(finalLocaleName));
       return Integer.compare(distance1, distance2);
     };
 
@@ -901,6 +1182,7 @@ public final class CollationFactory {
       }
     };
 
+    // Return the top 3 suggestions.
     final int suggestionThreshold = 3;
     final ArrayList<String> suggestions = new ArrayList<>(maxSuggestions);
     for (int i = 0; i < maxSuggestions; i++) {

@@ -1743,8 +1743,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           ${strGen.code}
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
-              ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
-              ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
+              ${ev.value} = ${CollationSupport.StringLocate.genCode(strGen.value,
+              substrGen.value, startGen.value, collationId)} + 1;
             }
           } else {
             ${ev.isNull} = true;

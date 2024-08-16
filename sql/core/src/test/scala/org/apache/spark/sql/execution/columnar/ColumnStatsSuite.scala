@@ -143,10 +143,14 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
   }
 
+  private def testSupportedCollations: Seq[String] =
+    Seq("UTF8_BINARY", "UTF8_BINARY_TRIM", "UTF8_LCASE", "UTF8_LCASE_TRIM",
+      "UNICODE", "UNICODE_TRIM", "UNICODE_CI", "UNICODE_CI_TRIM")
+
   def testStringColumnStats[T <: PhysicalDataType, U <: ColumnStats](
       initialStatistics: Array[Any]): Unit = {
 
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+    testSupportedCollations.foreach(collation => {
       val columnType = STRING(StringType(collation))
 
       test(s"STRING($collation): empty") {
@@ -181,7 +185,7 @@ class ColumnStatsSuite extends SparkFunSuite {
       }
     })
 
-    test("STRING(UTF8_LCASE): collation-defined ordering") {
+    test("STRING(UTF8_LCASE): collation-defined ordering with case insensitivity") {
       import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
       import org.apache.spark.unsafe.types.UTF8String
 
@@ -196,6 +200,23 @@ class ColumnStatsSuite extends SparkFunSuite {
       val stats = columnStats.collectedStatistics
       assertResult(UTF8String.fromString("a"), "Wrong lower bound")(stats(0))
       assertResult(UTF8String.fromString("C"), "Wrong upper bound")(stats(1))
+    }
+
+    test("STRING(UTF8_BINARY_TRIM): collation-defined ordering with trim insensitivity") {
+      import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+      import org.apache.spark.unsafe.types.UTF8String
+
+      val columnStats = new StringColumnStats(StringType("UTF8_BINARY_TRIM").collationId)
+      val rows = Seq("b", "a", "C", " a ").map(str => {
+        val row = new GenericInternalRow(1)
+        row(0) = UTF8String.fromString(str)
+        row
+      })
+      rows.foreach(columnStats.gatherStats(_, 0))
+
+      val stats = columnStats.collectedStatistics
+      assertResult(UTF8String.fromString("C"), "Wrong lower bound")(stats(0))
+      assertResult(UTF8String.fromString("b"), "Wrong upper bound")(stats(1))
     }
   }
 }
