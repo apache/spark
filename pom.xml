@@ -161,6 +161,12 @@
     <aws.java.sdk.v2.version>2.24.6</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
+    <!--
+      HADOOP-19224 / SPARK-48867: com.huaweicloud:esdk-obs-java:jar:3.20.4.2 is
+      vulnerable due to okhttp 3.x (CVE-2023-0833, CVE-2021-0341),
+      it has to be upgraded to 3.24.3 which depends on okhttp 4.12.0
+    -->
+    <esdk.obs.java.version>3.24.3</esdk.obs.java.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
     <gcs-connector.version>hadoop3-2.2.25</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
@@ -237,7 +243,9 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>6.13.4</kubernetes-client.version>
-    <okio.version>1.17.6</okio.version>
+    <okio.version>3.9.0</okio.version>
+    <okhttp.version>4.12.0</okhttp.version>
+    <kotlin-stdlib.version>2.0.10</kotlin-stdlib.version>
 
     <test.java.home>${java.home}</test.java.home>
 

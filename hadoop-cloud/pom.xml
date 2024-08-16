@@ -171,6 +171,41 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-cos</artifactId>
         </exclusion>
+        <!--
+          HADOOP-19224 / SPARK-48867: com.huaweicloud:esdk-obs-java:jar:3.20.4.2 is
+          vulnerable due to okhttp 3.x (CVE-2023-0833, CVE-2021-0341),
+          it has to be upgraded to 3.24.3 which depends on okhttp 4.12.0
+        -->
+        <exclusion>
+          <groupId>com.huaweicloud</groupId>
+          <artifactId>esdk-obs-java</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.huaweicloud</groupId>
+      <artifactId>esdk-obs-java</artifactId>
+      <version>${esdk.obs.java.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.jetbrains.kotlin</groupId>
+          <artifactId>kotlin-stdlib-jdk8</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jetbrains.kotlin</groupId>
+          <artifactId>kotlin-stdlib</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+      <version>${kotlin-stdlib.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.jetbrains</groupId>
+          <artifactId>annotations</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <!--
