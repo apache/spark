@@ -1326,7 +1326,7 @@ public class CollationAwareUTF8String {
   private static void appendTitleCasedCodepoint(
       StringBuilder sb,
       int codepoint,
-   t    boolean isAfterAsciiSpace,
+      boolean isAfterAsciiSpace,
       boolean precededByCasedLetter,
       UTF8String target,
       int offset) {
