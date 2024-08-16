@@ -541,7 +541,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInPandas(column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       "Must pass a grouped map pandas udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -573,7 +574,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInArrow(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
       "Must pass a grouped map arrow udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -605,7 +607,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapCoGroupsInPandas(
       r: RelationalGroupedDataset,
-      expr: PythonUDF): DataFrame = {
+      column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       "Must pass a cogrouped map pandas udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
@@ -651,7 +654,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapCoGroupsInArrow(
       r: RelationalGroupedDataset,
-      expr: PythonUDF): DataFrame = {
+      column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
       "Must pass a cogrouped map arrow udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
@@ -700,7 +704,7 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def applyInPandasWithState(
-      func: PythonUDF,
+      func: Column,
       outputStructType: StructType,
       stateStructType: StructType,
       outputModeStr: String,
@@ -718,7 +722,7 @@ class RelationalGroupedDataset protected[sql](
     val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
     val outputAttrs = toAttributes(outputStructType)
     val plan = FlatMapGroupsInPandasWithState(
-      func,
+      func.expr,
       groupingAttrs,
       outputAttrs,
       stateStructType,
@@ -740,7 +744,7 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def transformWithStateInPandas(
-      func: PythonUDF,
+      func: Column,
       outputStructType: StructType,
       outputModeStr: String,
       timeModeStr: String): DataFrame = {
@@ -754,7 +758,7 @@ class RelationalGroupedDataset protected[sql](
     val timeMode = TimeModes(timeModeStr)
 
     val plan = TransformWithStateInPandas(
-      func,
+      func.expr,
       groupingAttrs,
       outputAttrs,
       outputMode,

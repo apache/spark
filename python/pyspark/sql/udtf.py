@@ -373,7 +373,7 @@ class UserDefinedTableFunction:
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
-        from pyspark.sql.classic.column import _to_java_column, _to_java_expr, _to_seq
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         from pyspark.sql import DataFrame, SparkSession
 

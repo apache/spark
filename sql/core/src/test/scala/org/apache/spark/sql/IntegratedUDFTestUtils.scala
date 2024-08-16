@@ -488,7 +488,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true) {
 
-      override def builder(e: Seq[Expression]): Expression = {
+      override def builderWithResultId(id: ExprId, e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
         val rt = returnType.getOrElse {
@@ -497,7 +497,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
           expr.dataType
         }
         val pythonUDF = new PythonUDFWithoutId(
-          super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
+          super.builderWithResultId(id, Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
         Cast(pythonUDF, rt)
       }
     }
@@ -1388,7 +1388,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
       udfDeterministic = true) {
 
-      override def builder(e: Seq[Expression]): Expression = {
+      override def builderWithResultId(id: ExprId, e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
         val rt = returnType.getOrElse {
@@ -1397,7 +1397,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
           expr.dataType
         }
         val pythonUDF = new PythonUDFWithoutId(
-          super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
+          super.builderWithResultId(id, Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
         Cast(pythonUDF, rt)
       }
     }

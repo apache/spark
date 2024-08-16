@@ -25,7 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, ExprId, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NamedExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -42,11 +42,14 @@ case class UserDefinedPythonFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
-  def builder(e: Seq[Expression]): Expression = {
+  final def builder(e: Seq[Expression]): Expression =
+    builderWithResultId(NamedExpression.newExprId, e)
+
+  def builderWithResultId(id: ExprId, e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
-        || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
-        || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+      || pythonEvalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+      || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -58,20 +61,15 @@ case class UserDefinedPythonFunction(
     }
 
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic)
+      PythonUDAF(name, func, dataType, e, udfDeterministic, id)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, id)
     }
   }
-
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = builder(exprs.map(expression))
 
-  /**
-   * Returns a [[Column]] that will evaluate the UDF expression with the given input.
-   */
-  // TODO we should tru to get rid of this.
-  def fromUDFExpr(expr: Expression): Column = expr
+  def apply(id: ExprId, exprs: Column*): Column = builderWithResultId(id, exprs.map(expression))
 }
 
 /**

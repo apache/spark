@@ -3520,9 +3520,10 @@ class Dataset[T] private[sql](
    * workers.
    */
   private[sql] def mapInPandas(
-      func: PythonUDF,
+      funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
+    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
@@ -3539,9 +3540,10 @@ class Dataset[T] private[sql](
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
   private[sql] def mapInArrow(
-      func: PythonUDF,
+      funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
+    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
       MapInArrow(

@@ -397,15 +397,13 @@ class UserDefinedFunction:
         return judf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:
-        from pyspark.sql.classic.column import _to_java_expr, _to_seq
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         sc = get_active_spark_context()
 
         assert sc._jvm is not None
-        jexprs = [_to_java_expr(arg) for arg in args] + [
-            sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
-                key, _to_java_expr(value)
-            )
+        jcols = [_to_java_column(arg) for arg in args] + [
+            sc._jvm.PythonSQLUtils.namedArgumentExpression(key, _to_java_column(value))
             for key, value in kwargs.items()
         ]
 
@@ -424,9 +422,7 @@ class UserDefinedFunction:
                     UserWarning,
                 )
                 judf = self._judf
-                jUDFExpr = judf.builder(_to_seq(sc, jexprs))
-                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
-                return Column(jPythonUDF)
+                return Column(judf.apply(_to_seq(sc, jcols)))
 
             # Disallow enabling two profilers at the same time.
             if profiler_enabled and memory_profiler_enabled:
@@ -449,11 +445,10 @@ class UserDefinedFunction:
                     return profiler.profile(f, *args, **kwargs)
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                resultId = sc._jvm.PythonSQLUtils.nextExprId()
                 judf = self._create_judf(func)
-                jUDFExpr = judf.builder(_to_seq(sc, jexprs))
-                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
-                id = jUDFExpr.resultId().id()
-                sc.profiler_collector.add_profiler(id, profiler)
+                jPythonUDF = judf.apply(resultId, _to_seq(sc, jcols))
+                sc.profiler_collector.add_profiler(resultId.id(), profiler)
             else:  # memory_profiler_enabled
                 f = self.func
                 memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
@@ -467,15 +462,13 @@ class UserDefinedFunction:
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                resultId = sc._jvm.PythonSQLUtils.nextExprId()
                 judf = self._create_judf(func)
-                jUDFExpr = judf.builder(_to_seq(sc, jexprs))
-                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
-                id = jUDFExpr.resultId().id()
-                sc.profiler_collector.add_profiler(id, memory_profiler)
+                jPythonUDF = judf.apply(resultId, _to_seq(sc, jcols))
+                sc.profiler_collector.add_profiler(resultId.id(), memory_profiler)
         else:
             judf = self._judf
-            jUDFExpr = judf.builder(_to_seq(sc, jexprs))
-            jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+            jPythonUDF = judf.apply(_to_seq(sc, jcols))
         return Column(jPythonUDF)
 
     # This function is for improving the online help system in the interactive interpreter.

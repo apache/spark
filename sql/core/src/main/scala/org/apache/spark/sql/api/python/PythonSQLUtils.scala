@@ -189,6 +189,8 @@ private[sql] object PythonSQLUtils extends Logging {
 
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
+
+  def nextExprId(): ExprId = NamedExpression.newExprId
 }
 
 /**

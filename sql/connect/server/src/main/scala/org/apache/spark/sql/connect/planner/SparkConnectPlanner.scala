@@ -653,10 +653,10 @@ class SparkConnectPlanner(
 
         pythonUdf.evalType match {
           case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF =>
-            group.flatMapGroupsInPandas(pythonUdf).logicalPlan
+            group.flatMapGroupsInPandas(column(pythonUdf)).logicalPlan
 
           case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF =>
-            group.flatMapGroupsInArrow(pythonUdf).logicalPlan
+            group.flatMapGroupsInArrow(column(pythonUdf)).logicalPlan
 
           case _ =>
             throw InvalidPlanInput(
@@ -992,7 +992,7 @@ class SparkConnectPlanner(
       .ofRows(session, transformRelation(rel.getInput))
       .groupBy(cols: _*)
       .applyInPandasWithState(
-        pythonUdf,
+        column(pythonUdf),
         outputSchema,
         stateSchema,
         rel.getOutputMode,
