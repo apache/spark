@@ -413,11 +413,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan =
       plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
-        case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide) => resolve(expr)
+        case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide)
+          if expr.childrenResolved => resolve(expr)
       }
 
     def resolve(expr: Expression): Expression = expr match {
-      case a @ Add(l, r, mode) if a.childrenResolved => (l.dataType, r.dataType) match {
+      case a @ Add(l, r, mode) => (l.dataType, r.dataType) match {
         case (DateType, DayTimeIntervalType(DAY, DAY)) => DateAdd(l, ExtractANSIIntervalDays(r))
         case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
         case (DayTimeIntervalType(DAY, DAY), DateType) => DateAdd(r, ExtractANSIIntervalDays(l))
@@ -444,7 +445,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case (dt, DateType) if dt != StringType => DateAdd(r, l)
         case _ => a
       }
-      case s @ Subtract(l, r, mode) if s.childrenResolved => (l.dataType, r.dataType) match {
+      case s @ Subtract(l, r, mode) => (l.dataType, r.dataType) match {
         case (DateType, DayTimeIntervalType(DAY, DAY)) =>
           DateAdd(l, UnaryMinus(ExtractANSIIntervalDays(r), mode == EvalMode.ANSI))
         case (DateType, _: DayTimeIntervalType) =>
@@ -470,7 +471,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case (DateType, dt) if dt != StringType => DateSub(l, r)
         case _ => s
       }
-      case m @ Multiply(l, r, mode) if m.childrenResolved => (l.dataType, r.dataType) match {
+      case m @ Multiply(l, r, mode) => (l.dataType, r.dataType) match {
         case (CalendarIntervalType, _) => MultiplyInterval(l, r, mode == EvalMode.ANSI)
         case (_, CalendarIntervalType) => MultiplyInterval(r, l, mode == EvalMode.ANSI)
         case (_: YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
@@ -479,7 +480,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case (_, _: DayTimeIntervalType) => MultiplyDTInterval(r, l)
         case _ => m
       }
-      case d @ Divide(l, r, mode) if d.childrenResolved => (l.dataType, r.dataType) match {
+      case d @ Divide(l, r, mode) => (l.dataType, r.dataType) match {
         case (CalendarIntervalType, _) => DivideInterval(l, r, mode == EvalMode.ANSI)
         case (_: YearMonthIntervalType, _) => DivideYMInterval(l, r)
         case (_: DayTimeIntervalType, _) => DivideDTInterval(l, r)
