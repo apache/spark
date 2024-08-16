@@ -170,9 +170,12 @@ class RocksDB(
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
-  // make visible for testing
-  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short](
-    Map(StateStore.DEFAULT_COL_FAMILY_NAME -> StateStore.DEFAULT_COL_FAMILY_ID).asJava)
+  // This is accessed and updated only between load and acquire
+  // which means it is implicitly guarded by acquireLock
+  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+
+  private val defaultColumnFamilyIdMapping =
+    Map(StateStore.DEFAULT_COL_FAMILY_NAME -> StateStore.DEFAULT_COL_FAMILY_ID).asJava
 
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(0)
 
@@ -180,70 +183,6 @@ class RocksDB(
 
   def getColFamilyNameToIdMap: Map[String, Short] = {
     colFamilyNameToIdMap.asScala.toMap
-  }
-
-  private val multColFamiliesDisabledStr = "multiple column families is disabled in " +
-    "RocksDBStateStoreProvider"
-
-  /**
-   * Function to verify invariants for column family based operations
-   * such as get, put, remove etc.
-   *
-   * @param operationName - name of the store operation
-   * @param colFamilyName - name of the column family
-   */
-  def verifyColFamilyOperations(
-      operationName: String,
-      colFamilyName: String): Unit = {
-    if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
-      // if the state store instance does not support multiple column families, throw an exception
-      if (!useColumnFamilies) {
-        throw StateStoreErrors.unsupportedOperationException(operationName,
-          multColFamiliesDisabledStr)
-      }
-
-      // if the column family name is empty or contains leading/trailing whitespaces, throw an
-      // exception
-      if (colFamilyName.isEmpty || colFamilyName.trim != colFamilyName) {
-        throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
-      }
-
-      // if the column family does not exist, throw an exception
-      if (!checkColFamilyExists(colFamilyName)) {
-        throw StateStoreErrors.unsupportedOperationOnMissingColumnFamily(operationName,
-          colFamilyName)
-      }
-    }
-  }
-
-  /**
-   * Function to verify invariants for column family creation or deletion operations.
-   *
-   * @param operationName - name of the store operation
-   * @param colFamilyName - name of the column family
-   */
-  private def verifyColFamilyCreationOrDeletion(
-      operationName: String,
-      colFamilyName: String,
-      isInternal: Boolean = false): Unit = {
-    // if the state store instance does not support multiple column families, throw an exception
-    if (!useColumnFamilies) {
-      throw StateStoreErrors.unsupportedOperationException(operationName,
-        multColFamiliesDisabledStr)
-    }
-
-    // if the column family name is empty or contains leading/trailing whitespaces
-    // or using the reserved "default" column family, throw an exception
-    if (colFamilyName.isEmpty
-      || colFamilyName.trim != colFamilyName
-      || (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME && !isInternal)) {
-      throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
-    }
-
-    // if the column family is not internal and uses reserved characters, throw an exception
-    if (!isInternal && colFamilyName.charAt(0) == '_') {
-      throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
-    }
   }
 
   /**
@@ -258,7 +197,6 @@ class RocksDB(
    * Create RocksDB column family, if not created already
    */
   def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false): Short = {
-    verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
       colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
@@ -271,7 +209,6 @@ class RocksDB(
    * Remove RocksDB column family, if exists
    */
   def removeColFamilyIfExists(colFamilyName: String): Boolean = {
-    verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
     if (checkColFamilyExists(colFamilyName)) {
       colFamilyNameToIdMap.remove(colFamilyName)
       shouldForceSnapshot.set(true)
@@ -287,8 +224,26 @@ class RocksDB(
    * @param colFamilyName - name of the column family
    * @return - true if the column family exists, false otherwise
    */
-  private def checkColFamilyExists(colFamilyName: String): Boolean = {
+  def checkColFamilyExists(colFamilyName: String): Boolean = {
     colFamilyNameToIdMap.containsKey(colFamilyName)
+  }
+
+  // This method sets the internal column family metadata to
+  // the default values it should be set to on load
+  private def setInitialCFInfo(): Unit = {
+    colFamilyNameToIdMap.clear()
+    colFamilyNameToIdMap.putAll(defaultColumnFamilyIdMapping)
+    shouldForceSnapshot.set(false)
+    maxColumnFamilyId.set(0)
+  }
+
+  def getColFamilyCount(isInternal: Boolean): Long = {
+    val countFunc = if (isInternal) {
+      checkInternalColumnFamilies _
+    } else {
+      !checkInternalColumnFamilies(_)
+    }
+    colFamilyNameToIdMap.asScala.keys.toSeq.count(countFunc)
   }
 
   /**
@@ -313,6 +268,7 @@ class RocksDB(
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
+        setInitialCFInfo()
         metadata.columnFamilyMapping.foreach { mapping =>
           colFamilyNameToIdMap.putAll(mapping.asJava)
         }

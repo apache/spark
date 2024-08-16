@@ -72,7 +72,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
-      rocksDB.verifyColFamilyOperations("get", colFamilyName)
+      verifyColFamilyOperations("get", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val value =
@@ -98,7 +98,7 @@ private[sql] class RocksDBStateStoreProvider
      */
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       verify(key != null, "Key cannot be null")
-      rocksDB.verifyColFamilyOperations("valuesIterator", colFamilyName)
+      verifyColFamilyOperations("valuesIterator", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val valueEncoder = kvEncoder._2
@@ -114,7 +114,7 @@ private[sql] class RocksDBStateStoreProvider
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
-      rocksDB.verifyColFamilyOperations("merge", colFamilyName)
+      verifyColFamilyOperations("merge", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val keyEncoder = kvEncoder._1
@@ -131,7 +131,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
-      rocksDB.verifyColFamilyOperations("put", colFamilyName)
+      verifyColFamilyOperations("put", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       rocksDB.put(kvEncoder._1.encodeKey(key), kvEncoder._2.encodeValue(value))
@@ -140,7 +140,7 @@ private[sql] class RocksDBStateStoreProvider
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
-      rocksDB.verifyColFamilyOperations("remove", colFamilyName)
+      verifyColFamilyOperations("remove", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       rocksDB.remove(kvEncoder._1.encodeKey(key))
@@ -150,7 +150,7 @@ private[sql] class RocksDBStateStoreProvider
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
-      rocksDB.verifyColFamilyOperations("iterator", colFamilyName)
+      verifyColFamilyOperations("iterator", colFamilyName)
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
 
@@ -184,7 +184,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
-      rocksDB.verifyColFamilyOperations("prefixScan", colFamilyName)
+      verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       require(kvEncoder._1.supportPrefixKeyScan,
@@ -248,13 +248,11 @@ private[sql] class RocksDBStateStoreProvider
 
         // Used for metrics reporting around internal/external column families
         def internalColFamilyCnt(): Long = {
-          rocksDB.getColFamilyNameToIdMap.keys.
-            toSeq.count(rocksDB.checkInternalColumnFamilies)
+          rocksDB.getColFamilyCount(true)
         }
 
         def externalColFamilyCnt(): Long = {
-          rocksDB.getColFamilyNameToIdMap.keys.
-            toSeq.count(!rocksDB.checkInternalColumnFamilies(_))
+          rocksDB.getColFamilyCount(false)
         }
 
         val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
@@ -441,6 +439,10 @@ private[sql] class RocksDBStateStoreProvider
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
+
+  private val multColFamiliesDisabledStr = "multiple column families is disabled in " +
+    "RocksDBStateStoreProvider"
+
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
   }
@@ -485,6 +487,67 @@ private[sql] class RocksDBStateStoreProvider
       endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap)
+  }
+
+  /**
+   * Function to verify invariants for column family based operations
+   * such as get, put, remove etc.
+   *
+   * @param operationName - name of the store operation
+   * @param colFamilyName - name of the column family
+   */
+  private def verifyColFamilyOperations(
+      operationName: String,
+      colFamilyName: String): Unit = {
+    if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
+      // if the state store instance does not support multiple column families, throw an exception
+      if (!useColumnFamilies) {
+        throw StateStoreErrors.unsupportedOperationException(operationName,
+          multColFamiliesDisabledStr)
+      }
+
+      // if the column family name is empty or contains leading/trailing whitespaces, throw an
+      // exception
+      if (colFamilyName.isEmpty || colFamilyName.trim != colFamilyName) {
+        throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
+      }
+
+      // if the column family does not exist, throw an exception
+      if (!rocksDB.checkColFamilyExists(colFamilyName)) {
+        throw StateStoreErrors.unsupportedOperationOnMissingColumnFamily(operationName,
+          colFamilyName)
+      }
+    }
+  }
+
+  /**
+   * Function to verify invariants for column family creation or deletion operations.
+   *
+   * @param operationName - name of the store operation
+   * @param colFamilyName - name of the column family
+   */
+  private def verifyColFamilyCreationOrDeletion(
+      operationName: String,
+      colFamilyName: String,
+      isInternal: Boolean = false): Unit = {
+    // if the state store instance does not support multiple column families, throw an exception
+    if (!useColumnFamilies) {
+      throw StateStoreErrors.unsupportedOperationException(operationName,
+        multColFamiliesDisabledStr)
+    }
+
+    // if the column family name is empty or contains leading/trailing whitespaces
+    // or using the reserved "default" column family, throw an exception
+    if (colFamilyName.isEmpty
+      || colFamilyName.trim != colFamilyName
+      || (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME && !isInternal)) {
+      throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
+    }
+
+    // if the column family is not internal and uses reserved characters, throw an exception
+    if (!isInternal && colFamilyName.charAt(0) == '_') {
+      throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
+    }
   }
 }
 
