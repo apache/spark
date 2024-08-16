@@ -111,6 +111,10 @@ case class QualifiedTableName(database: String, name: String) {
   override def toString: String = s"$database.$name"
 }
 
+case class FullQualifiedTableName(catalog: String, database: String, name: String) {
+  override def toString: String = s"$catalog.$database.$name"
+}
+
 object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
   def apply(table: String, database: Option[String]): TableIdentifier =
