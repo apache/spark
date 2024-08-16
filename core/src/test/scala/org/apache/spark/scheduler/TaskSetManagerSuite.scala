@@ -2725,6 +2725,25 @@ class TaskSetManagerSuite
     assert(executorMonitor.isExecutorIdle("exec2"))
   }
 
+  test("SPARK-49252: TaskSetExcludeList can be created without HealthTracker") {
+    for (enableConfig <- Seq(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE,
+      config.EXCLUDE_ON_FAILURE_ENABLED)) {
+      // When the excludeOnFailure.enabled is set to true, the TaskSetManager should create a
+      // TaskSetExcludelist even if the application level HealthTracker is not defined.
+      val conf = new SparkConf().set(enableConfig, true)
+
+      // Create a task with two executors.
+      sc = new SparkContext("local", "test", conf)
+      sched = new FakeTaskScheduler(sc)
+      val taskSet = FakeTask.createTaskSet(1)
+
+      val taskSetManager = new TaskSetManager(sched, taskSet, 1,
+        // No application level HealthTracker.
+        healthTracker = None)
+      assert(taskSetManager.taskSetExcludelistHelperOpt.isDefined)
+    }
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {

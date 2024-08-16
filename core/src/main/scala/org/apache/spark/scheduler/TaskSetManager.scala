@@ -143,8 +143,11 @@ private[spark] class TaskSetManager(
   private var calculatedTasks = 0
 
   private[scheduler] val taskSetExcludelistHelperOpt: Option[TaskSetExcludelist] = {
-    healthTracker.map { _ =>
-      new TaskSetExcludelist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
+    if (TaskSetExcludelist.isExcludeOnFailureEnabled(conf)) {
+      Some(new TaskSetExcludelist(sched.sc.listenerBus, conf, stageId,
+        taskSet.stageAttemptId, clock))
+    } else {
+      None
     }
   }
 
@@ -725,7 +728,7 @@ private[spark] class TaskSetManager(
           hostToExecutors.forall { case (host, execsOnHost) =>
             // Check if the task can run on the node
             val nodeExcluded =
-              appHealthTracker.isNodeExcluded(host) ||
+              healthTracker.exists(_.isNodeExcluded(host)) ||
                 taskSetExcludelist.isNodeExcludedForTaskSet(host) ||
                 taskSetExcludelist.isNodeExcludedForTask(host, indexInTaskSet)
             if (nodeExcluded) {
@@ -733,7 +736,7 @@ private[spark] class TaskSetManager(
             } else {
               // Check if the task can run on any of the executors
               execsOnHost.forall { exec =>
-                appHealthTracker.isExecutorExcluded(exec) ||
+                healthTracker.exists(_.isExecutorExcluded(exec)) ||
                   taskSetExcludelist.isExecutorExcludedForTaskSet(exec) ||
                   taskSetExcludelist.isExecutorExcludedForTask(exec, indexInTaskSet)
               }
@@ -1439,6 +1442,7 @@ private[spark] object TaskSetManager {
 
   // 1 minute
   val BARRIER_LOGGING_INTERVAL = 60000
+
 }
 
 /**

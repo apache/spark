@@ -441,6 +441,24 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     assert(1000 === HealthTracker.getExcludeOnFailureTimeout(conf))
   }
 
+  test("SPARK-49252: check exclusion enabling config on the application level") {
+    val conf = new SparkConf().setMaster("local")
+    assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
+    // Overall exclusion is enabled, and it takes over the application level switch.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION, false)
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
+    // Turn off the overall exclusion and turn on task and stage level exclusion, health tracker
+    // should still be disabled.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, false)
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE, false)
+    assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
+    // Turn on application level exclusion, health tracker should be enabled.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION, true)
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
+  }
+
   test("check exclude configuration invariants") {
     val conf = new SparkConf().setMaster("yarn").set(config.SUBMIT_DEPLOY_MODE, "cluster")
     Seq(
