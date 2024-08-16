@@ -1521,6 +1521,10 @@ case class ArrayContains(left: Expression, right: Expression)
 
 /**
  * Searches the specified array for the specified object using the binary search algorithm.
+ *
+ * NOTE: The input array must be in ascending order before calling this method; if the array is
+ * not sorted, the results are undefined.
+ *
  * This expression is dedicated only for PySpark and Spark-ML.
  */
 @ExpressionDescription(
@@ -1599,13 +1603,13 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
   @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
     elementType != BooleanType && !resultArrayElementNullable
 
-  @transient private lazy val comp: SerializableComparator[Any] = {
-    val ordering = array.dataType match {
+  @transient private lazy val comp: Comparator[Any] = new Comparator[Any] with Serializable {
+    private val ordering = array.dataType match {
       case _ @ ArrayType(n, _) =>
         PhysicalDataType.ordering(n)
     }
 
-    (o1: Any, o2: Any) =>
+    override def compare(o1: Any, o2: Any): Int =
       (o1, o2) match {
         case (null, null) => 0
         case (null, _) => 1

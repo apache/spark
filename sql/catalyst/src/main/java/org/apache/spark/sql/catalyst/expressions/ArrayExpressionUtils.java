@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Comparator;
 
@@ -175,5 +174,3 @@ public class ArrayExpressionUtils {
     return Arrays.binarySearch(array, value, comp);
   }
 }
-
-interface SerializableComparator<T> extends Comparator<T>, Serializable {}
