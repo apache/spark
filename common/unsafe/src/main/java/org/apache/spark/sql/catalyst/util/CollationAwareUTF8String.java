@@ -483,6 +483,10 @@ public class CollationAwareUTF8String {
   private static final int CODE_POINT_COMBINING_DOT = 0x307;
   private static final int CODE_POINT_COMBINED_LOWERCASE_I_DOT =
     CODE_POINT_LOWERCASE_I << 16 | CODE_POINT_COMBINING_DOT;
+  private static final int ASCII_SPACE_CODEPOINT = 32;
+  private static final int CAPITAL_SIGMA = 0x03A3;
+  private static final int SMALL_NON_FINAL_SIGMA = 0x03C3;
+  private static final int SMALL_FINAL_SIGMA = 0x03C2;
 
   /**
    * Returns the lowercase version of the provided code point, with special handling for
@@ -495,11 +499,11 @@ public class CollationAwareUTF8String {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
       return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
     }
-    else if (codePoint == 0x03C2) {
+    else if (codePoint == SMALL_FINAL_SIGMA) {
       // Greek final and non-final letter sigma should be mapped the same. This is achieved by
       // mapping Greek small final sigma (U+03C2) to Greek small non-final sigma (U+03C3). Capital
       // letter sigma (U+03A3) is mapped to small non-final sigma (U+03C3) in the `else` branch.
-      return 0x03C3;
+      return SMALL_NON_FINAL_SIGMA;
     }
     else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
@@ -1280,8 +1284,10 @@ public class CollationAwareUTF8String {
    */
   public static UTF8String toTitleCaseICU(UTF8String target) {
 
-    Iterator<Integer> codepointIterator = target.codePointIterator(
-            CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    // In the previous implementation, when UTF8String.toLowerCase() was called, it implicitly did
+    // UTF8String validation(replacing invalid UTF-8 byte sequences with Unicode replacement
+    // character U+FFFD), but now we have to do the validation manually.
+    target = target.makeValid();
 
     // Building the title cased target with 'sb'.
     StringBuilder sb = new StringBuilder();
@@ -1293,11 +1299,12 @@ public class CollationAwareUTF8String {
     boolean precededByCasedLetter = false;
 
     // 'offset' is a byte offset in target's byte array pointing to the beginning of the character
-    // that we need to process next(this is only actually used in appendLowerCasedGreekCapitalSigma)
+    // that we need to process next.
     int offset = 0;
+    int len = target.numBytes();
 
-    while(codepointIterator.hasNext()) {
-      int codepoint = codepointIterator.next();
+    while(offset < len) {
+      int codepoint = target.codePointFrom(offset);
       // Appending the correctly cased character onto 'sb'.
       appendTitleCasedCodepoint(sb, codepoint, newWord, precededByCasedLetter, target, offset);
       // Updating 'newWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
@@ -1352,10 +1359,6 @@ public class CollationAwareUTF8String {
   /**
    * Checks if the character beginning at 'offset'(in 'targets' byte array) is followed by a cased
    * letter.
-   *
-   * @param target
-   * @param offset
-   * @return
    */
   private static boolean followedByCasedLetter(UTF8String target, int offset) {
     // Moving the offset one character forward, so we could start the linear search from there.
@@ -1382,13 +1385,10 @@ public class CollationAwareUTF8String {
    * case of the codepoint
    */
   private static String codepointToTitleString(int codepoint) {
+    // This operation is expensive. In worst case we can have n/2 calls of this function when doing
+    // toTitleCaseICU.
     return UCharacter.toTitleCase(new String(Character.toChars(codepoint)),null);
   }
-
-  private static final int ASCII_SPACE_CODEPOINT = 32;
-  private static final int CAPITAL_SIGMA = 0x03A3;
-  private static final int SMALL_NON_FINAL_SIGMA = 0x03C3;
-  private static final int SMALL_FINAL_SIGMA = 0x03C2;
 
   // TODO: Add more collation-aware UTF8String operations here.
 

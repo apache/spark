@@ -887,6 +887,7 @@ public class CollationSupportSuite {
     assertEquals(expected_utf8, CollationSupport.InitCap.exec(target_utf8, collationId, false));
     // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
+
   private void assertInitCap(
       String target,
       String collationName,
@@ -912,13 +913,13 @@ public class CollationSupportSuite {
     assertInitCap("", "UNICODE", "");
     assertInitCap("", "UNICODE_CI", "");
     // Basic tests
-    assertInitCap("ABCDE", "UTF8_BINARY", "Abcde", "Abcde");
+    assertInitCap("ABCDE", "UTF8_BINARY", "Abcde");
     assertInitCap("ABCDE", "UTF8_LCASE", "Abcde");
     assertInitCap("ABCDE", "UNICODE", "Abcde");
     assertInitCap("ABCDE", "UNICODE_CI", "Abcde");
     // Uppercase present
-    assertInitCap("AbCdE", "UTF8_BINARY", "Abcde", "Abcde");
-    assertInitCap("aBcDe", "UTF8_BINARY", "Abcde", "Abcde");
+    assertInitCap("AbCdE", "UTF8_BINARY", "Abcde");
+    assertInitCap("aBcDe", "UTF8_BINARY", "Abcde");
     assertInitCap("AbCdE", "UTF8_LCASE", "Abcde");
     assertInitCap("aBcDe", "UTF8_LCASE", "Abcde");
     assertInitCap("AbCdE", "UNICODE", "Abcde");
@@ -926,13 +927,13 @@ public class CollationSupportSuite {
     assertInitCap("AbCdE", "UNICODE_CI", "Abcde");
     assertInitCap("aBcDe", "UNICODE_CI", "Abcde");
     // Accent letters
-    assertInitCap("AbĆdE", "UTF8_BINARY", "Abćde", "Abćde");
+    assertInitCap("AbĆdE", "UTF8_BINARY", "Abćde");
     assertInitCap("AbĆdE", "UTF8_LCASE", "Abćde");
     assertInitCap("AbĆdE", "UNICODE", "Abćde");
     assertInitCap("AbĆdE", "UNICODE_CI", "Abćde");
     // Variable byte length characters
-    assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De", "Ab 世 De");
-    assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe", "Äbćδe");
+    assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De");
+    assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe");
     assertInitCap("aB 世 De", "UTF8_LCASE", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UTF8_LCASE", "Äbćδe");
     assertInitCap("aB 世 De", "UNICODE", "Ab 世 De");
@@ -944,33 +945,33 @@ public class CollationSupportSuite {
     assertInitCap("İo", "UTF8_LCASE", "İo");
     assertInitCap("İo", "UNICODE", "İo");
     assertInitCap("İo", "UNICODE_CI", "İo");
-    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o", "I\u0307o");
+    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o");
     assertInitCap("i\u0307o", "UTF8_LCASE", "I\u0307o");
     assertInitCap("i\u0307o", "UNICODE", "I\u0307o");
     assertInitCap("i\u0307o", "UNICODE_CI", "I\u0307o");
     // Different possible word boundaries
-    assertInitCap("a b c", "UTF8_BINARY", "A B C", "A B C");
+    assertInitCap("a b c", "UTF8_BINARY", "A B C");
     assertInitCap("a b c", "UNICODE", "A B C");
     assertInitCap("a b c", "UTF8_LCASE", "A B C");
     assertInitCap("a b c", "UNICODE_CI", "A B C");
-    assertInitCap("a.b,c", "UTF8_BINARY", "A.b,c", "A.b,c");
+    assertInitCap("a.b,c", "UTF8_BINARY", "A.b,c");
     assertInitCap("a.b,c", "UNICODE", "A.b,C");
     assertInitCap("a.b,c", "UTF8_LCASE", "A.b,C");
     assertInitCap("a.b,c", "UNICODE_CI", "A.b,C");
-    assertInitCap("a. b-c", "UTF8_BINARY", "A. B-c", "A. B-c");
+    assertInitCap("a. b-c", "UTF8_BINARY", "A. B-c");
     assertInitCap("a. b-c", "UNICODE", "A. B-C");
     assertInitCap("a. b-c", "UTF8_LCASE", "A. B-C");
     assertInitCap("a. b-c", "UNICODE_CI", "A. B-C");
-    assertInitCap("a?b世c", "UTF8_BINARY", "A?b世c", "A?b世c");
+    assertInitCap("a?b世c", "UTF8_BINARY", "A?b世c");
     assertInitCap("a?b世c", "UNICODE", "A?B世C");
     assertInitCap("a?b世c", "UTF8_LCASE", "A?B世C");
     assertInitCap("a?b世c", "UNICODE_CI", "A?B世C");
     // Titlecase characters that are different from uppercase characters
-    assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UNICODE", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UTF8_LCASE", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UNICODE_CI", "ǲǳǳ");
-    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY", "ǅaba ǈubav ǋegova", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_LCASE", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE_CI", "ǅaba ǈubav ǋegova");
