@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.internal
 
+import UserDefinedFunctionUtils.toScalaUDF
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
@@ -28,7 +30,6 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
-import org.apache.spark.sql.expressions.UserDefinedFunctionUtils.toScalaUDF
 
 /**
  * Convert a [[ColumnNode]] into an [[Expression]].
@@ -171,7 +172,7 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
         toScalaUDF(udf, arguments.map(apply))
 
-      case Wrapper(expression, _) =>
+      case ExpressionColumnNode(expression, _) =>
         expression
 
       case node =>
@@ -233,10 +234,10 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class Wrapper(
+private[sql] case class ExpressionColumnNode(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
-  override def normalize(): Wrapper = {
+  override def normalize(): ExpressionColumnNode = {
     val updated = expression.transform {
       case a: AttributeReference =>
         DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)

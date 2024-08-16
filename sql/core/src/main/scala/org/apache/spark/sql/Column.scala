@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{ColumnNode, TypedAggUtils, Wrapper}
+import org.apache.spark.sql.internal.{ColumnNode, ExpressionColumnNode, TypedAggUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -39,7 +39,7 @@ private[spark] object Column {
 
   def apply(colName: String): Column = new Column(colName)
 
-  def apply(expr: Expression): Column = Column(Wrapper(expr))
+  def apply(expr: Expression): Column = Column(ExpressionColumnNode(expr))
 
   def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
 
@@ -288,7 +288,7 @@ class Column(val node: ColumnNode) extends Logging {
     if (this == right) {
       logWarning(
         log"Constructing trivially true equals predicate, " +
-          log"'${MDC(LEFT_EXPR, this)} <=> ${MDC(RIGHT_EXPR, right)}'. " +
+          log"'${MDC(LEFT_EXPR, this)} == ${MDC(RIGHT_EXPR, right)}'. " +
           log"Perhaps you need to use aliases.")
     }
   }

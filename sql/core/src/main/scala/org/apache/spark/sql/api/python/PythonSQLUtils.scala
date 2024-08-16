@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.internal.{SQLConf, Wrapper}
+import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -185,12 +185,12 @@ private[sql] object PythonSQLUtils extends Logging {
   }
 
   def namedArgumentExpression(name: String, e: Column): Column =
-    Column(Wrapper(NamedArgumentExpression(name, e.expr)))
+    Column(ExpressionColumnNode(NamedArgumentExpression(name, e.expr)))
 
   def distributedIndex(): Column = {
     val expr = MonotonicallyIncreasingID()
     expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    Column(Wrapper(expr))
+    Column(ExpressionColumnNode(expr))
   }
 
   @scala.annotation.varargs

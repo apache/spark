@@ -387,7 +387,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
 
   test("extension") {
     testConversion(
-      Wrapper(analysis.UnresolvedAttribute("bar")),
+      ExpressionColumnNode(analysis.UnresolvedAttribute("bar")),
       analysis.UnresolvedAttribute("bar"))
   }
 
