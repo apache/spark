@@ -454,7 +454,7 @@ class AstBuilder extends DataTypeAstBuilder
         val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
         = visitInsertIntoTable(table)
         withIdentClause(relationCtx, ident => {
-          val insertIntoStatement = InsertIntoStatement(
+          InsertIntoStatement(
             createUnresolvedRelation(relationCtx, ident, options),
             partition,
             cols,
@@ -462,11 +462,6 @@ class AstBuilder extends DataTypeAstBuilder
             overwrite = false,
             ifPartitionNotExists,
             byName)
-          if (conf.getConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER)) {
-            EvaluateUnresolvedInlineTable.evaluate(insertIntoStatement)
-          } else {
-            insertIntoStatement
-          }
         })
       case table: InsertOverwriteTableContext =>
         val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
@@ -1882,7 +1877,12 @@ class AstBuilder extends DataTypeAstBuilder
       Seq.tabulate(rows.head.size)(i => s"col${i + 1}")
     }
 
-    val table = UnresolvedInlineTable(aliases, rows.toSeq)
+    val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
+    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+      EvaluateUnresolvedInlineTable.evaluate(table)
+    } else {
+      unresolvedTable
+    }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
   }
 
