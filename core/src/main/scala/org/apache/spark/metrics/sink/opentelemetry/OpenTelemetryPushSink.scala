@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.metrics.sink
+package org.apache.spark.metrics.sink.opentelemetry
 
 import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
@@ -24,6 +24,8 @@ import com.codahale.metrics.MetricRegistry
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.sink.Sink
+
 
 private[spark] object OpenTelemetryPushSink {
   private def fetchMapFromProperties(

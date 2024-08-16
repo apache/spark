@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.metrics.sink
+package org.apache.spark.metrics.sink.opentelemetry
 
 import java.nio.file.{Files, Paths}
 import java.util.{Locale, SortedMap}
@@ -23,9 +23,7 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics._
 import io.opentelemetry.api.common.Attributes
-import io.opentelemetry.api.metrics.DoubleGauge
-import io.opentelemetry.api.metrics.DoubleHistogram
-import io.opentelemetry.api.metrics.LongCounter
+import io.opentelemetry.api.metrics.{DoubleGauge, DoubleHistogram, LongCounter}
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator
 import io.opentelemetry.context.propagation.ContextPropagators
 import io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporter
@@ -33,6 +31,7 @@ import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader
 import io.opentelemetry.sdk.resources.Resource
+
 
 private[spark] class OpenTelemetryPushReporter (
     registry: MetricRegistry,

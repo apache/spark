@@ -15,31 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.metrics.sink
+package org.apache.spark.metrics.sink.opentelemetry
 
-import com.codahale.metrics.MetricRegistry
+import java.util.Properties
+
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 
-class OpenTelemetryPushReporterSuite
+
+class OpenTelemetryPushSinkSuite
     extends SparkFunSuite
     with PrivateMethodTester {
-  test("normalize metric name key") {
-    val reporter = new OpenTelemetryPushReporter(
-      registry = new MetricRegistry(),
-      trustedCertificatesPath = null,
-      privateKeyPemPath = null,
-      certificatePemPath = null
-    )
-    val name = "local-1592132938718.driver.LiveListenerBus." +
-      "listenerProcessingTime.org.apache.spark.HeartbeatReceiver"
-    val metricsName = reporter invokePrivate PrivateMethod[String](
-      Symbol("normalizeMetricName")
-    )(name)
-    assert(
-      metricsName == "local_1592132938718_driver_livelistenerbus_" +
-        "listenerprocessingtime_org_apache_spark_heartbeatreceiver"
-    )
+
+  test("fetch properties map") {
+    val properties = new Properties
+    properties.put("foo1.foo2.foo3.foo4.header.key1.key2.key3", "value1")
+    properties.put("foo1.foo2.foo3.foo4.header.key2", "value2")
+    val keyPrefix = "foo1.foo2.foo3.foo4.header"
+    val propertiesMap: Map[String, String] = OpenTelemetryPushSink invokePrivate
+      PrivateMethod[Map[String, String]](
+        Symbol("fetchMapFromProperties")
+      )(properties, keyPrefix)
+
+    assert("value1".equals(propertiesMap("key1.key2.key3")))
+    assert("value2".equals(propertiesMap("key2")))
   }
 }
