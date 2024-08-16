@@ -238,12 +238,11 @@ class RocksDB(
   }
 
   def getColFamilyCount(isInternal: Boolean): Long = {
-    val countFunc = if (isInternal) {
-      checkInternalColumnFamilies _
+    if (isInternal) {
+      colFamilyNameToIdMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
     } else {
-      !checkInternalColumnFamilies(_)
+      colFamilyNameToIdMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
     }
-    colFamilyNameToIdMap.asScala.keys.toSeq.count(countFunc)
   }
 
   /**
