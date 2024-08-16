@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -169,7 +170,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   @throws(classOf[NoSuchTableException])
   def append(): Unit = {
     val append = AppendData.byName(
-      UnresolvedRelation(tableName).forWrite, logicalPlan, options.toMap)
+      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT)),
+      logicalPlan, options.toMap)
     runCommand(append)
   }
 
@@ -186,7 +188,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   @throws(classOf[NoSuchTableException])
   def overwrite(condition: Column): Unit = {
     val overwrite = OverwriteByExpression.byName(
-      UnresolvedRelation(tableName).forWrite, logicalPlan, condition.expr, options.toMap)
+      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
+      logicalPlan, condition.expr, options.toMap)
     runCommand(overwrite)
   }
 
@@ -206,7 +209,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   @throws(classOf[NoSuchTableException])
   def overwritePartitions(): Unit = {
     val dynamicOverwrite = OverwritePartitionsDynamic.byName(
-      UnresolvedRelation(tableName).forWrite, logicalPlan, options.toMap)
+      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
+      logicalPlan, options.toMap)
     runCommand(dynamicOverwrite)
   }
 

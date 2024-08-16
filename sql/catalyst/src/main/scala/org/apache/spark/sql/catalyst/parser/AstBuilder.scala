@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -455,7 +455,7 @@ class AstBuilder extends DataTypeAstBuilder
         = visitInsertIntoTable(table)
         withIdentClause(relationCtx, ident => {
           val insertIntoStatement = InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options, forWrite = true),
+            createUnresolvedRelation(relationCtx, ident, options, Seq(TableWritePrivilege.INSERT)),
             partition,
             cols,
             query,
@@ -473,7 +473,8 @@ class AstBuilder extends DataTypeAstBuilder
         = visitInsertOverwriteTable(table)
         withIdentClause(relationCtx, ident => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options, forWrite = true),
+            createUnresolvedRelation(relationCtx, ident, options,
+              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
             partition,
             cols,
             query,
@@ -485,7 +486,8 @@ class AstBuilder extends DataTypeAstBuilder
         val options = Option(ctx.optionsClause())
         withIdentClause(ctx.identifierReference, ident => {
           OverwriteByExpression.byPosition(
-            createUnresolvedRelation(ctx.identifierReference, ident, options, forWrite = true),
+            createUnresolvedRelation(ctx.identifierReference, ident, options,
+              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
             query,
             expression(ctx.whereClause().booleanExpression()))
         })
@@ -570,7 +572,8 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = createUnresolvedRelation(ctx.identifierReference, forWrite = true)
+    val table = createUnresolvedRelation(
+      ctx.identifierReference, writePrivileges = Seq(TableWritePrivilege.DELETE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
@@ -582,7 +585,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = createUnresolvedRelation(ctx.identifierReference, forWrite = true)
+    val table = createUnresolvedRelation(
+      ctx.identifierReference, writePrivileges = Seq(TableWritePrivilege.UPDATE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -605,9 +609,6 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
     val withSchemaEvolution = ctx.EVOLUTION() != null
-    val targetTable = createUnresolvedRelation(ctx.target, forWrite = true)
-    val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
-    val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
 
     val sourceTableOrQuery = if (ctx.source != null) {
       createUnresolvedRelation(ctx.source)
@@ -638,7 +639,7 @@ class AstBuilder extends DataTypeAstBuilder
             s"Unrecognized matched action: ${clause.matchedAction().getText}")
         }
       }
-    }
+    }.toSeq
     val notMatchedActions = ctx.notMatchedClause().asScala.map {
       clause => {
         if (clause.notMatchedAction().INSERT() != null) {
@@ -659,7 +660,7 @@ class AstBuilder extends DataTypeAstBuilder
             s"Unrecognized matched action: ${clause.notMatchedAction().getText}")
         }
       }
-    }
+    }.toSeq
     val notMatchedBySourceActions = ctx.notMatchedBySourceClause().asScala.map {
       clause => {
         val notMatchedBySourceAction = clause.notMatchedBySourceAction()
@@ -674,7 +675,7 @@ class AstBuilder extends DataTypeAstBuilder
             s"Unrecognized matched action: ${clause.notMatchedBySourceAction().getText}")
         }
       }
-    }
+    }.toSeq
     if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
       throw QueryParsingErrors.mergeStatementWithoutWhenClauseError(ctx)
     }
@@ -693,13 +694,19 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.nonLastNotMatchedBySourceClauseOmitConditionError(ctx)
     }
 
+    val targetTable = createUnresolvedRelation(
+      ctx.target,
+      writePrivileges = MergeIntoTable.getWritePrivileges(
+        matchedActions, notMatchedActions, notMatchedBySourceActions))
+    val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
+    val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
     MergeIntoTable(
       aliasedTarget,
       aliasedSource,
       mergeCondition,
-      matchedActions.toSeq,
-      notMatchedActions.toSeq,
-      notMatchedBySourceActions.toSeq,
+      matchedActions,
+      notMatchedActions,
+      notMatchedBySourceActions,
       withSchemaEvolution)
   }
 
@@ -3117,15 +3124,11 @@ class AstBuilder extends DataTypeAstBuilder
   private def createUnresolvedRelation(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext] = None,
-      forWrite: Boolean = false): LogicalPlan = withOrigin(ctx) {
+      writePrivileges: Seq[TableWritePrivilege] = Nil): LogicalPlan = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
     withIdentClause(ctx, parts => {
       val relation = new UnresolvedRelation(parts, options, isStreaming = false)
-      if (forWrite) {
-        relation.forWrite
-      } else {
-        relation
-      }
+      relation.requireWritePrivileges(writePrivileges)
     })
   }
 
@@ -3136,14 +3139,10 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ParserRuleContext,
       ident: Seq[String],
       optionsClause: Option[OptionsClauseContext],
-      forWrite: Boolean): UnresolvedRelation = withOrigin(ctx) {
+      writePrivileges: Seq[TableWritePrivilege]): UnresolvedRelation = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
     val relation = new UnresolvedRelation(ident, options, isStreaming = false)
-    if (forWrite) {
-      relation.forWrite
-    } else {
-      relation
-    }
+    relation.requireWritePrivileges(writePrivileges)
   }
 
   private def resolveOptions(
@@ -5019,7 +5018,8 @@ class AstBuilder extends DataTypeAstBuilder
       if (query.isDefined) {
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
-        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident, None, forWrite = false),
+        CacheTable(
+          createUnresolvedRelation(ctx.identifierReference, ident, None, writePrivileges = Nil),
           ident, isLazy, options)
       }
     })

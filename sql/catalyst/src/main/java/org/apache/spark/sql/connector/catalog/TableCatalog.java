@@ -111,13 +111,22 @@ public interface TableCatalog extends CatalogPlugin {
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
-   * A variant of {@link #loadTable(Identifier)} that indicates it's for data writing.
-   * Implementations can override this method to do additional handling for data writing, such as
-   * checking write permissions.
+   * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
+   * into this table later.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param writePrivileges
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
    *
    * @since 4.0.0
    */
-  default Table loadTableForWrite(Identifier ident) throws NoSuchTableException {
+  default Table loadTable(
+      Identifier ident,
+      Set<TableWritePrivilege> writePrivileges) throws NoSuchTableException {
     return loadTable(ident);
   }
 

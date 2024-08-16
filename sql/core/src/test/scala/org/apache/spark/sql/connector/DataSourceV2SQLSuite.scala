@@ -3704,6 +3704,11 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-49246: read-only catalog") {
+    def assertPrivilegeError(f: => Unit, privilege: String): Unit = {
+      val e = intercept[RuntimeException](f)
+      assert(e.getMessage.contains(privilege))
+    }
+
     def checkWriteOperations(catalog: String): Unit = {
       withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
         val input = sql("SELECT 1")
@@ -3714,42 +3719,47 @@ class DataSourceV2SQLSuiteV1Filter
           assert(df.collect().isEmpty)
           assert(df.schema == new StructType().add("i", "int"))
 
-          intercept[RuntimeException](sql(s"INSERT INTO $tbl SELECT 1"))
-          intercept[RuntimeException](sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT 1"))
-          intercept[RuntimeException] (sql(s"INSERT OVERWRITE $tbl SELECT 1"))
-          intercept[RuntimeException] (sql(s"DELETE FROM $tbl WHERE i = 0"))
-          intercept[RuntimeException] (sql(s"UPDATE $tbl SET i = 0"))
-          intercept[RuntimeException] {
-            sql(
-              s"""
-                |MERGE INTO $tbl USING (SELECT 1 i) AS source
-                |ON source.i = $tbl.i
-                |WHEN NOT MATCHED THEN INSERT *
-                |""".stripMargin)
-          }
+          assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT 1"), "INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT 1"), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"INSERT OVERWRITE $tbl SELECT 1"), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"DELETE FROM $tbl WHERE i = 0"), "DELETE")
+          assertPrivilegeError(sql(s"UPDATE $tbl SET i = 0"), "UPDATE")
+          assertPrivilegeError(
+            sql(s"""
+               |MERGE INTO $tbl USING (SELECT 1 i) AS source
+               |ON source.i = $tbl.i
+               |WHEN MATCHED THEN UPDATE SET *
+               |WHEN NOT MATCHED THEN INSERT *
+               |WHEN NOT MATCHED BY SOURCE THEN DELETE
+               |""".stripMargin),
+            "DELETE,INSERT,UPDATE"
+          )
 
-          intercept[RuntimeException](input.write.insertInto(tbl))
-          intercept[RuntimeException](input.write.mode("append").saveAsTable(tbl))
-          intercept[RuntimeException](input.writeTo(tbl).append())
-          intercept[RuntimeException](input.writeTo(tbl).overwrite(df.col("i") === 1))
-          intercept[RuntimeException](input.writeTo(tbl).overwritePartitions())
+          assertPrivilegeError(input.write.insertInto(tbl), "INSERT")
+          assertPrivilegeError(input.write.mode("overwrite").insertInto(tbl), "DELETE,INSERT")
+          assertPrivilegeError(input.write.mode("append").saveAsTable(tbl), "INSERT")
+          assertPrivilegeError(input.write.mode("overwrite").saveAsTable(tbl), "DELETE,INSERT")
+          assertPrivilegeError(input.writeTo(tbl).append(), "INSERT")
+          assertPrivilegeError(input.writeTo(tbl).overwrite(df.col("i") === 1), "DELETE,INSERT")
+          assertPrivilegeError(input.writeTo(tbl).overwritePartitions(), "DELETE,INSERT")
         }
 
         // Test CTAS
         withTable(tbl) {
-          intercept[RuntimeException](sql(s"CREATE TABLE $tbl AS SELECT 1 i"))
+          assertPrivilegeError(sql(s"CREATE TABLE $tbl AS SELECT 1 i"), "INSERT")
         }
         withTable(tbl) {
-          intercept[RuntimeException](sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"))
+          assertPrivilegeError(sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"), "INSERT")
         }
         withTable(tbl) {
-          intercept[RuntimeException](input.write.saveAsTable(tbl))
+          assertPrivilegeError(input.write.saveAsTable(tbl), "INSERT")
         }
         withTable(tbl) {
-          intercept[RuntimeException](input.writeTo(tbl).create())
+          assertPrivilegeError(input.writeTo(tbl).create(), "INSERT")
         }
         withTable(tbl) {
-          intercept[RuntimeException](input.writeTo(tbl).createOrReplace())
+          assertPrivilegeError(input.writeTo(tbl).createOrReplace(), "INSERT")
         }
       }
     }
@@ -3838,7 +3848,10 @@ class ReadOnlyCatalog extends InMemoryCatalog {
     null
   }
 
-  override def loadTableForWrite(ident: Identifier): Table = {
-    throw new RuntimeException("cannot write")
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    throw new RuntimeException("cannot write with " +
+      writePrivileges.asScala.toSeq.map(_.toString).sorted.mkString(","))
   }
 }

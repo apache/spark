@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSel
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -474,7 +476,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-    val table = catalog.asTableCatalog.loadTableForWrite(ident) match {
+    val table = catalog.asTableCatalog.loadTable(ident, getWritePrivileges.toSet.asJava) match {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
@@ -505,13 +507,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     runCommand(df.sparkSession) {
       InsertIntoStatement(
-        table = UnresolvedRelation(tableIdent).forWrite,
+        table = UnresolvedRelation(tableIdent).requireWritePrivileges(getWritePrivileges),
         partitionSpec = Map.empty[String, Option[String]],
         Nil,
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifPartitionNotExists = false)
     }
+  }
+
+  private def getWritePrivileges: Seq[TableWritePrivilege] = mode match {
+    case SaveMode.Overwrite => Seq(INSERT, DELETE)
+    case _ => Seq(INSERT)
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
@@ -611,7 +618,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveAsTable(
       catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): Unit = {
-    val tableOpt = try Option(catalog.loadTableForWrite(ident)) catch {
+    val tableOpt = try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava)) catch {
       case _: NoSuchTableException => None
     }
 
