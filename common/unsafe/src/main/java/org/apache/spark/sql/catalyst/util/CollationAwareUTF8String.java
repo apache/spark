@@ -1304,6 +1304,11 @@ public class CollationAwareUTF8String {
     int len = target.numBytes();
 
     while(offset < len) {
+      // We will actually call 'codePointFrom()' 2 times for each character in the worst case (once
+      // here, and once in 'followedByCasedLetter'). Example of a string where we call it 2 times
+      // for almost every character is 'ΣΣΣΣΣ' (a string consisting only of Greek capital sigma)
+      // and 'Σ`````' (a string consisting of a Greek capital sigma, followed by case-ignorable
+      // characters).
       int codepoint = target.codePointFrom(offset);
       // Appending the correctly cased character onto 'sb'.
       appendTitleCasedCodepoint(sb, codepoint, newWord, precededByCasedLetter, target, offset);
@@ -1321,7 +1326,7 @@ public class CollationAwareUTF8String {
   private static void appendTitleCasedCodepoint(
       StringBuilder sb,
       int codepoint,
-      boolean isAfterAsciiSpace,
+   t    boolean isAfterAsciiSpace,
       boolean precededByCasedLetter,
       UTF8String target,
       int offset) {
