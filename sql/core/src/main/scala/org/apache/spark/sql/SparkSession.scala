@@ -1007,7 +1007,7 @@ class SparkSession private(
           outStream.close()
         })
       case _ =>
-        throw new IllegalArgumentException(s"Unsupported artifact storage: ${artifact.storage}")
+        throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
     }
   }
 
