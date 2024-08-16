@@ -1879,7 +1879,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
     val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
-      EvaluateUnresolvedInlineTable.evaluate(table)
+      EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }

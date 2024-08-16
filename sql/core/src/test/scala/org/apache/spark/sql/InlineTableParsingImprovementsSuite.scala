@@ -101,25 +101,29 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    */
   private def generateInsertStatementsWithComplexExpressions(
       tableName: String): String = {
-        s"""
-          INSERT INTO $tableName (id, first_name, last_name, age, gender,
-            email, phone_number, address, city, state, zip_code, country, registration_date) VALUES
+    s"""
+      INSERT INTO $tableName (id, first_name, last_name, age, gender,
+        email, phone_number, address, city, state, zip_code, country, registration_date)
+      ${generateValuesWithComplexExpressions}
+    """
+  }
 
-            (1, base64('FirstName_1'), base64('LastName_1'), 10+10, 'M', 'usr' || '@gmail.com',
-             concat('555','-1234'), hex('123 Fake St'), 'Anytown', 'CA', '12345', 'USA',
-             '2021-01-01'),
+  private def generateValuesWithComplexExpressions: String = {
+    s""" VALUES
+      (1, base64('FirstName_1'), base64('LastName_1'), 10+10, 'M', 'usr' || '@gmail.com',
+        concat('555','-1234'), hex('123 Fake St'), 'Anytown', 'CA', '12345', 'USA',
+        '2021-01-01'),
 
-            (2, 'FirstName_2', string(5), abs(-8), 'F', 'usr@gmail.com', '555-1234', '123 Fake St',
-             concat('Anytown', 'sada'), 'CA', '12345', 'USA', '2021-01-01'),
+      (2, 'FirstName_2', string(5), abs(-8), 'F', 'usr@gmail.com', '555-1234', '123 Fake St',
+        concat('Anytown', 'sada'), 'CA', '12345', 'USA', '2021-01-01'),
 
-            (3, 'FirstName_3', 'LastName_3', 34::int, 'M', 'usr@gmail.com', '555-1234',
-             '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01'),
+      (3, 'FirstName_3', 'LastName_3', 34::int, 'M', 'usr@gmail.com', '555-1234',
+        '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01'),
 
-            (4, left('FirstName_4', 5), upper('LastName_4'), acos(1), 'F', 'user@gmail.com',
-             '555-1234', '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01');
-        """
-      }
-
+      (4, left('FirstName_4', 5), upper('LastName_4'), acos(1), 'F', 'user@gmail.com',
+        '555-1234', '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01');
+    """
+  }
   test("Insert Into Values optimization - Basic literals.") {
     // Set the number of inserted rows to 10000.
     val rowCount = 10000
@@ -136,7 +140,11 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         // Generate an INSERT INTO VALUES statement.
         val sqlStatement = generateInsertStatementWithLiterals(tableName, rowCount)
 
+        // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
         if (eagerEvalOfUnresolvedInlineTableEnabled) {
           assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
         } else {
@@ -175,7 +183,11 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         // Generate an INSERT INTO VALUES statement.
         val sqlStatement = generateInsertStatementsWithComplexExpressions(tableName)
 
+        // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
         if (eagerEvalOfUnresolvedInlineTableEnabled) {
           assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
         } else {
@@ -209,7 +221,12 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         // Generate an INSERT INTO VALUES statement that omits all columns
         // containing a DEFAULT value.
         val sqlStatement = s"INSERT INTO $tableName (id) VALUES (1);"
+
+        // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
         if (eagerEvalOfUnresolvedInlineTableEnabled) {
           assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
         } else {
@@ -274,19 +291,13 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement.
-        val sqlStatement =
-          """
-            |SELECT *
-            |FROM (
-            |  VALUES
-            |    (1, 'John Doe', 'Engineering', 55000),
-            |    (2, 'Jane Smith', 'Marketing', 65000),
-            |    (3, 'Alice Johnson', 'Sales', 45000),
-            |    (4, 'Mike Brown', 'Engineering', 75000)
-            |) AS Employees(EmployeeID, Name, Department, Salary)
-            |""".stripMargin
+        val sqlStatement = s"SELECT * FROM ($generateValuesWithComplexExpressions)"
 
+        // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
         if (eagerEvalOfUnresolvedInlineTableEnabled) {
           assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
         } else {
@@ -314,18 +325,13 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement.
-        val sqlStatement =
-          """
-            |  SELECT (SELECT COUNT(*) FROM
-            |  VALUES
-            |    (1, 'John Doe', 'Engineering', 55000),
-            |    (2, 'Jane Smith', 'Marketing', 65000),
-            |    (3, 'Alice Johnson', 'Sales', 45000),
-            |    (4, 'Mike Brown', 'Engineering', 75000)
-            |  AS Employees(EmployeeID, Name, Department, Salary)) AS count_star
-            |""".stripMargin
+        val sqlStatement = s"SELECT (SELECT COUNT(*) FROM $generateValuesWithComplexExpressions)"
 
+        // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
         if (eagerEvalOfUnresolvedInlineTableEnabled) {
           assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
         } else {
