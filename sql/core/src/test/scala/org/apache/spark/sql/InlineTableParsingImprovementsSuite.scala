@@ -89,6 +89,9 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     baseQuery + rows + ";"
   }
 
+  /**
+   * Traverse the plan and check for the presence of the given node type.
+   */
   private def traversePlanAndCheckForNodeType[T <: LogicalPlan](
       plan: LogicalPlan, nodeType: Class[T]): Boolean = plan match {
     case node if nodeType.isInstance(node) => true
@@ -108,6 +111,9 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     """
   }
 
+  /**
+   * Generate a VALUES clause with complex expressions.
+   */
   private def generateValuesWithComplexExpressions: String = {
     s""" VALUES
       (1, base64('FirstName_1'), base64('LastName_1'), 10+10, 'M', 'usr' || '@gmail.com',
@@ -290,7 +296,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
       withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
         eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
-        // Generate an INSERT INTO VALUES statement.
+        // Generate a subquery with a VALUES clause.
         val sqlStatement = s"SELECT * FROM ($generateValuesWithComplexExpressions)"
 
         // Parse the SQL statement.
@@ -324,7 +330,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
       withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
         eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
-        // Generate an INSERT INTO VALUES statement.
+        // Generate a subquery with a VALUES clause in the projection list.
         val sqlStatement = s"SELECT (SELECT COUNT(*) FROM $generateValuesWithComplexExpressions)"
 
         // Parse the SQL statement.
