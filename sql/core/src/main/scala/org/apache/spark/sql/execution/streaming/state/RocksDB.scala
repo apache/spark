@@ -196,13 +196,15 @@ class RocksDB(
   /**
    * Create RocksDB column family, if not created already
    */
-  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false): Short = {
+  def createColFamilyIfAbsent(colFamilyName: String): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
       colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
       shouldForceSnapshot.set(true)
       newColumnFamilyId
-    } else colFamilyNameToIdMap.get(colFamilyName)
+    } else {
+      colFamilyNameToIdMap.get(colFamilyName)
+    }
   }
 
   /**

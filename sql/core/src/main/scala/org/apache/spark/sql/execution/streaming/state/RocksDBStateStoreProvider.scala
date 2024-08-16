@@ -62,7 +62,7 @@ private[sql] class RocksDBStateStoreProvider
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Short = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
+      val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
