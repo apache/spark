@@ -3919,6 +3919,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE" : {
+    "message" : [
+      "Unknown time mode <timeMode>. Accepted timeMode modes are 'none', 'processingTime', 'eventTime'"
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."
@@ -4143,6 +4149,29 @@
       "'<optionName>' must be specified."
     ],
     "sqlState" : "42601"
+  },
+  "STREAMING_OUTPUT_MODE" : {
+    "message" : [
+      "Invalid streaming output mode: <outputMode>."
+    ],
+    "subClass" : {
+      "INVALID" : {
+        "message" : [
+          "Accepted output modes are 'Append', 'Complete', 'Update'."
+        ]
+      },
+      "UNSUPPORTED_DATASOURCE" : {
+        "message" : [
+          "This output mode is not supported in Data Source <className>."
+        ]
+      },
+      "UNSUPPORTED_OPERATION" : {
+        "message" : [
+          "This output mode is not supported for <operation> on streaming DataFrames/DataSets."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
   },
   "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
@@ -5764,11 +5793,6 @@
       "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1131" : {
-    "message" : [
-      "Data source <className> does not support <outputMode> output mode."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1132" : {
     "message" : [
       "A schema needs to be specified when using <className>."
@@ -7185,11 +7209,6 @@
       "StreamingRelationExec cannot be executed."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2211" : {
-    "message" : [
-      "Invalid output mode: <outputMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2212" : {
     "message" : [
       "Invalid catalog name: <name>."
@@ -8504,11 +8523,6 @@
   "_LEGACY_ERROR_TEMP_3260" : {
     "message" : [
       "'<s>' is an invalid timestamp"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3261" : {
-    "message" : [
-      "Unknown output mode <outputMode>. Accepted output modes are 'append', 'complete', 'update'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3262" : {
