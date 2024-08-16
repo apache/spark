@@ -94,7 +94,7 @@ class DataFrameReader(OptionUtils):
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
-        self._options[key] = str(value)
+        self._options[key] = to_str(value)
         return self
 
     option.__doc__ = PySparkDataFrameReader.option.__doc__
