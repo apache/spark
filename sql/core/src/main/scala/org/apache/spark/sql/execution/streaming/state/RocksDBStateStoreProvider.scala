@@ -61,6 +61,7 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Short = {
+      verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
@@ -307,6 +308,7 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+      verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
       verify(useColumnFamilies, "Column families are not supported in this store")
 
       val result = {
