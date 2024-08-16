@@ -821,8 +821,12 @@ public class CollationSupportSuite {
     assertStringSplitSQL("A𐐭B", "𐐅", "UNICODE_CI", array_A_B);
   }
 
+  /**
+   * Verify the behaviour of the `Upper` collation support class.
+   */
+
   private void assertUpper(String target, String collationName, String expected)
-          throws SparkException {
+      throws SparkException {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -835,52 +839,57 @@ public class CollationSupportSuite {
 
   @Test
   public void testUpper() throws SparkException {
-    // Edge cases
-    assertUpper("", "UTF8_BINARY", "");
-    assertUpper("", "UTF8_LCASE", "");
-    assertUpper("", "UNICODE", "");
-    assertUpper("", "UNICODE_CI", "");
-    // Basic tests
-    assertUpper("abcde", "UTF8_BINARY", "ABCDE");
-    assertUpper("abcde", "UTF8_LCASE", "ABCDE");
-    assertUpper("abcde", "UNICODE", "ABCDE");
-    assertUpper("abcde", "UNICODE_CI", "ABCDE");
-    // Uppercase present
-    assertUpper("AbCdE", "UTF8_BINARY", "ABCDE");
-    assertUpper("aBcDe", "UTF8_BINARY", "ABCDE");
-    assertUpper("AbCdE", "UTF8_LCASE", "ABCDE");
-    assertUpper("aBcDe", "UTF8_LCASE", "ABCDE");
-    assertUpper("AbCdE", "UNICODE", "ABCDE");
-    assertUpper("aBcDe", "UNICODE", "ABCDE");
-    assertUpper("AbCdE", "UNICODE_CI", "ABCDE");
-    assertUpper("aBcDe", "UNICODE_CI", "ABCDE");
-    // Accent letters
-    assertUpper("aBćDe","UTF8_BINARY", "ABĆDE");
-    assertUpper("aBćDe","UTF8_LCASE", "ABĆDE");
-    assertUpper("aBćDe","UNICODE", "ABĆDE");
-    assertUpper("aBćDe","UNICODE_CI", "ABĆDE");
-    // Variable byte length characters
-    assertUpper("ab世De", "UTF8_BINARY", "AB世DE");
-    assertUpper("äbćδe", "UTF8_BINARY", "ÄBĆΔE");
-    assertUpper("ab世De", "UTF8_LCASE", "AB世DE");
-    assertUpper("äbćδe", "UTF8_LCASE", "ÄBĆΔE");
-    assertUpper("ab世De", "UNICODE", "AB世DE");
-    assertUpper("äbćδe", "UNICODE", "ÄBĆΔE");
-    assertUpper("ab世De", "UNICODE_CI", "AB世DE");
-    assertUpper("äbćδe", "UNICODE_CI", "ÄBĆΔE");
-    // Case-variable character length
-    assertUpper("i\u0307o", "UTF8_BINARY","I\u0307O");
-    assertUpper("i\u0307o", "UTF8_LCASE","I\u0307O");
-    assertUpper("i\u0307o", "UNICODE","I\u0307O");
-    assertUpper("i\u0307o", "UNICODE_CI","I\u0307O");
-    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY","SS FI FFI FF ST \u0399\u0308\u0342");
-    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_LCASE","SS FI FFI FF ST \u0399\u0308\u0342");
-    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","SS FI FFI FF ST \u0399\u0308\u0342");
-    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","SS FI FFI FF ST \u0399\u0308\u0342");
+    for (String collationName: testSupportedCollations) {
+      // Empty strings.
+      assertUpper("", collationName, "");
+      // Basic tests.
+      assertUpper("abcde", collationName, "ABCDE");
+      assertUpper("AbCdE", collationName, "ABCDE");
+      assertUpper("aBcDe", collationName, "ABCDE");
+      assertUpper("ABCDE", collationName, "ABCDE");
+      // Advanced tests.
+      assertUpper("aBćDe", collationName, "ABĆDE");
+      assertUpper("ab世De", collationName, "AB世DE");
+      assertUpper("äbćδe", collationName, "ÄBĆΔE");
+      assertUpper("AbĆdE", collationName, "ABĆDE");
+      assertUpper("aB世De", collationName, "AB世DE");
+      assertUpper("ÄBĆΔE", collationName, "ÄBĆΔE");
+      // One-to-many case mapping (e.g. Turkish dotted I).
+      assertUpper("İ", collationName, "İ");
+      assertUpper("i\u0307", collationName,"I\u0307");
+      assertUpper("İonic", collationName, "İONIC");
+      assertUpper("i\u0307onic", collationName,"I\u0307ONIC");
+      assertUpper("FIDELİO", collationName, "FIDELİO");
+      // Conditional case mapping (e.g. Greek sigmas).
+      assertUpper("σ", collationName, "Σ");
+      assertUpper("σ", collationName, "Σ");
+      assertUpper("ς", collationName, "Σ");
+      assertUpper("Σ", collationName, "Σ");
+      assertUpper("ΣΑΛΑΤΑ", collationName, "ΣΑΛΑΤΑ");
+      assertUpper("σαλατα", collationName, "ΣΑΛΑΤΑ");
+      assertUpper("ςαλατα", collationName, "ΣΑΛΑΤΑ");
+      assertUpper("ΘΑΛΑΣΣΙΝΟΣ", collationName, "ΘΑΛΑΣΣΙΝΟΣ");
+      assertUpper("θαλασσινοσ", collationName, "ΘΑΛΑΣΣΙΝΟΣ");
+      assertUpper("θαλασσινος", collationName, "ΘΑΛΑΣΣΙΝΟΣ");
+      // Surrogate pairs.
+      assertUpper("a🙃B🙃c", collationName, "A🙃B🙃C");
+      assertUpper("😄 😆", collationName, "😄 😆");
+      assertUpper("😀😆😃😄", collationName, "😀😆😃😄");
+      assertUpper("𝔸", collationName, "𝔸");
+      assertUpper("𐐅", collationName, "𐐅");
+      assertUpper("𐐭", collationName, "𐐅");
+      assertUpper("𐐭𝔸", collationName, "𐐅𝔸");
+      // Ligatures.
+      assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", collationName,"SS FI FFI FF ST \u0399\u0308\u0342");
+    }
   }
 
+  /**
+   * Verify the behaviour of the `Lower` collation support class.
+   */
+
   private void assertLower(String target, String collationName, String expected)
-          throws SparkException {
+      throws SparkException {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -893,48 +902,56 @@ public class CollationSupportSuite {
 
   @Test
   public void testLower() throws SparkException {
-    // Edge cases
-    assertLower("", "UTF8_BINARY", "");
-    assertLower("", "UTF8_LCASE", "");
-    assertLower("", "UNICODE", "");
-    assertLower("", "UNICODE_CI", "");
-    // Basic tests
-    assertLower("ABCDE", "UTF8_BINARY", "abcde");
-    assertLower("ABCDE", "UTF8_LCASE", "abcde");
-    assertLower("ABCDE", "UNICODE", "abcde");
-    assertLower("ABCDE", "UNICODE_CI", "abcde");
-    // Uppercase present
-    assertLower("AbCdE", "UTF8_BINARY", "abcde");
-    assertLower("aBcDe", "UTF8_BINARY", "abcde");
-    assertLower("AbCdE", "UTF8_LCASE", "abcde");
-    assertLower("aBcDe", "UTF8_LCASE", "abcde");
-    assertLower("AbCdE", "UNICODE", "abcde");
-    assertLower("aBcDe", "UNICODE", "abcde");
-    assertLower("AbCdE", "UNICODE_CI", "abcde");
-    assertLower("aBcDe", "UNICODE_CI", "abcde");
-    // Accent letters
-    assertLower("AbĆdE","UTF8_BINARY", "abćde");
-    assertLower("AbĆdE","UTF8_LCASE", "abćde");
-    assertLower("AbĆdE","UNICODE", "abćde");
-    assertLower("AbĆdE","UNICODE_CI", "abćde");
-    // Variable byte length characters
-    assertLower("aB世De", "UTF8_BINARY", "ab世de");
-    assertLower("ÄBĆΔE", "UTF8_BINARY", "äbćδe");
-    assertLower("aB世De", "UTF8_LCASE", "ab世de");
-    assertLower("ÄBĆΔE", "UTF8_LCASE", "äbćδe");
-    assertLower("aB世De", "UNICODE", "ab世de");
-    assertLower("ÄBĆΔE", "UNICODE", "äbćδe");
-    assertLower("aB世De", "UNICODE_CI", "ab世de");
-    assertLower("ÄBĆΔE", "UNICODE_CI", "äbćδe");
-    // Case-variable character length
-    assertLower("İo", "UTF8_BINARY","i\u0307o");
-    assertLower("İo", "UTF8_LCASE","i\u0307o");
-    assertLower("İo", "UNICODE","i\u0307o");
-    assertLower("İo", "UNICODE_CI","i\u0307o");
+    for (String collationName: testSupportedCollations) {
+      // Empty strings.
+      assertLower("", collationName, "");
+      // Basic tests.
+      assertLower("abcde", collationName, "abcde");
+      assertLower("AbCdE", collationName, "abcde");
+      assertLower("aBcDe", collationName, "abcde");
+      assertLower("ABCDE", collationName, "abcde");
+      // Advanced tests.
+      assertUpper("aBćDe", collationName, "ABĆDE");
+      assertUpper("ab世De", collationName, "AB世DE");
+      assertUpper("äbćδe", collationName, "ÄBĆΔE");
+      assertLower("AbĆdE", collationName, "abćde");
+      assertLower("aB世De", collationName, "ab世de");
+      assertLower("ÄBĆΔE", collationName, "äbćδe");
+      // One-to-many case mapping (e.g. Turkish dotted I).
+      assertLower("İ", collationName, "i\u0307");
+      assertLower("I\u0307", collationName,"i\u0307");
+      assertLower("İonic", collationName, "i\u0307onic");
+      assertLower("i\u0307onic", collationName,"i\u0307onic");
+      assertLower("FIDELİO", collationName, "fideli\u0307o");
+      // Conditional case mapping (e.g. Greek sigmas).
+      assertLower("σ", collationName, "σ");
+      assertLower("ς", collationName, "ς");
+      assertLower("Σ", collationName, "σ");
+      assertLower("ΣΑΛΑΤΑ", collationName, "σαλατα");
+      assertLower("σαλατα", collationName, "σαλατα");
+      assertLower("ςαλατα", collationName, "ςαλατα");
+      assertLower("ΘΑΛΑΣΣΙΝΟΣ", collationName, "θαλασσινος");
+      assertLower("θαλασσινοσ", collationName, "θαλασσινοσ");
+      assertLower("θαλασσινος", collationName, "θαλασσινος");
+      // Surrogate pairs.
+      assertLower("a🙃B🙃c", collationName, "a🙃b🙃c");
+      assertLower("😄 😆", collationName, "😄 😆");
+      assertLower("😀😆😃😄", collationName, "😀😆😃😄");
+      assertLower("𝔸", collationName, "𝔸");
+      assertLower("𐐅", collationName, "𐐭");
+      assertLower("𐐭", collationName, "𐐭");
+      assertLower("𐐭𝔸", collationName, "𐐭𝔸");
+      // Ligatures.
+      assertLower("ß ﬁ ﬃ ﬀ ﬆ ῗ", collationName,"ß ﬁ ﬃ ﬀ ﬆ ῗ");
+    }
   }
 
+  /**
+   * Verify the behaviour of the `InitCap` collation support class.
+   */
+
   private void assertInitCap(String target, String collationName, String expected)
-          throws SparkException {
+      throws SparkException {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
@@ -947,49 +964,102 @@ public class CollationSupportSuite {
 
   @Test
   public void testInitCap() throws SparkException {
-    // Edge cases
-    assertInitCap("", "UTF8_BINARY", "");
-    assertInitCap("", "UTF8_LCASE", "");
-    assertInitCap("", "UNICODE", "");
-    assertInitCap("", "UNICODE_CI", "");
-    // Basic tests
-    assertInitCap("ABCDE", "UTF8_BINARY", "Abcde");
-    assertInitCap("ABCDE", "UTF8_LCASE", "Abcde");
-    assertInitCap("ABCDE", "UNICODE", "Abcde");
-    assertInitCap("ABCDE", "UNICODE_CI", "Abcde");
-    // Uppercase present
-    assertInitCap("AbCdE", "UTF8_BINARY", "Abcde");
-    assertInitCap("aBcDe", "UTF8_BINARY", "Abcde");
-    assertInitCap("AbCdE", "UTF8_LCASE", "Abcde");
-    assertInitCap("aBcDe", "UTF8_LCASE", "Abcde");
-    assertInitCap("AbCdE", "UNICODE", "Abcde");
-    assertInitCap("aBcDe", "UNICODE", "Abcde");
-    assertInitCap("AbCdE", "UNICODE_CI", "Abcde");
-    assertInitCap("aBcDe", "UNICODE_CI", "Abcde");
-    // Accent letters
-    assertInitCap("AbĆdE", "UTF8_BINARY", "Abćde");
-    assertInitCap("AbĆdE", "UTF8_LCASE", "Abćde");
-    assertInitCap("AbĆdE", "UNICODE", "Abćde");
-    assertInitCap("AbĆdE", "UNICODE_CI", "Abćde");
-    // Variable byte length characters
-    assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De");
+    for (String collationName: testSupportedCollations) {
+      // Empty strings.
+      assertInitCap("", collationName, "");
+      // Basic tests.
+      assertInitCap("abcde", collationName, "Abcde");
+      assertInitCap("AbCdE", collationName, "Abcde");
+      assertInitCap("aBcDe", collationName, "Abcde");
+      assertInitCap("ABCDE", collationName, "Abcde");
+      // Conditional case mapping (e.g. Greek sigmas).
+      assertInitCap("σ", collationName, "Σ");
+      assertInitCap("ς", collationName, "Σ");
+      assertInitCap("Σ", collationName, "Σ");
+      assertInitCap("ΣΑΛΑΤΑ", collationName, "Σαλατα");
+      assertInitCap("σαλατα", collationName, "Σαλατα");
+      assertInitCap("ςαλατα", collationName, "Σαλατα");
+      assertInitCap("ΘΑΛΑΣΣΙΝΟΣ", collationName, "Θαλασσινος");
+      assertInitCap("θαλασσινοσ", collationName, "Θαλασσινοσ");
+      assertInitCap("θαλασσινος", collationName, "Θαλασσινος");
+    }
+    // Advanced tests.
+    assertInitCap("aBćDe", "UTF8_BINARY", "Abćde");
+    assertInitCap("aBćDe", "UTF8_LCASE", "Abćde");
+    assertInitCap("aBćDe", "UNICODE", "Abćde");
+    assertInitCap("aBćDe", "UNICODE_CI", "Abćde");
+    assertInitCap("ab世De", "UTF8_BINARY", "Ab世de");
+    assertInitCap("ab世De", "UTF8_LCASE", "Ab世De");
+    assertInitCap("ab世De", "UNICODE", "Ab世De");
+    assertInitCap("ab世De", "UNICODE_CI", "Ab世De");
+    assertInitCap("äbćδe", "UTF8_BINARY", "Äbćδe");
+    assertInitCap("äbćδe", "UTF8_LCASE", "Äbćδe");
+    assertInitCap("äbćδe", "UNICODE", "Äbćδe");
+    assertInitCap("äbćδe", "UNICODE_CI", "Äbćδe");
     assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe");
-    assertInitCap("aB 世 De", "UTF8_LCASE", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UTF8_LCASE", "Äbćδe");
-    assertInitCap("aB 世 De", "UNICODE", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE", "Äbćδe");
-    assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
-    // Case-variable character length
-    assertInitCap("İo", "UTF8_BINARY", "I\u0307o");
-    assertInitCap("İo", "UTF8_LCASE", "İo");
-    assertInitCap("İo", "UNICODE", "İo");
-    assertInitCap("İo", "UNICODE_CI", "İo");
-    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o");
-    assertInitCap("i\u0307o", "UTF8_LCASE", "I\u0307o");
-    assertInitCap("i\u0307o", "UNICODE", "I\u0307o");
-    assertInitCap("i\u0307o", "UNICODE_CI", "I\u0307o");
-    // Different possible word boundaries
+    assertInitCap("aB 世 de", "UTF8_BINARY", "Ab 世 De");
+    assertInitCap("aB 世 de", "UTF8_LCASE", "Ab 世 De");
+    assertInitCap("aB 世 de", "UNICODE", "Ab 世 De");
+    assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertInitCap("İ", "UTF8_BINARY", "I\u0307");
+    assertInitCap("İ", "UTF8_LCASE", "İ");
+    assertInitCap("İ", "UNICODE", "İ");
+    assertInitCap("İ", "UNICODE_CI", "İ");
+    assertInitCap("I\u0307", "UTF8_BINARY","I\u0307");
+    assertInitCap("I\u0307", "UTF8_LCASE","I\u0307");
+    assertInitCap("I\u0307", "UNICODE","I\u0307");
+    assertInitCap("I\u0307", "UNICODE_CI","I\u0307");
+    assertInitCap("İonic", "UTF8_BINARY", "I\u0307onic");
+    assertInitCap("İonic", "UTF8_LCASE", "İonic");
+    assertInitCap("İonic", "UNICODE", "İonic");
+    assertInitCap("İonic", "UNICODE_CI", "İonic");
+    assertInitCap("i\u0307onic", "UTF8_BINARY","I\u0307onic");
+    assertInitCap("i\u0307onic", "UTF8_LCASE","I\u0307onic");
+    assertInitCap("i\u0307onic", "UNICODE","I\u0307onic");
+    assertInitCap("i\u0307onic", "UNICODE_CI","I\u0307onic");
+    assertInitCap("FIDELİO", "UTF8_BINARY", "Fideli\u0307o");
+    assertInitCap("FIDELİO", "UTF8_LCASE", "Fideli\u0307o");
+    assertInitCap("FIDELİO", "UNICODE", "Fideli\u0307o");
+    assertInitCap("FIDELİO", "UNICODE_CI", "Fideli\u0307o");
+    // Surrogate pairs.
+    assertInitCap("a🙃B🙃c", "UTF8_BINARY", "A🙃b🙃c");
+    assertInitCap("a🙃B🙃c", "UTF8_LCASE", "A🙃B🙃C");
+    assertInitCap("a🙃B🙃c", "UNICODE", "A🙃B🙃C");
+    assertInitCap("a🙃B🙃c", "UNICODE_CI", "A🙃B🙃C");
+    assertInitCap("😄 😆", "UTF8_BINARY", "😄 😆");
+    assertInitCap("😄 😆", "UTF8_LCASE", "😄 😆");
+    assertInitCap("😄 😆", "UNICODE", "😄 😆");
+    assertInitCap("😄 😆", "UNICODE_CI", "😄 😆");
+    assertInitCap("😀😆😃😄", "UTF8_BINARY", "😀😆😃😄");
+    assertInitCap("😀😆😃😄", "UTF8_LCASE", "😀😆😃😄");
+    assertInitCap("😀😆😃😄", "UNICODE", "😀😆😃😄");
+    assertInitCap("😀😆😃😄", "UNICODE_CI", "😀😆😃😄");
+    assertInitCap("𝔸", "UTF8_BINARY", "𝔸");
+    assertInitCap("𝔸", "UTF8_LCASE", "𝔸");
+    assertInitCap("𝔸", "UNICODE", "𝔸");
+    assertInitCap("𝔸", "UNICODE_CI", "𝔸");
+    assertInitCap("𐐅", "UTF8_BINARY", "𐐭");
+    assertInitCap("𐐅", "UTF8_LCASE", "𐐅");
+    assertInitCap("𐐅", "UNICODE", "𐐅");
+    assertInitCap("𐐅", "UNICODE_CI", "𐐅");
+    assertInitCap("𐐭", "UTF8_BINARY", "𐐭");
+    assertInitCap("𐐭", "UTF8_LCASE", "𐐅");
+    assertInitCap("𐐭", "UNICODE", "𐐅");
+    assertInitCap("𐐭", "UNICODE_CI", "𐐅");
+    assertInitCap("𐐭𝔸", "UTF8_BINARY", "𐐭𝔸");
+    assertInitCap("𐐭𝔸", "UTF8_LCASE", "𐐅𝔸");
+    assertInitCap("𐐭𝔸", "UNICODE", "𐐅𝔸");
+    assertInitCap("𐐭𝔸", "UNICODE_CI", "𐐅𝔸");
+    // Ligatures.
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY","ß ﬁ ﬃ ﬀ ﬆ ῗ");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_LCASE","Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    // Different possible word boundaries.
     assertInitCap("a b c", "UTF8_BINARY", "A B C");
     assertInitCap("a b c", "UNICODE", "A B C");
     assertInitCap("a b c", "UTF8_LCASE", "A B C");
@@ -1006,7 +1076,7 @@ public class CollationSupportSuite {
     assertInitCap("a?b世c", "UNICODE", "A?B世C");
     assertInitCap("a?b世c", "UTF8_LCASE", "A?B世C");
     assertInitCap("a?b世c", "UNICODE_CI", "A?B世C");
-    // Titlecase characters that are different from uppercase characters
+    // Titlecase characters that are different from uppercase characters.
     assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UNICODE", "ǲǳǳ");
     assertInitCap("ǳǱǲ", "UTF8_LCASE", "ǲǳǳ");
