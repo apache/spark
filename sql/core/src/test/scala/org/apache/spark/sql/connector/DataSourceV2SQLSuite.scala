@@ -3489,10 +3489,10 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
   override def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[ColumnV2],
       partitions: Array[Transform],
       properties: jutil.Map[String, String]): Table = {
-    super.createTable(ident, schema, partitions, properties)
+    super.createTable(ident, columns, partitions, properties)
     null
   }
 
