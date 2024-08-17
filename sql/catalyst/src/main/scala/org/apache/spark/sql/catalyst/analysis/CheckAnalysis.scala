@@ -57,6 +57,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
   val INVALID_FORMAT_ERROR = TreeNodeTag[Unit]("invalidFormatError")
 
+  // Error that has a lower priority, that are not thrown immediately on triggering, e.g. certain
+  // internal errors. These errors are thrown at the end of the whole check analysis process.
+  var lowPriorityError: Option[() => Unit] = None
+
   /**
    * Fails the analysis at the point where a specific tree node was parsed using a provided
    * error class and message parameters.
@@ -114,10 +118,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkNotContainingLCA(exprs: Seq[Expression], plan: LogicalPlan): Unit = {
     exprs.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
       case lcaRef: LateralColumnAliasReference =>
-        throw SparkException.internalError("Resolved plan should not contain any " +
-          s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
-          context = lcaRef.origin.getQueryContext,
-          summary = lcaRef.origin.context.summary)
+        // this should be a low priority internal error that is thrown when no other error occurs
+        if (lowPriorityError.isEmpty) {
+          lowPriorityError = Some(
+            () =>
+              throw SparkException.internalError(
+                "Resolved plan should not contain any " +
+                s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
+                context = lcaRef.origin.getQueryContext,
+                summary = lcaRef.origin.context.summary
+              )
+          )
+        }
+        lcaRef
     })
   }
 
@@ -176,6 +189,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
     try {
       checkAnalysis0(inlinedPlan)
+      lowPriorityError.foreach(_.apply())
     } catch {
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, inlinedPlan)
