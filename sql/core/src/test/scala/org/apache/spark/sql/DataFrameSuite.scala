@@ -1567,11 +1567,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
-<<<<<<< HEAD
         column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
-=======
-        Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
->>>>>>> apache/master
       val df = spark.range(1000).filter($"id" === subquery)
       assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
 
