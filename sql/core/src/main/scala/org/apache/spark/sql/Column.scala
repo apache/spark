@@ -226,7 +226,7 @@ class Column(val node: ColumnNode) extends Logging {
     if (this == right) {
       logWarning(
         log"Constructing trivially true equals predicate, " +
-          log"'${MDC(LEFT_EXPR, this)} <=> ${MDC(RIGHT_EXPR, right)}'. " +
+          log"'${MDC(LEFT_EXPR, this)} == ${MDC(RIGHT_EXPR, right)}'. " +
           log"Perhaps you need to use aliases.")
     }
   }

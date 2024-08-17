@@ -33,8 +33,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.expressions.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.internal.ToScalaUDF
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -185,7 +185,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       println(s"""
         |/**
         | * Register a deterministic Java UDF$i instance as user-defined function (UDF).
-        | * @since 1.3.0
+        | * @since $version
         | */
         |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
         |  registerJavaUDF(name, ToScalaUDF(f), returnType, $i)
@@ -493,7 +493,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
 
   /**
    * Register a deterministic Java UDF0 instance as user-defined function (UDF).
-   * @since 1.3.0
+   * @since 2.3.0
    */
   def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 0)

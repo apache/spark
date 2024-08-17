@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.{SQLConf, Wrapper}
+import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.CalendarIntervalType
 
@@ -506,7 +506,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
     val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
       internal.WindowFrame.Range,
-      internal.WindowFrame.Value(Wrapper(Literal.create(null, CalendarIntervalType))),
+      internal.WindowFrame.Value(ExpressionColumnNode(Literal.create(null, CalendarIntervalType))),
       internal.WindowFrame.Value(lit(2).node))
     checkError(
       exception = intercept[AnalysisException] {
@@ -528,7 +528,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
     val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
       internal.WindowFrame.Range,
-      internal.WindowFrame.Value(Wrapper(NonFoldableLiteral(1))),
+      internal.WindowFrame.Value(ExpressionColumnNode(NonFoldableLiteral(1))),
       internal.WindowFrame.Value(lit(2).node))
     checkError(
       exception = intercept[AnalysisException] {

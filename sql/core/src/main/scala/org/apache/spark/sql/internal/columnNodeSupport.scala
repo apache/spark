@@ -18,6 +18,8 @@ package org.apache.spark.sql.internal
 
 import scala.language.implicitConversions
 
+import UserDefinedFunctionUtils.toScalaUDF
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
@@ -32,7 +34,6 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
-import org.apache.spark.sql.expressions.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
@@ -176,7 +177,7 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
         toScalaUDF(udf, arguments.map(apply))
 
-      case Wrapper(expression, _) =>
+      case ExpressionColumnNode(expression, _) =>
         val transformed = expression.transformDown {
           case ColumnNodeExpression(node) => apply(node)
         }
@@ -244,10 +245,10 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class Wrapper(
+private[sql] case class ExpressionColumnNode(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
-  override def normalize(): Wrapper = {
+  override def normalize(): ExpressionColumnNode = {
     val updated = expression.transform {
       case a: AttributeReference =>
         DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
@@ -269,7 +270,7 @@ private[spark] object ExpressionUtils {
   /**
    * Create an Expression backed Column.
    */
-  implicit def column(e: Expression): Column = Column(Wrapper(e))
+  implicit def column(e: Expression): Column = Column(ExpressionColumnNode(e))
 
   /**
    * Create an ColumnNode backed Expression. Please not that this has to be converted to an actual
