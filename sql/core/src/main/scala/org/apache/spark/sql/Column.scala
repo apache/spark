@@ -1186,6 +1186,17 @@ class Column(val node: ColumnNode) extends Logging {
     case _ => asc.node.asInstanceOf[internal.SortOrder]
   }
 
+  private def sortOrder(
+      sortDirection: internal.SortOrder.SortDirection,
+      nullOrdering: internal.SortOrder.NullOrdering): Column = {
+    Column(internal.SortOrder(node, sortDirection, nullOrdering))
+  }
+
+  private[sql] def sortOrder: internal.SortOrder = node match {
+    case order: internal.SortOrder => order
+    case _ => asc.node.asInstanceOf[internal.SortOrder]
+  }
+
   /**
    * Returns a sort expression based on the descending order of the column.
    * {{{

@@ -1661,7 +1661,12 @@ class Dataset[T] private[sql](
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(c => encoderFor(c.encoder))
+<<<<<<< HEAD
     val namedColumns = columns.map(c => withInputType(c.named, exprEnc, logicalPlan.output))
+=======
+    val namedColumns =
+      columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
+>>>>>>> apache/master
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(execution, ExpressionEncoder.tuple(encoders))
   }
