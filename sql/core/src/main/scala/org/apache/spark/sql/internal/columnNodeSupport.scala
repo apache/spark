@@ -245,7 +245,7 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class ExpressionColumnNode(
+private[sql] case class ExpressionColumnNode private(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
   override def normalize(): ExpressionColumnNode = {
@@ -259,11 +259,25 @@ private[sql] case class ExpressionColumnNode(
   override def sql: String = expression.sql
 }
 
-private[sql] case class ColumnNodeExpression(node: ColumnNode) extends Unevaluable {
+private[sql] object ExpressionColumnNode {
+  def apply(e: Expression): ColumnNode = e match {
+    case ColumnNodeExpression(node) => node
+    case _ => new ExpressionColumnNode(e)
+  }
+}
+
+private[internal] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
   override protected def withNewChildrenInternal(c: IndexedSeq[Expression]): Expression = this
+}
+
+private[sql] object ColumnNodeExpression {
+  def apply(node: ColumnNode): Expression = node match {
+    case ExpressionColumnNode(e, _) => e
+    case _ => new ColumnNodeExpression(node)
+  }
 }
 
 private[spark] object ExpressionUtils {

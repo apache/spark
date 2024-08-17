@@ -590,7 +590,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       spark.sql("SELECT :m['a'][1]",
         Map("m" ->
           map_from_arrays(
-            lit("a"),
+            lit(Array("a")),
             array(map_from_arrays(lit(Array(1)), lit(Array(2))))))),
       Row(2))
     // `str_to_map` is not supported

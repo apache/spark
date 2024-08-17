@@ -496,6 +496,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
               "as input. Try df(name) or df.col(name)")
           expr.dataType
         }
+        assert(rt != NullType, "KABOOM! " + expr.sql)
         val pythonUDF = new PythonUDFWithoutId(
           super.builderWithResultId(id, Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
         Cast(pythonUDF, rt)

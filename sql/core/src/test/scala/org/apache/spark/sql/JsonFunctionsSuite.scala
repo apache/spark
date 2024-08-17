@@ -1406,7 +1406,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"to_json(NAMED_STRUCT('b', 1))\"",
         "name" -> "`b`",
         "type" -> "\"JAVA.LANG.INTEGER\""
-      )
+      ),
+      context = ExpectedContext("to_json", getCurrentClassCallSitePattern)
     )
   }
 

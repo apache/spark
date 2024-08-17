@@ -930,7 +930,7 @@ class SparkSession private(
     conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
   }
 
-  private[sql] object Converter extends ColumnNodeToExpressionConverter {
+  private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
     override protected def parser: ParserInterface = sessionState.sqlParser
     override protected def conf: SQLConf = sessionState.conf
   }

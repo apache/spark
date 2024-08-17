@@ -156,13 +156,13 @@ private[sql] object PythonSQLUtils extends Logging {
     Column.internalFn("pandas_stddev", e, lit(ddof))
 
   def pandasVariance(e: Column, ddof: Int): Column =
-    Column.internalFn("pandas_variance", e, lit(ddof))
+    Column.internalFn("pandas_var", e, lit(ddof))
 
   def pandasSkewness(e: Column): Column =
-    Column.internalFn("pandas_skewness", e)
+    Column.internalFn("pandas_skew", e)
 
   def pandasKurtosis(e: Column): Column =
-    Column.internalFn("pandas_kurtosis", e)
+    Column.internalFn("pandas_kurt", e)
 
   def pandasMode(e: Column, ignoreNA: Boolean): Column =
     Column.internalFn("pandas_mode", e, lit(ignoreNA))
