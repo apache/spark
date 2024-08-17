@@ -25,7 +25,6 @@ import java.util.Properties
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
