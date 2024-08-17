@@ -243,7 +243,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
        ["b1","b2","b3"]
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b');
-       [NULL,NULL,NULL]
+       [null,null,null]
   """,
   since = "2.0.0",
   group = "xml_funcs")
