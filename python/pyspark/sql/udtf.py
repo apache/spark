@@ -373,7 +373,7 @@ class UserDefinedTableFunction:
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
-        from pyspark.sql.classic.column import _to_java_column, _to_java_expr, _to_seq
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         from pyspark.sql import DataFrame, SparkSession
 
@@ -382,11 +382,7 @@ class UserDefinedTableFunction:
 
         assert sc._jvm is not None
         jcols = [_to_java_column(arg) for arg in args] + [
-            sc._jvm.Column(
-                sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
-                    key, _to_java_expr(value)
-                )
-            )
+            sc._jvm.PythonSQLUtils.namedArgumentExpression(key, _to_java_column(value))
             for key, value in kwargs.items()
         ]
 

@@ -67,7 +67,7 @@ import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, Spark
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -78,7 +78,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
@@ -1718,9 +1718,9 @@ class SparkConnectPlanner(
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
-      transformScalaFunction(fun)
-        .asInstanceOf[UserDefinedAggregator[Any, Any, Any]]
-        .scalaAggregator(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+      ScalaAggregator(
+        transformScalaFunction(fun).asInstanceOf[UserDefinedAggregator[Any, Any, Any]],
+        fun.getArgumentsList.asScala.map(transformExpression).toSeq)
         .toAggregateExpression()
     } else {
       ScalaUDF(
@@ -1899,7 +1899,7 @@ class SparkConnectPlanner(
       fun: org.apache.spark.sql.expressions.UserDefinedFunction,
       exprs: Seq[Expression]): ScalaUDF = {
     val f = fun.asInstanceOf[org.apache.spark.sql.expressions.SparkUserDefinedFunction]
-    f.createScalaUDF(exprs)
+    UserDefinedFunctionUtils.toScalaUDF(f, exprs)
   }
 
   private def extractProtobufArgs(children: Seq[Expression]) = {
