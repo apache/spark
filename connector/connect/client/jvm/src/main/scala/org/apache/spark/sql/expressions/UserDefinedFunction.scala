@@ -107,7 +107,7 @@ case class ScalaUserDefinedFunction private[sql] (
     aggregate: Boolean)
     extends UserDefinedFunction {
 
-  private[expressions] lazy val udf = {
+  private[sql] lazy val udf = {
     val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serializedUdfPacket))
