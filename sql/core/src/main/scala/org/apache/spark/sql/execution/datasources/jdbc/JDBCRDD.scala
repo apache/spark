@@ -130,18 +130,19 @@ object JDBCRDD extends Logging {
     }
     new JDBCRDD(
       sc,
-      dialect,
       dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
       predicates,
       parts,
+      url,
       options,
       groupByColumns,
       sample,
       limit,
       sortOrders,
       offset)
+      .withDialect(dialect)
   }
   // scalastyle:on argcount
 }
@@ -153,12 +154,12 @@ object JDBCRDD extends Logging {
  */
 class JDBCRDD(
     sc: SparkContext,
-    dialect: JdbcDialect,
     getConnection: Int => Connection,
     schema: StructType,
     columns: Array[String],
     predicates: Array[Predicate],
     partitions: Array[Partition],
+    url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
@@ -173,6 +174,22 @@ class JDBCRDD(
   val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     sparkContext,
     name = "JDBC query execution time")
+
+  /**
+   * Dialect to use instead of inferring it from the URL.
+   */
+  private var prescribedDialect: Option[JdbcDialect] = None
+
+  private lazy val dialect = prescribedDialect.getOrElse(JdbcDialects.get(url))
+
+  /**
+   * Prescribe a particular dialect to use for this RDD. If not set, the dialect will be automatically
+   * resolved from the JDBC URL. This previous behavior is preserved for binary compatibility.
+   */
+  def withDialect(dialect: JdbcDialect): JDBCRDD = {
+    prescribedDialect = Some(dialect)
+    this
+  }
 
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
     // H2's JDBC driver does not support the setSchema() method.  We pass a
