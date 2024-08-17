@@ -559,6 +559,69 @@ public class CollationAwareUTF8String {
   }
 
   /**
+   * This 'HashMap' is introduced as a performance speedup. Since titlecasing a codepoint can result
+   * in more than a single codepoint, for correctness, we would use 'UCharacter.toTitleCase(String)'
+   * which returns a 'String'. If we use 'UCharacter.toTitleCase(int)' (the version of the same
+   * function which converts a single codepoint to its titlecase codepoint), it would be faster than
+   * the previously mentioned version, but the problem here is that we don't handle when titlecasing
+   * a codepoint yields more than 1 codepoint. Since there are only 48 codepoints that are mapped to
+   * more than 1 codepoint when titlecased, they are precalculated here, so that the faster function
+   * for titlecasing could be used in combination with this 'HashMap' in the method
+   * 'appendCodepointToTitleCase'.
+   */
+  private static final HashMap<Integer, String> codepointOneToManyTitleCasePrecalculation =
+    new HashMap<>(){{
+    put(223, "Ss");
+    put(329, "ʼN");
+    put(496, "J̌");
+    put(912, "Ϊ́");
+    put(944, "Ϋ́");
+    put(1415, "Եւ");
+    put(7830, "H̱");
+    put(7831, "T̈");
+    put(7832, "W̊");
+    put(7833, "Y̊");
+    put(7834, "Aʾ");
+    put(8016, "Υ̓");
+    put(8018, "Υ̓̀");
+    put(8020, "Υ̓́");
+    put(8022, "Υ̓͂");
+    put(8114, "Ὰͅ");
+    put(8116, "Άͅ");
+    put(8118, "Α͂");
+    put(8119, "ᾼ͂");
+    put(8130, "Ὴͅ");
+    put(8132, "Ήͅ");
+    put(8134, "Η͂");
+    put(8135, "ῌ͂");
+    put(8146, "Ϊ̀");
+    put(8147, "Ϊ́");
+    put(8150, "Ι͂");
+    put(8151, "Ϊ͂");
+    put(8162, "Ϋ̀");
+    put(8163, "Ϋ́");
+    put(8164, "Ρ̓");
+    put(8166, "Υ͂");
+    put(8167, "Ϋ͂");
+    put(8178, "Ὼͅ");
+    put(8180, "Ώͅ");
+    put(8182, "Ω͂");
+    put(8183, "ῼ͂");
+    put(64256, "Ff");
+    put(64257, "Fi");
+    put(64258, "Fl");
+    put(64259, "Ffi");
+    put(64260, "Ffl");
+    put(64261, "St");
+    put(64262, "St");
+    put(64275, "Մն");
+    put(64276, "Մե");
+    put(64277, "Մի");
+    put(64278, "Վն");
+    put(64279, "Մխ");
+  }};
+
+  /**
    * Title casing a string according to a new behaviour. Iterates over the string and title cases
    * the first character in each word, and lowercases every other character. Handles lowercasing
    * capital Greek letter sigma ('Σ') separately, taking into account if it should be a small final
@@ -611,15 +674,15 @@ public class CollationAwareUTF8String {
   }
 
   private static void appendTitleCasedCodepoint(
-          StringBuilder sb,
-          int codepoint,
-          boolean isAfterAsciiSpace,
-          boolean precededByCasedLetter,
-          UTF8String target,
-          int offset) {
+      StringBuilder sb,
+      int codepoint,
+      boolean isAfterAsciiSpace,
+      boolean precededByCasedLetter,
+      UTF8String target,
+      int offset) {
     if(isAfterAsciiSpace) {
       // Titlecasing a character if it is in the beginning of a new word.
-      sb.append(codepointToTitleString(codepoint));
+      appendCodepointToTitleCase(sb, codepoint);
       return;
     }
     if(codepoint == CAPITAL_SIGMA) {
@@ -638,10 +701,10 @@ public class CollationAwareUTF8String {
   }
 
   private static void appendLowerCasedGreekCapitalSigma(
-          StringBuilder sb,
-          boolean precededByCasedLetter,
-          UTF8String target,
-          int offset) {
+      StringBuilder sb,
+      boolean precededByCasedLetter,
+      UTF8String target,
+      int offset) {
     int codepoint;
     if (!followedByCasedLetter(target,offset) && precededByCasedLetter) {
       codepoint = SMALL_FINAL_SIGMA;
@@ -674,16 +737,16 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Titlecases a single character using the ICU root locale rules.
-   *
-   * @param codepoint is a character that is needed to be title cased
-   * @return a java String(whose length can be more than 1 character) which corresponds to the title
-   * case of the codepoint
+   * Appends titlecase of a single character to a 'StringBuilder' using the ICU root locale rules.
    */
-  private static String codepointToTitleString(int codepoint) {
-    // This operation is expensive. In worst case we can have n/2 calls of this function when doing
-    // toTitleCaseICU.
-    return UCharacter.toTitleCase(new String(Character.toChars(codepoint)),null);
+  private static void appendCodepointToTitleCase(StringBuilder sb, int codepoint) {
+    String toTitleCase = codepointOneToManyTitleCasePrecalculation.get(codepoint);
+    if(toTitleCase == null) {
+      sb.appendCodePoint(UCharacter.toTitleCase(codepoint));
+    }
+    else {
+      sb.append(toTitleCase);
+    }
   }
 
   /*
