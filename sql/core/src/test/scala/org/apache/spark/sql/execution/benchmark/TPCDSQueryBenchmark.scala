@@ -58,7 +58,6 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
       .set("spark.sql.crossJoin.enabled", "true")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrationRequired", "true")
-      .set("spark.sql.ansi.enabled", "false")
 
     SparkSession.builder().config(conf).getOrCreate()
   }

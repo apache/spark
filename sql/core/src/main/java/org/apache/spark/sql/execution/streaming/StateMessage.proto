@@ -1,0 +1,103 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package org.apache.spark.sql.execution.streaming.state;
+
+message StateRequest {
+  int32 version = 1;
+  oneof method {
+    StatefulProcessorCall statefulProcessorCall = 2;
+    StateVariableRequest stateVariableRequest = 3;
+    ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;
+  }
+}
+
+message StateResponse {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  bytes value = 3;
+}
+
+message StatefulProcessorCall {
+  oneof method {
+    SetHandleState setHandleState = 1;
+    StateCallCommand getValueState = 2;
+    StateCallCommand getListState = 3;
+    StateCallCommand getMapState = 4;
+  }
+}
+
+message StateVariableRequest {
+  oneof method {
+    ValueStateCall valueStateCall = 1;
+  }
+}
+
+message ImplicitGroupingKeyRequest {
+  oneof method {
+    SetImplicitKey setImplicitKey = 1;
+    RemoveImplicitKey removeImplicitKey = 2;
+  }
+}
+
+message StateCallCommand {
+  string stateName = 1;
+  string schema = 2;
+}
+
+message ValueStateCall {
+  string stateName = 1;
+  oneof method {
+    Exists exists = 2;
+    Get get = 3;
+    ValueStateUpdate valueStateUpdate = 4;
+    Clear clear = 5;
+  }
+}
+
+message SetImplicitKey {
+  bytes key = 1;
+}
+
+message RemoveImplicitKey {
+}
+
+message Exists {
+}
+
+message Get {
+}
+
+message ValueStateUpdate {
+  bytes value = 1;
+}
+
+message Clear {
+}
+
+enum HandleState {
+  CREATED = 0;
+  INITIALIZED = 1;
+  DATA_PROCESSED = 2;
+  CLOSED = 3;
+}
+
+message SetHandleState {
+  HandleState state = 1;
+}

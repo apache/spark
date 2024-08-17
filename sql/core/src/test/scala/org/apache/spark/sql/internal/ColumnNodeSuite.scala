@@ -229,6 +229,10 @@ class ColumnNodeSuite extends SparkFunSuite {
     } else {
       Metadata.empty
     }
-    Wrapper(AttributeReference(name, LongType, metadata = metadata)(exprId = ExprId(id)))
+    ExpressionColumnNode(AttributeReference(
+      name,
+      LongType,
+      metadata = metadata)(
+      exprId = ExprId(id)))
   }
 }

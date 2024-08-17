@@ -23,11 +23,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
-import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.execution.aggregate.ScalaAggregator
-import org.apache.spark.sql.internal.UserDefinedFunctionLike
+import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -68,7 +64,9 @@ sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def apply(exprs: Column*): Column
+  def apply(exprs: Column*): Column = {
+    Column(InvokeInlineUserDefinedFunction(this, exprs.map(_.node)))
+  }
 
   /**
    * Updates UserDefinedFunction with a given name.
@@ -100,23 +98,6 @@ private[spark] case class SparkUserDefinedFunction(
     givenName: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
-
-  @scala.annotation.varargs
-  override def apply(exprs: Column*): Column = {
-    Column(createScalaUDF(exprs.map(_.expr)))
-  }
-
-  private[sql] def createScalaUDF(exprs: Seq[Expression]): ScalaUDF = {
-    ScalaUDF(
-      f,
-      dataType,
-      exprs,
-      inputEncoders.map(_.filter(_ != UnboundRowEncoder).map(e => encoderFor(e))),
-      outputEncoder.map(e => encoderFor(e)),
-      udfName = givenName,
-      nullable = nullable,
-      udfDeterministic = deterministic)
-  }
 
   override def withName(name: String): SparkUserDefinedFunction = {
     copy(givenName = Option(name))
@@ -176,19 +157,6 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     givenName: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
-
-  @scala.annotation.varargs
-  def apply(exprs: Column*): Column = {
-    Column(scalaAggregator(exprs.map(_.expr)).toAggregateExpression())
-  }
-
-  // This is also used by udf.register(...) when it detects a UserDefinedAggregator
-  def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
-    val iEncoder = encoderFor(inputEncoder)
-    val bEncoder = encoderFor(aggregator.bufferEncoder)
-    ScalaAggregator(
-      exprs, aggregator, iEncoder, bEncoder, nullable, deterministic, aggregatorName = givenName)
-  }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
     copy(givenName = Option(name))

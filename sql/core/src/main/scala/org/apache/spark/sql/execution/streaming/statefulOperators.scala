@@ -688,7 +688,8 @@ case class StateStoreSaveExec(
               }
             }
 
-          case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
+          case _ => throw QueryExecutionErrors.unsupportedOutputModeForStreamingOperationError(
+            outputMode.get, "streaming aggregations")
         }
     }
   }
@@ -936,7 +937,8 @@ case class SessionWindowStateStoreSaveExec(
             }
           }
 
-        case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
+        case _ => throw throw QueryExecutionErrors.unsupportedOutputModeForStreamingOperationError(
+          outputMode.get, "session window streaming aggregations")
       }
     }
   }

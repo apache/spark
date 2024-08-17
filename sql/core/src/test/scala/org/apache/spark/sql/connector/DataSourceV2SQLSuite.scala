@@ -27,9 +27,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, ColumnStat, CommandResult, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -42,6 +43,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -3638,6 +3640,69 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49211: V2 Catalog can support built-in data sources") {
+    def checkParquet(tableName: String, path: String): Unit = {
+      withTable(tableName) {
+        sql("CREATE TABLE " + tableName +
+          " (name STRING) USING PARQUET LOCATION '" + path + "'")
+        sql("INSERT INTO " + tableName + " VALUES('Bob')")
+        val df = sql("SELECT * FROM " + tableName)
+        assert(df.queryExecution.analyzed.exists {
+          case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+          case _ => false
+        })
+        checkAnswer(df, Row("Bob"))
+      }
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    spark.sessionState.catalogManager.reset()
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+        classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkParquet(table1.toString, path.getAbsolutePath)
+      }
+    }
+    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkParquet(table2.toString, path.getAbsolutePath)
+      }
+    }
+  }
+
+  test("SPARK-49211: V2 Catalog support CTAS") {
+    def checkCTAS(tableName: String, path: String): Unit = {
+      sql("CREATE TABLE " + tableName + " USING PARQUET LOCATION '" + path +
+        "' AS SELECT 1, 2, 3")
+      checkAnswer(sql("SELECT * FROM " + tableName), Row(1, 2, 3))
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+        classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkCTAS(table1.toString, path.getAbsolutePath)
+      }
+    }
+
+    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkCTAS(table2.toString, path.getAbsolutePath)
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3673,3 +3738,36 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
     super.createTable(ident, columns, partitions, newProps)
   }
 }
+
+
+class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def loadTable(ident: Identifier): Table = {
+    val superTable = super.loadTable(ident)
+    val tableIdent = {
+      TableIdentifier(ident.name(), Some(ident.namespace().head), Some(name))
+    }
+    val uri = CatalogUtils.stringToURI(superTable.properties().get(TableCatalog.PROP_LOCATION))
+    val sparkTable = CatalogTable(
+      tableIdent,
+      tableType = CatalogTableType.EXTERNAL,
+      storage = CatalogStorageFormat.empty.copy(
+        locationUri = Some(uri),
+        properties = superTable.properties().asScala.toMap
+      ),
+      schema = superTable.schema(),
+      provider = Some(superTable.properties().get(TableCatalog.PROP_PROVIDER)),
+      tracksPartitionsInCatalog = false
+    )
+    V1Table(sparkTable)
+  }
+}
+
