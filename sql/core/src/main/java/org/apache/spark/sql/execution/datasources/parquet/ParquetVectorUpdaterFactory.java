@@ -954,7 +954,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
-      values.putByteArray(offset, v.getBytes());
+      values.putByteArray(offset, v.getBytesUnsafe());
     }
   }
 
@@ -1264,7 +1264,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
-      values.putByteArray(offset, v.getBytes());
+      values.putByteArray(offset, v.getBytesUnsafe());
     }
   }
 
@@ -1498,7 +1498,7 @@ private static class BinaryToDecimalUpdater extends DecimalUpdater {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       BigInteger value =
-        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytesUnsafe());
       BigDecimal decimal = new BigDecimal(value, parquetScale);
       writeDecimal(offset, values, decimal);
     }
@@ -1538,7 +1538,7 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       BigInteger value =
-        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytesUnsafe());
       BigDecimal decimal = new BigDecimal(value, this.parquetScale);
       writeDecimal(offset, values, decimal);
     }
