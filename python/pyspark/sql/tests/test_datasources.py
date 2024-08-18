@@ -211,7 +211,7 @@ class DataSourcesTestsMixin:
                 ]
             )
             df = (
-                self.spark.read.option("header", "true")
+                self.spark.read.option("header", True)
                 .schema(schema)
                 .csv(path, enforceSchema=False)
             )
