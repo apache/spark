@@ -178,12 +178,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         toScalaUDF(udf, arguments.map(apply))
 
       case ExpressionColumnNode(expression, _) =>
-        val transformed = expression.transformDown {
+        expression.transformDown {
           case ColumnNodeExpression(node) => apply(node)
-        }
-        transformed match {
-          case f: AggregateFunction => f.toAggregateExpression()
-          case _ => transformed
         }
 
       case node =>
