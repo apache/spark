@@ -102,9 +102,13 @@ class StatefulProcessorHandle:
             The schema of the state variable. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         """
-        self.stateful_processor_api_client.get_value_state(state_name, schema)
+        self.stateful_processor_api_client.get_value_state(state_name, schema, None)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
+    def getValueStateWithTTL(
+        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: int) -> ValueState:
+        self.stateful_processor_api_client.get_value_state(state_name, schema, ttlDurationMs)
+        return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
 class StatefulProcessor(ABC):
     """

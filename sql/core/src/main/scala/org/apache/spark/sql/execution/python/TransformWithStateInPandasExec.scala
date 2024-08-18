@@ -133,7 +133,7 @@ case class TransformWithStateInPandasExec(
         val data = groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
 
         val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-          groupingKeyExprEncoder, timeMode)
+          groupingKeyExprEncoder, timeMode, true, batchTimestampMs, metrics)
         val runner = new TransformWithStateInPandasPythonRunner(
           chainedFunc,
           PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,

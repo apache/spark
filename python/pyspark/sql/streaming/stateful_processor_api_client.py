@@ -101,7 +101,8 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify errors thrown by internal methods.
             raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
 
-    def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
+    def get_value_state(
+        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: int) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
@@ -110,6 +111,8 @@ class StatefulProcessorApiClient:
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
         state_call_command.schema = schema.json()
+        if ttlDurationMs is not None:
+            state_call_command.ttl.durationMs = ttlDurationMs
         call = stateMessage.StatefulProcessorCall(getValueState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 

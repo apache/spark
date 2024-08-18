@@ -16,6 +16,7 @@
 #
 
 import os
+import time
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
 from typing import Iterator
@@ -32,6 +33,7 @@ from pyspark.sql.types import (
     Row,
     IntegerType,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -59,20 +61,18 @@ class TransformWithStateInPandasTestsMixin:
         )
         return cfg
 
+    def _prepare_input_data(self, input_path, col1, col2):
+        with open(input_path, "w") as fw:
+            for e1, e2 in zip(col1, col2):
+                fw.write(f"{e1}, {e2}\n")
+
     def _prepare_test_resource1(self, input_path):
-        with open(input_path + "/text-test1.txt", "w") as fw:
-            fw.write("0, 123\n")
-            fw.write("0, 46\n")
-            fw.write("1, 146\n")
-            fw.write("1, 346\n")
+        self._prepare_input_data(input_path + "/text-test1.txt",
+                                 [0, 0, 1, 1], [123, 46, 146, 346])
 
     def _prepare_test_resource2(self, input_path):
-        with open(input_path + "/text-test2.txt", "w") as fw:
-            fw.write("0, 123\n")
-            fw.write("0, 223\n")
-            fw.write("0, 323\n")
-            fw.write("1, 246\n")
-            fw.write("1, 6\n")
+        self._prepare_input_data(input_path + "/text-test2.txt",
+                                 [0, 0, 0, 1, 1], [123, 223, 323, 246, 6])
 
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
@@ -84,7 +84,7 @@ class TransformWithStateInPandasTestsMixin:
         return df_final
 
     def _test_transform_with_state_in_pandas_basic(
-        self, stateful_processor, check_results, single_batch=False
+        self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
@@ -110,7 +110,7 @@ class TransformWithStateInPandasTestsMixin:
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode="None",
+                timeMode=timeMode,
             )
             .writeStream.queryName("this_query")
             .foreachBatch(check_results)
@@ -211,6 +211,77 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
+    def test_value_state_ttl_basic(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="2"),
+                    Row(id="1", countAsString="2"),
+                }
+            else:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="3"),
+                    Row(id="1", countAsString="2"),
+                }
+
+        self._test_transform_with_state_in_pandas_basic(
+            SimpleTTLStatefulProcessor(), check_results, False, "processingTime")
+
+    def test_value_state_ttl_expiration(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assertDataFrameEqual(
+                    batch_df,
+                    [Row(id="ttl-count-0", count=1), Row(id="count-0", count=1),
+                     Row(id="ttl-count-1", count=1), Row(id="count-1", count=1)])
+            elif batch_id == 1:
+                assertDataFrameEqual(
+                    batch_df,
+                    [Row(id="ttl-count-0", count=2), Row(id="count-0", count=2),
+                     Row(id="ttl-count-1", count=2), Row(id="count-1", count=2)])
+            elif batch_id == 2:
+                # ttl-count-0 expire and restart from count 0.
+                # ttl-count-1 get reset in batch 1 and keep the state
+                # non-ttl state never expires
+                assertDataFrameEqual(
+                    batch_df,
+                    [Row(id="ttl-count-0", count=1), Row(id="count-0", count=3),
+                     Row(id="ttl-count-1", count=3), Row(id="count-1", count=3)])
+            if batch_id == 0 or batch_id == 1:
+                time.sleep(6)
+        input_path = tempfile.mkdtemp()
+        df = self._build_test_df(input_path)
+        self._prepare_input_data(input_path + "/batch1.txt", [1, 0], [0, 0])
+        self._prepare_input_data(input_path + "/batch2.txt", [1, 0], [0, 0])
+        self._prepare_input_data(input_path + "/batch3.txt", [1, 0], [0, 0])
+        for q in self.spark.streams.active:
+            q.stop()
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("count", IntegerType(), True),
+            ]
+        )
+
+        q = (
+            df.groupBy("id")
+                .transformWithStateInPandas(
+                statefulProcessor=TTLStatefulProcessor(),
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="processingTime",
+            )
+                .writeStream
+                .foreachBatch(check_results)
+                .outputMode("update")
+                .start()
+        )
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.stop()
+        q.awaitTermination()
+        self.assertTrue(q.exception() is None)
+
 
 class SimpleStatefulProcessor(StatefulProcessor):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
@@ -241,6 +312,43 @@ class SimpleStatefulProcessor(StatefulProcessor):
         assert updated_violations == self.dict[self.batch_id][key_str]
         self.num_violations_state.update((updated_violations,))
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
+
+    def close(self) -> None:
+        pass
+
+
+# A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use ttl state
+# with a large timeout.
+class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.num_violations_state = handle.getValueStateWithTTL("numViolations", state_schema, 30000)
+
+class TTLStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.ttl_count_state = handle.getValueStateWithTTL("ttl-state", state_schema, 10000)
+        self.count_state = handle.getValueState("state", state_schema)
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        count = 0
+        ttl_count = 0
+        id = key[0]
+        if self.count_state.exists():
+            count = self.count_state.get()[0]
+        if self.ttl_count_state.exists():
+            ttl_count = self.ttl_count_state.get()[0]
+        for pdf in rows:
+            pdf_count = pdf.count().get("temperature")
+            count += pdf_count
+            ttl_count += pdf_count
+
+        self.count_state.update((count,))
+        # skip updating state for the 2nd batch so that ttl state expire
+        if not (ttl_count == 2 and id == '0'):
+            self.ttl_count_state.update((ttl_count,))
+        yield pd.DataFrame({"id": [f"ttl-count-{id}", f"count-{id}"],
+                            "count": [ttl_count, count]})
 
     def close(self) -> None:
         pass
