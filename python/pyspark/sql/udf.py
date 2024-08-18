@@ -445,10 +445,11 @@ class UserDefinedFunction:
                     return profiler.profile(f, *args, **kwargs)
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-                resultId = sc._jvm.PythonSQLUtils.nextExprId()
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(resultId, _to_seq(sc, jcols))
-                sc.profiler_collector.add_profiler(resultId.id(), profiler)
+                jUDFExpr = judf.builderWithColumns(_to_seq(sc, jcols))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
+                sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
                 memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
@@ -462,10 +463,11 @@ class UserDefinedFunction:
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-                resultId = sc._jvm.PythonSQLUtils.nextExprId()
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(resultId, _to_seq(sc, jcols))
-                sc.profiler_collector.add_profiler(resultId.id(), memory_profiler)
+                jUDFExpr = judf.builderWithColumns(_to_seq(sc, jcols))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
+                sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
             jPythonUDF = judf.apply(_to_seq(sc, jcols))

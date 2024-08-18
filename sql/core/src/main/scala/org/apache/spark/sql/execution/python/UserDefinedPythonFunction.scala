@@ -25,7 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, ExprId, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NamedExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -42,14 +42,11 @@ case class UserDefinedPythonFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
-  final def builder(e: Seq[Expression]): Expression =
-    builderWithResultId(NamedExpression.newExprId, e)
-
-  def builderWithResultId(id: ExprId, e: Seq[Expression]): Expression = {
+  def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
-      || pythonEvalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
-      || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+        || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
+        || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -61,15 +58,28 @@ case class UserDefinedPythonFunction(
     }
 
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic, id)
+      PythonUDAF(name, func, dataType, e, udfDeterministic)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, id)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
     }
   }
-  /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
-  def apply(exprs: Column*): Column = builder(exprs.map(expression))
 
-  def apply(id: ExprId, exprs: Column*): Column = builderWithResultId(id, exprs.map(expression))
+  def builderWithColumns(e: Seq[Column]): Expression = builder(e.map(expression))
+
+  /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
+  def apply(exprs: Column*): Column = {
+    fromUDFExpr(builder(exprs.map(expression)))
+  }
+
+  /**
+   * Returns a [[Column]] that will evaluate the UDF expression with the given input.
+   */
+  def fromUDFExpr(expr: Expression): Column = {
+    expr match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case _ => expr
+    }
+  }
 }
 
 /**
@@ -150,7 +160,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
+    val udtf = builder(exprs.map(expression), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }
