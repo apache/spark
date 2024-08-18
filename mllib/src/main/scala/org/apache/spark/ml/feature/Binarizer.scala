@@ -118,7 +118,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       }
 
     val mappedOutputCols = inputColNames.zip(tds).map { case (colName, td) =>
-      dataset.schema(colName).dataType match {
+      SchemaUtils.getSchemaField(dataset.schema, colName).dataType match {
         case DoubleType =>
           when(!col(colName).isNaN && col(colName) > td, lit(1.0))
             .otherwise(lit(0.0))
