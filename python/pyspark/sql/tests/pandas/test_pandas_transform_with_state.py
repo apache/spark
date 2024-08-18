@@ -211,6 +211,8 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
+    # test value state with ttl has the same behavior as value state when
+    # state doesn't expire.
     def test_value_state_ttl_basic(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:

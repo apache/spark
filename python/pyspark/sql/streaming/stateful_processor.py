@@ -107,6 +107,24 @@ class StatefulProcessorHandle:
 
     def getValueStateWithTTL(
         self, state_name: str, schema: Union[StructType, str], ttlDurationMs: int) -> ValueState:
+        """
+        Function to create new or return existing single value state variable with TTL.
+        State values will not be returned past ttlDuration, and will be eventually removed
+        from the state store. Any state update resets the expiration time to current processing time
+        plus ttlDuration.
+        The user must ensure to call this function only within the `init()` method of the
+        :class:`StatefulProcessor`.
+
+        Parameters
+        ----------
+        state_name : str
+            name of the state variable
+        schema : :class:`pyspark.sql.types.DataType` or str
+            The schema of the state variable. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        ttlDurationMs: int
+            Time to live duration of the state in milliseconds
+        """
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttlDurationMs)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
