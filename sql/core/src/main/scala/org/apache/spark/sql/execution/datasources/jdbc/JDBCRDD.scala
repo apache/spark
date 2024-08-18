@@ -183,8 +183,9 @@ class JDBCRDD(
   private lazy val dialect = prescribedDialect.getOrElse(JdbcDialects.get(url))
 
   /**
-   * Prescribe a particular dialect to use for this RDD. If not set, the dialect will be automatically
-   * resolved from the JDBC URL. This previous behavior is preserved for binary compatibility.
+   * Prescribe a particular dialect to use for this RDD. If not set, the dialect will be
+   * automatically resolved from the JDBC URL. This previous behavior is preserved for binary
+   * compatibility.
    */
   def withDialect(dialect: JdbcDialect): JDBCRDD = {
     prescribedDialect = Some(dialect)
