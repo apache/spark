@@ -19,8 +19,8 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.{ColumnNode, SortOrder, Window => EvalWindow, WindowFrame, WindowSpec => InternalWindowSpec}
 
 /**
  * A window specification that defines the partitioning, ordering, and frame boundaries.
@@ -31,9 +31,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 @Stable
 class WindowSpec private[sql](
-    partitionSpec: Seq[Expression],
+    partitionSpec: Seq[ColumnNode],
     orderSpec: Seq[SortOrder],
-    frame: WindowFrame) {
+    frame: Option[WindowFrame]) {
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].
@@ -50,7 +50,7 @@ class WindowSpec private[sql](
    */
   @scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
-    new WindowSpec(cols.map(_.expr), orderSpec, frame)
+    new WindowSpec(cols.map(_.node), orderSpec, frame)
   }
 
   /**
@@ -68,15 +68,7 @@ class WindowSpec private[sql](
    */
   @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
-    val sortOrder: Seq[SortOrder] = cols.map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
-    }
-    new WindowSpec(partitionSpec, sortOrder, frame)
+    new WindowSpec(partitionSpec, cols.map(_.sortOrder), frame)
   }
 
   /**
@@ -125,23 +117,20 @@ class WindowSpec private[sql](
   // Note: when updating the doc for this method, also update Window.rowsBetween.
   def rowsBetween(start: Long, end: Long): WindowSpec = {
     val boundaryStart = start match {
-      case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
+      case 0 => WindowFrame.CurrentRow
+      case Long.MinValue => WindowFrame.UnboundedPreceding
+      case x if Int.MinValue <= x && x <= Int.MaxValue => WindowFrame.value(x.toInt)
       case x => throw QueryCompilationErrors.invalidBoundaryStartError(x)
     }
 
     val boundaryEnd = end match {
-      case 0 => CurrentRow
-      case Long.MaxValue => UnboundedFollowing
-      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
+      case 0 => WindowFrame.CurrentRow
+      case Long.MaxValue => WindowFrame.UnboundedFollowing
+      case x if Int.MinValue <= x && x <= Int.MaxValue => WindowFrame.value(x.toInt)
       case x => throw QueryCompilationErrors.invalidBoundaryEndError(x)
     }
 
-    new WindowSpec(
-      partitionSpec,
-      orderSpec,
-      SpecifiedWindowFrame(RowFrame, boundaryStart, boundaryEnd))
+    withFrame(WindowFrame.Row, boundaryStart, boundaryEnd)
   }
 
   /**
@@ -193,28 +182,32 @@ class WindowSpec private[sql](
   // Note: when updating the doc for this method, also update Window.rangeBetween.
   def rangeBetween(start: Long, end: Long): WindowSpec = {
     val boundaryStart = start match {
-      case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case x => Literal(x)
+      case 0 => WindowFrame.CurrentRow
+      case Long.MinValue => WindowFrame.UnboundedPreceding
+      case x => WindowFrame.value(x)
     }
 
     val boundaryEnd = end match {
-      case 0 => CurrentRow
-      case Long.MaxValue => UnboundedFollowing
-      case x => Literal(x)
+      case 0 => WindowFrame.CurrentRow
+      case Long.MaxValue => WindowFrame.UnboundedFollowing
+      case x => WindowFrame.value(x)
     }
+    withFrame(WindowFrame.Range, boundaryStart, boundaryEnd)
+  }
 
-    new WindowSpec(
-      partitionSpec,
-      orderSpec,
-      SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
+  private[sql] def withFrame(
+      frameType: WindowFrame.FrameType,
+      lower: WindowFrame.FrameBoundary,
+      uppper: WindowFrame.FrameBoundary): WindowSpec = {
+    val frame = WindowFrame(frameType, lower, uppper)
+    new WindowSpec(partitionSpec, orderSpec, Some(frame))
   }
 
   /**
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
-    val spec = WindowSpecDefinition(partitionSpec, orderSpec, frame)
-    new Column(WindowExpression(aggregate.expr, spec))
+    val spec = InternalWindowSpec(partitionSpec, sortColumns = orderSpec, frame = frame)
+    Column(EvalWindow(aggregate.node, spec))
   }
 }

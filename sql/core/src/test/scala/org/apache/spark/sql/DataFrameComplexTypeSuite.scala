@@ -82,8 +82,8 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
 
       // items: Seq[Int] => items.map { item => Seq(Struct(item)) }
       val result = df.select(
-        new Column(MapObjects(
-          (item: Expression) => array(struct(new Column(item))).expr,
+        Column(MapObjects(
+          (item: Expression) => array(struct(Column(item))).expr,
           $"items".expr,
           df.schema("items").dataType.asInstanceOf[ArrayType].elementType
         )) as "items"
