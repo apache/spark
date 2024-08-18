@@ -1,3 +1,11 @@
+<!-- 
+
+This include expects the following arguments:
+
+    - nav: this must be a YAML Jekyll data file. Please see _data/menu-* for an example.
+
+-->
+
 {% assign navurl = page.url | remove: 'index.html' %}
 <ul>
 {% for item in include.nav %}

@@ -1,0 +1,14 @@
+<!-- 
+This include requires the following arguments:
+
+    - nav-streaming: this is a YAML data file that specifies the menu items to be shown.
+                     It is passed directly to nav-left.html.
+
+-->
+
+<div class="left-menu-wrapper">
+    <div class="left-menu">
+        <h3><a href="structured-streaming-programming-guide.html">Table of Contents</a></h3>
+        {% include nav-left.html nav=include.nav-streaming %}
+    </div>
+</div>

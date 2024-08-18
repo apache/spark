@@ -1,0 +1,37 @@
+- text: Index
+  url: /streaming/index.html
+- text: Getting Started
+  url: /streaming/getting-started.html
+- text: APIs on DataFrames and Datasets
+  url: /streaming/apis-on-dataframes-and-datasets.html
+  subitems:
+    - text: Creating Streaming DataFrames and Streaming Datasets
+      url: /streaming/apis-on-dataframes-and-datasets.html#creating-streaming-dataframes-and-streaming-datasets
+    - text: Operations on Streaming DataFrames/Datasets
+      url: /streaming/apis-on-dataframes-and-datasets.html#operations-on-streaming-dataframesdatasets
+    - text: Starting Streaming Queries
+      url: /streaming/apis-on-dataframes-and-datasets.html#starting-streaming-queries
+    - text: Managing Streaming Queries
+      url: /streaming/apis-on-dataframes-and-datasets.html#managing-streaming-queries
+    - text: Monitoring Streaming Queries
+      url: /streaming/apis-on-dataframes-and-datasets.html#monitoring-streaming-queries
+    - text: Recovering from Failures with Checkpointing
+      url: /streaming/apis-on-dataframes-and-datasets.html#recovering-from-failures-with-checkpointing
+    - text: Recovery Semantics after Changes in a Streaming Query
+      url: /streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query
+- text: Performance Tips
+  url: /streaming/performance-tips.html
+  subitems:
+    - text: Asynchronous Progress Tracking
+      url: /streaming/performance-tips.html#asynchronous-progress-tracking
+    - text: Continuous Processing
+      url: /streaming/performance-tips.html#continuous-processing
+- text: Additional Information
+  url: /streaming/additional-information.html
+  subitems:
+    - text: Miscellaneous Notes
+      url: /streaming/additional-information.html#miscellaneous-notes
+    - text: Related Resources
+      url: /streaming/additional-information.html#related-resources
+    - text: Migration Guide
+      url: /streaming/additional-information.html#migration-guide

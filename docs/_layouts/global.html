@@ -21,12 +21,12 @@
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-        <link href="css/custom.css" rel="stylesheet">
-        <script src="js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
+        <link href="/css/custom.css" rel="stylesheet">
+        <script src="/js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
 
-        <link rel="stylesheet" href="css/pygments-default.css">
+        <link rel="stylesheet" href="/css/pygments-default.css">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.css" />
-        <link rel="stylesheet" href="css/docsearch.css">
+        <link rel="stylesheet" href="/css/docsearch.css">
 
         {% production %}
         <!-- Matomo -->
@@ -52,7 +52,7 @@
         <!-- This code is taken from http://twitter.github.com/bootstrap/examples/hero.html -->
         <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4 fixed-top" style="background: #1d6890;" id="topbar">
             <div class="navbar-brand"><a href="index.html">
-                <img src="img/spark-logo-rev.svg" width="141" height="72"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
+                <img src="/img/spark-logo-rev.svg" width="141" height="72"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
             </div>
             <button class="navbar-toggler" type="button" data-toggle="collapse"
                     data-target="#navbarCollapse" aria-controls="navbarCollapse"
@@ -66,15 +66,15 @@
                     <li class="nav-item dropdown">
                         <a href="#" class="nav-link dropdown-toggle" id="navbarQuickStart" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Programming Guides</a>
                         <div class="dropdown-menu" aria-labelledby="navbarQuickStart">
-                            <a class="dropdown-item" href="quick-start.html">Quick Start</a>
-                            <a class="dropdown-item" href="rdd-programming-guide.html">RDDs, Accumulators, Broadcasts Vars</a>
-                            <a class="dropdown-item" href="sql-programming-guide.html">SQL, DataFrames, and Datasets</a>
-                            <a class="dropdown-item" href="structured-streaming-programming-guide.html">Structured Streaming</a>
-                            <a class="dropdown-item" href="streaming-programming-guide.html">Spark Streaming (DStreams)</a>
-                            <a class="dropdown-item" href="ml-guide.html">MLlib (Machine Learning)</a>
-                            <a class="dropdown-item" href="graphx-programming-guide.html">GraphX (Graph Processing)</a>
-                            <a class="dropdown-item" href="sparkr.html">SparkR (R on Spark)</a>
-                            <a class="dropdown-item" href="api/python/getting_started/index.html">PySpark (Python on Spark)</a>
+                            <a class="dropdown-item" href="/quick-start.html">Quick Start</a>
+                            <a class="dropdown-item" href="/rdd-programming-guide.html">RDDs, Accumulators, Broadcasts Vars</a>
+                            <a class="dropdown-item" href="/sql-programming-guide.html">SQL, DataFrames, and Datasets</a>
+                            <a class="dropdown-item" href="/streaming/index.html">Structured Streaming</a>
+                            <a class="dropdown-item" href="/streaming-programming-guide.html">Spark Streaming (DStreams)</a>
+                            <a class="dropdown-item" href="/ml-guide.html">MLlib (Machine Learning)</a>
+                            <a class="dropdown-item" href="/graphx-programming-guide.html">GraphX (Graph Processing)</a>
+                            <a class="dropdown-item" href="/sparkr.html">SparkR (R on Spark)</a>
+                            <a class="dropdown-item" href="/api/python/getting_started/index.html">PySpark (Python on Spark)</a>
                         </div>
                     </li>
 
@@ -150,12 +150,13 @@
         {% endif %}
 
         <div class="container">
-
-            {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "migration-guide.html" %}
+            {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "/streaming" or page.url contains "migration-guide.html" %}
                 {% if page.url contains "migration-guide.html" %}
                     {% include nav-left-wrapper-migration.html nav-migration=site.data.menu-migration %}
                 {% elsif page.url contains "/ml" %}
                     {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
+                {% elsif page.url contains "/streaming" %}
+                    {% include nav-left-wrapper-streaming.html nav-streaming=site.data.menu-streaming %}
                 {% else %}
                     {% include nav-left-wrapper-sql.html nav-sql=site.data.menu-sql %}
                 {% endif %}
@@ -191,8 +192,8 @@
         crossorigin="anonymous"></script>
         <script src="https://code.jquery.com/jquery.js"></script>
 
-        <script src="js/vendor/anchor.min.js"></script>
-        <script src="js/main.js"></script>
+        <script src="/js/vendor/anchor.min.js"></script>
+        <script src="/js/main.js"></script>
 
         <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
         <script type="text/javascript">
