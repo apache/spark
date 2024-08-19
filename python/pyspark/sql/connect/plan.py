@@ -283,7 +283,7 @@ class DataSource(LogicalPlan):
         if options is not None:
             for k, v in options.items():
                 assert isinstance(k, str)
-                assert isinstance(v, str)
+                assert v is None or isinstance(v, str)
 
         if paths is not None:
             assert isinstance(paths, list)
