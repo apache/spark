@@ -281,9 +281,13 @@ class DataSource(LogicalPlan):
         assert schema is None or isinstance(schema, str)
 
         if options is not None:
+            new_options = {}
             for k, v in options.items():
-                assert isinstance(k, str)
-                assert v is None or isinstance(v, str)
+                if v is not None:
+                    assert isinstance(k, str)
+                    assert isinstance(v, str)
+                    new_options[k] = v
+            options = new_options
 
         if paths is not None:
             assert isinstance(paths, list)
