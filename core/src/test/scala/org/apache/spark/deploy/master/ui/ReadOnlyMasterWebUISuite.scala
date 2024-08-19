@@ -26,6 +26,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.master.ui.MasterWebUISuite._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.UI.MASTER_UI_VISIBLE_ENV_VAR_PREFIXES
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
@@ -35,6 +36,7 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
   val conf = new SparkConf()
     .set(UI_KILL_ENABLED, false)
     .set(DECOMMISSION_ENABLED, false)
+    .set(MASTER_UI_VISIBLE_ENV_VAR_PREFIXES.key, "SPARK_SCALA_")
   val securityMgr = new SecurityManager(conf)
   val rpcEnv = mock(classOf[RpcEnv])
   val master = mock(classOf[Master])
@@ -85,5 +87,14 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
     assert(result.contains("Runtime Information"))
     assert(result.contains("Spark Properties"))
     assert(result.contains("Hadoop Properties"))
+  }
+
+  test("SPARK-49206: Add 'Environment Variables' table to Master 'EnvironmentPage'") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/environment/"
+    val conn = sendHttpRequest(url, "GET", "")
+    assert(conn.getResponseCode === SC_OK)
+    val result = Source.fromInputStream(conn.getInputStream).mkString
+    assert(result.contains("Environment Variables"))
+    assert(result.contains("<tr><td>SPARK_SCALA_VERSION</td><td>2.1"))
   }
 }

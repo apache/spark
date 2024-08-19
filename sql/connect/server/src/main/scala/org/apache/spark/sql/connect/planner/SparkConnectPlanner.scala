@@ -66,7 +66,7 @@ import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, Spark
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1717,9 +1717,9 @@ class SparkConnectPlanner(
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
-      transformScalaFunction(fun)
-        .asInstanceOf[UserDefinedAggregator[Any, Any, Any]]
-        .scalaAggregator(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+      ScalaAggregator(
+        transformScalaFunction(fun).asInstanceOf[UserDefinedAggregator[Any, Any, Any]],
+        fun.getArgumentsList.asScala.map(transformExpression).toSeq)
         .toAggregateExpression()
     } else {
       ScalaUDF(
@@ -1743,7 +1743,7 @@ class SparkConnectPlanner(
       UserDefinedAggregator(
         aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]],
         inputEncoder = ExpressionEncoder(udfPacket.inputEncoders.head),
-        name = Option(fun.getFunctionName),
+        givenName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
         deterministic = fun.getDeterministic)
     } else {
@@ -1752,7 +1752,7 @@ class SparkConnectPlanner(
         dataType = transformDataType(udf.getOutputType),
         inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
         outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-        name = Option(fun.getFunctionName),
+        givenName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
         deterministic = fun.getDeterministic)
     }
@@ -1840,26 +1840,6 @@ class SparkConnectPlanner(
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
     fun.getFunctionName match {
-
-      case "timestampdiff" if fun.getArgumentsCount == 3 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val unit = extractString(children(0), "unit")
-        Some(TimestampDiff(unit, children(1), children(2)))
-
-      case "timestampadd" if fun.getArgumentsCount == 3 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val unit = extractString(children(0), "unit")
-        Some(TimestampAdd(unit, children(1), children(2)))
-
-      case "bucket" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        (children.head, children.last) match {
-          case (numBuckets: Literal, child) if numBuckets.dataType == IntegerType =>
-            Some(Bucket(numBuckets, child))
-          case (other, _) =>
-            throw InvalidPlanInput(s"numBuckets should be a literal integer, but got $other")
-        }
-
       // Avro-specific functions
       case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1877,38 +1857,6 @@ class SparkConnectPlanner(
           jsonFormatSchema = Some(extractString(children(1), "jsonFormatSchema"))
         }
         Some(CatalystDataToAvro(children.head, jsonFormatSchema))
-
-      // PS(Pandas API on Spark)-specific functions
-      case "pandas_product" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val dropna = extractBoolean(children(1), "dropna")
-        Some(aggregate.PandasProduct(children(0), dropna).toAggregateExpression(false))
-
-      case "pandas_stddev" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ddof = extractInteger(children(1), "ddof")
-        Some(aggregate.PandasStddev(children(0), ddof).toAggregateExpression(false))
-
-      case "pandas_var" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ddof = extractInteger(children(1), "ddof")
-        Some(aggregate.PandasVariance(children(0), ddof).toAggregateExpression(false))
-
-      case "pandas_covar" if fun.getArgumentsCount == 3 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ddof = extractInteger(children(2), "ddof")
-        Some(aggregate.PandasCovar(children(0), children(1), ddof).toAggregateExpression(false))
-
-      case "pandas_mode" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val ignoreNA = extractBoolean(children(1), "ignoreNA")
-        Some(aggregate.PandasMode(children(0), ignoreNA).toAggregateExpression(false))
-
-      case "ewm" if fun.getArgumentsCount == 3 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val alpha = extractDouble(children(1), "alpha")
-        val ignoreNA = extractBoolean(children(2), "ignoreNA")
-        Some(new EWM(children(0), alpha, ignoreNA))
 
       // Protobuf-specific functions
       case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
