@@ -160,7 +160,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(expression), session.sessionState.sqlParser)
+    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }
