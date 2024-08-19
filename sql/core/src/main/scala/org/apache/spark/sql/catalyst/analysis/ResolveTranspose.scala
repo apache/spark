@@ -144,7 +144,8 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           )()
         }
 
-        LocalRelation(
+
+        Transpose(
           (keyAttr +: valueAttrs).toIndexedSeq, transposedInternalRows.toIndexedSeq)
       }
   }

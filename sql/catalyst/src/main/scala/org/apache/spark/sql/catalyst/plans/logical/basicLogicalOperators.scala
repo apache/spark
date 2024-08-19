@@ -1474,20 +1474,27 @@ case class Pivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
+/**
+ * A constructor for creating a transpose, which will later be converted
+ * to a [[LocalRelation]] during the query optimization.
+ *
+ * The result of the transpose operation is held in the `data` field, and the corresponding
+ * schema is stored in the `output` field. The `Transpose` node does not depend on any child
+ * logical plans after the data has been collected and transposed.
+ *
+ * @param output A sequence of output attributes representing the schema of the transposed data.
+ * @param data   A sequence of [[InternalRow]] containing the transposed data.
+ */
 case class Transpose(
-    indexColumn: Expression,
-    child: LogicalPlan,
-    originalColNames: Option[Seq[String]] = None,
-    output: Seq[Attribute] = Seq.empty
-) extends UnaryNode {
+    output: Seq[Attribute],
+    data: Seq[InternalRow] = Nil
+) extends LeafNode {
 
   override lazy val resolved: Boolean = {
-    indexColumn.resolved && child.resolved && originalColNames.isDefined && output.nonEmpty
+    output.nonEmpty && data.nonEmpty
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
-
-  override def withNewChildInternal(newChild: LogicalPlan): Transpose = copy(child = newChild)
 }
 
 
