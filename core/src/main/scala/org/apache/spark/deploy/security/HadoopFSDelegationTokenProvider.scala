@@ -150,6 +150,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
         val interval = newExpiration - getIssueDate(tokenKind, identifier)
         logInfo(log"Renewal interval is ${MDC(TOTAL_TIME, interval)} for" +
           log" token ${MDC(TOKEN_KIND, tokenKind)}")
+        token.cancel(hadoopConf)
         interval
       }.toOption
     }
