@@ -63,7 +63,6 @@ private[sql] class RocksDBStateStoreProvider
         isInternal: Boolean = false): Short = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
-
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
           Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
@@ -249,11 +248,11 @@ private[sql] class RocksDBStateStoreProvider
 
         // Used for metrics reporting around internal/external column families
         def internalColFamilyCnt(): Long = {
-          rocksDB.getColFamilyCount(true)
+          rocksDB.getColFamilyCount(isInternal = true)
         }
 
         def externalColFamilyCnt(): Long = {
-          rocksDB.getColFamilyCount(false)
+          rocksDB.getColFamilyCount(isInternal = false)
         }
 
         val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
@@ -541,7 +540,7 @@ private[sql] class RocksDBStateStoreProvider
     // if the column family name is empty or contains leading/trailing whitespaces
     // or using the reserved "default" column family, throw an exception
     if (colFamilyName.isEmpty
-      || colFamilyName.trim != colFamilyName
+      || (colFamilyName.trim != colFamilyName)
       || (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME && !isInternal)) {
       throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
     }

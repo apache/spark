@@ -172,13 +172,17 @@ class RocksDB(
 
   // This is accessed and updated only between load and acquire
   // which means it is implicitly guarded by acquireLock
+  @GuardedBy("acquireLock")
   private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
 
+  @GuardedBy("acquireLock")
   private val defaultColumnFamilyIdMapping =
     Map(StateStore.DEFAULT_COL_FAMILY_NAME -> StateStore.DEFAULT_COL_FAMILY_ID).asJava
 
+  @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(0)
 
+  @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
   /**
@@ -187,7 +191,7 @@ class RocksDB(
    * @param cfName - column family name
    * @return - true if the column family is for internal use, false otherwise
    */
-  def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
+  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
 
   /**
    * Create RocksDB column family, if not created already
@@ -637,6 +641,9 @@ class RocksDB(
           } finally {
             changelogWriter = None
           }
+          // If we have changed the columnFamilyId mapping, we have set a new
+          // snapshot and need to upload this to the DFS even if changelog checkpointing
+          // is enabled.
           if (shouldForceSnapshot.get()) {
             uploadSnapshot()
           }
