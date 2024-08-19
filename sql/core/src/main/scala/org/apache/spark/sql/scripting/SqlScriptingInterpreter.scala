@@ -35,7 +35,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *
    * @param compoundBody
    *   CompoundBody to execute.
-   * @return Result of the execution.
+   * @return Execution result of the last statement in the given [[CompoundBody]].
+   *         It is returned as a sequence of rows.
    */
   def execute(compoundBody: CompoundBody): Seq[Row] = {
     val resultsIter = executeInternal(compoundBody)

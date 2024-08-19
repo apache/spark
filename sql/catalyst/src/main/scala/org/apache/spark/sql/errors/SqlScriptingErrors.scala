@@ -95,4 +95,12 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
+
+  def parametersAreNotSupportedWithSqlScripting(): Throwable = {
+    new SqlScriptingException(
+      origin = null,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_PARAMETERS",
+      cause = null,
+      messageParameters = Map.empty)
+  }
 }

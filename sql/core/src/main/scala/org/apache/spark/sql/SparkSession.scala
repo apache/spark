@@ -21,11 +21,9 @@ import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -45,7 +43,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -653,11 +651,15 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         parsedPlan match {
-          case compoundBody: CompoundBody => compoundBody
+          case compoundBody: CompoundBody =>
+            if (args.nonEmpty) {
+              // Positional parameters are not supported for SQL scripting
+              throw SqlScriptingErrors.parametersAreNotSupportedWithSqlScripting()
+            }
+            compoundBody
           case logicalPlan: LogicalPlan if args.nonEmpty =>
             PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
           case p =>
-            assert(args.isEmpty, "Named parameters are not supported for batch queries")
             p
         }
       }
@@ -724,11 +726,15 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         parsedPlan match {
-          case compoundBody: CompoundBody => compoundBody
+          case compoundBody: CompoundBody =>
+            if (args.nonEmpty) {
+              // Named parameters are not supported for SQL scripting
+              throw SqlScriptingErrors.parametersAreNotSupportedWithSqlScripting()
+            }
+            compoundBody
           case logicalPlan: LogicalPlan if args.nonEmpty =>
             NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
           case p =>
-            assert(args.isEmpty, "Named parameters are not supported for batch queries")
             p
         }
       }

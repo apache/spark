@@ -4835,6 +4835,11 @@
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
         ]
       },
+      "SQL_SCRIPTING_WITH_PARAMETERS" : {
+        "message" : [
+          "Parameters are not supported with SQL Scripting."
+        ]
+      },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."
