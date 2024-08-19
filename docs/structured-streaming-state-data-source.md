@@ -108,7 +108,7 @@ Users are encouraged to query about the schema via df.schema() / df.printSchema(
 The following options must be set for the source.
 
 <table>
-<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
+<thead><tr><th>Option</th><th>Value</th><th>Meaning</th></tr></thead>
 <tr>
   <td>path</td>
   <td>string</td>
@@ -119,7 +119,7 @@ The following options must be set for the source.
 The following configurations are optional:
 
 <table>
-<thead><tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr></thead>
+<thead><tr><th>Option</th><th>Value</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td>batchId</td>
   <td>numeric value</td>
@@ -264,13 +264,14 @@ The output schema will also be different from the normal output.
 </tr>
 </table>
 
-## State metadata source
+## State Metadata Source
 
 Before querying the state from existing checkpoint via state data source, users would like to understand the information for the checkpoint, especially about state operator. This includes which operators and state store instances are available in the checkpoint, available range of batch IDs, etc.
 
 Structured Streaming provides a data source named "State metadata source" to provide the state-related metadata information from the checkpoint.
 
 Note: The metadata is constructed when the streaming query is running with Spark 4.0+. The existing checkpoint which has been running with lower Spark version does not have the metadata and will be unable to query/use with this metadata source. It is required to run the streaming query pointing the existing checkpoint in Spark 4.0+ to construct the metadata before querying.
+Users can optionally provide the batchId to get the operator metadata at a point in time.
 
 ### Creating a State metadata store for Batch Queries
 
@@ -310,6 +311,29 @@ Dataset<Row> df = spark
 
 </div>
 
+The following options must be set for the source:
+
+<table>
+<thead><tr><th>Option</th><th>Value</th><th>Meaning</th></tr></thead>
+<tr>
+  <td>path</td>
+  <td>string</td>
+  <td>Specify the root directory of the checkpoint location. You can either specify the path via option("path", `path`) or load(`path`).</td>
+</tr>
+</table>
+
+The following configurations are optional:
+
+<table>
+<thead><tr><th>Option</th><th>Value</th><th>Default</th><th>Meaning</th></tr></thead>
+<tr>
+  <td>batchId</td>
+  <td>numeric value</td>
+  <td>Last committed batch if available, else 0</td>
+  <td>Optional batchId used to retrieve operator metadata at that batch.</td>
+</tr>
+</table>
+
 Each row in the source has the following schema:
 
 <table>
@@ -343,6 +367,11 @@ Each row in the source has the following schema:
   <td>maxBatchId</td>
   <td>int</td>
   <td>The maximum batch ID available for querying state. The value could be invalid if the streaming query taking the checkpoint is running, as the query will commit further batches.</td>
+</tr>
+<tr>
+  <td>operatorProperties</td>
+  <td>string</td>
+  <td>List of properties used by the operator encoded as JSON. Output generated here is operator dependent.</td>
 </tr>
 <tr>
   <td>_numColsPrefixKey</td>

@@ -89,10 +89,12 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
         s"output columns ${outputColNames.length}.")
 
     // Input columns must be NumericType.
-    inputColNames.foreach(SchemaUtils.checkNumericType(schema, _))
+    inputColNames.foreach { colName =>
+      SchemaUtils.checkNumericType(schema, colName)
+    }
 
     // Prepares output columns with proper attributes by examining input columns.
-    val inputFields = inputColNames.map(schema(_))
+    val inputFields = inputColNames.map(SchemaUtils.getSchemaField(schema, _))
 
     val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
       OneHotEncoderCommon.transformOutputColumnSchema(

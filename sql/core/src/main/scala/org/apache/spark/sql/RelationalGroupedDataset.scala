@@ -725,6 +725,42 @@ class RelationalGroupedDataset protected[sql](
     Dataset.ofRows(df.sparkSession, plan)
   }
 
+  /**
+   * Applies a grouped vectorized python user-defined function to each group of data.
+   * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
+   * iterator of `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as an iterator of `pandas.DataFrame`
+   * along with corresponding state, and the results for all groups are combined into a new
+   * [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def transformWithStateInPandas(
+      func: PythonUDF,
+      outputStructType: StructType,
+      outputModeStr: String,
+      timeModeStr: String): DataFrame = {
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = toAttributes(outputStructType)
+    val outputMode = InternalOutputModes(outputModeStr)
+    val timeMode = TimeModes(timeModeStr)
+
+    val plan = TransformWithStateInPandas(
+      func,
+      groupingAttrs,
+      outputAttrs,
+      outputMode,
+      timeMode,
+      child = df.logicalPlan
+    )
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
   override def toString: String = {
     val builder = new StringBuilder
     builder.append("RelationalGroupedDataset: [grouping expressions: [")

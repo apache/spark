@@ -775,7 +775,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`b`",
-        "proposal" -> "`a`"))
+        "proposal" -> "`a`"),
+      context = ExpectedContext("apply", ".*"))
   }
 
   test("wrong order of input fields for case class") {

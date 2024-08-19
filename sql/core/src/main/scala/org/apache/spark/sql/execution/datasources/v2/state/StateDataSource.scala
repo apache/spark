@@ -61,7 +61,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
     // Read the operator metadata once to see if we can find the information for prefix scan
     // encoder used in session window aggregation queries.
     val allStateStoreMetadata = new StateMetadataPartitionReader(
-      sourceOptions.stateCheckpointLocation.getParent.toString, serializedHadoopConf)
+      sourceOptions.stateCheckpointLocation.getParent.toString, serializedHadoopConf,
+      sourceOptions.batchId)
       .stateMetadata.toArray
     val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
       entry.operatorId == sourceOptions.operatorId &&

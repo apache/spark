@@ -194,7 +194,7 @@ class ChannelBuilder:
         channel = grpc.insecure_channel(target, options=self._channel_options, **kwargs)
 
         if len(self._interceptors) > 0:
-            logger.info(f"Applying interceptors ({self._interceptors})")
+            logger.debug(f"Applying interceptors ({self._interceptors})")
             channel = grpc.intercept_channel(channel, *self._interceptors)
         return channel
 
@@ -202,7 +202,7 @@ class ChannelBuilder:
         channel = grpc.secure_channel(target, credentials, options=self._channel_options, **kwargs)
 
         if len(self._interceptors) > 0:
-            logger.info(f"Applying interceptors ({self._interceptors})")
+            logger.debug(f"Applying interceptors ({self._interceptors})")
             channel = grpc.intercept_channel(channel, *self._interceptors)
         return channel
 
@@ -846,7 +846,7 @@ class SparkConnectClient(object):
         )
 
     def _resources(self) -> Dict[str, ResourceInformation]:
-        logger.info("Fetching the resources")
+        logger.debug("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
         (_, properties, _) = self.execute_command(cmd)
@@ -864,8 +864,10 @@ class SparkConnectClient(object):
         """
         Return given plan as a PyArrow Table iterator.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Executing plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
@@ -881,8 +883,10 @@ class SparkConnectClient(object):
         """
         Return given plan as a PyArrow Table.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Executing plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req, observations)
@@ -898,8 +902,10 @@ class SparkConnectClient(object):
         """
         Return given plan as a pandas DataFrame.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Executing plan {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         (self_destruct_conf,) = self.get_config_with_defaults(
@@ -997,6 +1003,8 @@ class SparkConnectClient(object):
             return text_format.MessageToString(p2, as_one_line=True)
         except RecursionError:
             return "<Truncated message due to recursion error>"
+        except Exception:
+            return "<Truncated message due to truncation error>"
 
     def _truncate(self, p: google.protobuf.message.Message) -> google.protobuf.message.Message:
         """
@@ -1047,8 +1055,10 @@ class SparkConnectClient(object):
         """
         Return schema for given plan.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Schema for plan: {self._proto_to_string(plan, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Schema for plan: {self._proto_to_string(plan, True)}")
         schema = self._analyze(method="schema", plan=plan).schema
         assert schema is not None
         # Server side should populate the struct field which is the schema.
@@ -1059,8 +1069,10 @@ class SparkConnectClient(object):
         """
         Return explain string for given plan.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(
                 f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan, True)}"
             )
         result = self._analyze(
@@ -1075,8 +1087,10 @@ class SparkConnectClient(object):
         """
         Execute given command.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Execute command for command {self._proto_to_string(command, True)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1097,8 +1111,10 @@ class SparkConnectClient(object):
         """
         Execute given command. Similar to execute_command, but the value is returned using yield.
         """
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(
                 f"Execute command as iterator for command {self._proto_to_string(command, True)}"
             )
         req = self._execute_plan_request_with_metadata()
@@ -1284,7 +1300,7 @@ class SparkConnectClient(object):
             Proto representation of the plan.
 
         """
-        logger.info("Execute")
+        logger.debug("Execute")
 
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
@@ -1319,7 +1335,10 @@ class SparkConnectClient(object):
             Dict[str, Any],
         ]
     ]:
-        logger.info("ExecuteAndFetchAsIterator")
+        if logger.isEnabledFor(logging.DEBUG):
+            # inside an if statement to not incur a performance cost converting proto to string
+            # when not at debug log level.
+            logger.debug(f"ExecuteAndFetchAsIterator. Request: {self._proto_to_string(req)}")
 
         num_records = 0
 
@@ -1338,6 +1357,13 @@ class SparkConnectClient(object):
             nonlocal num_records
             # The session ID is the local session ID and should match what we expect.
             self._verify_response_integrity(b)
+            if logger.isEnabledFor(logging.DEBUG):
+                # inside an if statement to not incur a performance cost converting proto to string
+                # when not at debug log level.
+                logger.debug(
+                    f"ExecuteAndFetchAsIterator. Response received: {self._proto_to_string(b)}"
+                )
+
             if b.HasField("metrics"):
                 logger.debug("Received metric batch.")
                 yield from self._build_metrics(b.metrics)
@@ -1468,7 +1494,7 @@ class SparkConnectClient(object):
         List[PlanObservedMetrics],
         Dict[str, Any],
     ]:
-        logger.info("ExecuteAndFetch")
+        logger.debug("ExecuteAndFetch")
 
         observed_metrics: List[PlanObservedMetrics] = []
         metrics: List[PlanMetrics] = []
@@ -1795,6 +1821,7 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
+                    logger.debug(f"Received ErrorInfo: {info}")
 
                     if info.metadata["errorClass"] == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
@@ -1874,7 +1901,7 @@ class SparkConnectClient(object):
 
     def _create_profile(self, profile: pb2.ResourceProfile) -> int:
         """Create the ResourceProfile on the server side and return the profile ID"""
-        logger.info("Creating the ResourceProfile")
+        logger.debug("Creating the ResourceProfile")
         cmd = pb2.Command()
         cmd.create_resource_profile_command.profile.CopyFrom(profile)
         (_, properties, _) = self.execute_command(cmd)

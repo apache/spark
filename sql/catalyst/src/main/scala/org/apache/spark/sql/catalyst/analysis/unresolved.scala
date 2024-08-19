@@ -60,9 +60,19 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
-    planBuilder: Seq[String] => LogicalPlan)
-  extends UnresolvedLeafNode {
+    children: Seq[LogicalPlan],
+    planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
+  extends UnresolvedNode {
+
+  def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
+    this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+    copy(identifierExpr, newChildren, planBuilder)
 }
 
 /**
@@ -342,7 +352,8 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false,
-    orderingWithinGroup: Seq[SortOrder] = Seq.empty)
+    orderingWithinGroup: Seq[SortOrder] = Seq.empty,
+    isInternal: Boolean = false)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

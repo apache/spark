@@ -44,41 +44,34 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 select * from x where exists (select * from y where x1 = y1 limit 1 offset 2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (outer(x1#x) = y1#x)\n+- SubqueryAlias spark_catalog.default.y\n   +- Relation spark_catalog.default.y[y1#x,y2#x] json\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 31,
-    "stopIndex" : 59,
-    "fragment" : "select * from y where x1 = y1"
-  } ]
-}
+Project [x1#x, x2#x]
++- Filter exists#x [x1#x]
+   :  +- GlobalLimit 1
+   :     +- LocalLimit 1
+   :        +- Offset 2
+   :           +- Project [y1#x, y2#x]
+   :              +- Filter (outer(x1#x) = y1#x)
+   :                 +- SubqueryAlias spark_catalog.default.y
+   :                    +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
 
 
 -- !query
 select * from x join lateral (select * from y where x1 = y1 limit 1 offset 2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (outer(x1#x) = y1#x)\n+- SubqueryAlias spark_catalog.default.y\n   +- Relation spark_catalog.default.y[y1#x,y2#x] json\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 31,
-    "stopIndex" : 59,
-    "fragment" : "select * from y where x1 = y1"
-  } ]
-}
+Project [x1#x, x2#x, y1#x, y2#x]
++- LateralJoin lateral-subquery#x [x1#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- GlobalLimit 1
+   :        +- LocalLimit 1
+   :           +- Offset 2
+   :              +- Project [y1#x, y2#x]
+   :                 +- Filter (outer(x1#x) = y1#x)
+   :                    +- SubqueryAlias spark_catalog.default.y
+   :                       +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
 
 
 -- !query
@@ -99,21 +92,73 @@ Project [x1#x, x2#x]
 -- !query
 select * from x where (select sum(y2) from y where x1 = y1 limit 1 offset 2) > 2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (outer(x1#x) = y1#x)\n+- SubqueryAlias spark_catalog.default.y\n   +- Relation spark_catalog.default.y[y1#x,y2#x] json\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 58,
-    "fragment" : "select sum(y2) from y where x1 = y1"
-  } ]
-}
+Project [x1#x, x2#x]
++- Filter (scalar-subquery#x [x1#x] > cast(2 as bigint))
+   :  +- GlobalLimit 1
+   :     +- LocalLimit 1
+   :        +- Offset 2
+   :           +- Aggregate [sum(y2#x) AS sum(y2)#xL]
+   :              +- Filter (outer(x1#x) = y1#x)
+   :                 +- SubqueryAlias spark_catalog.default.y
+   :                    +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
+
+
+-- !query
+select * from x where exists (select * from y where x1 = y1 offset 2)
+-- !query analysis
+Project [x1#x, x2#x]
++- Filter exists#x [x1#x]
+   :  +- Offset 2
+   :     +- Project [y1#x, y2#x]
+   :        +- Filter (outer(x1#x) = y1#x)
+   :           +- SubqueryAlias spark_catalog.default.y
+   :              +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
+
+
+-- !query
+select * from x join lateral (select * from y where x1 = y1 offset 2)
+-- !query analysis
+Project [x1#x, x2#x, y1#x, y2#x]
++- LateralJoin lateral-subquery#x [x1#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Offset 2
+   :        +- Project [y1#x, y2#x]
+   :           +- Filter (outer(x1#x) = y1#x)
+   :              +- SubqueryAlias spark_catalog.default.y
+   :                 +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
+
+
+-- !query
+select * from x where x1 in (select y1 from y offset 2)
+-- !query analysis
+Project [x1#x, x2#x]
++- Filter x1#x IN (list#x [])
+   :  +- Offset 2
+   :     +- Project [y1#x]
+   :        +- SubqueryAlias spark_catalog.default.y
+   :           +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
+
+
+-- !query
+select * from x where (select sum(y2) from y where x1 = y1 offset 2) > 2
+-- !query analysis
+Project [x1#x, x2#x]
++- Filter (scalar-subquery#x [x1#x] > cast(2 as bigint))
+   :  +- Offset 2
+   :     +- Aggregate [sum(y2#x) AS sum(y2)#xL]
+   :        +- Filter (outer(x1#x) = y1#x)
+   :           +- SubqueryAlias spark_catalog.default.y
+   :              +- Relation spark_catalog.default.y[y1#x,y2#x] json
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[x1#x,x2#x] json
 
 
 -- !query
@@ -179,21 +224,27 @@ WHERE EXISTS (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (dept_id#x = outer(dept_id#x))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 186,
-    "fragment" : "SELECT max(dept.dept_id) a\n                   FROM   dept\n                   WHERE  dept.dept_id = emp.dept_id\n                   GROUP  BY state"
-  } ]
-}
+Project [emp_name#x]
++- Filter exists#x [dept_id#x]
+   :  +- GlobalLimit 2
+   :     +- LocalLimit 2
+   :        +- Offset 1
+   :           +- Project [a#x]
+   :              +- Sort [state#x ASC NULLS FIRST], true
+   :                 +- Aggregate [state#x], [max(dept_id#x) AS a#x, state#x]
+   :                    +- Filter (dept_id#x = outer(dept_id#x))
+   :                       +- SubqueryAlias dept
+   :                          +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
+   :                             +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+   :                                +- Project [dept_id#x, dept_name#x, state#x]
+   :                                   +- SubqueryAlias DEPT
+   :                                      +- LocalRelation [dept_id#x, dept_name#x, state#x]
+   +- SubqueryAlias emp
+      +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
+         +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+            +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+               +- SubqueryAlias EMP
+                  +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
@@ -207,21 +258,91 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (dept_id#x = outer(dept_id#x))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 186,
-    "fragment" : "SELECT max(dept.dept_id) a\n                   FROM   dept\n                   WHERE  dept.dept_id = emp.dept_id\n                   GROUP  BY state"
-  } ]
-}
+Project [emp_name#x]
++- LateralJoin lateral-subquery#x [dept_id#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- GlobalLimit 2
+   :        +- LocalLimit 2
+   :           +- Offset 1
+   :              +- Project [a#x]
+   :                 +- Sort [state#x ASC NULLS FIRST], true
+   :                    +- Aggregate [state#x], [max(dept_id#x) AS a#x, state#x]
+   :                       +- Filter (dept_id#x = outer(dept_id#x))
+   :                          +- SubqueryAlias dept
+   :                             +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
+   :                                +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+   :                                   +- Project [dept_id#x, dept_name#x, state#x]
+   :                                      +- SubqueryAlias DEPT
+   :                                         +- LocalRelation [dept_id#x, dept_name#x, state#x]
+   +- SubqueryAlias emp
+      +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
+         +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+            +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+               +- SubqueryAlias EMP
+                  +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+
+
+-- !query
+SELECT emp_name
+FROM   emp
+WHERE EXISTS (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   OFFSET 1)
+-- !query analysis
+Project [emp_name#x]
++- Filter exists#x [dept_id#x]
+   :  +- Offset 1
+   :     +- Project [a#x]
+   :        +- Sort [state#x ASC NULLS FIRST], true
+   :           +- Aggregate [state#x], [max(dept_id#x) AS a#x, state#x]
+   :              +- Filter (dept_id#x = outer(dept_id#x))
+   :                 +- SubqueryAlias dept
+   :                    +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
+   :                       +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+   :                          +- Project [dept_id#x, dept_name#x, state#x]
+   :                             +- SubqueryAlias DEPT
+   :                                +- LocalRelation [dept_id#x, dept_name#x, state#x]
+   +- SubqueryAlias emp
+      +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
+         +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+            +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+               +- SubqueryAlias EMP
+                  +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+
+
+-- !query
+SELECT emp_name
+FROM   emp
+JOIN LATERAL (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   OFFSET 1)
+-- !query analysis
+Project [emp_name#x]
++- LateralJoin lateral-subquery#x [dept_id#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Offset 1
+   :        +- Project [a#x]
+   :           +- Sort [state#x ASC NULLS FIRST], true
+   :              +- Aggregate [state#x], [max(dept_id#x) AS a#x, state#x]
+   :                 +- Filter (dept_id#x = outer(dept_id#x))
+   :                    +- SubqueryAlias dept
+   :                       +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
+   :                          +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+   :                             +- Project [dept_id#x, dept_name#x, state#x]
+   :                                +- SubqueryAlias DEPT
+   :                                   +- LocalRelation [dept_id#x, dept_name#x, state#x]
+   +- SubqueryAlias emp
+      +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
+         +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+            +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+               +- SubqueryAlias EMP
+                  +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query

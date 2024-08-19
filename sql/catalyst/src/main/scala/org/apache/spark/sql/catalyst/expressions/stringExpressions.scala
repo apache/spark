@@ -1160,8 +1160,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
           .buildDict($termLastMatching, $termLastReplace, $collationId);
       }
-      ${ev.value} = CollationSupport.StringTranslate.
-      exec($src, $termDict, $collationId);
+      ${ev.value} = CollationSupport.StringTranslate.exec($src, $termDict, $collationId);
       """
     })
   }
