@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, StructType}
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -177,6 +177,44 @@ case class TransformWithStateExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
+  // Wrapper to ensure that the implicit key is set when the methods on the iterator
+  // are called. We process all the values for a particular key at a time, so we
+  // only have to set the implicit key when the first call to the iterator is made, and
+  // we have to remove it when the iterator is closed.
+  //
+  // Note: if we ever start to interleave the processing of the iterators we get back
+  // from handleInputRows (i.e. we don't process each iterator all at once), then this
+  // iterator will need to set/unset the implicit key every time hasNext/next is called,
+  // not just at the first and last calls to hasNext.
+  private def iteratorWithImplicitKeySet(
+      key: Any,
+      iter: Iterator[InternalRow],
+      onClose: () => Unit = () => {}
+  ): Iterator[InternalRow] = {
+    new NextIterator[InternalRow] {
+      var hasStarted = false
+
+      override protected def getNext(): InternalRow = {
+        if (!hasStarted) {
+          hasStarted = true
+          ImplicitGroupingKeyTracker.setImplicitKey(key)
+        }
+
+        if (!iter.hasNext) {
+          finished = true
+          null
+        } else {
+          iter.next()
+        }
+      }
+
+      override protected def close(): Unit = {
+        onClose()
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+    }
+  }
+
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
     val getKeyObj =
@@ -205,37 +243,7 @@ case class TransformWithStateExec(
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
 
-    // Wrapper to ensure that the implicit key is set when the methods on the iterator
-    // are called. Inside of processNewData, we use a GroupedIterator, so handleInputRows
-    // is only called once per key. As such, we only have to set the implicit key when
-    // the first call to hasNext is made, and we have to remove it when hasNext returns
-    // false.
-    //
-    // Note: if we ever start to interleave the processing of the iterators we get back
-    // from handleInputRows (i.e. we don't process each iterator all at once), then this
-    // iterator will need to set/unset the implicit key every time hasNext/next is called,
-    // not just at the first and last calls to hasNext.
-    new Iterator[InternalRow] {
-      var hasStarted = false
-
-      override def hasNext: Boolean = {
-        if (!hasStarted) {
-          hasStarted = true
-          ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-        }
-
-        val hasNext = mappedIterator.hasNext
-        if (!hasNext) {
-          ImplicitGroupingKeyTracker.removeImplicitKey()
-        }
-        hasNext
-      }
-
-      override def next(): InternalRow = {
-        assert(hasStarted, "next() called on handleInputRows iterator before hasNext()")
-        mappedIterator.next()
-      }
-    }
+    iteratorWithImplicitKeySet(keyObj, mappedIterator)
   }
 
   private def processInitialStateRows(
@@ -289,29 +297,9 @@ case class TransformWithStateExec(
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
 
-    // See the comment in handleInputRows for an explanation of this wrapper.
-    new Iterator[InternalRow] {
-      var hasStarted = false
-
-      override def hasNext: Boolean = {
-        if (!hasStarted) {
-          hasStarted = true
-          ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-        }
-
-        val hasNext = mappedIterator.hasNext
-        if (!hasNext) {
-          processorHandle.deleteTimer(expiryTimestampMs)
-          ImplicitGroupingKeyTracker.removeImplicitKey()
-        }
-        hasNext
-      }
-
-      override def next(): InternalRow = {
-        assert(hasStarted, "next() called on handleTimerRows iterator before hasNext()")
-        mappedIterator.next()
-      }
-    }
+    iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
+      processorHandle.deleteTimer(expiryTimestampMs)
+    })
   }
 
   private def processTimers(
