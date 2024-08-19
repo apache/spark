@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT, SparkNumberFormatException}
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
@@ -284,6 +284,48 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
 
     assert(df.selectExpr("random(1)").collect() != null)
     assert(df.select(random(lit(1))).collect() != null)
+  }
+
+  test("SPARK-49306 nullifzero and zeroifnull functions") {
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("nullifzero(0)"), Row(null))
+    checkAnswer(df.selectExpr("nullifzero(cast(0 as tinyint))"), Row(null))
+    checkAnswer(df.selectExpr("nullifzero(cast(0 as bigint))"), Row(null))
+    checkAnswer(df.selectExpr("nullifzero('0')"), Row(null))
+    checkAnswer(df.selectExpr("nullifzero(0.0)"), Row(null))
+    checkAnswer(df.selectExpr("nullifzero(1)"), Row(1))
+    checkAnswer(df.selectExpr("nullifzero(null)"), Row(null))
+    var expr = "nullifzero('abc')"
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        checkAnswer(df.selectExpr(expr), Row(null))
+      },
+      errorClass = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'abc'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ),
+      context = ExpectedContext("", "", 0, expr.length - 1, expr))
+
+    checkAnswer(df.selectExpr("zeroifnull(null)"), Row(0))
+    checkAnswer(df.selectExpr("zeroifnull(1)"), Row(1))
+    checkAnswer(df.selectExpr("zeroifnull(cast(1 as tinyint))"), Row(1))
+    checkAnswer(df.selectExpr("zeroifnull(cast(1 as bigint))"), Row(1))
+    expr = "zeroifnull('abc')"
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        checkAnswer(df.selectExpr(expr), Row(null))
+      },
+      errorClass = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'abc'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ),
+      context = ExpectedContext("", "", 0, expr.length - 1, expr))
   }
 }
 
