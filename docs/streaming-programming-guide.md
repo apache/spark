@@ -29,7 +29,7 @@ Spark Streaming is the previous generation of Spark’s streaming engine. There 
 updates to Spark Streaming and it’s a legacy project. There is a newer and easier to use
 streaming engine in Spark called Structured Streaming. You should use Spark Structured Streaming
 for your streaming applications and pipelines. See
-[Structured Streaming Programming Guide](structured-streaming-programming-guide.html).
+[Structured Streaming Programming Guide](/streaming/index.html).
 
 # Overview
 Spark Streaming is an extension of the core Spark API that enables scalable, high-throughput,
