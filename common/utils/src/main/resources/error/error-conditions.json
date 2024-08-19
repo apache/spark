@@ -4824,6 +4824,18 @@
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
         ]
       },
+      "QUERY_ONLY_CORRUPT_RECORD_COLUMN" : {
+        "message" : [
+          "Queries from raw JSON/CSV/XML files are disallowed when the",
+          "referenced columns only include the internal corrupt record column",
+          "(named _corrupt_record by default). For example:",
+          "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()",
+          "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().",
+          "Instead, you can cache or save the parsed results and then send the same query.",
+          "For example, val df = spark.read.schema(schema).json(file).cache() and then",
+          "df.filter($\"_corrupt_record\".isNotNull).count()."
+        ]
+      },
       "REMOVE_NAMESPACE_COMMENT" : {
         "message" : [
           "Remove a comment from the namespace <namespace>."
@@ -6303,18 +6315,6 @@
   "_LEGACY_ERROR_TEMP_1280" : {
     "message" : [
       "It is not allowed to create a persisted view from the Dataset API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1285" : {
-    "message" : [
-      "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
-      "referenced columns only include the internal corrupt record column",
-      "(named _corrupt_record by default). For example:",
-      "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()",
-      "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().",
-      "Instead, you can cache or save the parsed results and then send the same query.",
-      "For example, val df = spark.read.schema(schema).csv(file).cache() and then",
-      "df.filter($\"_corrupt_record\".isNotNull).count()."
     ]
   },
   "_LEGACY_ERROR_TEMP_1286" : {

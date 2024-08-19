@@ -3130,7 +3130,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1285",
+      errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
       messageParameters = Map.empty)
   }
 
