@@ -3118,12 +3118,12 @@
     "subClass" : {
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
-          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+          "Declaration of the variable <varName> is not allowed in this scope."
         ]
       },
       "ONLY_AT_BEGINNING" : {
         "message" : [
-          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+          "Variable <varName> can only be declared at the beginning of the compound."
         ]
       }
     },

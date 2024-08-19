@@ -45,24 +45,22 @@ private[sql] object SqlScriptingErrors {
 
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
-      varName: String,
-      lineNumber: String): Throwable = {
+      varName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       cause = null,
-      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+      messageParameters = Map("varName" -> varName))
   }
 
   def variableDeclarationOnlyAtBeginning(
       origin: Origin,
-      varName: String,
-      lineNumber: String): Throwable = {
+      varName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
-      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+      messageParameters = Map("varName" -> varName))
   }
 
   def invalidBooleanStatement(

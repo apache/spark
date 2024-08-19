@@ -174,13 +174,11 @@ class AstBuilder extends DataTypeAstBuilder
         if (allowVarDeclare) {
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
             c.origin,
-            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
-            c.origin.line.get.toString)
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts))
         } else {
           throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
             c.origin,
-            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
-            c.origin.line.get.toString)
+            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts))
         }
       case _ =>
     }
@@ -200,12 +198,14 @@ class AstBuilder extends DataTypeAstBuilder
             el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
           throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            toSQLId(bl.multipartIdentifier().getText),
+            toSQLId(el.multipartIdentifier().getText))
         }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
+            CurrentOrigin.get, toSQLId(el.multipartIdentifier().getText))
         }
       case _ =>
     }

@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, In, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, Project}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
@@ -212,7 +213,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parseScript(sqlScriptText)
       },
       condition = "LABELS_MISMATCH",
-      parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
+      parameters = Map("beginLabel" -> toSQLId("lbl_begin"), "endLabel" -> toSQLId("lbl_end")))
   }
 
   test("compound: endLabel") {
@@ -231,7 +232,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parseScript(sqlScriptText)
       },
       condition = "END_LABEL_WITHOUT_BEGIN_LABEL",
-      parameters = Map("endLabel" -> "lbl"))
+      parameters = Map("endLabel" -> toSQLId("lbl")))
   }
 
   test("compound: beginLabel + endLabel with different casing") {
@@ -292,7 +293,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
           parseScript(sqlScriptText)
         },
         condition = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
-        parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
+        parameters = Map("varName" -> "`testVariable`"))
   }
 
   test("declare in wrong scope") {
@@ -308,7 +309,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parseScript(sqlScriptText)
       },
       condition = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
-      parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
+      parameters = Map("varName" -> "`testVariable`"))
   }
 
   test("SET VAR statement test") {
