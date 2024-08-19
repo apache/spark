@@ -119,7 +119,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCompoundOrSingleStatement(
       ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
-      if (!SQLConf.get.sqlScriptingEnabled) {
+      if (conf.getConf(SQLConf.SQL_SCRIPTING_ENABLED)) {
         throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
       }
       visit(s).asInstanceOf[CompoundBody]

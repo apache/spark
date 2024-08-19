@@ -32,6 +32,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession {
   // Helpers
+  private var originalSqlScriptingConfVal: String = null
+
   private def runSqlScript(sqlText: String): Seq[Array[Row]] = {
     val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
@@ -50,11 +52,12 @@ class SqlScriptingInterpreterSuite extends SparkFunSuite with SharedSparkSession
   // Tests setup
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    originalSqlScriptingConfVal = spark.conf.get(SQLConf.SQL_SCRIPTING_ENABLED.key)
     spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   protected override def afterAll(): Unit = {
-    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "false")
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, originalSqlScriptingConfVal)
     super.afterAll()
   }
 

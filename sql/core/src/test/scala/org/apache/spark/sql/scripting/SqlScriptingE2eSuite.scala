@@ -19,9 +19,9 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.scripting.SparkSqlParser.parsePlan
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -33,6 +33,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   // Helpers
+  private var originalSqlScriptingConfVal: String = null
+
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
     checkAnswer(df, expected)
@@ -41,11 +43,12 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   // Tests setup
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    originalSqlScriptingConfVal = spark.conf.get(SQLConf.SQL_SCRIPTING_ENABLED.key)
     spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   protected override def afterAll(): Unit = {
-    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "false")
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, originalSqlScriptingConfVal)
     super.afterAll()
   }
 
@@ -59,10 +62,10 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
           |END""".stripMargin
       checkError(
         exception = intercept[SqlScriptingException] {
-          parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+          spark.sql(sqlScriptText).asInstanceOf[CompoundBody]
         },
         errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
-        parameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
+        parameters = Map("sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
     }
   }
 

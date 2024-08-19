@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -81,7 +82,8 @@ private[sql] object SqlScriptingErrors {
       errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
       cause = null,
       origin = origin,
-      messageParameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
+      messageParameters = Map(
+        "sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
   }
 
   def booleanStatementWithEmptyRow(
