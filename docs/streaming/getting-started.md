@@ -22,7 +22,7 @@ license: |
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
 [Python]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming/structured_network_wordcount.py)/[Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCount.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCount.java)/[R]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/r/streaming/structured_network_wordcount.R).
-And if you [download Spark](https://spark.apache.org/downloads.html), you can directly [run the example](index.html#running-the-examples-and-shell). In any case, let’s walk through the example step-by-step and understand how it works. First, we have to import the necessary classes and create a local SparkSession, the starting point of all functionalities related to Spark.
+And if you [download Spark](https://spark.apache.org/downloads.html), you can directly [run the example](../index.html#running-the-examples-and-shell). In any case, let’s walk through the example step-by-step and understand how it works. First, we have to import the necessary classes and create a local SparkSession, the starting point of all functionalities related to Spark.
 
 <div class="codetabs">
 
@@ -241,8 +241,8 @@ awaitTermination(query)
 After this code is executed, the streaming computation will have started in the background. The `query` object is a handle to that active streaming query, and we have decided to wait for the termination of the query using `awaitTermination()` to prevent the process from exiting while the query is active.
 
 To actually execute this example code, you can either compile the code in your own
-[Spark application](quick-start.html#self-contained-applications), or simply
-[run the example](index.html#running-the-examples-and-shell) once you have downloaded Spark. We are showing the latter. You will first need to run Netcat (a small utility found in most Unix-like systems) as a data server by using
+[Spark application](../quick-start.html#self-contained-applications), or simply
+[run the example](../index.html#running-the-examples-and-shell) once you have downloaded Spark. We are showing the latter. You will first need to run Netcat (a small utility found in most Unix-like systems) as a data server by using
 
 
     $ nc -lk 9999
@@ -465,7 +465,7 @@ The "Output" is defined as what gets written out to the external storage. The ou
 
   - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (available since Spark 2.1.1). Note that this is different from the Complete Mode in that this mode only outputs the rows that have changed since the last trigger. If the query doesn't contain aggregations, it will be equivalent to Append mode.
 
-Note that each mode is applicable on certain types of queries. This is discussed in detail [later](#output-modes).
+Note that each mode is applicable on certain types of queries. This is discussed in detail [later](./apis-on-dataframes-and-datasets.md#output-modes).
 
 To illustrate the use of this model, let’s understand the model in context of
 the [Quick Example](#quick-example) above. The first `lines` DataFrame is the input table, and
@@ -501,7 +501,7 @@ as well as cleaning up old aggregates to limit the size of intermediate
 state data. Since Spark 2.1, we have support for watermarking which
 allows the user to specify the threshold of late data, and allows the engine
 to accordingly clean up old state. These are explained later in more
-detail in the [Window Operations](#window-operations-on-event-time) section.
+detail in the [Window Operations](./apis-on-dataframes-and-datasets.html#window-operations-on-event-time) section.
 
 ## Fault Tolerance Semantics
 Delivering end-to-end exactly-once semantics was one of key goals behind the design of Structured Streaming. To achieve that, we have designed the Structured Streaming sources, the sinks and the execution engine to reliably track the exact progress of the processing so that it can handle any kind of failure by restarting and/or reprocessing. Every streaming source is assumed to have offsets (similar to Kafka offsets, or Kinesis sequence numbers)

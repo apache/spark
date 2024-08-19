@@ -1,7 +1,12 @@
-- text: Index
+- text: Overview 
   url: /streaming/index.html
 - text: Getting Started
   url: /streaming/getting-started.html
+  subitems:
+    - text: Quick Example
+      url: /streaming/getting-started.html#quick-example
+    - text: Programming Model 
+      url: /streaming/getting-started.html#programming-model
 - text: APIs on DataFrames and Datasets
   url: /streaming/apis-on-dataframes-and-datasets.html
   subitems:
