@@ -96,7 +96,7 @@ Here are the details of all the sources in Spark.
         href="api/R/read.stream.html">R</a>).
         E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code>.
         <br/><br/>
-        In addition, there are session configurations that affect certain file-formats. See the <a href="sql-programming-guide.html">SQL Programming Guide</a> for more details. E.g., for "parquet", see <a href="sql-data-sources-parquet.html#configuration">Parquet configuration</a> section.
+        In addition, there are session configurations that affect certain file-formats. See the <a href="../sql-programming-guide.html">SQL Programming Guide</a> for more details. E.g., for "parquet", see <a href="../sql-data-sources-parquet.html#configuration">Parquet configuration</a> section.
         </td>
     <td>Yes</td>
     <td>Supports glob paths, but does not support multiple comma-separated paths/globs.</td>
@@ -2804,7 +2804,7 @@ Here are the different kinds of triggers that are supported.
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
-        about this in the <a href="#continuous-processing">Continuous Processing section</a> below.
+        about this in the <a href="./performance-tips.html#continuous-processing">Continuous Processing section</a> below.
     </td>
   </tr>
 </table>

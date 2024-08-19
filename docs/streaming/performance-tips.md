@@ -165,7 +165,7 @@ As of Spark 2.4, only the following type of queries are supported in the continu
   + Memory sink: Good for debugging.
   + Console sink: Good for debugging. All options are supported. Note that the console will print every checkpoint interval that you have specified in the continuous trigger.
 
-See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections for more details on them. While the console sink is good for testing, the end-to-end low-latency processing can be best observed with Kafka as the source and sink, as this allows the engine to process the data and make the results available in the output topic within milliseconds of the input data being available in the input topic.
+See [Input Sources](./apis-on-dataframes-and-datasets.html#input-sources) and [Output Sinks](./apis-on-dataframes-and-datasets.html#output-sinks) sections for more details on them. While the console sink is good for testing, the end-to-end low-latency processing can be best observed with Kafka as the source and sink, as this allows the engine to process the data and make the results available in the output topic within milliseconds of the input data being available in the input topic.
 
 ## Caveats
 {:.no_toc}
