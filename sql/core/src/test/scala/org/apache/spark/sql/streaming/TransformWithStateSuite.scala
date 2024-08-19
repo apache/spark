@@ -1259,7 +1259,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
-
         val result2 = inputData1.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
