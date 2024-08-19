@@ -207,13 +207,15 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
-
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
     checkError(
-      exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
-      },
+      exception = exception,
       condition = "LABELS_MISMATCH",
       parameters = Map("beginLabel" -> toSQLId("lbl_begin"), "endLabel" -> toSQLId("lbl_end")))
+    assert(exception.origin.line.isDefined)
+    assert(exception.origin.line.get == 2)
   }
 
   test("compound: endLabel") {
@@ -226,13 +228,15 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl""".stripMargin
-
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
     checkError(
-      exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
-      },
+      exception = exception,
       condition = "END_LABEL_WITHOUT_BEGIN_LABEL",
       parameters = Map("endLabel" -> toSQLId("lbl")))
+    assert(exception.origin.line.isDefined)
+    assert(exception.origin.line.get == 8)
   }
 
   test("compound: beginLabel + endLabel with different casing") {
@@ -288,12 +292,15 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT 1;
         |  DECLARE testVariable INTEGER;
         |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
     checkError(
-        exception = intercept[SqlScriptingException] {
-          parseScript(sqlScriptText)
-        },
+        exception = exception,
         condition = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
         parameters = Map("varName" -> "`testVariable`"))
+    assert(exception.origin.line.isDefined)
+    assert(exception.origin.line.get == 4)
   }
 
   test("declare in wrong scope") {
@@ -304,12 +311,15 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |   DECLARE testVariable INTEGER;
         | END IF;
         |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
     checkError(
-      exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
-      },
+      exception = exception,
       condition = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       parameters = Map("varName" -> "`testVariable`"))
+    assert(exception.origin.line.isDefined)
+    assert(exception.origin.line.get == 4)
   }
 
   test("SET VAR statement test") {

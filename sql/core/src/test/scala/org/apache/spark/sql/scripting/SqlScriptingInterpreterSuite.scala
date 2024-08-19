@@ -755,13 +755,16 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END IF;
           |END
           |""".stripMargin
+      val exception = intercept[SqlScriptingException] {
+        runSqlScript(commands)
+      }
       checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands)
-        ),
+        exception = exception,
         condition = "INVALID_BOOLEAN_STATEMENT",
         parameters = Map("invalidStatement" -> "1")
       )
+      assert(exception.origin.line.isDefined)
+      assert(exception.origin.line.get == 3)
     }
   }
 
@@ -777,13 +780,16 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END IF;
           |END
           |""".stripMargin
+      val exception = intercept[SqlScriptingException] {
+        runSqlScript(commands1)
+      }
       checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands1)
-        ),
+        exception = exception,
         condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
       )
+      assert(exception.origin.line.isDefined)
+      assert(exception.origin.line.get == 4)
 
       // too many rows ( > 1 )
       val commands2 =
