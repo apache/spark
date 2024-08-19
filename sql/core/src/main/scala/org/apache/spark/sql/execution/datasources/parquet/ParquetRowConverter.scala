@@ -95,7 +95,7 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
   override def addLong(value: Long): Unit = updater.setLong(value)
   override def addFloat(value: Float): Unit = updater.setFloat(value)
   override def addDouble(value: Double): Unit = updater.setDouble(value)
-  override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
+  override def addBinary(value: Binary): Unit = updater.set(value.getBytesUnsafe)
 }
 
 /**
@@ -622,7 +622,7 @@ private[parquet] class ParquetRowConverter(
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
+        Decimal(new BigDecimal(new BigInteger(value.getBytesUnsafe), scale), precision, scale)
       }
     }
   }
