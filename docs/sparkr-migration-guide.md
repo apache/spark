@@ -28,7 +28,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 ## Upgrading from SparkR 3.1 to 3.2
 
- - Previously, SparkR automatically downloaded and installed the Spark distribution in user' cache directory to complete SparkR installation when SparkR runs in a plain R shell or Rscript, and the Spark distribution cannot be found. Now, it asks if users want to download and install or not. To restore the previous behavior, set `SPARKR_ASK_INSTALLATION` environment variable to `FALSE`.
+ - Previously, SparkR automatically downloaded and installed the Spark distribution in user's cache directory to complete SparkR installation when SparkR runs in a plain R shell or Rscript, and the Spark distribution cannot be found. Now, it asks if users want to download and install or not. To restore the previous behavior, set `SPARKR_ASK_INSTALLATION` environment variable to `FALSE`.
 
 ## Upgrading from SparkR 2.4 to 3.0
 

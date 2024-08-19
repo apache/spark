@@ -211,7 +211,7 @@ class QueryExecutionErrorsSuite
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(
-        exception = intercept[SparkRuntimeException] { lit(v) },
+        exception = intercept[SparkRuntimeException] { lit(v).expr },
         errorClass = "UNSUPPORTED_FEATURE.LITERAL_TYPE",
         parameters = Map("value" -> literal, "type" -> dataType),
         sqlState = "0A000")

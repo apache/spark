@@ -38,6 +38,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM parquet.`file:tmp`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_LOCATION",
+  "sqlState" : "42K05",
+  "messageParameters" : {
+    "location" : "file:tmp"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 32,
+    "fragment" : "parquet.`file:tmp`"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM parquet.`/file/not/found`
 -- !query schema
 struct<>
@@ -94,6 +116,28 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 15,
     "stopIndex" : 20,
     "fragment" : "orc.``"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM orc.`file:tmp`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_LOCATION",
+  "sqlState" : "42K05",
+  "messageParameters" : {
+    "location" : "file:tmp"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "orc.`file:tmp`"
   } ]
 }
 
@@ -160,6 +204,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM csv.`file:tmp`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_LOCATION",
+  "sqlState" : "42K05",
+  "messageParameters" : {
+    "location" : "file:tmp"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "csv.`file:tmp`"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM csv.`/file/not/found`
 -- !query schema
 struct<>
@@ -216,6 +282,28 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 15,
     "stopIndex" : 21,
     "fragment" : "json.``"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM json.`file:tmp`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_LOCATION",
+  "sqlState" : "42K05",
+  "messageParameters" : {
+    "location" : "file:tmp"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 29,
+    "fragment" : "json.`file:tmp`"
   } ]
 }
 

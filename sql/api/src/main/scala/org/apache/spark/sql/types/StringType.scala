@@ -36,13 +36,16 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * non-binary. If this field is true, byte level operations can be used against this datatype
    * (e.g. for equality and hashing).
    */
-  def supportsBinaryEquality: Boolean =
+  private[sql] def supportsBinaryEquality: Boolean =
     CollationFactory.fetchCollation(collationId).supportsBinaryEquality
 
-  def isUTF8BinaryCollation: Boolean =
+  private[sql] def supportsLowercaseEquality: Boolean =
+    CollationFactory.fetchCollation(collationId).supportsLowercaseEquality
+
+  private[sql] def isUTF8BinaryCollation: Boolean =
     collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
 
-  def isUTF8BinaryLcaseCollation: Boolean =
+  private[sql] def isUTF8LcaseCollation: Boolean =
     collationId == CollationFactory.UTF8_LCASE_COLLATION_ID
 
   /**
@@ -52,7 +55,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * it follows spark internal implementation. If this field is true, byte level operations
    * can be used against this datatype (e.g. for equality, hashing and ordering).
    */
-  def supportsBinaryOrdering: Boolean =
+  private[sql] def supportsBinaryOrdering: Boolean =
     CollationFactory.fetchCollation(collationId).supportsBinaryOrdering
 
   /**

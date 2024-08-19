@@ -759,14 +759,6 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
-  lazy val COLLATION_ENABLED =
-    buildConf("spark.sql.collation.enabled")
-      .doc("Collations feature is under development and its use should be done under this" +
-        "feature flag.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(Utils.isTesting)
-
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -974,6 +966,14 @@ object SQLConf {
       .doc("When true, the query optimizer will propagate a set of distinct attributes from the " +
         "current node and use it to optimize query.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
+    buildConf("spark.sql.parser.optimizeInsertIntoValuesParser")
+      .internal()
+      .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
+        "`insert into ... values` DML statements.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1631,6 +1631,17 @@ object SQLConf {
         s"enabled and ${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} " +
         "to be disabled."
       )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PARTITION_FILTER_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
+      .doc(s"Whether to filter partitions when running storage-partition join. " +
+        s"When enabled, partitions without matches on the other side can be omitted for " +
+        s"scanning, if allowed by the join type. This config requires both " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
+        s"enabled.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -3719,7 +3730,7 @@ object SQLConf {
       .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false) // Disabled for now, see SPARK-46446
+      .createWithDefault(true)
 
   val DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")
@@ -4388,8 +4399,8 @@ object SQLConf {
 
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
-      .internal()
-      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser.")
+      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +
+        "can be overwritten by the JSON option `useUnsafeRow`.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -4602,6 +4613,15 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_DUPLICATE_BETWEEN_INPUT =
+    buildConf("spark.sql.legacy.duplicateBetweenInput")
+      .internal()
+      .doc("When true, we use legacy between implementation. This is a flag that fixes a " +
+        "problem introduced by a between optimization, see ticket SPARK-49063.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
@@ -5393,8 +5413,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
-
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
@@ -5985,6 +6003,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def legacyDuplicateBetweenInput: Boolean =
+    getConf(SQLConf.LEGACY_DUPLICATE_BETWEEN_INPUT)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 

@@ -27,7 +27,7 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -143,7 +143,7 @@ private[sql] object PythonSQLUtils extends Logging {
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(EWM(e.expr, alpha, ignoreNA))
+    Column(new EWM(e.expr, alpha, ignoreNA))
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 
@@ -174,6 +174,27 @@ private[sql] object PythonSQLUtils extends Logging {
   def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
     Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
   }
+
+  def unresolvedNamedLambdaVariable(name: String): Column =
+    Column(internal.UnresolvedNamedLambdaVariable.apply(name))
+
+  @scala.annotation.varargs
+  def lambdaFunction(function: Column, variables: Column*): Column = {
+    val arguments = variables.map(_.node.asInstanceOf[internal.UnresolvedNamedLambdaVariable])
+    Column(internal.LambdaFunction(function.node, arguments))
+  }
+
+  def namedArgumentExpression(name: String, e: Column): Column =
+    Column(ExpressionColumnNode(NamedArgumentExpression(name, e.expr)))
+
+  def distributedIndex(): Column = {
+    val expr = MonotonicallyIncreasingID()
+    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
+    Column(ExpressionColumnNode(expr))
+  }
+
+  @scala.annotation.varargs
+  def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 }
 
 /**

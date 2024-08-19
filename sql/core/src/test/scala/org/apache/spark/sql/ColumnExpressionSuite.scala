@@ -978,15 +978,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-37646: lit") {
     assert(lit($"foo") == $"foo")
     assert(lit($"foo") == $"foo")
-    assert(lit(1) == Column(Literal(1)))
-    assert(lit(null) == Column(Literal(null, NullType)))
+    assert(lit(1).expr == Column(Literal(1)).expr)
+    assert(lit(null).expr == Column(Literal(null, NullType)).expr)
   }
 
   test("typedLit") {
     assert(typedLit($"foo") == $"foo")
     assert(typedLit($"foo") == $"foo")
-    assert(typedLit(1) == Column(Literal(1)))
-    assert(typedLit[String](null) == Column(Literal(null, StringType)))
+    assert(typedLit(1).expr == Column(Literal(1)).expr)
+    assert(typedLit[String](null).expr == Column(Literal(null, StringType)).expr)
 
     val df = Seq(Tuple1(0)).toDF("a")
     // Only check the types `lit` cannot handle

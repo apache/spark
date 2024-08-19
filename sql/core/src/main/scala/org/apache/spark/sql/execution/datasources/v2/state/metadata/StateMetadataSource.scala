@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, StateStoreMetadataV1}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataUtils, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -104,7 +104,16 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
       if (!options.containsKey("path")) {
         throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
       }
-      new StateMetadataScan(options.get("path"))
+
+      val checkpointLocation = options.get("path")
+
+      val batchIdOpt = Option(options.get("batchId")).map(_.toLong)
+      // if a batchId is provided, use it. Otherwise, use the last committed batch. If there is no
+      // committed batch, use batchId 0.
+      val batchId = batchIdOpt.getOrElse(OperatorStateMetadataUtils
+        .getLastCommittedBatch(SparkSession.active, checkpointLocation).getOrElse(0L))
+
+      new StateMetadataScan(options.get("path"), batchId)
     }
   }
 
@@ -119,7 +128,7 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
 case class StateMetadataInputPartition(checkpointLocation: String) extends InputPartition
 
-class StateMetadataScan(checkpointLocation: String) extends Scan {
+class StateMetadataScan(checkpointLocation: String, batchId: Long) extends Scan {
   override def readSchema: StructType = StateMetadataTableEntry.schema
 
   override def toBatch: Batch = {
@@ -131,24 +140,26 @@ class StateMetadataScan(checkpointLocation: String) extends Scan {
       override def createReaderFactory(): PartitionReaderFactory = {
         // Don't need to broadcast the hadoop conf because this source only has one partition.
         val conf = new SerializableConfiguration(SparkSession.active.sessionState.newHadoopConf())
-        StateMetadataPartitionReaderFactory(conf)
+        StateMetadataPartitionReaderFactory(conf, batchId)
       }
     }
   }
 }
 
-case class StateMetadataPartitionReaderFactory(hadoopConf: SerializableConfiguration)
-  extends PartitionReaderFactory {
+case class StateMetadataPartitionReaderFactory(
+    hadoopConf: SerializableConfiguration,
+    batchId: Long) extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     new StateMetadataPartitionReader(
-      partition.asInstanceOf[StateMetadataInputPartition].checkpointLocation, hadoopConf)
+      partition.asInstanceOf[StateMetadataInputPartition].checkpointLocation, hadoopConf, batchId)
   }
 }
 
 class StateMetadataPartitionReader(
     checkpointLocation: String,
-    serializedHadoopConf: SerializableConfiguration) extends PartitionReader[InternalRow] {
+    serializedHadoopConf: SerializableConfiguration,
+    batchId: Long) extends PartitionReader[InternalRow] {
 
   override def next(): Boolean = {
     stateMetadata.hasNext
@@ -207,11 +218,12 @@ class StateMetadataPartitionReader(
       } else {
         1
       }
+
       OperatorStateMetadataReader.createReader(
-        operatorIdPath, hadoopConf, operatorStateMetadataVersion).read() match {
+        operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId).read() match {
         case Some(metadata) => metadata
-        case None => OperatorStateMetadataV1(OperatorInfoV1(opId, null),
-          Array(StateStoreMetadataV1(null, -1, -1)))
+        case None => throw StateDataSourceErrors.failedToReadOperatorMetadata(checkpointLocation,
+          batchId)
       }
     }
   }
