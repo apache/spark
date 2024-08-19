@@ -4,8 +4,49 @@
 
 # From 3.5.x
 
+- [SPARK-48424][INFRA] Make dev/is-changed.py to return true it it fails
+- [SPARK-41049][SQL][FOLLOW-UP] Mark map related expressions as stateful expressions
+- [SPARK-48273][SQL] Fix late rewrite of PlanWithUnresolvedIdentifier
+- [SPARK-48484][SQL] Fix: V2Write use the same TaskAttemptId for different task attempts
+- [SPARK-48391][CORE] Using addAll instead of add function in fromAccumulatorInfos method of TaskMetrics Class
+- [SPARK-48481][SQL][SS] Do not apply OptimizeOneRowPlan against streaming Dataset
+- [SPARK-48394][3.5][CORE] Cleanup mapIdToMapIndex on mapoutput unregister
+- [SPARK-48535][SS] Update config docs to indicate possibility of data loss/corruption issue if skip nulls for stream-stream joins config is enabled
+- [SPARK-48286] Fix analysis of column with exists default expression - Add user facing error
+- [SPARK-48610][SQL] refactor: use auxiliary idMap instead of OP_ID_TAG
+- [SPARK-48642][CORE] False SparkOutOfMemoryError caused by killing task on spilling
+- [SPARK-48286][SQL][3.5] Fix column default value check - Add error class
+- [SPARK-47910][CORE] close stream when DiskBlockObjectWriter closeResources to avoid memory leak
+- [SPARK-48498][SQL][3.5] Always do char padding in predicates 
+- [SPARK-47172][CORE][3.5] Add support for AES-GCM for RPC encryption
+- [SPARK-48428][SQL] Fix IllegalStateException in NestedColumnAliasing
+- [SPARK-46957][CORE] Decommission migrated shuffle files should be able to cleanup from executor 
+- [SPARK-48709][SQL][3.5] Fix varchar type resolution mismatch for DataSourceV2 CTAS
+- [SPARK-48494][BUILD][3.5] Update `airlift:aircompressor` to 0.27
+- [SPARK-48586][SS][3.5] Remove lock acquisition in doMaintenance() by making a deep copy of file mappings in RocksDBFileManager in load()
+- [SPARK-48292][CORE][3.5] Revert [SPARK-39195][SQL] Spark OutputCommitCoordinator should abort stage when committed file not consistent with task status
+- [SPARK-48759][SQL] Add migration doc for CREATE TABLE AS SELECT behavior change behavior change since Spark 3.4 (branch-3.5)
+- [SPARK-48710][PYTHON][3.5] Limit NumPy version to supported range (>=1.15,<2)
+- [SPARK-48806][SQL] Pass actual exception when url_decode fails
+- [SPARK-48719][SQL][3.5] Fix the calculation bug of RegrSlope & RegrIntercept when the first parameter is null
+- [SPARK-48843] Prevent infinite loop with BindParameters 
+- [SPARK-48863][SQL] Fix ClassCastException when parsing JSON with "spark.sql.json.enablePartialResults" enabled
+- [MINOR][DOCS] Add `docs/_generated/` to .gitignore
+- [MINOR][SQL][TESTS] Remove a duplicate test case in `CSVExprUtilsSuite`
+- [SPARK-48871] Fix INVALID_NON_DETERMINISTIC_EXPRESSIONS validation in
+- [SPARK-48845][SQL] GenericUDF catch exceptions from children
+- [SPARK-48666][SQL] Do not push down filter if it contains PythonUDFs
+- [SPARK-47172][DOCS][FOLLOWUP] Fix spark.network.crypto.ciphersince version field on security page
+- [SPARK-47307][SQL][3.5] Add a config to optionally chunk base64 strings 
+- [SPARK-48889][SS] testStream to unload state stores before finishing
+- [SPARK-48920][BUILD][3.5] Upgrade ORC to 1.9.4
+- [SPARK-48930][CORE] Redact `awsAccessKeyId` by including `accesskey` pattern
+- [SPARK-48791][CORE][3.5] Fix perf regression caused by the accumulators registration overhead using CopyOnWriteArrayList
+- [SPARK-48921][SQL][3.5] ScalaUDF encoders in subquery should be resolved for MergeInto
+- [SPARK-48934][SS] Python datetime types converted incorrectly for setting timeout in applyInPandasWithState
 
 # Internal changes
 
 - [INTERNAL] Setup Buildkite CI for 3.5 branche
 - [INTERNAL] Update Spark Dockerfile to ignore already installed system packages
+- [INTERNAL] Ignore flaky tests
