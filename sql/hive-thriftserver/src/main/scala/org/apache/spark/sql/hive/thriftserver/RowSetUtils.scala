@@ -137,8 +137,7 @@ object RowSetUtils {
         var i = 0
         val rowSize = rows.length
         val values = new java.util.ArrayList[String](rowSize)
-        while (i < rowSize) {
-          val row = rows(i)
+        rows.foreach { row =>
           nulls.set(i, row.isNullAt(ordinal))
           val value = if (row.isNullAt(ordinal)) {
             ""

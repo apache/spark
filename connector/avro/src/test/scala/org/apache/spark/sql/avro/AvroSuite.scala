@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.URL
+import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.UUID
@@ -648,7 +648,7 @@ abstract class AvroSuite
         assert(message.contains("No Avro files found."))
 
         Files.copy(
-          Paths.get(new URL(episodesAvro).toURI),
+          Paths.get(new URI(episodesAvro)),
           Paths.get(dir.getCanonicalPath, "episodes.avro"))
 
         val result = spark.read.format("avro").load(episodesAvro).collect()
@@ -760,7 +760,7 @@ abstract class AvroSuite
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
       assert(snappySize > bzip2Size)
-      assert(bzip2Size > xzSize)
+      assert(xzSize > bzip2Size)
       assert(uncompressSize > zstandardSize)
     }
   }
@@ -2139,7 +2139,7 @@ abstract class AvroSuite
   test("SPARK-24805: do not ignore files without .avro extension by default") {
     withTempDir { dir =>
       Files.copy(
-        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(new URI(episodesAvro)),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
       val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
@@ -2178,7 +2178,7 @@ abstract class AvroSuite
   test("SPARK-24836: ignoreExtension must override hadoop's config") {
     withTempDir { dir =>
       Files.copy(
-        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(new URI(episodesAvro)),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
       val hadoopConf = spark.sessionState.newHadoopConf()

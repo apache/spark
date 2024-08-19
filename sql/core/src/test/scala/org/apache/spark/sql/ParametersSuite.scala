@@ -22,6 +22,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -689,5 +690,13 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         |USING 'UPPER', 'col'
         |""".stripMargin)
     checkAnswer(query, Row("ABC"))
+  }
+
+  test("SPARK-48843: Prevent infinite loop with BindParameters") {
+    val df =
+      sql("EXECUTE IMMEDIATE 'SELECT SUM(c1) num_sum FROM VALUES (?), (?) AS t(c1) ' USING 5, 6;")
+    val analyzedPlan = Limit(Literal.create(100), df.queryExecution.logical)
+    spark.sessionState.analyzer.executeAndCheck(analyzedPlan, df.queryExecution.tracker)
+    checkAnswer(df, Row(11))
   }
 }

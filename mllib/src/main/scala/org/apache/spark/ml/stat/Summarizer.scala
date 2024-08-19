@@ -257,7 +257,7 @@ private[ml] class SummaryBuilderImpl(
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
 
-    new Column(agg.toAggregateExpression())
+    Column(agg.toAggregateExpression())
   }
 }
 
