@@ -1526,7 +1526,7 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      BigInteger value = new BigInteger(valuesReader.readBinary(arrayLen).getBytes());
+      BigInteger value = new BigInteger(valuesReader.readBinary(arrayLen).getBytesUnsafe());
       BigDecimal decimal = new BigDecimal(value, this.parquetScale);
       writeDecimal(offset, values, decimal);
     }
