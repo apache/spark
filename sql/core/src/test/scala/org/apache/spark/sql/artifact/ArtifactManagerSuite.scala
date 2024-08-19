@@ -24,8 +24,10 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
@@ -326,6 +328,26 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val buffer = Files.readAllBytes(classPath)
       spark.addArtifact(buffer, filePath)
       filePath
+    }
+  }
+
+  test("Add UDF as artifact") {
+    val buffer = Files.readAllBytes(artifactPath.resolve("IntSumUdf.class"))
+    spark.addArtifact(buffer, "IntSumUdf.class")
+
+    val instance = artifactManager.classloader
+      .loadClass("IntSumUdf")
+      .getDeclaredConstructor()
+      .newInstance()
+      .asInstanceOf[UDF2[Long, Long, Long]]
+    spark.udf.register("intSum", instance, DataTypes.LongType)
+
+    artifactManager.withResources {
+      val r = spark.range(5)
+        .withColumn("id2", col("id") + 1)
+        .selectExpr("intSum(id, id2)")
+        .collect()
+      assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
     }
   }
 
