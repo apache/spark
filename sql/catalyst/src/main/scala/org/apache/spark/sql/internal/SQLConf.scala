@@ -3357,8 +3357,9 @@ object SQLConf {
 
   val SQL_SCRIPTING_ENABLED =
     buildConf("spark.sql.scripting.enabled")
-      .doc("SQL Scripting feature is under development and its use should be done under this" +
-        "feature flag.")
+      .doc("SQL Scripting feature is under development and its use should be done under this " +
+        "feature flag. SQL Scripting enables users to write procedural SQL including control " +
+        "flow and error handling.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

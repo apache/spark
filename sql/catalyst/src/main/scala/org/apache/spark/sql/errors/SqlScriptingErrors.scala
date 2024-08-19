@@ -79,7 +79,7 @@ private[sql] object SqlScriptingErrors {
 
   def sqlScriptingNotEnabled(origin: Origin): Throwable = {
     new SqlScriptingException(
-      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
       cause = null,
       origin = origin,
       messageParameters = Map(
