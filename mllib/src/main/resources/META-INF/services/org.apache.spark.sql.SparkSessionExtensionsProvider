@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-org.apache.spark.sql.ml.FunctionRegistration
+org.apache.spark.sql.ml.InternalFunctionRegistration

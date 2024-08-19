@@ -31,7 +31,7 @@ import org.apache.spark.sql.functions.udf
  * This is a bit of a hack because we use the [[SparkSessionExtensions]] mechanism to register
  * functions in a global registry. The use of a Scala object makes sure we only do this once.
  */
-object FunctionRegistration {
+object InternalFunctionRegistration {
   def apply(): Unit = ()
 
   private def invokeUdf(udf: UserDefinedFunction, e: Expression): Expression = udf(Column(e)).expr
@@ -95,6 +95,6 @@ object FunctionRegistration {
   }
 }
 
-class FunctionRegistration extends SparkSessionExtensionsProvider {
-  override def apply(e: SparkSessionExtensions): Unit = FunctionRegistration()
+class InternalFunctionRegistration extends SparkSessionExtensionsProvider {
+  override def apply(e: SparkSessionExtensions): Unit = InternalFunctionRegistration()
 }
