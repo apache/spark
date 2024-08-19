@@ -29,8 +29,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.arrow
-import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.TransformWithStateInPandasPythonRunner.{InType, OutType}
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleImpl
@@ -65,8 +63,6 @@ class TransformWithStateInPandasPythonRunner(
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
-
-  private val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
   // constructor.
@@ -132,24 +128,27 @@ class TransformWithStateInPandasPythonRunner(
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
   }
 
+  private var pandasWriter: TransformWithStateInPandasWriter = _
+
   override protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
+    if (pandasWriter == null) {
+      pandasWriter = new TransformWithStateInPandasWriter(root, writer, arrowMaxRecordsPerBatch)
+    }
 
     if (inputIterator.hasNext) {
       val startData = dataOut.size()
       val next = inputIterator.next()
-      val nextBatch = next._2
+      val dataIter = next._2
 
-      while (nextBatch.hasNext) {
-        arrowWriter.write(nextBatch.next())
+      while (dataIter.hasNext) {
+        val dataRow = dataIter.next()
+        pandasWriter.writeRow(dataRow)
       }
-
-      arrowWriter.finish()
-      writer.writeBatch()
-      arrowWriter.reset()
+      pandasWriter.finalizeCurrentArrowBatch()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
       true
