@@ -170,17 +170,13 @@ class RocksDB(
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
-  // This is accessed and updated only between load and acquire
+  // This is accessed and updated only between load and commit
   // which means it is implicitly guarded by acquireLock
   @GuardedBy("acquireLock")
   private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
 
   @GuardedBy("acquireLock")
-  private val defaultColumnFamilyIdMapping =
-    Map(StateStore.DEFAULT_COL_FAMILY_NAME -> StateStore.DEFAULT_COL_FAMILY_ID).asJava
-
-  @GuardedBy("acquireLock")
-  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(0)
+  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
   @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
@@ -192,6 +188,15 @@ class RocksDB(
    * @return - true if the column family is for internal use, false otherwise
    */
   private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
+
+  // Methods to fetch column family mapping for this State Store version
+  def getColumnFamilyMapping: Map[String, Short] = {
+    colFamilyNameToIdMap.asScala
+  }
+
+  def getColumnFamilyId(cfName: String): Short = {
+    colFamilyNameToIdMap.get(cfName)
+  }
 
   /**
    * Create RocksDB column family, if not created already
@@ -234,7 +239,6 @@ class RocksDB(
   // the default values it should be set to on load
   private def setInitialCFInfo(): Unit = {
     colFamilyNameToIdMap.clear()
-    colFamilyNameToIdMap.putAll(defaultColumnFamilyIdMapping)
     shouldForceSnapshot.set(false)
     maxColumnFamilyId.set(0)
   }
@@ -635,17 +639,19 @@ class RocksDB(
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
-          try {
-            assert(changelogWriter.isDefined)
-            changelogWriter.foreach(_.commit())
-          } finally {
-            changelogWriter = None
-          }
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
           if (shouldForceSnapshot.get()) {
             uploadSnapshot()
+            changelogWriter = None
+          } else {
+            try {
+              assert(changelogWriter.isDefined)
+              changelogWriter.foreach(_.commit())
+            } finally {
+              changelogWriter = None
+            }
           }
         } else {
           assert(changelogWriter.isEmpty)

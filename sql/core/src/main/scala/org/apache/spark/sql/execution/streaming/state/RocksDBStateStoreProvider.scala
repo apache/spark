@@ -54,20 +54,30 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
+    // Test-visible methods to fetch column family mapping for this State Store version
+    // Because column families are only enabled for RocksDBStateStore, these methods
+    // are no-ops everywhere else.
+    override private[sql] def getColumnFamilyMapping: Map[String, Short] = {
+      rocksDB.getColumnFamilyMapping.toMap
+    }
+
+    override private[sql] def getColumnFamilyId(cfName: String): Short = {
+      rocksDB.getColumnFamilyId(cfName)
+    }
+
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
-        isInternal: Boolean = false): Short = {
+        isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
           Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
           useMultipleValuesPerKey)))
-      newColFamilyId
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -348,12 +358,17 @@ private[sql] class RocksDBStateStoreProvider
         " enabled in RocksDBStateStore.")
     }
 
+    rocksDB // lazy initialization
+    var defaultColFamilyId: Option[Short] = None
+
+    if (useColumnFamilies) {
+      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+    }
+
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, Some(StateStore.DEFAULT_COL_FAMILY_ID)),
+        useColumnFamilies, defaultColFamilyId),
         RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
-
-    rocksDB // lazy initialization
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -440,8 +455,7 @@ private[sql] class RocksDBStateStoreProvider
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
-
-  private val multColFamiliesDisabledStr = "multiple column families is disabled in " +
+  private val multiColFamiliesDisabledStr = "multiple column families is disabled in " +
     "RocksDBStateStoreProvider"
 
   private def verify(condition: => Boolean, msg: String): Unit = {
@@ -504,7 +518,7 @@ private[sql] class RocksDBStateStoreProvider
       // if the state store instance does not support multiple column families, throw an exception
       if (!useColumnFamilies) {
         throw StateStoreErrors.unsupportedOperationException(operationName,
-          multColFamiliesDisabledStr)
+          multiColFamiliesDisabledStr)
       }
 
       // if the column family name is empty or contains leading/trailing whitespaces, throw an
@@ -534,7 +548,7 @@ private[sql] class RocksDBStateStoreProvider
     // if the state store instance does not support multiple column families, throw an exception
     if (!useColumnFamilies) {
       throw StateStoreErrors.unsupportedOperationException(operationName,
-        multColFamiliesDisabledStr)
+        multiColFamiliesDisabledStr)
     }
 
     // if the column family name is empty or contains leading/trailing whitespaces

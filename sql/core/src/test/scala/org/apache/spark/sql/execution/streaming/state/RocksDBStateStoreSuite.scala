@@ -1118,22 +1118,26 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       store.commit()
 
       store = provider.getStore(2)
-      assert(store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
-        NoPrefixKeyStateEncoderSpec(keySchema)) == 3)
+      store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily3) == 3)
       store.removeColFamilyIfExists(colFamily1)
       store.removeColFamilyIfExists(colFamily3)
       store.commit()
 
       store = provider.getStore(1)
       // this should return the old id, because we didn't remove this colFamily for version 1
-      assert(store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
-        NoPrefixKeyStateEncoderSpec(keySchema)) == 1)
+      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily1) == 1)
 
       store = provider.getStore(3)
-      assert(store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
-        NoPrefixKeyStateEncoderSpec(keySchema)) == 4)
-      assert(store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
-        NoPrefixKeyStateEncoderSpec(keySchema)) == 5)
+      store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily4) == 4)
+      store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily5) == 5)
     }
   }
 

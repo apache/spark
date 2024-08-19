@@ -135,7 +135,14 @@ trait StateStore extends ReadStateStore {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
-      isInternal: Boolean = false): Short
+      isInternal: Boolean = false): Unit
+
+  // Test-visible methods to fetch column family mapping for this State Store version
+  // Because column families are only enabled for RocksDBStateStore, these methods
+  // are no-ops everywhere else.
+  private[sql] def getColumnFamilyMapping: Map[String, Short] = Map.empty
+
+  private[sql] def getColumnFamilyId(cfName: String): Short = -1
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
@@ -607,8 +614,6 @@ object StateStore extends Logging {
   val PARTITION_ID_TO_CHECK_SCHEMA = 0
 
   val DEFAULT_COL_FAMILY_NAME = "default"
-
-  val DEFAULT_COL_FAMILY_ID: Short = 0
 
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
