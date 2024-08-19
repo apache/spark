@@ -780,10 +780,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     val schema = new StructType()
       .add("key", IntegerType)
       .add("value", StringType)
-    val encoder = TransformingEncoder(
-      classTag[(Int, String)],
-      toRowEncoder(schema),
-      () => new TestCodec)
+    val encoder =
+      TransformingEncoder(classTag[(Int, String)], toRowEncoder(schema), () => new TestCodec)
     roundTripAndCheckIdentical(encoder) { () =>
       Iterator.tabulate(10)(i => (i, "v" + i))
     }

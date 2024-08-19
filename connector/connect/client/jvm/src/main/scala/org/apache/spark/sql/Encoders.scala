@@ -183,7 +183,8 @@ object Encoders {
    *
    * T must be publicly accessible.
    *
-   * @note This is extremely inefficient and should only be used as the last resort.
+   * @note
+   *   This is extremely inefficient and should only be used as the last resort.
    * @since 1.6.0
    */
   def javaSerialization[T: ClassTag]: Encoder[T] = {
@@ -191,12 +192,13 @@ object Encoders {
   }
 
   /**
-   * Creates an encoder that serializes objects of type T using generic Java serialization.
-   * This encoder maps T into a single byte array (binary) field.
+   * Creates an encoder that serializes objects of type T using generic Java serialization. This
+   * encoder maps T into a single byte array (binary) field.
    *
    * T must be publicly accessible.
    *
-   * @note This is extremely inefficient and should only be used as the last resort.
+   * @note
+   *   This is extremely inefficient and should only be used as the last resort.
    * @since 1.6.0
    */
   def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
