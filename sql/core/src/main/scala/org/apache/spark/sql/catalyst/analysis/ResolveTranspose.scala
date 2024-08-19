@@ -81,7 +81,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(TreePattern.UNRESOLVED_TRANSPOSE)) {
-    case t @ UnresolvedTranspose(indexColumn, child, _, _) if !t.resolved =>
+    case t @ UnresolvedTranspose(indexColumn, child) if indexColumn.resolved && child.resolved =>
 
       // Cast the index column to StringType
       val indexColumnAsString = indexColumn match {
