@@ -4798,7 +4798,7 @@
       "QUERY_ONLY_CORRUPT_RECORD_COLUMN" : {
         "message" : [
           "Queries from raw JSON/CSV/XML files are disallowed when the",
-          "referenced columns only inclupade the internal corrupt record column",
+          "referenced columns only include the internal corrupt record column",
           "(named _corrupt_record by default). For example:",
           "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()",
           "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().",
