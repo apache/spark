@@ -49,7 +49,7 @@ class PushablePredicateSuite extends QueryTest with SharedSparkSession {
   test("PushablePredicate throws") {
     withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "false") {
       intercept[java.lang.AssertionError] {
-        val pushable = PushablePredicate.unapply(Literal.create("string"))
+        PushablePredicate.unapply(Literal.create("string"))
       }
     }
   }

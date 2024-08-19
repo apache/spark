@@ -47,9 +47,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
           && translated.isDefined
           && !translated.get.isInstanceOf[V2Predicate]) {
 
-        // When isPredicate is specified we always expect to receive predicate.
-        // If this is not the case, and we received something that is not a predicate -
-        // don't fail query, act as if we didn't know how to translate it at all.
+        // If a predicate is expected but the translation yields something else,
+        // log a warning and proceed as if the translation was not possible.
         logWarning(log"Predicate expected but got class: ${MDC(EXPR, translated.get.describe())}")
         None
       } else {
@@ -57,7 +56,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       }
 
       modifiedExprOpt.map { v =>
-        assert(v.isInstanceOf[V2Predicate])
+        assert(v.isInstanceOf[V2Predicate], s"Expected Predicate but got ${v.describe()}")
         v.asInstanceOf[V2Predicate]
       }
     } else {
