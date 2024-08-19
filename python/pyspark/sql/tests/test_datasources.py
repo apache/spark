@@ -211,7 +211,8 @@ class DataSourcesTestsMixin:
                 ]
             )
             df = (
-                self.spark.read.option("header", "true").option("quote", None)
+                self.spark.read.option("header", "true")
+                .option("quote", None)
                 .schema(schema)
                 .csv(path, enforceSchema=False)
             )
