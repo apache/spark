@@ -64,7 +64,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SqlScriptingException] {
           spark.sql(sqlScriptText).asInstanceOf[CompoundBody]
         },
-        errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+        errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
         parameters = Map("sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
     }
   }

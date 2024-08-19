@@ -38,13 +38,16 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper with SharedSp
   import SparkSqlParser._
 
   // Tests setup
+  private var originalSqlScriptingConfVal: String = null
+
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    originalSqlScriptingConfVal = spark.conf.get(SQLConf.SQL_SCRIPTING_ENABLED.key)
     spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   protected override def afterAll(): Unit = {
-    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "false")
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, originalSqlScriptingConfVal)
     super.afterAll()
   }
 
