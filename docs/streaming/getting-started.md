@@ -465,7 +465,7 @@ The "Output" is defined as what gets written out to the external storage. The ou
 
   - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (available since Spark 2.1.1). Note that this is different from the Complete Mode in that this mode only outputs the rows that have changed since the last trigger. If the query doesn't contain aggregations, it will be equivalent to Append mode.
 
-Note that each mode is applicable on certain types of queries. This is discussed in detail [later](./apis-on-dataframes-and-datasets.md#output-modes).
+Note that each mode is applicable on certain types of queries. This is discussed in detail [later](./apis-on-dataframes-and-datasets.html#output-modes).
 
 To illustrate the use of this model, let’s understand the model in context of
 the [Quick Example](#quick-example) above. The first `lines` DataFrame is the input table, and

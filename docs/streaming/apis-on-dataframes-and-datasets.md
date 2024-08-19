@@ -432,7 +432,7 @@ You may want to check the query plan of the query, as Spark could inject statefu
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration.
 
-Imagine our [quick example](./getting-started.md#quick-example) is modified and the stream now contains lines along with the time when the line was generated. Instead of running word counts, we want to count words within 10 minute windows, updating every 5 minutes. That is, word counts in words received between 10 minute windows 12:00 - 12:10, 12:05 - 12:15, 12:10 - 12:20, etc. Note that 12:00 - 12:10 means data that arrived after 12:00 but before 12:10. Now, consider a word that was received at 12:07. This word should increment the counts corresponding to two windows 12:00 - 12:10 and 12:05 - 12:15. So the counts will be indexed by both, the grouping key (i.e. the word) and the window (can be calculated from the event-time).
+Imagine our [quick example](./getting-started.html#quick-example) is modified and the stream now contains lines along with the time when the line was generated. Instead of running word counts, we want to count words within 10 minute windows, updating every 5 minutes. That is, word counts in words received between 10 minute windows 12:00 - 12:10, 12:05 - 12:15, 12:10 - 12:20, etc. Note that 12:00 - 12:10 means data that arrived after 12:00 but before 12:10. Now, consider a word that was received at 12:07. This word should increment the counts corresponding to two windows 12:00 - 12:10 and 12:05 - 12:15. So the counts will be indexed by both, the grouping key (i.e. the word) and the window (can be calculated from the event-time).
 
 The result tables would look something like the following.
 
@@ -2141,7 +2141,7 @@ writeStream
 
 Some sinks are not fault-tolerant because they do not guarantee persistence of the output and are
 meant for debugging purposes only. See the earlier section on
-[fault-tolerance semantics](./getting-started.md#fault-tolerance-semantics).
+[fault-tolerance semantics](./getting-started.html#fault-tolerance-semantics).
 Here are the details of all the sinks in Spark.
 
 <table>
@@ -3472,7 +3472,7 @@ sql("SET spark.sql.streaming.metricsEnabled=true")
 All queries started in the SparkSession after this configuration has been enabled will report metrics through Dropwizard to whatever [sinks](../monitoring.html#metrics) have been configured (e.g. Ganglia, Graphite, JMX, etc.).
 
 ## Recovering from Failures with Checkpointing
-In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write-ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](./getting-started.md#quick-example)) to the checkpoint location. This checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries).
+In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write-ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](./getting-started.html#quick-example)) to the checkpoint location. This checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries).
 
 <div class="codetabs">
 
