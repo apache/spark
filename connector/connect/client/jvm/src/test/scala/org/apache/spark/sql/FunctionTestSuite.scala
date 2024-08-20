@@ -267,12 +267,12 @@ class FunctionTestSuite extends ConnectFunSuite {
   testEquals("call_udf", callUDF("bob", lit(1)), call_udf("bob", lit(1)))
 
   test("assert_true no message") {
-    val e = assert_true(a).expr
+    val e = toExpr(assert_true(a))
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "assert_true")
     assert(fn.getArgumentsCount == 1)
-    assert(fn.getArguments(0) == a.expr)
+    assert(fn.getArguments(0) == toExpr(a))
   }
 
   test("json_tuple zero args") {
@@ -280,7 +280,7 @@ class FunctionTestSuite extends ConnectFunSuite {
   }
 
   test("rand no seed") {
-    val e = rand().expr
+    val e = toExpr(rand())
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "rand")
@@ -288,7 +288,7 @@ class FunctionTestSuite extends ConnectFunSuite {
   }
 
   test("randn no seed") {
-    val e = randn().expr
+    val e = toExpr(randn())
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "randn")

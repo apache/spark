@@ -52,7 +52,7 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * @since 3.4.0
  */
-class Column(@DeveloperApi val expr: proto.Expression) extends Logging {
+class Column(@DeveloperApi private val expr: proto.Expression) extends Logging {
 
   private[sql] def this(name: String, planId: Option[Long]) =
     this(Column.nameToExpression(name, planId))
@@ -83,6 +83,8 @@ class Column(@DeveloperApi val expr: proto.Expression) extends Logging {
     val encoder = implicitly[Encoder[U]].asInstanceOf[AgnosticEncoder[U]]
     new TypedColumn[Any, U](expr, encoder)
   }
+
+  private[sql] def secret(): proto.Expression = expr
 
   /**
    * Extracts a value or values from a complex type. The following types of extraction are

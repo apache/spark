@@ -134,6 +134,8 @@ class Dataset[T] private[sql] (
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
     extends Serializable {
+  import sparkSession.RichColumn
+
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
 

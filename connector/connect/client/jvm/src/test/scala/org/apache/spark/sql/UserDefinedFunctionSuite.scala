@@ -33,10 +33,10 @@ class UserDefinedFunctionSuite extends ConnectFunSuite {
     val myUdf = udf(func _)
     val colWithUdf = myUdf(Column("dummy"))
 
-    val udfExpr = colWithUdf.expr.getCommonInlineUserDefinedFunction
+    val udfExpr = toExpr(colWithUdf).getCommonInlineUserDefinedFunction
     assert(udfExpr.getDeterministic)
     assert(udfExpr.getArgumentsCount == 1)
-    assert(udfExpr.getArguments(0) == Column("dummy").expr)
+    assert(udfExpr.getArguments(0) == toExpr(Column("dummy")))
     val udfObj = udfExpr.getScalarScalaUdf
 
     assert(udfObj.getNullable)

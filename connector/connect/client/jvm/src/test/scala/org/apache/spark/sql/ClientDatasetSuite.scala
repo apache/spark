@@ -136,7 +136,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     builder
       .setInput(df.plan.getRoot)
       .setTableName("t1")
-      .addPartitioningColumns(col("col99").expr)
+      .addPartitioningColumns(toExpr(col("col99")))
       .setProvider("json")
       .addClusteringColumns("col3")
       .putTableProperties("key", "value")

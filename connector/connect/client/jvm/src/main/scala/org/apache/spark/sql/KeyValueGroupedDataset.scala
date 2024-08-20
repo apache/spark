@@ -941,6 +941,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val valueMapFunc: IV => V,
     private val keysFunc: () => Dataset[IK])
     extends KeyValueGroupedDataset[K, V] {
+  import sparkSession.RichColumn
 
   override def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V] = {
     new KeyValueGroupedDatasetImpl[L, V, IK, IV](
@@ -1106,14 +1107,15 @@ private object KeyValueGroupedDatasetImpl {
       function = groupingFunc,
       inputEncoders = ds.agnosticEncoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
+    val session = ds.sparkSession
     new KeyValueGroupedDatasetImpl(
-      ds.sparkSession,
+      session,
       ds.plan,
       kEncoder,
       kEncoder,
       ds.agnosticEncoder,
       ds.agnosticEncoder,
-      Arrays.asList(gf.apply(col("*")).expr),
+      Arrays.asList(session.expression(gf.apply(col("*")))),
       UdfUtils.identical(),
       () => ds.map(groupingFunc)(kEncoder))
   }
@@ -1128,15 +1130,15 @@ private object KeyValueGroupedDatasetImpl {
       function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
       outputEncoder = kEncoder).apply(col("*"))
-
+    val session = df.sparkSession
     new KeyValueGroupedDatasetImpl(
-      df.sparkSession,
+      session,
       df.plan,
       kEncoder,
       kEncoder,
       vEncoder,
       vEncoder,
-      (Seq(dummyGroupingFunc) ++ groupingExprs).map(_.expr).asJava,
+      (Seq(dummyGroupingFunc) ++ groupingExprs).map(session.expression).asJava,
       UdfUtils.identical(),
       () => df.select(groupingExprs: _*).as(kEncoder))
   }

@@ -820,6 +820,12 @@ class SparkSession private[sql] (
       observationOrNull.setMetricsAndNotify(Some(metrics))
     }
   }
+
+  private[sql] def expression(c: Column): proto.Expression = c.secret()
+
+  implicit class RichColumn(c: Column) {
+    def expr: proto.Expression = c.secret()
+  }
 }
 
 // The minimal builder needed to create a spark session.

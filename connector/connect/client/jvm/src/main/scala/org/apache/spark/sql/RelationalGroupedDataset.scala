@@ -41,6 +41,7 @@ class RelationalGroupedDataset private[sql] (
     groupType: proto.Aggregate.GroupType,
     pivot: Option[proto.Aggregate.Pivot] = None,
     groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None) {
+  import df.sparkSession.RichColumn
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
     df.sparkSession.newDataFrame { builder =>
