@@ -94,7 +94,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         s" $address, $city, $state, $zipCode, $country, $registrationDate)"
     }.mkString(",\n")
 
-    s" VALUES $rows;"
+    s" VALUES $rows"
   }
 
   /**
