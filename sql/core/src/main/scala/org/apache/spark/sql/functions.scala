@@ -1701,7 +1701,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[T](df: Dataset[T]): Dataset[T] = df.hint("broadcast")
+  def broadcast[T, DS <: api.Dataset[T]](df: DS): df.DS[T] = df.hint("broadcast")
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
