@@ -29,6 +29,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
+import org.apache.spark.sql.internal.UserDefinedFunctionLike
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
 
@@ -101,11 +102,12 @@ case class ScalaUserDefinedFunction private[sql] (
     serializedUdfPacket: Array[Byte],
     inputTypes: Seq[proto.DataType],
     outputType: proto.DataType,
-    name: Option[String],
+    givenName: Option[String],
     override val nullable: Boolean,
     override val deterministic: Boolean,
     aggregate: Boolean)
-    extends UserDefinedFunction {
+    extends UserDefinedFunction
+    with UserDefinedFunctionLike {
 
   private[sql] lazy val udf = {
     val scalaUdfBuilder = proto.ScalarScalaUDF
@@ -128,10 +130,10 @@ case class ScalaUserDefinedFunction private[sql] (
       .setScalarScalaUdf(udf)
       .addAllArguments(exprs.map(_.expr).asJava)
 
-    name.foreach(udfBuilder.setFunctionName)
+    givenName.foreach(udfBuilder.setFunctionName)
   }
 
-  override def withName(name: String): ScalaUserDefinedFunction = copy(name = Option(name))
+  override def withName(name: String): ScalaUserDefinedFunction = copy(givenName = Option(name))
 
   override def asNonNullable(): ScalaUserDefinedFunction = copy(nullable = false)
 
@@ -143,9 +145,11 @@ case class ScalaUserDefinedFunction private[sql] (
       .setDeterministic(deterministic)
       .setScalarScalaUdf(udf)
 
-    name.foreach(builder.setFunctionName)
+    givenName.foreach(builder.setFunctionName)
     builder.build()
   }
+
+  override def name: String = givenName.getOrElse("UDF")
 }
 
 object ScalaUserDefinedFunction {
@@ -195,7 +199,7 @@ object ScalaUserDefinedFunction {
       serializedUdfPacket = udfPacketBytes,
       inputTypes = inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType),
       outputType = DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType),
-      name = None,
+      givenName = None,
       nullable = true,
       deterministic = true,
       aggregate = aggregate)

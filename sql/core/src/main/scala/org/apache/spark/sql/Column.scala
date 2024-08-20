@@ -160,7 +160,7 @@ class Column(val node: ColumnNode) extends Logging {
   def this(name: String) = this(withOrigin {
     name match {
       case "*" => internal.UnresolvedStar(None)
-      case _ if name.endsWith(".*") => internal.UnresolvedStar(Option(name.dropRight(2)))
+      case _ if name.endsWith(".*") => internal.UnresolvedStar(Option(name))
       case _ => internal.UnresolvedAttribute(name)
     }
   })

@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect
 
 import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering.{SORT_NULLS_FIRST, SORT_NULLS_LAST}
@@ -24,14 +25,24 @@ import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection.{SORT_D
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBoundary, FrameType}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
 import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.internal._
 
+/**
+ * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.
+ */
 object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   override def apply(node: ColumnNode): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     // TODO(SPARK-49273) support Origin in Connect Scala Client.
     node match {
+      case Literal(value, None, _) =>
+        builder.setLiteral(toLiteralProtoBuilder(value))
+
+      case Literal(value, Some(dataType), _) =>
+        builder.setLiteral(toLiteralProtoBuilder(value, dataType))
+
       case UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
         val b = builder.getUnresolvedAttributeBuilder
           .setUnparsedIdentifier(unparsedIdentifier)
@@ -43,6 +54,11 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         unparsedTarget.foreach(b.setUnparsedTarget)
         planId.foreach(b.setPlanId)
 
+      case UnresolvedRegex(regex, planId, _) =>
+        val b = builder.getUnresolvedRegexBuilder
+          .setColName(regex)
+        planId.foreach(b.setPlanId)
+
       case UnresolvedFunction(functionName, arguments, isDistinct, isUserDefinedFunction, _, _) =>
         // TODO(SPARK-49087) use internal namespace.
         builder.getUnresolvedFunctionBuilder
@@ -50,6 +66,11 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
           .addAllArguments(arguments.map(apply).asJava)
+
+      case Alias(child, name, metadata, _) =>
+        val b = builder.getAliasBuilder.setExpr(apply(child))
+        name.foreach(b.addName)
+        metadata.foreach(m => b.setMetadata(m.json))
 
       case Cast(child, dataType, evalMode, _) =>
         val b = builder.getCastBuilder
@@ -63,6 +84,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           }
           b.setEvalMode(convertedMode)
         }
+
+      case SqlExpression(expression, _) =>
+        builder.getExpressionStringBuilder.setExpression(expression)
 
       case s: SortOrder =>
         builder.setSortOrder(convertSortOrder(s))
@@ -106,21 +130,21 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setScalarScalaUdf(udf.udf)
           .setDeterministic(udf.deterministic)
           .addAllArguments(arguments.map(apply).asJava)
-        udf.name.foreach(b.setFunctionName)
+        udf.givenName.foreach(b.setFunctionName)
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
-        branches.foreach {
-          case (condition, value) =>
-            b.addArguments(apply(condition))
-            b.addArguments(apply(value))
+        branches.foreach { case (condition, value) =>
+          b.addArguments(apply(condition))
+          b.addArguments(apply(value))
         }
         otherwise.foreach { value =>
           b.addArguments(apply(value))
         }
 
-      case ProtoColumnNode(e, _) => e
+      case ProtoColumnNode(e, _) =>
+        return e
 
       case node =>
         throw SparkException.internalError("Unsupported ColumnNode: " + node)
@@ -129,7 +153,8 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   }
 
   private def convertSortOrder(s: SortOrder): proto.Expression.SortOrder = {
-    proto.Expression.SortOrder.newBuilder()
+    proto.Expression.SortOrder
+      .newBuilder()
       .setChild(apply(s.child))
       .setDirection(s.sortDirection match {
         case SortOrder.Ascending => SORT_DIRECTION_ASCENDING
@@ -161,6 +186,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
 case class ProtoColumnNode(
     expr: proto.Expression,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override def sql: String = expr.toString
 }
