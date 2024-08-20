@@ -27,6 +27,7 @@ from pyspark.errors import (
     PySparkValueError,
     IllegalArgumentException,
     SparkUpgradeException,
+    PySparkTypeError,
 )
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -1358,13 +1359,13 @@ class UtilsTestsMixin:
         s1 = "names: int"
         s2 = "names: int"
 
-        with self.assertRaises(PySparkAssertionError) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             assertSchemaEqual(s1, s2)
 
         self.check_error(
             exception=pe.exception,
-            errorClass="UNSUPPORTED_DATA_TYPE",
-            messageParameters={"data_type": type(s1)},
+            errorClass="NOT_STRUCT",
+            messageParameters={"arg_name": "actual", "arg_type": "str"},
         )
 
     def test_spark_sql(self):
