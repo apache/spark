@@ -43,13 +43,12 @@ private[sql] object TypedAggUtils {
    * Insert inputs into typed aggregate expressions. For untyped aggregate expressions,
    * the resolving is handled in the analyzer directly.
    */
-  private[sql] def withInputType(
-      expr: Expression,
+  private[sql] def withInputType[T <: Expression](
+      expr: T,
       inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): Expression = {
+      inputAttributes: Seq[Attribute]): T = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
-
-    expr transform {
+    val transformed = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
           deser = unresolvedDeserializer,
@@ -57,6 +56,7 @@ private[sql] object TypedAggUtils {
           schema = inputEncoder.schema
         )
     }
+    transformed.asInstanceOf[T]
   }
 }
 
