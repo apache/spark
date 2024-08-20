@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -36,6 +37,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
+  import df.sparkSession.RichColumn
 
   /**
    * Returns a new `DataFrame` that drops rows containing any null or NaN values.
@@ -398,7 +400,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
         replaceCol(attr, replacementMap)
       } else {
-        Column(attr)
+        column(attr)
       }
     }
     df.select(projections : _*)
@@ -431,7 +433,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         case v: jl.Integer => fillCol[Integer](attr, v)
         case v: jl.Boolean => fillCol[Boolean](attr, v.booleanValue())
         case v: String => fillCol[String](attr, v)
-      }.getOrElse(Column(attr))
+      }.getOrElse(column(attr))
     }
     df.select(projections : _*)
   }
@@ -441,7 +443,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * with `replacement`.
    */
   private def fillCol[T](attr: Attribute, replacement: T): Column = {
-    fillCol(attr.dataType, attr.name, Column(attr), replacement)
+    fillCol(attr.dataType, attr.name, column(attr), replacement)
   }
 
   /**
@@ -468,7 +470,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val branches = replacementMap.flatMap { case (source, target) =>
       Seq(Literal(source), buildExpr(target))
     }.toSeq
-    Column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
+    column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
   }
 
   private def convertToDouble(v: Any): Double = v match {
@@ -502,7 +504,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     // Filtering condition:
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
     val predicate = AtLeastNNonNulls(minNonNulls, cols)
-    df.filter(Column(predicate))
+    df.filter(column(predicate))
   }
 
   private[sql] def fillValue(value: Any, cols: Option[Seq[String]]): DataFrame = {
@@ -538,9 +540,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       }
       // Only fill if the column is part of the cols list.
       if (typeMatches && cols.exists(_.semanticEquals(col))) {
-        fillCol(col.dataType, col.name, Column(col), value)
+        fillCol(col.dataType, col.name, column(col), value)
       } else {
-        Column(col)
+        column(col)
       }
     }
     df.select(projections : _*)

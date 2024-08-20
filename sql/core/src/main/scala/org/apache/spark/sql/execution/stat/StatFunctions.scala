@@ -21,7 +21,6 @@ import java.util.Locale
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ElementAt}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -73,7 +72,7 @@ object StatFunctions extends Logging {
       require(field.dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
         " is not supported.")
-      Column(Cast(Column(colName).expr, DoubleType))
+      Column(colName).cast(DoubleType)
     }
     val emptySummaries = Array.fill(cols.size)(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
@@ -252,7 +251,7 @@ object StatFunctions extends Logging {
         .withColumnRenamed("_1", "summary")
     } else {
       val valueColumns = columnNames.map { columnName =>
-        Column(ElementAt(col(columnName).expr, col("summary").expr)).as(columnName)
+        element_at(col(columnName), col("summary")).as(columnName)
       }
       import org.apache.spark.util.ArrayImplicits._
       ds.select(mapColumns: _*)

@@ -23,10 +23,10 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFPercentileApprox
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
+import org.apache.spark.sql.functions.{lit, percentile_approx => pa}
 import org.apache.spark.sql.hive.execution.TestingTypedCount
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.ExpressionUtils.{column => toCol, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
@@ -117,8 +117,7 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
       output = output
     )
 
-    def typed_count(column: Column): Column =
-      Column(TestingTypedCount(column.expr).toAggregateExpression())
+    def typed_count(column: Column): Column = TestingTypedCount(column)
 
     val df = spark.range(N)
 
@@ -205,10 +204,8 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
-  private def percentile_approx(
-      column: Column, percentage: Double, isDistinct: Boolean = false): Column = {
-    val approxPercentile = new ApproximatePercentile(column.expr, Literal(percentage))
-    Column(approxPercentile.toAggregateExpression(isDistinct))
+  private def percentile_approx(column: Column, percentage: Double): Column = {
+    pa(column, lit(percentage), lit(10000))
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
