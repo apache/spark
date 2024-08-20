@@ -625,6 +625,63 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     comparePlans(expected, parameterizedSql)
   }
 
+  test("SPARK-49017: bind named parameters with IDENTIFIER clause") {
+    withTable("testtab") {
+      // Create table
+      spark.sql("create table testtab (id int, name string)")
+
+      // Insert into table using single param
+      spark.sql("insert into identifier(:tab) values(1, 'test1')", Map("tab" -> "testtab"))
+
+      // Select from table using param
+      checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab")),
+        Seq(Row(1, "test1")))
+
+      // Insert into table using multiple params
+      spark.sql("insert into identifier(:tab) values(2, :name)",
+        Map("tab" -> "testtab", "name" -> "test2"))
+
+      // Select from table using param
+      checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
+
+      // Insert into table using multiple params and idents
+      sql("insert into testtab values(2, 'test3')")
+
+      // Select from table using param
+      checkAnswer(spark.sql("select identifier(:col) from identifier(:tab) where :name == name",
+        Map("tab" -> "testtab", "name" -> "test2", "col" -> "id")), Seq(Row(2)))
+    }
+  }
+
+  test("SPARK-49017: bind positional parameters with IDENTIFIER clause") {
+    withTable("testtab") {
+      // Create table
+      spark.sql("create table testtab (id int, name string)")
+
+      // Insert into table using single param
+      spark.sql("insert into identifier(?) values(1, 'test1')",
+        Array("testtab"))
+
+      // Select from table using param
+      checkAnswer(spark.sql("select * from identifier(?)", Array("testtab")),
+        Seq(Row(1, "test1")))
+
+      // Insert into table using multiple params
+      spark.sql("insert into identifier(?) values(2, ?)",
+        Array("testtab", "test2"))
+
+      // Select from table using param
+      checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
+
+      // Insert into table using multiple params and idents
+      sql("insert into testtab values(2, 'test3')")
+
+      // Select from table using param
+      checkAnswer(spark.sql("select identifier(?) from identifier(?) where ? == name",
+        Array("id", "testtab", "test2")), Seq(Row(2)))
+    }
+  }
+
   test("SPARK-46999: bind parameters for nested IDENTIFIER clause") {
     val query = sql(
       """
