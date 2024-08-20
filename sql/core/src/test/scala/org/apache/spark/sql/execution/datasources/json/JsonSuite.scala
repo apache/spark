@@ -2207,7 +2207,7 @@ abstract class JsonSuite
         exception = intercept[AnalysisException] {
           spark.read.schema(schema).json(path).select("_corrupt_record").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1285",
+        errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
         parameters = Map.empty
       )
 
@@ -3760,7 +3760,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 29)
+    assert(JSONOptions.getAllOptions.size == 30)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3789,6 +3789,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("timeZone"))
     assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
     assert(JSONOptions.isValidOption("singleVariantColumn"))
+    assert(JSONOptions.isValidOption("useUnsafeRow"))
     assert(JSONOptions.isValidOption("encoding"))
     assert(JSONOptions.isValidOption("charset"))
     // Please add validation on any new Json options with alternative here

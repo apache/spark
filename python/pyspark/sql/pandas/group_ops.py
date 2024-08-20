@@ -238,7 +238,7 @@ class PandasGroupedOpsMixin:
         udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc)
         return DataFrame(jdf, self.session)
 
     def applyInPandasWithState(
@@ -356,7 +356,7 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.applyInPandasWithState(
-            udf_column._jc.expr(),
+            udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             self.session._jsparkSession.parseDataType(stateStructType.json()),
             outputMode,
@@ -523,7 +523,7 @@ class PandasGroupedOpsMixin:
         udf_column = udf(*[df[col] for col in df.columns])
 
         jdf = self._jgd.transformWithStateInPandas(
-            udf_column._jc.expr(),
+            udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
@@ -653,7 +653,7 @@ class PandasGroupedOpsMixin:
         )  # type: ignore[call-overload]
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc.expr())
+        jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc)
         return DataFrame(jdf, self.session)
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
@@ -793,7 +793,7 @@ class PandasCogroupedOps:
 
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
+        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc)
         return DataFrame(jdf, self._gd1.session)
 
     def applyInArrow(
@@ -891,7 +891,7 @@ class PandasCogroupedOps:
 
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInArrow(self._gd2._jgd, udf_column._jc.expr())
+        jdf = self._gd1._jgd.flatMapCoGroupsInArrow(self._gd2._jgd, udf_column._jc)
         return DataFrame(jdf, self._gd1.session)
 
     @staticmethod

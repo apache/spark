@@ -42,6 +42,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val df: DataFrame = ds.toDF()
 
   private val sparkSession = ds.sparkSession
+  import sparkSession.expression
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
@@ -89,7 +90,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
     def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
 
-    val asTransforms = (column +: columns).map(_.expr).map {
+    val asTransforms = (column +: columns).map(expression).map {
       case PartitionTransform.YEARS(Seq(attr: Attribute)) =>
         LogicalExpressions.years(ref(attr.name))
       case PartitionTransform.MONTHS(Seq(attr: Attribute)) =>
@@ -189,7 +190,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   def overwrite(condition: Column): Unit = {
     val overwrite = OverwriteByExpression.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, condition.expr, options.toMap)
+      logicalPlan, expression(condition), options.toMap)
     runCommand(overwrite)
   }
 

@@ -71,20 +71,34 @@ class AstBuilder extends DataTypeAstBuilder
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
     val exprCtx = ctx.expression
     if (exprCtx != null) {
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
+        (ident, _) => builder(ident))
     } else {
       builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
     }
   }
 
-  protected def withFuncIdentClause(
-      ctx: FunctionNameContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
+  protected def withIdentClause(
+      ctx: IdentifierReferenceContext,
+      otherPlans: Seq[LogicalPlan],
+      builder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan): LogicalPlan = {
     val exprCtx = ctx.expression
     if (exprCtx != null) {
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, otherPlans, builder)
     } else {
-      builder.apply(getFunctionMultiparts(ctx))
+      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier), otherPlans)
+    }
+  }
+
+  protected def withFuncIdentClause(
+      ctx: FunctionNameContext,
+      otherPlans: Seq[LogicalPlan],
+      builder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan): LogicalPlan = {
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, otherPlans, builder)
+    } else {
+      builder.apply(getFunctionMultiparts(ctx), otherPlans)
     }
   }
 
@@ -453,12 +467,12 @@ class AstBuilder extends DataTypeAstBuilder
       case table: InsertIntoTableContext =>
         val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
         = visitInsertIntoTable(table)
-        withIdentClause(relationCtx, ident => {
+        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
           val insertIntoStatement = InsertIntoStatement(
             createUnresolvedRelation(relationCtx, ident, options, Seq(TableWritePrivilege.INSERT)),
             partition,
             cols,
-            query,
+            otherPlans.head,
             overwrite = false,
             ifPartitionNotExists,
             byName)
@@ -471,24 +485,24 @@ class AstBuilder extends DataTypeAstBuilder
       case table: InsertOverwriteTableContext =>
         val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
         = visitInsertOverwriteTable(table)
-        withIdentClause(relationCtx, ident => {
+        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
             createUnresolvedRelation(relationCtx, ident, options,
               Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
             partition,
             cols,
-            query,
+            otherPlans.head,
             overwrite = true,
             ifPartitionNotExists,
             byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
-        withIdentClause(ctx.identifierReference, ident => {
+        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
           OverwriteByExpression.byPosition(
             createUnresolvedRelation(ctx.identifierReference, ident, options,
               Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
-            query,
+            otherPlans.head,
             expression(ctx.whereClause().booleanExpression()))
         })
       case dir: InsertOverwriteDirContext =>
@@ -1849,7 +1863,8 @@ class AstBuilder extends DataTypeAstBuilder
 
     withFuncIdentClause(
       func.functionName,
-      ident => {
+      Nil,
+      (ident, _) => {
         if (ident.length > 1) {
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
         }
@@ -2593,7 +2608,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       // It's a function call
       val funcCtx = ctx.functionName
-      val func = withFuncIdentClause(
+      val func: Expression = withFuncIdentClause(
         funcCtx,
         arguments ++ filter ++ order.toSeq,
         (ident, otherExprs) => {

@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import scala.util.Random
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -221,12 +223,13 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df)
 
       // Case 4: InSet
-      val inSetExpr = expressions.InSet($"j".expr,
+      val inSetExpr = expressions.InSet(
+        UnresolvedAttribute("j"),
         Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
-        filterCondition = Column(inSetExpr),
+        filterCondition = column(inSetExpr),
         df)
     }
   }
