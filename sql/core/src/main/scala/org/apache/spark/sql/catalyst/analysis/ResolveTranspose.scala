@@ -45,37 +45,41 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       fullCollectedRows: Array[InternalRow],
       nonIndexColumnNames: Seq[String],
       nonIndexColumnDataTypes: Seq[DataType]): Array[Array[Any]] = {
-    // Construct the original matrix
-    val originalMatrixNumCols = fullCollectedRows.head.numFields - 1
-    val originalMatrixNumRows = fullCollectedRows.length
+    val numTransposedRows = fullCollectedRows.head.numFields - 1
+    val numTransposedCols = fullCollectedRows.length + 1
+    val finalMatrix = Array.ofDim[Any](numTransposedRows, numTransposedCols)
 
-    val originalMatrix = Array.ofDim[Any](originalMatrixNumRows, originalMatrixNumCols)
-    for (i <- 0 until originalMatrixNumRows) {
-      val row = fullCollectedRows(i)
-      for (j <- 0 until originalMatrixNumCols) {
-        originalMatrix(i)(j) = row.get(j + 1, nonIndexColumnDataTypes(j))
-      }
-    }
+    // Example of the original DataFrame:
+    // +---+-----+-----+
+    // | id|col1 |col2 |
+    // +---+-----+-----+
+    // |  1|  10 |  20 |
+    // |  2|  30 |  40 |
+    // +---+-----+-----+
+    //
+    // After transposition, the finalMatrix will look like:
+    // [
+    //   ["col1", 10, 30],  // Transposed row for col1
+    //   ["col2", 20, 40]   // Transposed row for col2
+    // ]
 
-    // Transpose the original matrix
-    val transposedMatrix = Array.ofDim[Any](originalMatrixNumCols, originalMatrixNumRows)
-    for (i <- 0 until originalMatrixNumRows) {
-      for (j <- 0 until originalMatrixNumCols) {
-        transposedMatrix(j)(i) = originalMatrix(i)(j)
-      }
-    }
-
-    // Insert nonIndexColumnNames as first "column"
-    val finalMatrix = Array.ofDim[Any](originalMatrixNumCols, originalMatrixNumRows + 1)
-    for (i <- 0 until originalMatrixNumCols) {
+    for (i <- 0 until numTransposedRows) {
+      // Insert non-index column name as the first element in each transposed row
       finalMatrix(i)(0) = UTF8String.fromString(nonIndexColumnNames(i))
-    }
-    for (i <- 0 until originalMatrixNumCols) {
-      for (j <- 1 until originalMatrixNumRows + 1) {
-        finalMatrix(i)(j) = transposedMatrix(i)(j - 1)
+
+      for (j <- 1 until numTransposedCols) {
+        // Insert the transposed data
+
+        // Example: If j = 2, then row = fullCollectedRows(1)
+        // This corresponds to the second row of the original DataFrame: InternalRow(2, 30, 40)
+        val row = fullCollectedRows(j - 1)
+
+        // Example: If i = 0 (for "col1"), and j = 2,
+        // then finalMatrix(0)(2) corresponds to row.get(1, nonIndexColumnDataTypes(0)),
+        // which accesses the value 30 from InternalRow(2, 30, 40)
+        finalMatrix(i)(j) = row.get(i + 1, nonIndexColumnDataTypes(i))
       }
     }
-
     finalMatrix
   }
 
