@@ -436,10 +436,10 @@ When there exists a log collection system, you can expose it at Spark Driver `Ex
 spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
 ```
 
-You can add custom variables to this url template, populated with the values of existing executor environment variables like
+You can add additional custom variables to this url template, populated with the values of existing executor environment variables like
 
 ```
-spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXECUTOR_ENV_VAR)'
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXISTING_EXECUTOR_ENV_VAR)'
 spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
 ```
 
