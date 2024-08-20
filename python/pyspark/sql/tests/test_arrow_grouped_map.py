@@ -255,6 +255,19 @@ class GroupedMapInArrowTestsMixin:
                 self.assertEqual(r.a, "hi")
                 self.assertEqual(r.b, 1)
 
+    def test_apply_in_arrow_iterator(self):
+        def func(group):
+            assert isinstance(group, pa.Table)
+            assert group.schema.names == ["id", "value"]
+            yield from group.to_batches()
+
+        df = self.spark.range(10).withColumn("value", col("id") * 10)
+        grouped_df = df.groupBy((col("id") / 4).cast("int"))
+        expected = df.collect()
+
+        actual = grouped_df.applyInArrow(func, "id long, value long").collect()
+        self.assertEqual(actual, expected)
+
 
 class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
