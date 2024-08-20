@@ -57,11 +57,11 @@ private[sql] class RocksDBStateStoreProvider
     // Test-visible methods to fetch column family mapping for this State Store version
     // Because column families are only enabled for RocksDBStateStore, these methods
     // are no-ops everywhere else.
-    override private[sql] def getColumnFamilyMapping: Map[String, Short] = {
+    private[sql] def getColumnFamilyMapping: Map[String, Short] = {
       rocksDB.getColumnFamilyMapping.toMap
     }
 
-    override private[sql] def getColumnFamilyId(cfName: String): Short = {
+    private[sql] def getColumnFamilyId(cfName: String): Short = {
       rocksDB.getColumnFamilyId(cfName)
     }
 
@@ -335,6 +335,11 @@ private[sql] class RocksDBStateStoreProvider
       keyValueEncoderMap.remove(colFamilyName)
       result
     }
+  }
+
+  // Test-visible method to fetch the internal RocksDBStateStore class
+  private[sql] def getRocksDBStateStore(version: Long): RocksDBStateStore = {
+    getStore(version).asInstanceOf[RocksDBStateStore]
   }
 
   override def init(

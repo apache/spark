@@ -1101,23 +1101,24 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   test("verify that column family id is assigned correctly after removal") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
-      var store = provider.getStore(0)
+      var store = provider.getRocksDBStateStore(0)
       val colFamily1: String = "abc"
       val colFamily2: String = "def"
       val colFamily3: String = "ghi"
       val colFamily4: String = "jkl"
       val colFamily5: String = "mno"
+
       store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.commit()
 
-      store = provider.getStore(1)
+      store = provider.getRocksDBStateStore(1)
       store.removeColFamilyIfExists(colFamily2)
       store.commit()
 
-      store = provider.getStore(2)
+      store = provider.getRocksDBStateStore(2)
       store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       assert(store.getColumnFamilyId(colFamily3) == 3)
@@ -1125,13 +1126,13 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       store.removeColFamilyIfExists(colFamily3)
       store.commit()
 
-      store = provider.getStore(1)
+      store = provider.getRocksDBStateStore(1)
       // this should return the old id, because we didn't remove this colFamily for version 1
       store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       assert(store.getColumnFamilyId(colFamily1) == 1)
 
-      store = provider.getStore(3)
+      store = provider.getRocksDBStateStore(3)
       store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       assert(store.getColumnFamilyId(colFamily4) == 4)
