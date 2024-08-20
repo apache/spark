@@ -53,6 +53,10 @@ class CogroupedMapInArrowTestsMixin:
 
     @staticmethod
     def apply_in_arrow_func(left, right):
+        return pa.Table.from_batches(CogroupedMapInArrowTests.apply_in_arrow_iterator_func(left, right))
+    
+    @staticmethod
+    def apply_in_arrow_iterator_func(left, right):
         assert isinstance(left, pa.Table)
         assert isinstance(right, pa.Table)
         assert left.schema.names == ["id", "v"]
@@ -65,7 +69,7 @@ class CogroupedMapInArrowTestsMixin:
             "left": [min(left_ids), max(left_ids), len(left_ids), sum(left_ids)],
             "right": [min(right_ids), max(right_ids), len(right_ids), sum(right_ids)],
         }
-        return pa.Table.from_pydict(result)
+        yield pa.RecordBatch.from_pydict(result)
 
     @staticmethod
     def apply_in_arrow_with_key_func(key_column):
@@ -298,6 +302,20 @@ class CogroupedMapInArrowTestsMixin:
             "|        2|           3|         1|            2|\n"
             "+---------+------------+----------+-------------+\n",
         )
+
+    def test_apply_in_arrow_iterator(self):
+        schema = "metric string, left long, right long"
+
+        # compare with result of applyInPandas
+        expected = self.cogrouped.applyInPandas(
+            CogroupedMapInArrowTestsMixin.apply_in_pandas_with_key_func("id"), schema
+        )
+
+        # apply in arrow without key
+        actual = self.cogrouped.applyInArrow(
+            CogroupedMapInArrowTestsMixin.apply_in_arrow_iterator_func, schema
+        ).collect()
+        self.assertEqual(actual, expected.collect())
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
