@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
@@ -144,9 +144,10 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           )()
         }
 
-
-        Transpose(
-          (keyAttr +: valueAttrs).toIndexedSeq, transposedInternalRows.toIndexedSeq)
+        val hasNonIndexColumns = nonIndexColumnsAttr.nonEmpty
+        val transposeOutput = (keyAttr +: valueAttrs).toIndexedSeq
+        val transposeData = transposedInternalRows.toIndexedSeq
+        Transpose(transposeOutput, transposeData, hasNonIndexColumns)
       }
   }
 }

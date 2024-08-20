@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -1487,11 +1487,12 @@ case class Pivot(
  */
 case class Transpose(
     output: Seq[Attribute],
-    data: Seq[InternalRow] = Nil
+    data: Seq[InternalRow] = Nil,
+    hasNonIndexColumns: Boolean = true
 ) extends LeafNode {
 
   override lazy val resolved: Boolean = {
-    output.nonEmpty && data.nonEmpty
+    output.nonEmpty && (!hasNonIndexColumns || data.nonEmpty)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
