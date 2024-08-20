@@ -271,7 +271,7 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 {% highlight scala %}
 @ import org.apache.spark.sql.SparkSession
-@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").build()
+@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").getOrCreate()
 {% endhighlight %}
 
 </div>
@@ -344,7 +344,7 @@ your Spark server when you create a Spark session, as in this example:
 
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
-val spark = SparkSession.builder().remote("sc://localhost").build()
+val spark = SparkSession.builder().remote("sc://localhost").getOrCreate()
 {% endhighlight %}
 
 

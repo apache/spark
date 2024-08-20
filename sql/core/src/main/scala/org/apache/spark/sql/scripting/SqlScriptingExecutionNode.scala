@@ -81,7 +81,12 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       df.schema.fields match {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
-            case Array(row) => row.getBoolean(0)
+            case Array(row) =>
+              if (row.isNullAt(0)) {
+                throw SqlScriptingErrors.booleanStatementWithEmptyRow(
+                  statement.origin, statement.getText)
+              }
+              row.getBoolean(0)
             case _ =>
               throw SparkException.internalError(
                 s"Boolean statement ${statement.getText} is invalid. It returns more than one row.")
@@ -225,7 +230,6 @@ class IfElseStatementExec(
 
       override def next(): CompoundStatementExec = state match {
         case IfElseState.Condition =>
-          assert(curr.get.isInstanceOf[SingleStatementExec])
           val condition = curr.get.asInstanceOf[SingleStatementExec]
           if (evaluateBooleanCondition(session, condition)) {
             state = IfElseState.Body
@@ -293,7 +297,6 @@ class WhileStatementExec(
 
       override def next(): CompoundStatementExec = state match {
           case WhileState.Condition =>
-            assert(curr.get.isInstanceOf[SingleStatementExec])
             val condition = curr.get.asInstanceOf[SingleStatementExec]
             if (evaluateBooleanCondition(session, condition)) {
               state = WhileState.Body

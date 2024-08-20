@@ -24,13 +24,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.ScalaReflection.encoderFor
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{SQLConf, ToScalaUDF}
 import org.apache.spark.sql.types._
@@ -88,10 +84,6 @@ import org.apache.spark.util.Utils
 object functions {
 // scalastyle:on
 
-  private def withExpr(expr: => Expression): Column = withOrigin {
-    Column(expr)
-  }
-
   /**
    * Returns a [[Column]] based on the given column name.
    *
@@ -128,7 +120,7 @@ object functions {
         // method, `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence,
         // we can just manually call `Literal.apply` to skip the expensive `ScalaReflection` code.
         // This is significantly better when there are many threads calling `lit` concurrently.
-      Column(Literal(literal))
+      Column(internal.Literal(literal))
     }
   }
 
@@ -140,7 +132,7 @@ object functions {
    * @group normal_funcs
    * @since 2.2.0
    */
-  def typedLit[T : TypeTag](literal: T): Column = withOrigin {
+  def typedLit[T : TypeTag](literal: T): Column = {
     typedlit(literal)
   }
 
@@ -159,11 +151,13 @@ object functions {
    * @group normal_funcs
    * @since 3.2.0
    */
-  def typedlit[T : TypeTag](literal: T): Column = withOrigin {
+  def typedlit[T : TypeTag](literal: T): Column = {
     literal match {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
-      case _ => Column(Literal.create(literal))
+      case _ =>
+        val dataType = ScalaReflection.schemaFor[T].dataType
+        Column(internal.Literal(literal, Option(dataType)))
     }
   }
 
@@ -415,14 +409,8 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(e: Column): Column = {
-    val withoutStar = e.expr match {
-      // Turn count(*) into count(1)
-      case _: Star => Column(Literal(1))
-      case _ => e
-    }
-    Column.fn("count", withoutStar)
-  }
+  def count(e: Column): Column =
+    Column.fn("count", e)
 
   /**
    * Aggregate function: returns the number of items in a group.
@@ -431,7 +419,7 @@ object functions {
    * @since 1.3.0
    */
   def count(columnName: String): TypedColumn[Any, Long] =
-    count(Column(columnName)).as(AgnosticEncoders.PrimitiveLongEncoder)
+    count(Column(columnName)).as(PrimitiveLongEncoder)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -1713,10 +1701,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[T](df: Dataset[T]): Dataset[T] = {
-    Dataset[T](df.sparkSession,
-      ResolvedHint(df.logicalPlan, HintInfo(strategy = Some(BROADCAST))))(df.exprEnc)
-  }
+  def broadcast[T](df: Dataset[T]): Dataset[T] = df.hint("broadcast")
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
@@ -2012,9 +1997,8 @@ object functions {
    * @group conditional_funcs
    * @since 1.4.0
    */
-  def when(condition: Column, value: Any): Column = withExpr {
-    CaseWhen(Seq((condition.expr, lit(value).expr)))
-  }
+  def when(condition: Column, value: Any): Column =
+    Column(internal.CaseWhenOtherwise(Seq(condition.node -> lit(value).node)))
 
   /**
    * Computes bitwise NOT (~) of a number.
@@ -2072,12 +2056,7 @@ object functions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = withExpr {
-    val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
-      new SparkSqlParser()
-    }
-    parser.parseExpression(expr)
-  }
+  def expr(expr: String): Column = Column(internal.SqlExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
@@ -6065,31 +6044,26 @@ object functions {
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
 
-  private def createLambda(f: Column => Column) = withOrigin {
-    Column {
-      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-      val function = f(Column(x)).expr
-      LambdaFunction(function, Seq(x))
-    }
+
+  private def createLambda(f: Column => Column) = {
+    val x = internal.UnresolvedNamedLambdaVariable("x")
+    val function = f(Column(x)).node
+    Column(internal.LambdaFunction(function, Seq(x)))
   }
 
-  private def createLambda(f: (Column, Column) => Column) = withOrigin {
-    Column {
-      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-      val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
-      val function = f(Column(x), Column(y)).expr
-      LambdaFunction(function, Seq(x, y))
-    }
+  private def createLambda(f: (Column, Column) => Column) = {
+    val x = internal.UnresolvedNamedLambdaVariable("x")
+    val y = internal.UnresolvedNamedLambdaVariable("y")
+    val function = f(Column(x), Column(y)).node
+    Column(internal.LambdaFunction(function, Seq(x, y)))
   }
 
-  private def createLambda(f: (Column, Column, Column) => Column) = withOrigin {
-    Column {
-      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-      val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
-      val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
-      val function = f(Column(x), Column(y), Column(z)).expr
-      LambdaFunction(function, Seq(x, y, z))
-    }
+  private def createLambda(f: (Column, Column, Column) => Column) = {
+    val x = internal.UnresolvedNamedLambdaVariable("x")
+    val y = internal.UnresolvedNamedLambdaVariable("y")
+    val z = internal.UnresolvedNamedLambdaVariable("z")
+    val function = f(Column(x), Column(y), Column(z)).node
+    Column(internal.LambdaFunction(function, Seq(x, y, z)))
   }
 
   /**
@@ -7966,7 +7940,7 @@ object functions {
    * @note The input encoder is inferred from the input type IN.
    */
   def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
-    udaf(agg, encoderFor[IN])
+    udaf(agg, ScalaReflection.encoderFor[IN])
   }
 
   /**
@@ -8332,7 +8306,7 @@ object functions {
    */
   @scala.annotation.varargs
   @deprecated("Use call_udf")
-  def callUDF(udfName: String, cols: Column*): Column = call_udf(udfName, cols: _*)
+  def callUDF(udfName: String, cols: Column*): Column = call_function(udfName, cols: _*)
 
   /**
    * Call an user-defined function.
@@ -8350,7 +8324,7 @@ object functions {
    * @since 3.2.0
    */
   @scala.annotation.varargs
-  def call_udf(udfName: String, cols: Column*): Column = Column.fn(udfName, cols: _*)
+  def call_udf(udfName: String, cols: Column*): Column = call_function(udfName, cols: _*)
 
   /**
    * Call a SQL function.
@@ -8363,15 +8337,7 @@ object functions {
    */
   @scala.annotation.varargs
   def call_function(funcName: String, cols: Column*): Column = {
-    val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
-      new SparkSqlParser()
-    }
-    val nameParts = parser.parseMultipartIdentifier(funcName)
-    call_function(nameParts, cols: _*)
-  }
-
-  private def call_function(nameParts: Seq[String], cols: Column*): Column = withExpr {
-    UnresolvedFunction(nameParts, cols.map(_.expr), false)
+    Column(internal.UnresolvedFunction(funcName, cols.map(_.node), isUserDefinedFunction = true))
   }
 
   /**
