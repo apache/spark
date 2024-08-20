@@ -19,7 +19,7 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Row}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 import org.apache.spark.sql.types._
 
 /**
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 @Stable
 @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
   " via the functions.udaf(agg) method.", "3.0.0")
-abstract class UserDefinedAggregateFunction extends Serializable {
+abstract class UserDefinedAggregateFunction extends Serializable with UserDefinedFunctionLike {
 
   /**
    * A `StructType` represents data types of input arguments of this aggregate function.
@@ -130,8 +130,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    val aggregateExpression = ScalaUDAF(exprs.map(_.expr), this).toAggregateExpression()
-    Column(aggregateExpression)
+    Column(InvokeInlineUserDefinedFunction(this, exprs.map(_.node)))
   }
 
   /**
@@ -142,9 +141,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    */
   @scala.annotation.varargs
   def distinct(exprs: Column*): Column = {
-    val aggregateExpression =
-      ScalaUDAF(exprs.map(_.expr), this).toAggregateExpression(isDistinct = true)
-    Column(aggregateExpression)
+    Column(InvokeInlineUserDefinedFunction(this, exprs.map(_.node), isDistinct = true))
   }
 }
 
