@@ -741,7 +741,7 @@ class SparkSession private[sql] (
    * Often, a unit of execution in an application consists of multiple Spark executions.
    * Application programmers can use this method to group all those jobs together and give a group
    * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
-   * running running executions with this tag. For example:
+   * running executions with this tag. For example:
    * {{{
    * // In the main thread:
    * spark.addTag("myjobs")

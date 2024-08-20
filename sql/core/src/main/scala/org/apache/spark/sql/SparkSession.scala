@@ -22,6 +22,7 @@ import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -790,6 +791,108 @@ class SparkSession private(
 
       case _ =>
         throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
+    }
+  }
+
+
+  /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def addTag(tag: String): Unit = sparkContext.addJobTag(tag)
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def removeTag(tag: String): Unit = sparkContext.removeJobTag(tag)
+
+  /**
+   * Get the tags that are currently set to be assigned to all the operations started by this
+   * thread.
+   *
+   * @since 4.0.0
+   */
+  def getTags(): Set[String] = sparkContext.getJobTags()
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 4.0.0
+   */
+  def clearTags(): Unit = sparkContext.clearJobTags()
+
+  /**
+   * Interrupt all operations of this session that are currently running.
+   *
+   * @return
+   *   sequence of Job IDs of interrupted operations.
+   *
+   * @since 4.0.0
+   */
+  def interruptAll(): Seq[String] = {
+    val jobIds = mutable.Set[Int]()
+    sparkContext.cancelAllJobs(jobIdCallback = (jobId: Int) => jobIds.add(jobId))
+    jobIds.toSeq.map(_.toString)
+  }
+
+  /**
+   * Interrupt all operations of this session with the given operation tag.
+   *
+   * @return
+   *   sequence of Job IDs of interrupted operations.
+   *
+   * @since 4.0.0
+   */
+  def interruptTag(tag: String): Seq[String] = {
+    val jobIds = mutable.Set[Int]()
+    sparkContext.cancelJobsWithTag(
+      tag,
+      "Interrupted by user",
+      jobIdCallback = (jobId: Int) => jobIds.add(jobId))
+    jobIds.toSeq.map(_.toString)
+  }
+
+  /**
+   * Interrupt an operation of this session with the given Job ID.
+   *
+   * @return
+   *   sequence of Job IDs of interrupted operations.
+   *
+   * @since 4.0.0
+   */
+  def interruptOperation(jobId: String): Seq[String] = {
+    scala.util.Try(jobId.toInt).toOption match {
+      case Some(id) =>
+        sparkContext.cancelJob(id, "Interrupted by user")
+        Seq(jobId)
+      case None =>
+        throw new IllegalArgumentException("jobId must be a number.")
     }
   }
 
