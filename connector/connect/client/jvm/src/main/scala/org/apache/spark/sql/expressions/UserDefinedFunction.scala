@@ -33,66 +33,6 @@ import org.apache.spark.sql.internal.UserDefinedFunctionLike
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
 
-/**
- * A user-defined function. To create one, use the `udf` functions in `functions`.
- *
- * As an example:
- * {{{
- *   // Define a UDF that returns true or false based on some numeric score.
- *   val predict = udf((score: Double) => score > 0.5)
- *
- *   // Projects a column that adds a prediction column based on the score column.
- *   df.select( predict(df("score")) )
- * }}}
- *
- * @since 3.4.0
- */
-sealed abstract class UserDefinedFunction {
-
-  /**
-   * Returns true when the UDF can return a nullable value.
-   *
-   * @since 3.4.0
-   */
-  def nullable: Boolean
-
-  /**
-   * Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the
-   * same input.
-   *
-   * @since 3.4.0
-   */
-  def deterministic: Boolean
-
-  /**
-   * Returns an expression that invokes the UDF, using the given arguments.
-   *
-   * @since 3.4.0
-   */
-  @scala.annotation.varargs
-  def apply(exprs: Column*): Column
-
-  /**
-   * Updates UserDefinedFunction with a given name.
-   *
-   * @since 3.4.0
-   */
-  def withName(name: String): UserDefinedFunction
-
-  /**
-   * Updates UserDefinedFunction to non-nullable.
-   *
-   * @since 3.4.0
-   */
-  def asNonNullable(): UserDefinedFunction
-
-  /**
-   * Updates UserDefinedFunction to nondeterministic.
-   *
-   * @since 3.4.0
-   */
-  def asNondeterministic(): UserDefinedFunction
-}
 
 /**
  * Holder class for a scala user-defined function and it's input/output encoder(s).
@@ -120,17 +60,6 @@ case class ScalaUserDefinedFunction private[sql] (
       .setAggregate(aggregate)
 
     scalaUdfBuilder.build()
-  }
-
-  @scala.annotation.varargs
-  override def apply(exprs: Column*): Column = Column { builder =>
-    val udfBuilder = builder.getCommonInlineUserDefinedFunctionBuilder
-    udfBuilder
-      .setDeterministic(deterministic)
-      .setScalarScalaUdf(udf)
-      .addAllArguments(exprs.map(_.expr).asJava)
-
-    givenName.foreach(udfBuilder.setFunctionName)
   }
 
   override def withName(name: String): ScalaUserDefinedFunction = copy(givenName = Option(name))
