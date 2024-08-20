@@ -41,7 +41,7 @@ object functions {
   def from_avro(
       data: Column,
       jsonFormatSchema: String): Column = {
-    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, Map.empty))
+    Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, Map.empty))
   }
 
   /**
@@ -62,7 +62,7 @@ object functions {
       data: Column,
       jsonFormatSchema: String,
       options: java.util.Map[String, String]): Column = {
-    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
+    Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
   }
 
   /**
@@ -74,7 +74,7 @@ object functions {
    */
   @Experimental
   def to_avro(data: Column): Column = {
-    new Column(CatalystDataToAvro(data.expr, None))
+    Column(CatalystDataToAvro(data.expr, None))
   }
 
   /**
@@ -87,6 +87,6 @@ object functions {
    */
   @Experimental
   def to_avro(data: Column, jsonFormatSchema: String): Column = {
-    new Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema)))
+    Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema)))
   }
 }

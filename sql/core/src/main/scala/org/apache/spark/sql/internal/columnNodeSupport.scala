@@ -16,10 +16,11 @@
  */
 package org.apache.spark.sql.internal
 
+import UserDefinedFunctionUtils.toScalaUDF
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -162,23 +163,16 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       case InvokeInlineUserDefinedFunction(
           a: UserDefinedAggregator[Any @unchecked, Any @unchecked, Any @unchecked],
           arguments, isDistinct, _) =>
-        ScalaAggregator(
-          agg = a.aggregator,
-          children = arguments.map(apply),
-          inputEncoder = encoderFor(a.inputEncoder),
-          bufferEncoder = encoderFor(a.aggregator.bufferEncoder),
-          aggregatorName = a.givenName,
-          nullable = a.nullable,
-          isDeterministic = a.deterministic).toAggregateExpression(isDistinct)
+        ScalaAggregator(a, arguments.map(apply)).toAggregateExpression(isDistinct)
 
       case InvokeInlineUserDefinedFunction(
           a: UserDefinedAggregateFunction, arguments, isDistinct, _) =>
         ScalaUDAF(udaf = a, children = arguments.map(apply)).toAggregateExpression(isDistinct)
 
       case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
-        udf.createScalaUDF(arguments.map(apply))
+        toScalaUDF(udf, arguments.map(apply))
 
-      case Wrapper(expression, _) =>
+      case ExpressionColumnNode(expression, _) =>
         expression
 
       case node =>
@@ -240,10 +234,10 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class Wrapper(
+private[sql] case class ExpressionColumnNode(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
-  override def normalize(): Wrapper = {
+  override def normalize(): ExpressionColumnNode = {
     val updated = expression.transform {
       case a: AttributeReference =>
         DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)

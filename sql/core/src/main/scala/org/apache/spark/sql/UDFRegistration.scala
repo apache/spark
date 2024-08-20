@@ -30,10 +30,11 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.ToScalaUDF
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -107,51 +108,52 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    udf.withName(name) match {
-      case udaf: UserDefinedAggregator[_, _, _] =>
-        def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
-        functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
-        udaf
-      case other =>
-        def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
-        functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
-        other
-    }
+    register(name, udf, "scala_udf", validateParameterCount = false)
   }
 
   private def registerScalaUDF(
       name: String,
-      f: AnyRef,
+      func: AnyRef,
       returnTypeTag: TypeTag[_],
       inputTypeTags: TypeTag[_]*): UserDefinedFunction = {
-    register(name, SparkUserDefinedFunction(f, returnTypeTag, inputTypeTags: _*), "scala_udf")
+    val udf = SparkUserDefinedFunction(func, returnTypeTag, inputTypeTags: _*)
+    register(name, udf, "scala_udf", validateParameterCount = true)
   }
 
   private def registerJavaUDF(
       name: String,
-      f: AnyRef,
-      returnType: DataType,
+      func: AnyRef,
+      returnDataType: DataType,
       cardinality: Int): UserDefinedFunction = {
-    val validatedReturnType = CharVarcharUtils.failIfHasCharVarchar(returnType)
-    register(name, SparkUserDefinedFunction(f, validatedReturnType, cardinality), "java_udf")
+    val validatedReturnDataType = CharVarcharUtils.failIfHasCharVarchar(returnDataType)
+    val udf = SparkUserDefinedFunction(func, validatedReturnDataType, cardinality)
+    register(name, udf, "java_udf", validateParameterCount = true)
   }
 
   private def register(
       name: String,
-      udf: SparkUserDefinedFunction,
-      source: String): UserDefinedFunction = {
+      udf: UserDefinedFunction,
+      source: String,
+      validateParameterCount: Boolean): UserDefinedFunction = {
     val named = udf.withName(name)
-    val expectedParameterCount = named.inputEncoders.size
-    val builder: Seq[Expression] => Expression = { children =>
-      val actualParameterCount = children.length
-      if (expectedParameterCount == actualParameterCount) {
-        named.createScalaUDF(children)
-      } else {
-        throw QueryCompilationErrors.wrongNumArgsError(
-          name,
-          expectedParameterCount.toString,
-          actualParameterCount)
-      }
+    val builder: Seq[Expression] => Expression = named match {
+      case udaf: UserDefinedAggregator[_, _, _] =>
+        ScalaAggregator(udaf, _)
+      case udf: SparkUserDefinedFunction if validateParameterCount =>
+        val expectedParameterCount = udf.inputEncoders.size
+        children => {
+          val actualParameterCount = children.length
+          if (expectedParameterCount == actualParameterCount) {
+            toScalaUDF(udf, children)
+          } else {
+            throw QueryCompilationErrors.wrongNumArgsError(
+              name,
+              expectedParameterCount.toString,
+              actualParameterCount)
+          }
+        }
+      case udf: SparkUserDefinedFunction =>
+        toScalaUDF(udf, _)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, source)
     named
@@ -458,12 +460,12 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
               throw QueryCompilationErrors.udfClassWithTooManyTypeArgumentsError(n)
           }
         } catch {
-          case e @ (_: InstantiationException | _: IllegalArgumentException) =>
+          case _: InstantiationException | _: IllegalArgumentException =>
             throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
         }
       }
     } catch {
-      case e: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
+      case _: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
     }
 
   }
@@ -483,8 +485,8 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val udaf = clazz.getConstructor().newInstance().asInstanceOf[UserDefinedAggregateFunction]
       register(name, udaf)
     } catch {
-      case e: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
-      case e @ (_: InstantiationException | _: IllegalArgumentException) =>
+      case _: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
+      case _: InstantiationException | _: IllegalArgumentException =>
         throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
     }
   }

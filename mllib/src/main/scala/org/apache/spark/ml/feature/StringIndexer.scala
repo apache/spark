@@ -28,7 +28,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
-import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -195,7 +194,7 @@ class StringIndexer @Since("1.4.0") (
       } else {
         // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
         // we replace NaNs with null in advance.
-        new Column(If(col.isNaN.expr, Literal(null), col.expr)).cast(StringType)
+        when(!isnan(col), col).cast(StringType)
       }
     }
   }

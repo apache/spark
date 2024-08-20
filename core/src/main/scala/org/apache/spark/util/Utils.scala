@@ -638,7 +638,7 @@ private[spark] object Utils
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
-        val uc = new URL(url).openConnection()
+        val uc = new URI(url).toURL.openConnection()
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)

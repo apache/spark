@@ -138,7 +138,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.1</parquet.version>
-    <orc.version>2.0.1</orc.version>
+    <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.21</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -210,7 +210,7 @@
     <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.8.0</commons-cli.version>
+    <commons-cli.version>1.9.0</commons-cli.version>
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.14.1</tink.version>
     <datasketches.version>6.0.0</datasketches.version>
@@ -230,7 +230,8 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.2</kubernetes-client.version>
+    <kubernetes-client.version>6.13.3</kubernetes-client.version>
+    <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -291,7 +292,7 @@
     <connect.guava.version>33.2.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.62.2</io.grpc.version>
-    <mima.version>1.1.3</mima.version>
+    <mima.version>1.1.4</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
@@ -2871,6 +2872,11 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okio</groupId>
+        <artifactId>okio</artifactId>
+        <version>${okio.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
