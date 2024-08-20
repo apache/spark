@@ -1251,7 +1251,7 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleJobTagCancelled(
       tag: String,
       reason: Option[String],
-      jobIdCallbackOpt: Option[Int => Unit]): Unit = {
+      jobIdCallback: Option[Int => Unit]): Unit = {
     // Cancel all jobs belonging that have this tag.
     // First finds all active jobs with this group id, and then kill stages for them.
     val jobIds = activeJobs.filter { activeJob =>
@@ -1261,7 +1261,7 @@ private[spark] class DAGScheduler(
       }
     }.map(_.jobId)
     val updatedReason = reason.getOrElse("part of cancelled job tag %s".format(tag))
-    jobIds.foreach(handleJobCancellation(_, Option(updatedReason), jobIdCallbackOpt))
+    jobIds.foreach(handleJobCancellation(_, Option(updatedReason), jobIdCallback))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
