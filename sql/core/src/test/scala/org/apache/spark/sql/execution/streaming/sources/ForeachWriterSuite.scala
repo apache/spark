@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{ExecutorDeadException, SparkException}
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
@@ -142,8 +142,12 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       val e = intercept[StreamingQueryException] {
         query.processAllAvailable()
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getMessage === "ForeachSinkSuite error")
+
+      val errClass = "FOREACH_USER_FUNCTION_ERROR"
+
+      // verify that we classified the exception
+      assert(e.getMessage.contains(errClass))
+      assert(e.getCause.getMessage.contains("ForeachSinkSuite error"))
       assert(query.isActive === false)
 
       val allEvents = ForeachWriterSuite.allEvents()
@@ -157,6 +161,21 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
       // 'close' shouldn't be called with abort message if close with error has been called
       assert(allEvents(0).size == 3)
+
+      val e2 = intercept[StreamingQueryException] {
+        val query2 = input.toDS().repartition(1).writeStream
+          .foreach(new TestForeachWriter() {
+            override def process(value: Int): Unit = {
+              super.process(value)
+              throw ExecutorDeadException("network error")
+            }
+          }).start()
+        query2.processAllAvailable()
+      }
+
+      // we didn't wrap the spark exception
+      assert(!e2.getMessage.contains(errClass))
+      assert(e2.getCause.getMessage.contains("network error"))
     }
   }
 
