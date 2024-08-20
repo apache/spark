@@ -36,8 +36,8 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
-    case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved =>
-      executor.execute(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr)))
+    case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
+      executor.execute(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr), p.children))
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
