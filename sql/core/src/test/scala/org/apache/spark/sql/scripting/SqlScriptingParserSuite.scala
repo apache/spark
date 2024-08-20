@@ -15,47 +15,46 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.parser
+package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CreateVariable, IfElseStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
-  import CatalystSqlParser._
+/** For tests only */
+object SparkSqlParser extends SparkSqlParser
 
-  test("single select") {
-    val sqlScriptText = "SELECT 1;"
-    val tree = parseScript(sqlScriptText)
-    assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText == "SELECT 1;")
+/**
+ * SQL Scripting parser tests.
+ * Various SQL scripts are provided to the parser and the output plan is checked,
+ *  including the whole plan hierarchy.
+ */
+class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper with SharedSparkSession {
+  import SparkSqlParser._
+
+  // Tests setup
+  private var originalSqlScriptingConfVal: String = null
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalSqlScriptingConfVal = spark.conf.get(SQLConf.SQL_SCRIPTING_ENABLED.key)
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
-  test("single select without ;") {
-    val sqlScriptText = "SELECT 1"
-    val tree = parseScript(sqlScriptText)
-    assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText == "SELECT 1")
+  protected override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, originalSqlScriptingConfVal)
+    super.afterAll()
   }
 
-  test("multi select without ; - should fail") {
-    val sqlScriptText = "SELECT 1 SELECT 1"
-    val e = intercept[ParseException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
-    assert(e.getMessage.contains("Syntax error"))
-    assert(e.getMessage.contains("SELECT"))
-  }
-
+  // Tests
   test("multi select") {
     val sqlScriptText = "BEGIN SELECT 1;SELECT 2; END"
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
 
@@ -74,7 +73,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       """
         |BEGIN
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.isEmpty)
   }
 
@@ -86,7 +85,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT 2;
         |END""".stripMargin
     val e = intercept[ParseException] {
-      parseScript(sqlScriptText)
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
@@ -101,7 +100,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT 2
         |END""".stripMargin
     val e = intercept[ParseException] {
-      parseScript(sqlScriptText)
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
@@ -118,7 +117,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     sqlScriptText.split(";")
@@ -145,7 +144,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |    END;
         |  END;
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.head.isInstanceOf[CompoundBody])
     val body1 = tree.collection.head.asInstanceOf[CompoundBody]
@@ -163,17 +162,37 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       == "SELECT 3")
   }
 
-  test("compound: beginLabel") {
+  // TODO: to be removed once the parser rule for top level compound is fixed to support labels!
+  test("top level compound: labels not allowed") {
     val sqlScriptText =
       """
         |lbl: BEGIN
         |  SELECT 1;
-        |  SELECT 2;
-        |  INSERT INTO A VALUES (a, b, 3);
-        |  SELECT a, b, c FROM T;
-        |  SELECT * FROM T;
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'lbl'", "hint" -> ""))
+  }
+
+  test("compound: beginLabel") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END;
+        |END""".stripMargin
+    val rootTree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(rootTree.collection.length == 1)
+
+    val tree = rootTree.collection.head.asInstanceOf[CompoundBody]
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.contains("lbl"))
@@ -182,14 +201,19 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   test("compound: beginLabel + endLabel") {
     val sqlScriptText =
       """
-        |lbl: BEGIN
-        |  SELECT 1;
-        |  SELECT 2;
-        |  INSERT INTO A VALUES (a, b, 3);
-        |  SELECT a, b, c FROM T;
-        |  SELECT * FROM T;
-        |END lbl""".stripMargin
-    val tree = parseScript(sqlScriptText)
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END lbl;
+        |END""".stripMargin
+    val rootTree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(rootTree.collection.length == 1)
+
+    val tree = rootTree.collection.head.asInstanceOf[CompoundBody]
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.contains("lbl"))
@@ -198,17 +222,19 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   test("compound: beginLabel + endLabel with different values") {
     val sqlScriptText =
       """
-        |lbl_begin: BEGIN
-        |  SELECT 1;
-        |  SELECT 2;
-        |  INSERT INTO A VALUES (a, b, 3);
-        |  SELECT a, b, c FROM T;
-        |  SELECT * FROM T;
-        |END lbl_end""".stripMargin
+        |BEGIN
+        |  lbl_begin: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END lbl_end;
+        |END""".stripMargin
 
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        parsePlan(sqlScriptText)
       },
       errorClass = "LABELS_MISMATCH",
       parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
@@ -218,16 +244,18 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val sqlScriptText =
       """
         |BEGIN
-        |  SELECT 1;
-        |  SELECT 2;
-        |  INSERT INTO A VALUES (a, b, 3);
-        |  SELECT a, b, c FROM T;
-        |  SELECT * FROM T;
-        |END lbl""".stripMargin
+        |  BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END lbl;
+        |END""".stripMargin
 
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        parsePlan(sqlScriptText)
       },
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       parameters = Map("endLabel" -> "lbl"))
@@ -236,30 +264,40 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   test("compound: beginLabel + endLabel with different casing") {
     val sqlScriptText =
       """
-        |LBL: BEGIN
-        |  SELECT 1;
-        |  SELECT 2;
-        |  INSERT INTO A VALUES (a, b, 3);
-        |  SELECT a, b, c FROM T;
-        |  SELECT * FROM T;
-        |END lbl""".stripMargin
-    val tree = parseScript(sqlScriptText)
+        |BEGIN
+        |  LBL: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END lbl;
+        |END""".stripMargin
+    val rootTree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(rootTree.collection.length == 1)
+
+    val tree = rootTree.collection.head.asInstanceOf[CompoundBody]
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.contains("lbl"))
   }
 
-  test("compound: no labels provided") {
+  test("compound: no labels provided, random label should be generated") {
     val sqlScriptText =
       """
         |BEGIN
-        |  SELECT 1;
-        |  SELECT 2;
-        |  INSERT INTO A VALUES (a, b, 3);
-        |  SELECT a, b, c FROM T;
-        |  SELECT * FROM T;
+        |  BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END;
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val rootTree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(rootTree.collection.length == 1)
+
+    val tree = rootTree.collection.head.asInstanceOf[CompoundBody]
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.nonEmpty)
@@ -272,7 +310,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE testVariable1 VARCHAR(50);
         |  DECLARE testVariable2 INTEGER;
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.collection.forall(
@@ -288,7 +326,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     checkError(
         exception = intercept[SqlScriptingException] {
-          parseScript(sqlScriptText)
+          parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
         },
         errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
         parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
@@ -304,7 +342,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
       },
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
@@ -317,7 +355,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE totalInsCnt = 0;
         |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     assert(tree.collection(1).isInstanceOf[SingleStatement])
@@ -330,7 +368,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE totalInsCnt = 0;
         |  SET VARIABLE totalInsCnt = (SELECT x FROM y WHERE id = 1);
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     assert(tree.collection(1).isInstanceOf[SingleStatement])
@@ -343,7 +381,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE totalInsCnt = 0;
         |  SET totalInsCnt = (SELECT x FROM y WHERE id = 1);
         |END""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     assert(tree.collection(1).isInstanceOf[SingleStatement])
@@ -357,7 +395,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SET totalInsCnt = (SELECT x FROMERROR y WHERE id = 1);
         |END""".stripMargin
     val e = intercept[ParseException] {
-      parseScript(sqlScriptText)
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
@@ -372,7 +410,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         | END IF;
         |END
         |""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[IfElseStatement])
     val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
@@ -391,7 +429,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END IF;
         |END
         """.stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[IfElseStatement])
 
@@ -426,7 +464,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END IF;
         |END
       """.stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[IfElseStatement])
 
@@ -466,7 +504,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END IF;
         |END
       """.stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[IfElseStatement])
 
@@ -510,7 +548,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         | END IF;
         |END
         |""".stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[IfElseStatement])
 
@@ -549,7 +587,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END WHILE lbl;
         |END
       """.stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[WhileStatement])
 
@@ -575,8 +613,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       |END WHILE;
       |END
       |""".stripMargin
-
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection(1).isInstanceOf[WhileStatement])
 
@@ -602,7 +639,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END WHILE lbl;
         |END
       """.stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[WhileStatement])
 
@@ -643,7 +680,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END WHILE lbl;
         |END
       """.stripMargin
-    val tree = parseScript(sqlScriptText)
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[WhileStatement])
 
@@ -666,7 +703,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
     assert(whileStmt.label.contains("lbl"))
-
   }
 
   // Helper methods

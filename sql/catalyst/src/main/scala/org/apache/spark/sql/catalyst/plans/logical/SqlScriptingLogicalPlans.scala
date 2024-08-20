@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.parser
+package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
  * Trait for all SQL Scripting logical operators that are product of parsing phase.
  * These operators will be used by the SQL Scripting interpreter to generate execution nodes.
  */
-sealed trait CompoundPlanStatement
+sealed trait CompoundPlanStatement extends LogicalPlan
 
 /**
  * Logical operator representing result of parsing a single SQL statement
@@ -32,20 +31,24 @@ sealed trait CompoundPlanStatement
  * @param parsedPlan Result of SQL statement parsing.
  */
 case class SingleStatement(parsedPlan: LogicalPlan)
-  extends CompoundPlanStatement
-  with WithOrigin {
-
-  override val origin: Origin = CurrentOrigin.get
+  extends CompoundPlanStatement {
 
   /**
    * Get the SQL query text corresponding to this statement.
-   * @return
-   *   SQL query text.
+   * @return SQL query text.
    */
   def getText: String = {
     assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
+
+  override def output: Seq[Attribute] = parsedPlan.output
+
+  override def children: Seq[LogicalPlan] = parsedPlan.children
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+    SingleStatement(parsedPlan.withNewChildren(newChildren))
 }
 
 /**
@@ -57,7 +60,15 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
-    label: Option[String]) extends CompoundPlanStatement
+    label: Option[String]) extends Command with CompoundPlanStatement {
+
+  override def children: Seq[LogicalPlan] = collection
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    CompoundBody(newChildren.map(_.asInstanceOf[CompoundPlanStatement]), label)
+  }
+}
 
 /**
  * Logical operator for IF ELSE statement.
@@ -73,6 +84,30 @@ case class IfElseStatement(
     conditionalBodies: Seq[CompoundBody],
     elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq.concat(conditions, conditionalBodies, elseBody)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    val conditions = newChildren
+      .filter(_.isInstanceOf[SingleStatement])
+      .map(_.asInstanceOf[SingleStatement])
+    var conditionalBodies = newChildren
+      .filter(_.isInstanceOf[CompoundBody])
+      .map(_.asInstanceOf[CompoundBody])
+    var elseBody: Option[CompoundBody] = None
+
+    assert(conditions.length == conditionalBodies.length ||
+      conditions.length + 1 == conditionalBodies.length)
+
+    if (conditions.length < conditionalBodies.length) {
+      conditionalBodies = conditionalBodies.dropRight(1)
+      elseBody = Some(conditionalBodies.last)
+    }
+    IfElseStatement(conditions, conditionalBodies, elseBody)
+  }
 }
 
 /**
@@ -88,4 +123,18 @@ case class IfElseStatement(
 case class WhileStatement(
     condition: SingleStatement,
     body: CompoundBody,
-    label: Option[String]) extends CompoundPlanStatement
+    label: Option[String]) extends CompoundPlanStatement {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq(condition, body)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.length == 2)
+    WhileStatement(
+      newChildren(0).asInstanceOf[SingleStatement],
+      newChildren(1).asInstanceOf[CompoundBody],
+      label)
+  }
+}
