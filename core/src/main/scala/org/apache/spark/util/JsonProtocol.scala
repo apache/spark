@@ -1379,7 +1379,7 @@ private[spark] object JsonProtocol extends JsonUtils {
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
           .map(_.extractElements.map(accumulableInfoFromJson).toArray.toImmutableArraySeq)
           .getOrElse(taskMetricsFromJson(json.get("Metrics")).accumulators().map(acc => {
-            acc.toInfo(Some(acc.value), None)
+            acc.toInfoUpdate
           }).toArray.toImmutableArraySeq)
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost

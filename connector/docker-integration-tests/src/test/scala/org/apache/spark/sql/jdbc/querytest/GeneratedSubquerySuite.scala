@@ -145,10 +145,6 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       None
     }
 
-    // SPARK-46446: offset operator in correlated subquery is not supported
-    // as it creates incorrect results for now.
-    val requireNoOffsetInCorrelatedSubquery = correlationConditions.nonEmpty
-
     // For the Limit clause, consider whether the subquery needs to return 1 row, or whether the
     // operator to be included is a Limit.
     val limitAndOffsetClause = if (requiresExactlyOneRowOutput) {
@@ -156,11 +152,10 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     } else {
       operatorInSubquery match {
         case lo: LimitAndOffset =>
-          val offsetValue = if (requireNoOffsetInCorrelatedSubquery) 0 else lo.offsetValue
-          if (offsetValue == 0 && lo.limitValue == 0) {
+          if (lo.offsetValue == 0 && lo.limitValue == 0) {
             None
           } else {
-            Some(LimitAndOffset(lo.limitValue, offsetValue))
+            Some(lo)
           }
         case _ => None
       }

@@ -968,7 +968,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * that cast appropriately for the user facing interface.
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoders = columns.map(_.encoder)
+    val encoders = columns.map(c => encoderFor(c.encoder))
     val namedColumns =
       columns.map(_.withInputType(vExprEnc, dataAttributes).named)
     val keyColumn = TypedAggUtils.aggKeyColumn(kExprEnc, groupingAttributes)

@@ -4691,7 +4691,7 @@ class DataFrame:
         thresh: Optional[int] = None,
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
-        """Returns a new :class:`DataFrame` omitting rows with null values.
+        """Returns a new :class:`DataFrame` omitting rows with null or NaN values.
         :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are
         aliases of each other.
 
@@ -4720,50 +4720,50 @@ class DataFrame:
         --------
         >>> from pyspark.sql import Row
         >>> df = spark.createDataFrame([
-        ...     Row(age=10, height=80, name="Alice"),
-        ...     Row(age=5, height=None, name="Bob"),
+        ...     Row(age=10, height=80.0, name="Alice"),
+        ...     Row(age=5, height=float("nan"), name="Bob"),
         ...     Row(age=None, height=None, name="Tom"),
-        ...     Row(age=None, height=None, name=None),
+        ...     Row(age=None, height=float("nan"), name=None),
         ... ])
 
-        Example 1: Drop the row if it contains any nulls.
+        Example 1: Drop the row if it contains any null or NaN.
 
         >>> df.na.drop().show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
+        | 10|  80.0|Alice|
         +---+------+-----+
 
-        Example 2: Drop the row only if all its values are null.
+        Example 2: Drop the row only if all its values are null or NaN.
 
         >>> df.na.drop(how='all').show()
         +----+------+-----+
         | age|height| name|
         +----+------+-----+
-        |  10|    80|Alice|
-        |   5|  NULL|  Bob|
+        |  10|  80.0|Alice|
+        |   5|   NaN|  Bob|
         |NULL|  NULL|  Tom|
         +----+------+-----+
 
-        Example 3: Drop rows that have less than `thresh` non-null values.
+        Example 3: Drop rows that have less than `thresh` non-null and non-NaN values.
 
         >>> df.na.drop(thresh=2).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
-        |  5|  NULL|  Bob|
+        | 10|  80.0|Alice|
+        |  5|   NaN|  Bob|
         +---+------+-----+
 
-        Example 4: Drop rows with non-null values in the specified columns.
+        Example 4: Drop rows with null and NaN values in the specified columns.
 
         >>> df.na.drop(subset=['age', 'name']).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
-        |  5|  NULL|  Bob|
+        | 10|  80.0|Alice|
+        |  5|   NaN|  Bob|
         +---+------+-----+
         """
         ...
