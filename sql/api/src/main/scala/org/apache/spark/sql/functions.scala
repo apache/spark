@@ -26,11 +26,11 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{SQLConf, ToScalaUDF}
+import org.apache.spark.sql.internal.{SqlApiConf, ToScalaUDF}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -110,7 +110,7 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = withOrigin {
+  def lit(literal: Any): Column = {
     literal match {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
@@ -1701,7 +1701,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[T, DS <: api.Dataset[T]](df: DS): df.DS[T] = df.hint("broadcast")
+  def broadcast[DS <: api.Dataset[_]](df: DS): DS = df.hint("broadcast").asInstanceOf[DS]
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
@@ -1841,7 +1841,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def rand(): Column = rand(Utils.random.nextLong)
+  def rand(): Column = rand(SparkClassUtils.random.nextLong)
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from
@@ -1863,7 +1863,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def randn(): Column = randn(Utils.random.nextLong)
+  def randn(): Column = randn(SparkClassUtils.random.nextLong)
 
   /**
    * Partition ID.
@@ -3341,7 +3341,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = Column.fn("uuid", lit(Utils.random.nextLong))
+  def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3660,7 +3660,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def random(): Column = random(lit(Utils.random.nextLong))
+  def random(): Column = random(lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns the bucket number for the given input column.
@@ -7018,7 +7018,7 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(Utils.random.nextLong))
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -8292,8 +8292,8 @@ object functions {
   @deprecated("Scala `udf` method with return type parameter is deprecated. " +
     "Please use Scala `udf` method without return type parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
-      throw QueryCompilationErrors.usingUntypedScalaUDFError()
+    if (!SqlApiConf.get.legacyAllowUntypedScalaUDFs) {
+      throw CompilationErrors.usingUntypedScalaUDFError()
     }
     SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
   }
