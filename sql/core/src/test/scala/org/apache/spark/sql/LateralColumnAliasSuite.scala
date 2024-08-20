@@ -1343,7 +1343,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       parameters = Map(
         "objectName" -> "`Freq`",
         "proposal" -> "`Percentage`, `group_counts`.`Group`"
-      )
+      ),
+      context = ExpectedContext(
+        fragment = "Freq",
+        start = 280,
+        stop = 283)
     )
+
+    // the states are cleared - a subsequent correct query should succeed
+    sql("select 1 as a, a").queryExecution.assertAnalyzed()
   }
 }
