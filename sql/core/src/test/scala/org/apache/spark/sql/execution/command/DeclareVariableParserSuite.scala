@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, Cast, Divide, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-// import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LocalRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, Project, SubqueryAlias}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
