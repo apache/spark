@@ -185,7 +185,7 @@ object Encoders {
    *
    * @note
    *   This is extremely inefficient and should only be used as the last resort.
-   * @since 1.6.0
+   * @since 4.0.0
    */
   def javaSerialization[T: ClassTag]: Encoder[T] = {
     TransformingEncoder(implicitly[ClassTag[T]], BinaryEncoder, JavaSerializationCodec)
@@ -199,7 +199,7 @@ object Encoders {
    *
    * @note
    *   This is extremely inefficient and should only be used as the last resort.
-   * @since 1.6.0
+   * @since 4.0.0
    */
   def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
 
