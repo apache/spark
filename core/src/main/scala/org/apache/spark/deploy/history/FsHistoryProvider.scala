@@ -1289,7 +1289,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logWarning(log"Exception occurred while rebuilding log path " +
+          logInfo(log"Exception occurred while rebuilding log path " +
             log"${MDC(PATH, attempt.logPath)} - " +
             log"trying again...", ioe)
           store.close()
@@ -1362,7 +1362,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logWarning(log"Exception occurred while rebuilding app ${MDC(APP_ID, appId)} - " +
+          logInfo(log"Exception occurred while rebuilding app ${MDC(APP_ID, appId)} - " +
             log"trying again...", ioe)
           lease.rollback()
           retried = true
@@ -1390,7 +1390,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logWarning(log"Exception occurred while rebuilding log path " +
+          logInfo(log"Exception occurred while rebuilding log path " +
             log"${MDC(LogKeys.PATH, attempt.logPath)} - trying again...", ioe)
           retried = true
 
