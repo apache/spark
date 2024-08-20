@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DayTimeIntervalType
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -447,7 +449,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("from day-time string") {
-    import org.apache.spark.sql.types.DayTimeIntervalType._
     def check(input: String, from: Byte, to: Byte, expected: String): Unit = {
       withClue(s"from = $from, to = $to") {
         val expectedUtf8 = UTF8String.fromString(expected)
@@ -554,6 +555,15 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-34615: period to months") {
     assert(periodToMonths(Period.ZERO) === 0)
     assert(periodToMonths(Period.of(0, -1, 0)) === -1)
+    assert(periodToMonths(Period.of(0, -11, 0)) === -11)
+    assert(periodToMonths(Period.of(0, -12, 0)) === -12)
+    assert(periodToMonths(Period.of(0, -13, 0)) === -13)
+    assert(periodToMonths(Period.of(0, 11, 0), YM.YEAR) === 0)
+    assert(periodToMonths(Period.of(0, -11, 0), YM.YEAR) === 0)
+    assert(periodToMonths(Period.of(0, 12, 0), YM.YEAR) === 12)
+    assert(periodToMonths(Period.of(0, -12, 0), YM.YEAR) === -12)
+    assert(periodToMonths(Period.of(0, 13, 0), YM.YEAR) === 12)
+    assert(periodToMonths(Period.of(0, -13, 0), YM.YEAR) === -12)
     assert(periodToMonths(Period.of(-1, 0, 10)) === -12) // ignore days
     assert(periodToMonths(Period.of(178956970, 7, 0)) === Int.MaxValue)
     assert(periodToMonths(Period.of(-178956970, -8, 123)) === Int.MinValue)
@@ -637,11 +647,12 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format year-month intervals") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
       -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
       11 -> ("0-11", "INTERVAL '0-11' YEAR TO MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-1-0' YEAR TO MONTH"),
+      12 -> ("1-0", "INTERVAL '1-0' YEAR TO MONTH"),
       -13 -> ("-1-1", "INTERVAL '-1-1' YEAR TO MONTH"),
       13 -> ("1-1", "INTERVAL '1-1' YEAR TO MONTH"),
       -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
@@ -654,8 +665,22 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-49208 format year-month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0' MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
+      11 -> ("0-11", "INTERVAL '11' MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
+      12 -> ("1-0", "INTERVAL '12' MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+    }
+  }
+
   test("SPARK-35016: format day-time intervals") {
-    import DayTimeIntervalType._
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
@@ -670,8 +695,22 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-49208: format negative month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0' MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
+      11 -> ("0-11", "INTERVAL '11' MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
+      12 -> ("1-0", "INTERVAL '12' MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+    }
+  }
+
   test("SPARK-35734: Format day-time intervals using type fields") {
-    import DayTimeIntervalType._
     Seq(
       0L ->
         ("INTERVAL '0 00:00:00' DAY TO SECOND",
@@ -777,12 +816,13 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35771: Format year-month intervals using type fields") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 ->
         ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
       -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '-11' MONTH"),
       11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
+      -12 -> ("INTERVAL '-1-0' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-12' MONTH"),
+      12 -> ("INTERVAL '1-0' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '12' MONTH"),
       -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-13' MONTH"),
       13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '13' MONTH"),
       -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),
@@ -803,7 +843,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-38324: The second range is not [0, 59] in the day time ANSI interval") {
-    import org.apache.spark.sql.types.DayTimeIntervalType._
     Seq(
       ("10 12:40:60", 60, DAY, SECOND),
       ("10 12:40:60.999999999", 60, DAY, SECOND),

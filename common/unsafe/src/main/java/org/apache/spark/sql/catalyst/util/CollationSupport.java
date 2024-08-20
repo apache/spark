@@ -20,8 +20,6 @@ import com.ibm.icu.text.StringSearch;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -62,33 +60,11 @@ public final class CollationSupport {
       return string.splitSQL(delimiter, -1);
     }
     public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
-      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
-      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
-        CollationSupport.lowercaseRegexFlags);
-      String[] splits = pattern.split(string.toString(), -1);
-      UTF8String[] res = new UTF8String[splits.length];
-      for (int i = 0; i < res.length; i++) {
-        res[i] = UTF8String.fromString(splits[i]);
-      }
-      return res;
+      return CollationAwareUTF8String.lowercaseSplitSQL(string, delimiter, -1);
     }
     public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
         final int collationId) {
-      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
-      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-      List<UTF8String> strings = new ArrayList<>();
-      String target = string.toString(), pattern = delimiter.toString();
-      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-      int start = 0, end;
-      while ((end = stringSearch.next()) != StringSearch.DONE) {
-        strings.add(UTF8String.fromString(target.substring(start, end)));
-        start = end + stringSearch.getMatchLength();
-      }
-      if (start <= target.length()) {
-        strings.add(UTF8String.fromString(target.substring(start)));
-      }
-      return strings.toArray(new UTF8String[0]);
+      return CollationAwareUTF8String.icuSplitSQL(string, delimiter, -1, collationId);
     }
   }
 
@@ -696,7 +672,7 @@ public final class CollationSupport {
     return CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
   }
 
-  private static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
+  static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
   public static int collationAwareRegexFlags(final int collationId) {
     return supportsLowercaseRegex(collationId) ? lowercaseRegexFlags : 0;
   }

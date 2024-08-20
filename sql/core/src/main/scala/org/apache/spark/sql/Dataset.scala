@@ -61,7 +61,9 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -222,6 +224,8 @@ class Dataset[T] private[sql](
     queryExecution.sparkSession
   }
 
+  import sparkSession.RichColumn
+
   // A globally unique id of this Dataset.
   private[sql] val id = Dataset.curId.getAndIncrement()
 
@@ -291,7 +295,7 @@ class Dataset[T] private[sql](
       truncate: Int): Seq[Seq[String]] = {
     val newDf = commandResultOptimized.toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
-      Column(ToPrettyString(col))
+      column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -551,7 +555,7 @@ class Dataset[T] private[sql](
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      Column(oldAttribute).as(newName)
+      column(oldAttribute).as(newName)
     }
     select(newCols : _*)
   }
@@ -1310,11 +1314,11 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
-    val joinExprs = usingColumns.map { column =>
-      EqualTo(resolve(column), other.resolve(column))
-    }.reduceOption(And).map(Column.apply).orNull
-
-    joinAsOf(other, leftAsOf, rightAsOf, joinExprs, joinType,
+    val joinConditions = usingColumns.map { name =>
+      this(name) === other(name)
+    }
+    val joinCondition = joinConditions.reduceOption(_ && _).orNull
+    joinAsOf(other, leftAsOf, rightAsOf, joinCondition, joinType,
       tolerance, allowExactMatches, direction)
   }
 
@@ -1482,12 +1486,12 @@ class Dataset[T] private[sql](
    */
   def col(colName: String): Column = colName match {
     case "*" =>
-      Column(ResolvedStar(queryExecution.analyzed.output))
+      column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
       if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        Column(addDataFrameIdToCol(resolve(colName)))
+        column(addDataFrameIdToCol(resolve(colName)))
       }
   }
 
@@ -1501,7 +1505,7 @@ class Dataset[T] private[sql](
    * @since 3.5.0
    */
   def metadataColumn(colName: String): Column =
-    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+    column(queryExecution.analyzed.getMetadataAttributeByName(colName))
 
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
@@ -1531,11 +1535,11 @@ class Dataset[T] private[sql](
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     colName match {
       case ParserUtils.escapedIdentifier(columnNameRegex) =>
-        Column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
+        column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
-        Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
+        column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        Column(addDataFrameIdToCol(resolve(colName)))
+        column(addDataFrameIdToCol(resolve(colName)))
     }
   }
 
@@ -1635,9 +1639,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = sparkSession.withActive {
-    select(exprs.map { expr =>
-      Column(sparkSession.sessionState.sqlParser.parseExpression(expr))
-    }: _*)
+    select(exprs.map(functions.expr): _*)
   }
 
   /**
@@ -1652,8 +1654,9 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    implicit val encoder: ExpressionEncoder[U1] = c1.encoder
-    val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
+    implicit val encoder: ExpressionEncoder[U1] = encoderFor(c1.encoder)
+    val tc1 = withInputType(c1.named, exprEnc, logicalPlan.output)
+    val project = Project(tc1 :: Nil, logicalPlan)
 
     if (!encoder.isSerializedAsStructForTopLevel) {
       new Dataset[U1](sparkSession, project, encoder)
@@ -1669,9 +1672,8 @@ class Dataset[T] private[sql](
    * that cast appropriately for the user facing interface.
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoders = columns.map(_.encoder)
-    val namedColumns =
-      columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
+    val encoders = columns.map(c => encoderFor(c.encoder))
+    val namedColumns = columns.map(c => withInputType(c.named, exprEnc, logicalPlan.output))
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(execution, ExpressionEncoder.tuple(encoders))
   }
@@ -1749,7 +1751,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def filter(conditionExpr: String): Dataset[T] = sparkSession.withActive {
-    filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
+    filter(functions.expr(conditionExpr))
   }
 
   /**
@@ -2861,7 +2863,7 @@ class Dataset[T] private[sql](
         resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => Column(field)
+        case _ => column(field)
       }
     }
 
@@ -3065,7 +3067,7 @@ class Dataset[T] private[sql](
     val allColumns = queryExecution.analyzed.output
     val remainingCols = allColumns.filter { attribute =>
       colNames.forall(n => !resolver(attribute.name, n))
-    }.map(attribute => Column(attribute))
+    }.map(attribute => column(attribute))
     if (remainingCols.size == allColumns.size) {
       toDF()
     } else {
@@ -3530,9 +3532,10 @@ class Dataset[T] private[sql](
    * workers.
    */
   private[sql] def mapInPandas(
-      func: PythonUDF,
+      funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
+    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
@@ -3549,9 +3552,10 @@ class Dataset[T] private[sql](
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
   private[sql] def mapInArrow(
-      func: PythonUDF,
+      funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
+    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
       MapInArrow(
@@ -4257,7 +4261,7 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    select(Column(DistributedSequenceID()).alias(name), col("*"))
+    select(column(DistributedSequenceID()).alias(name), col("*"))
   }
 
   /**

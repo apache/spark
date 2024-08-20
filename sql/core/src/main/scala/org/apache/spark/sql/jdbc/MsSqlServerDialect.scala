@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
@@ -216,6 +216,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
+           case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+             val newTable = messageParameters("newName")
+             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case _ => super.classifyException(e, errorClass, messageParameters, description)

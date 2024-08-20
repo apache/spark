@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 
 class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
@@ -1046,5 +1047,55 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ruleTest(
         AnsiTypeCoercion.GetDateFieldOperations, operation(ts), operation(Cast(ts, DateType)))
     }
+  }
+
+  test("SPARK-49188: implicit casts of arrays") {
+    // Valid casts when inner type is non-complex type.
+    shouldCast(
+      ArrayType(IntegerType),
+      AbstractArrayType(IntegerType),
+      ArrayType(IntegerType))
+    shouldCast(
+      ArrayType(StringType),
+      AbstractArrayType(StringTypeAnyCollation),
+      ArrayType(StringType))
+    shouldCast(
+      ArrayType(IntegerType),
+      AbstractArrayType(StringTypeAnyCollation),
+      ArrayType(StringType))
+    shouldCast(
+      ArrayType(StringType),
+      AbstractArrayType(IntegerType),
+      ArrayType(IntegerType))
+
+    // Valid casts when inner type is array of non-complex types.
+    shouldCast(
+      ArrayType(ArrayType(IntegerType)),
+      AbstractArrayType(AbstractArrayType(IntegerType)),
+      ArrayType(ArrayType(IntegerType)))
+    shouldCast(
+      ArrayType(ArrayType(StringType)),
+      AbstractArrayType(AbstractArrayType(StringTypeAnyCollation)),
+      ArrayType(ArrayType(StringType)))
+    shouldCast(
+      ArrayType(ArrayType(IntegerType)),
+      AbstractArrayType(AbstractArrayType(StringTypeAnyCollation)),
+      ArrayType(ArrayType(StringType)))
+    shouldCast(
+      ArrayType(ArrayType(StringType)),
+      AbstractArrayType(AbstractArrayType(IntegerType)),
+      ArrayType(ArrayType(IntegerType)))
+
+    // Invalid casts involving casting arrays into non-complex types.
+    shouldNotCast(ArrayType(IntegerType), IntegerType)
+    shouldNotCast(ArrayType(StringType), StringTypeAnyCollation)
+    shouldNotCast(ArrayType(StringType), IntegerType)
+    shouldNotCast(ArrayType(IntegerType), StringTypeAnyCollation)
+
+    // Invalid casts involving casting arrays of arrays into arrays of non-complex types.
+    shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(IntegerType))
+    shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(StringTypeAnyCollation))
+    shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(IntegerType))
+    shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(StringTypeAnyCollation))
   }
 }

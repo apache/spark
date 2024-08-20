@@ -114,7 +114,6 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df3.select(count(df3["*"])).columns, ["count(1)"])
         self.assertEqual(df3.select(count(col("*"))).columns, ["count(1)"])
-        self.assertEqual(df3.select(count(col("s.*"))).columns, ["count(1)"])
 
     def test_self_join(self):
         df1 = self.spark.range(10).withColumn("a", lit(0))

@@ -408,7 +408,7 @@ private[sql] class SparkConnectClient(
 
 object SparkConnectClient {
 
-  private val SPARK_REMOTE: String = "SPARK_REMOTE"
+  private[sql] val SPARK_REMOTE: String = "SPARK_REMOTE"
 
   private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
 
@@ -629,7 +629,9 @@ object SparkConnectClient {
      * Configure the builder using the env SPARK_REMOTE environment variable.
      */
     def loadFromEnvironment(): Builder = {
-      sys.env.get(SparkConnectClient.SPARK_REMOTE).foreach(connectionString)
+      Option(System.getProperty("spark.remote")) // Set from Spark Submit
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+        .foreach(connectionString)
       this
     }
 
