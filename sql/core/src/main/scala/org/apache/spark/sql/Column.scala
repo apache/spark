@@ -22,16 +22,10 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{ColumnNode, ExpressionColumnNode, TypedAggUtils}
+import org.apache.spark.sql.internal.ColumnNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -39,17 +33,7 @@ private[spark] object Column {
 
   def apply(colName: String): Column = new Column(colName)
 
-  def apply(expr: Expression): Column = Column(ExpressionColumnNode(expr))
-
   def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
-
-  private[sql] def generateAlias(e: Expression): String = {
-    e match {
-      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-        a.aggregateFunction.toString
-      case expr => toPrettySQL(expr)
-    }
-  }
 
   private[spark] def fn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, inputs: _*)
@@ -89,29 +73,8 @@ private[spark] object Column {
 @Stable
 class TypedColumn[-T, U](
     node: ColumnNode,
-    private[sql] val encoder: Encoder[U],
-    private[sql] val inputType: Option[(ExpressionEncoder[_], Seq[Attribute])] = None)
+    private[sql] val encoder: Encoder[U])
   extends Column(node) {
-
-  override lazy val expr: Expression = {
-    val expression = internal.ColumnNodeToExpressionConverter(node)
-    inputType match {
-      case Some((inputEncoder, inputAttributes)) =>
-        TypedAggUtils.withInputType(expression, inputEncoder, inputAttributes)
-      case None =>
-        expression
-    }
-  }
-
-  /**
-   * Inserts the specific input type and schema into any expressions that are expected to operate
-   * on a decoded object.
-   */
-  private[sql] def withInputType(
-      inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    new TypedColumn[T, U](node, encoder, Option((inputEncoder, inputAttributes)))
-  }
 
   /**
    * Gives the [[TypedColumn]] a name (alias).
@@ -155,8 +118,6 @@ class TypedColumn[-T, U](
  */
 @Stable
 class Column(val node: ColumnNode) extends Logging {
-  lazy val expr: Expression = internal.ColumnNodeToExpressionConverter(node)
-
   def this(name: String) = this(withOrigin {
     name match {
       case "*" => internal.UnresolvedStar(None)
@@ -185,35 +146,12 @@ class Column(val node: ColumnNode) extends Logging {
   override def hashCode: Int = this.node.normalized.hashCode()
 
   /**
-   * Returns the expression for this column either with an existing or auto assigned name.
-   */
-  private[sql] def named: NamedExpression = expr match {
-    case expr: NamedExpression => expr
-
-    // Leave an unaliased generator with an empty list of names since the analyzer will generate
-    // the correct defaults after the nested expression's type has been resolved.
-    case g: Generator => MultiAlias(g, Nil)
-
-    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
-    // NamedExpression under this Cast.
-    case c: Cast =>
-      c.transformUp {
-        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
-      } match {
-        case ne: NamedExpression => ne
-        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
-      }
-
-    case expr: Expression => UnresolvedAlias(expr, Some(Column.generateAlias))
-  }
-
-  /**
    * Provides a type hint about the expected return value of this column.  This information can
    * be used by operations such as `select` on a [[Dataset]] to automatically convert the
    * results into the correct JVM types.
    * @since 1.6.0
    */
-  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](node, encoderFor[U])
+  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](node, implicitly[Encoder[U]])
 
   /**
    * Extracts a value or values from a complex type.
@@ -1203,7 +1141,7 @@ class Column(val node: ColumnNode) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
+  def cast(to: String): Column = cast(DataTypeParser.parseDataType(to))
 
   /**
    * Casts the column to a different data type and the result is null on failure.
@@ -1234,7 +1172,7 @@ class Column(val node: ColumnNode) extends Logging {
    * @since 4.0.0
    */
   def try_cast(to: String): Column = {
-    try_cast(CatalystSqlParser.parseDataType(to))
+    try_cast(DataTypeParser.parseDataType(to))
   }
 
   private def sortOrder(

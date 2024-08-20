@@ -565,7 +565,7 @@ object ScalaAggregator {
       bufferEncoder = encoderFor(uda.aggregator.bufferEncoder),
       nullable = uda.nullable,
       isDeterministic = uda.deterministic,
-      aggregatorName = Option(uda.name))
+      aggregatorName = uda.givenName)
   }
 }
 

@@ -110,6 +110,7 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.DataStreamWriter.clusterBy"),
     // SPARK-49022: Use Column API
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.TypedColumn.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.TypedColumn.this"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.expressions.WindowSpec.this")
   )
 
