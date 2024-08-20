@@ -305,7 +305,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a top-level plan with Common Table Expressions.
    */
   override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
-    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(
+      withQueryResultClauses(_, _, restrictToSingleClauseOnly = false))
 
     // Apply CTEs
     query.optionalMap(ctx.ctes)(withCTE)
@@ -367,7 +368,8 @@ class AstBuilder extends DataTypeAstBuilder
     val selects = ctx.fromStatementBody.asScala.map { body =>
       withFromStatementBody(body, from).
         // Add organization statements.
-        optionalMap(body.queryOrganization)(withQueryResultClauses)
+        optionalMap(body.queryOrganization)(
+          withQueryResultClauses(_, _, restrictToSingleClauseOnly = false))
     }
     // If there are multiple SELECT just UNION them together into one query.
     if (selects.length == 1) {
@@ -413,7 +415,8 @@ class AstBuilder extends DataTypeAstBuilder
     val inserts = ctx.multiInsertQueryBody.asScala.map { body =>
       withInsertInto(body.insertInto,
         withFromStatementBody(body.fromStatementBody, from).
-          optionalMap(body.fromStatementBody.queryOrganization)(withQueryResultClauses))
+          optionalMap(body.fromStatementBody.queryOrganization)(
+            withQueryResultClauses(_, _, restrictToSingleClauseOnly = false)))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -849,31 +852,34 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan. These
    * clauses determine the shape (ordering/partitioning/rows) of the query result.
+   * If 'restrictToSingleClauseOnly' is true, throws an error if more than one clause is present.
    */
   private def withQueryResultClauses(
       ctx: QueryOrganizationContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      restrictToSingleClauseOnly: Boolean): LogicalPlan = withOrigin(ctx) {
     import ctx._
+    var clause = ""
 
     // Handle ORDER BY, SORT BY, DISTRIBUTE BY, and CLUSTER BY clause.
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      // ORDER BY ...
+      clause = "ORDER BY"
       Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      // SORT BY ...
+      clause = "SORT BY"
       Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      // DISTRIBUTE BY ...
+      clause = "DISTRIBUTE BY"
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      // SORT BY ... DISTRIBUTE BY ...
+      clause = "SORT BY ... DISTRIBUTE BY ..."
       Sort(
         sort.asScala.map(visitSortItem).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
-      // CLUSTER BY ...
+      clause = "CLUSTER BY"
       val expressions = expressionList(clusterBy)
       Sort(
         expressions.map(SortOrder(_, Ascending)),
@@ -883,21 +889,41 @@ class AstBuilder extends DataTypeAstBuilder
       // [EMPTY]
       query
     } else {
-      throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(ctx)
+      throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
+        ctx, "ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY")
     }
 
     // WINDOWS
-    val withWindow = withOrder.optionalMap(windowClause)(withWindowClause)
+    val withWindow = withOrder.optionalMap(windowClause) {
+      withWindowClause
+    }
+    if (restrictToSingleClauseOnly && windowClause != null) {
+      if (clause.nonEmpty) {
+        throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
+          ctx, s"the $clause and WINDOW clauses")
+      }
+      clause = "WINDOW"
+    }
 
     // OFFSET
     // - OFFSET 0 is the same as omitting the OFFSET clause
     val withOffset = withWindow.optional(offset) {
+      if (restrictToSingleClauseOnly && clause.nonEmpty) {
+        throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
+          ctx, s"the $clause and OFFSET clauses")
+      }
+      clause = "OFFSET"
       Offset(typedVisit(offset), withWindow)
     }
 
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
     withOffset.optional(limit) {
+      if (restrictToSingleClauseOnly && clause.nonEmpty && clause != "OFFSET") {
+        throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
+          ctx, s"the $clause and LIMIT clauses")
+      }
+      clause = "LIMIT"
       Limit(typedVisit(limit), withOffset)
     }
   }
@@ -1261,9 +1287,30 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
     val left = plan(ctx.left)
-    val right = plan(ctx.right)
-    val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
-    ctx.operator.getType match {
+    var right: LogicalPlan = null
+    var all: Boolean = false
+    var operatorType: Int = 0
+    Option(ctx.setOperationLegacy()).foreach { c =>
+      right = plan(c.right)
+      all = Option(c.setQuantifier()).exists(_.ALL != null)
+      operatorType = c.operator.getType
+    }
+    Option(ctx.setOperationNonLegacyIntersect()).foreach { c =>
+      right = plan(c.right)
+      all = Option(c.setQuantifier()).exists(_.ALL != null)
+      operatorType = c.operator.getType
+    }
+    Option(ctx.setOperationNonLegacyUnionExceptMinus()).foreach { c =>
+      right = plan(c.right)
+      all = Option(c.setQuantifier()).exists(_.ALL != null)
+      operatorType = c.operator.getType
+    }
+    buildSetOperation(left, right, operatorType, all)
+  }
+
+  private def buildSetOperation(
+      left: LogicalPlan, right: LogicalPlan, operatorType: Int, all: Boolean): LogicalPlan = {
+    operatorType match {
       case SqlBaseParser.UNION if all =>
         Union(left, right)
       case SqlBaseParser.UNION =>
@@ -5613,4 +5660,34 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
     }
+
+  override def visitOperatorPipeStatement(ctx: OperatorPipeStatementContext): LogicalPlan = {
+    Option(ctx.query).map {
+      // If 'ctx.query' is populated, this is the 'query' base case of the recursive
+      // 'operatorPipeStatement' grammar rule.
+      visitQuery
+    }.getOrElse {
+      // Otherwise, 'ctx.operatorPipeStatement' should be populated along with exactly one of the
+      // SQL clauses in the supported list.
+      if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
+        operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
+      }
+      val left: LogicalPlan = visitOperatorPipeStatement(ctx.operatorPipeStatement())
+      Option(ctx.selectClause).map { c =>
+        withSelectQuerySpecification(
+          ctx = ctx,
+          selectClause = c,
+          lateralView = new java.util.ArrayList[LateralViewContext](),
+          whereClause = null,
+          aggregationClause = null,
+          havingClause = null,
+          windowClause = null,
+          left)
+      }.getOrElse(Option(ctx.whereClause).map { c =>
+        withWhereClause(c, left)
+      }.getOrElse(Option(ctx.queryOrganization).map { c =>
+        withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
+      }.get))
+    }
+  }
 }

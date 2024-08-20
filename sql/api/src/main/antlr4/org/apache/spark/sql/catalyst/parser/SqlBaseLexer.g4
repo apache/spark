@@ -501,6 +501,7 @@ TILDE: '~';
 AMPERSAND: '&';
 PIPE: '|';
 CONCAT_PIPE: '||';
+OPERATOR_PIPE: '|>';
 HAT: '^';
 COLON: ':';
 DOUBLE_COLON: '::';

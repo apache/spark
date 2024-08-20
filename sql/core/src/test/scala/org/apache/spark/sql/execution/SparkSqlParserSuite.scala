@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.ArrayImplicits._
@@ -880,4 +880,18 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan("SELECT\u30001") // Unicode ideographic space
   }
   // scalastyle:on
+
+  test("Operator pipe SQL syntax") {
+    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
+      parser.parsePlan("SELECT 1 AS X |> LIMIT 1")
+      parser.parsePlan("SELECT 1 AS X |> LIMIT 1 OFFSET 1")
+      parser.parsePlan("SELECT 1 AS X |> WHERE X < 5")
+      parser.parsePlan("SELECT 1 AS X |> LIMIT 1 |> LIMIT 1")
+      parser.parsePlan("SELECT 1 AS X |> SELECT 1")
+      parser.parsePlan("SELECT 1 AS X |> SELECT X")
+      parser.parsePlan("SELECT 1 AS X |> SELECT 1 AS Y |> LIMIT 1")
+      parser.parsePlan("SELECT 1 AS X |> WHERE X = 1")
+      parser.parsePlan("SELECT 1 AS X |> SELECT X |> WHERE X = 1")
+    }
+  }
 }

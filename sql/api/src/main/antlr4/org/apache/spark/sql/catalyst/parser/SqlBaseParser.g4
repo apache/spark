@@ -130,8 +130,7 @@ statement
         (commentSpec |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) propertyList))*             #createNamespace
-    | ALTER namespace identifierReference
-        SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
+    | ALTER namespace identifierReference SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
     | ALTER namespace identifierReference
         UNSET (DBPROPERTIES | PROPERTIES) propertyList                 #unsetNamespaceProperties
     | ALTER namespace identifierReference
@@ -276,6 +275,7 @@ statement
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    | operatorPipeStatement                                            #operatorPipeSequence
     ;
 
 setResetStatement
@@ -584,11 +584,23 @@ multiInsertQueryBody
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
     | left=queryTerm {legacy_setops_precedence_enabled}?
-        operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+        setOperationLegacy                                                               #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
-        operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
+        setOperationNonLegacyIntersect                                                   #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
-        operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
+        setOperationNonLegacyUnionExceptMinus                                            #setOperation
+    ;
+
+setOperationLegacy
+    : operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
+    ;
+
+setOperationNonLegacyIntersect
+    : operator=INTERSECT setQuantifier? right=queryTerm
+    ;
+
+setOperationNonLegacyUnionExceptMinus
+    : operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
     ;
 
 queryPrimary
@@ -1445,6 +1457,17 @@ comment
 version
     : INTEGER_VALUE
     | stringLit
+    ;
+
+operatorPipeStatement
+    : operatorPipeStatement OPERATOR_PIPE (
+        selectClause
+      | whereClause
+      | queryOrganization
+      | ({legacy_setops_precedence_enabled}? setOperationLegacy
+      | {!legacy_setops_precedence_enabled}? setOperationNonLegacyIntersect
+      | {!legacy_setops_precedence_enabled}? setOperationNonLegacyUnionExceptMinus))
+    | query
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
