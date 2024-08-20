@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedIdentifier, UnresolvedInlineTable}
 import org.apache.spark.sql.catalyst.expressions.{Add, Cast, Divide, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
+// import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LocalRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, Project, SubqueryAlias}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType, IntegerType, MapType, NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -91,6 +94,13 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
           Cast(UnresolvedFunction("CURRENT_DATABASE", Nil, isDistinct = false), StringType),
           "CURRENT_DATABASE()"),
         replace = false))
+    val subqueryAliasChild =
+      if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+        EvaluateUnresolvedInlineTable.evaluate(
+          UnresolvedInlineTable(Seq("c1"), Seq(Literal(1)) :: Nil))
+      } else {
+        UnresolvedInlineTable(Seq("c1"), Seq(Literal(1)) :: Nil)
+      }
     comparePlans(
       parsePlan("DECLARE VARIABLE var1 INT DEFAULT (SELECT c1 FROM VALUES(1) AS T(c1))"),
       CreateVariable(
@@ -99,7 +109,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
           Cast(ScalarSubquery(
             Project(UnresolvedAttribute("c1") :: Nil,
               SubqueryAlias(Seq("T"),
-                UnresolvedInlineTable(Seq("c1"), Seq(Literal(1)) :: Nil)))), IntegerType),
+                subqueryAliasChild))), IntegerType),
           "(SELECT c1 FROM VALUES(1) AS T(c1))"),
         replace = false))
   }

@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import java.util.UUID
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedInlineTable
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -66,7 +67,14 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    */
   private def generateInsertStatementWithLiterals(tableName: String, numRows: Int): String = {
     val baseQuery = s"INSERT INTO $tableName (id, first_name, last_name, age, gender," +
-      s" email, phone_number, address, city, state, zip_code, country, registration_date) VALUES "
+      s" email, phone_number, address, city, state, zip_code, country, registration_date) "
+    baseQuery + generateValuesWithLiterals(numRows) + ";"
+  }
+
+  /**
+   * Generate a VALUES clause with the given number of rows using basic literals.
+   */
+  private def generateValuesWithLiterals(numRows: Int = 1000): String = {
     val rows = (1 to numRows).map { i =>
       val id = i
       val firstName = s"'FirstName_$id'"
@@ -86,7 +94,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         s" $address, $city, $state, $zipCode, $country, $registrationDate)"
     }.mkString(",\n")
 
-    baseQuery + rows + ";"
+    s" VALUES $rows;"
   }
 
   /**
@@ -95,8 +103,24 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
   private def traversePlanAndCheckForNodeType[T <: LogicalPlan](
       plan: LogicalPlan, nodeType: Class[T]): Boolean = plan match {
     case node if nodeType.isInstance(node) => true
+    case n: Project =>
+      // If the plan node is a Project, we need to check the expressions in the project list
+      // and the child nodes.
+      n.projectList.exists(traverseExpressionAndCheckForNodeType(_, nodeType)) ||
+      n.children.exists(traversePlanAndCheckForNodeType(_, nodeType))
     case node if node.children.isEmpty => false
     case _ => plan.children.exists(traversePlanAndCheckForNodeType(_, nodeType))
+  }
+
+  /**
+   * Traverse the expression and check for the presence of the given node type.
+   */
+  private def traverseExpressionAndCheckForNodeType[T <: LogicalPlan](
+        expression: Expression, nodeType: Class[T]): Boolean = expression match {
+    case scalarSubquery: ScalarSubquery => scalarSubquery.plan.exists(
+      traversePlanAndCheckForNodeType(_, nodeType))
+    case _ =>
+      expression.children.exists(traverseExpressionAndCheckForNodeType(_, nodeType))
   }
 
   /**
@@ -106,16 +130,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
       tableName: String): String = {
     s"""
       INSERT INTO $tableName (id, first_name, last_name, age, gender,
-        email, phone_number, address, city, state, zip_code, country, registration_date)
-      ${generateValuesWithComplexExpressions}
-    """
-  }
-
-  /**
-   * Generate a VALUES clause with complex expressions.
-   */
-  private def generateValuesWithComplexExpressions: String = {
-    s""" VALUES
+        email, phone_number, address, city, state, zip_code, country, registration_date) VALUES
       (1, base64('FirstName_1'), base64('LastName_1'), 10+10, 'M', 'usr' || '@gmail.com',
         concat('555','-1234'), hex('123 Fake St'), 'Anytown', 'CA', '12345', 'USA',
         '2021-01-01'),
@@ -192,13 +207,12 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
 
-        // Traverse the plan and check for the presence of appropriate nodes depending on the
-        // feature flag.
-        if (eagerEvalOfUnresolvedInlineTableEnabled) {
-          assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
-        } else {
-          assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
-        }
+        // Traverse the plan and check for the presence of appropriate nodes.
+        // In this case, the plan should always contain a UnresolvedInlineTable node
+        // because the expressions are not eagerly resolved, therefore
+        // `plan.expressionsResolved` in `EvaluateUnresolvedInlineTable.evaluate` will
+        // always be false.
+        assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
 
         spark.sql(sqlStatement)
 
@@ -288,7 +302,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("Value list in subquery") {
+  test("SPARK-49269: Value list in subquery") {
     var firstDF: Option[DataFrame] = None
     val flagVals = Seq(true, false)
     flagVals.foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
@@ -297,7 +311,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate a subquery with a VALUES clause.
-        val sqlStatement = s"SELECT * FROM ($generateValuesWithComplexExpressions)"
+        val sqlStatement = s"SELECT * FROM (${generateValuesWithLiterals()});"
 
         // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
@@ -322,7 +336,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("Value list in projection list subquery") {
+  test("SPARK-49269: Value list in projection list subquery") {
     var firstDF: Option[DataFrame] = None
     val flagVals = Seq(true, false)
     flagVals.foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
@@ -331,7 +345,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate a subquery with a VALUES clause in the projection list.
-        val sqlStatement = s"SELECT (SELECT COUNT(*) FROM $generateValuesWithComplexExpressions)"
+        val sqlStatement = s"SELECT (SELECT COUNT(*) FROM ${generateValuesWithLiterals()});"
 
         // Parse the SQL statement.
         val plan = parser.parsePlan(sqlStatement)
