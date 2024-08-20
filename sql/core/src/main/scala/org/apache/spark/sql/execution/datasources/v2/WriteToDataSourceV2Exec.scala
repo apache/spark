@@ -24,6 +24,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
@@ -34,6 +35,7 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec.handleConcurrentCreateExceptions
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -53,6 +55,19 @@ case class WriteToDataSourceV2(
   override def output: Seq[Attribute] = Nil
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteToDataSourceV2 =
     copy(query = newChild)
+}
+
+object WriteToDataSourceV2Exec {
+  // Returns None if it detects table created by a concurrent command and ifNotExists is true.
+  def handleConcurrentCreateExceptions[T](ifNotExists: Boolean)(block: => T): Option[T] = {
+    try {
+      Some(block)
+    } catch {
+      // Committing to the table failed because of a concurrent table creation to catalog,
+      // but we ignore the exception when IF NOT EXISTS is true.
+      case _: TableAlreadyExistsException if ifNotExists => None
+    }
+  }
 }
 
 /**
@@ -82,10 +97,13 @@ case class CreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val table = Option(catalog.createTable(
-      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
-    writeToTable(catalog, table, writeOptions, ident, query)
+    val table = handleConcurrentCreateExceptions[Table](ifNotExists) {
+      Option(catalog.createTable(
+        ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
+        partitioning.toArray, properties.asJava)
+      ).getOrElse(catalog.loadTable(ident))
+    }.getOrElse { return Nil }
+    writeToTable(catalog, table, writeOptions, ident, query, ifNotExists)
   }
 }
 
@@ -116,10 +134,12 @@ case class AtomicCreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val stagedTable = catalog.stageCreate(
-      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)
-    writeToTable(catalog, stagedTable, writeOptions, ident, query)
+    val stagedTable = handleConcurrentCreateExceptions[StagedTable](ifNotExists) {
+      catalog.stageCreate(
+        ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
+        partitioning.toArray, properties.asJava)
+    }.getOrElse { return Nil }
+    writeToTable(catalog, stagedTable, writeOptions, ident, query, ifNotExists)
   }
 }
 
@@ -605,7 +625,8 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       table: Table,
       writeOptions: Map[String, String],
       ident: Identifier,
-      query: LogicalPlan): Seq[InternalRow] = {
+      query: LogicalPlan,
+      ifNotExists: Boolean = false): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
       val append = AppendData.byPosition(relation, query, writeOptions)
@@ -613,7 +634,9 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       qe.assertCommandExecuted()
 
       table match {
-        case st: StagedTable => st.commitStagedChanges()
+        case st: StagedTable => handleConcurrentCreateExceptions(ifNotExists) {
+          st.commitStagedChanges()
+        }
         case _ =>
       }
 
