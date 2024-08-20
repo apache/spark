@@ -5015,31 +5015,33 @@
       "Unsupported show create table command."
     ],
     "subClass" : {
-      "ON_SPARK_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
+      "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
         "message" : [
-          "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+          "<table> is a Spark data source table. Please use `SHOW CREATE TABLE` without `AS SERDE` instead."
         ]
       },
       "ON_TEMPORARY_VIEW" : {
         "message" : [
-          "SHOW CREATE TABLE is not supported on a temporary view: <table>."
+          "`SHOW CREATE TABLE` is not supported on a temporary view <table>."
         ]
       },
       "ON_TRANSACTIONAL_HIVE_TABLE" : {
         "message" : [
-          "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+          "Failed to execute `SHOW CREATE TABLE` against transactional Hive table <table>.",
+          "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
         ]
       },
       "WITH_UNSUPPORTED_FEATURE" : {
         "message" : [
-          "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
+          "Failed to execute `SHOW CREATE TABLE` against table/view <table>, which is created by Hive and uses the following unsupported features",
           "<unsupportedFeatures>"
         ]
       },
       "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
         "message" : [
-          "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
-          "<configs>"
+          "Failed to execute `SHOW CREATE TABLE` against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+          "<configs>",
+          "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
         ]
       }
     },
