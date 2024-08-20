@@ -6606,30 +6606,11 @@ object functions {
     from_json(e, schema, options.asScala.iterator)
   }
 
-  /**
-   * Invoke a function with an options map as its last argument. If there are no options, its
-   * column is dropped.
-   */
-  private def fnWithOptions(
-      name: String,
-      options: Iterator[(String, String)],
-      arguments: Column*): Column = {
-    val augmentedArguments = if (options.hasNext) {
-      val flattenedKeyValueIterator = options.flatMap { case (k, v) =>
-        Iterator(lit(k), lit(v))
-      }
-      arguments :+ map(flattenedKeyValueIterator.toSeq: _*)
-    } else {
-      arguments
-    }
-    Column.fn(name, augmentedArguments: _*)
-  }
-
   private def from_json(
       e: Column,
       schema: Column,
       options: Iterator[(String, String)]): Column = {
-    fnWithOptions("from_json", options, e, schema)
+    Column.fnWithOptions("from_json", options, e, schema)
   }
 
   /**
@@ -6756,7 +6737,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_json(json: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("schema_of_json", options.asScala.iterator, json)
+    Column.fnWithOptions("schema_of_json", options.asScala.iterator, json)
 
   /**
    * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
@@ -6798,7 +6779,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_json(e: Column, options: Map[String, String]): Column =
-    fnWithOptions("to_json", options.iterator, e)
+    Column.fnWithOptions("to_json", options.iterator, e)
 
   // scalastyle:off line.size.limit
   /**
@@ -7167,7 +7148,7 @@ object functions {
     from_csv(e, schema, options.asScala.iterator)
 
   private def from_csv(e: Column, schema: Column, options: Iterator[(String, String)]): Column =
-    fnWithOptions("from_csv", options, e, schema)
+    Column.fnWithOptions("from_csv", options, e, schema)
 
   /**
    * Parses a CSV string and infers its schema in DDL format.
@@ -7207,7 +7188,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("schema_of_csv", options.asScala.iterator, csv)
+    Column.fnWithOptions("schema_of_csv", options.asScala.iterator, csv)
 
   // scalastyle:off line.size.limit
   /**
@@ -7227,7 +7208,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_csv(e: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("to_csv", options.asScala.iterator, e)
+    Column.fnWithOptions("to_csv", options.asScala.iterator, e)
 
   /**
    * Converts a column containing a `StructType` into a CSV string with the specified schema.
@@ -7332,7 +7313,7 @@ object functions {
     from_xml(e, schema, Map.empty[String, String].asJava)
 
   private def from_xml(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
-    fnWithOptions("from_xml", options, e, schema)
+    Column.fnWithOptions("from_xml", options, e, schema)
   }
 
   /**
@@ -7371,7 +7352,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
+    Column.fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
 
   // scalastyle:off line.size.limit
 
@@ -7391,7 +7372,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_xml(e: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("to_xml", options.asScala.iterator, e)
+    Column.fnWithOptions("to_xml", options.asScala.iterator, e)
 
   /**
    * Converts a column containing a `StructType` into a XML string with the specified schema.

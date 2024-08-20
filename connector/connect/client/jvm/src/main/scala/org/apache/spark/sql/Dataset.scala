@@ -32,11 +32,13 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
+import org.apache.spark.sql.internal.{UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -848,12 +850,15 @@ class Dataset[T] private[sql] (
     builder.setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS)
   }
 
-  private def buildSort(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
+  private def buildSort(global: Boolean, sortColumns: Seq[Column]): Dataset[T] = {
+    val sortExprs = sortColumns.map { c =>
+      ColumnNodeToProtoConverter(c.sortOrder).getSortOrder
+    }
     sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getSortBuilder
         .setInput(plan.getRoot)
         .setIsGlobal(global)
-        .addAllOrder(sortExprs.map(_.sortOrder).asJava)
+        .addAllOrder(sortExprs.asJava)
     }
   }
 
@@ -1057,7 +1062,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def col(colName: String): Column = {
-    Column.apply(colName, getPlanId)
+    Column(UnresolvedAttribute(colName, getPlanId))
   }
 
   /**
@@ -1069,11 +1074,8 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.5.0
    */
-  def metadataColumn(colName: String): Column = Column { builder =>
-    val attributeBuilder = builder.getUnresolvedAttributeBuilder
-      .setUnparsedIdentifier(colName)
-      .setIsMetadataColumn(true)
-    getPlanId.foreach(attributeBuilder.setPlanId)
+  def metadataColumn(colName: String): Column = {
+    Column(UnresolvedAttribute(colName, getPlanId, isMetadataColumn = true))
   }
 
   /**
@@ -1082,10 +1084,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def colRegex(colName: String): Column = {
-    Column { builder =>
-      val unresolvedRegexBuilder = builder.getUnresolvedRegexBuilder.setColName(colName)
-      getPlanId.foreach(unresolvedRegexBuilder.setPlanId)
-    }
+    Column(UnresolvedRegex(colName, getPlanId))
   }
 
   /**
@@ -1182,7 +1181,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    val encoder = c1.encoder
+    val encoder = encoderFor(c1.encoder)
     val expr = if (encoder.schema == encoder.dataType) {
       functions.inline(functions.array(c1)).expr
     } else {
@@ -1201,7 +1200,7 @@ class Dataset[T] private[sql] (
    * cast appropriately for the user facing interface.
    */
   private def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoder = ProductEncoder.tuple(columns.map(_.encoder))
+    val encoder = ProductEncoder.tuple(columns.map(c => encoderFor(c.encoder)))
     selectUntyped(encoder, columns)
   }
 

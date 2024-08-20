@@ -25,7 +25,7 @@ import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, map}
 import org.apache.spark.sql.internal.ColumnNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -35,6 +35,25 @@ private[spark] object Column {
   def apply(colName: String): Column = new Column(colName)
 
   def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
+
+  /**
+   * Invoke a function with an options map as its last argument. If there are no options, its
+   * column is dropped.
+   */
+  private[sql] def fnWithOptions(
+      name: String,
+      options: Iterator[(String, String)],
+      arguments: Column*): Column = {
+    val augmentedArguments = if (options.hasNext) {
+      val flattenedKeyValueIterator = options.flatMap { case (k, v) =>
+        Iterator(lit(k), lit(v))
+      }
+      arguments :+ map(flattenedKeyValueIterator.toSeq: _*)
+    } else {
+      arguments
+    }
+    Column.fn(name, augmentedArguments: _*)
+  }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, inputs: _*)

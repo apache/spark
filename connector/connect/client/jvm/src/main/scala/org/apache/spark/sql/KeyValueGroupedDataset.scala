@@ -26,6 +26,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toExpr
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.functions.col
@@ -1011,8 +1012,10 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    // TODO bind input encoder to types column!
     // TODO(SPARK-43415): For each column, apply the valueMap func first
-    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(_.encoder)) // apply keyAs change
+    // apply keyAs change
+    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => encoderFor(c.encoder)))
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
         .setInput(plan.getRoot)
@@ -1029,8 +1032,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       inputEncoders = inputEncoders,
       outputEncoder = vEncoder)
     val input = udf.apply(inputEncoders.map(_ => col("*")): _*)
-    val expr = Column.fn("reduce", input).expr
-    val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr, vEncoder)
+    val expr = Column.fn("reduce", input)
+    val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr.node, vEncoder)
     agg(aggregator)
   }
 
@@ -1115,7 +1118,7 @@ private object KeyValueGroupedDatasetImpl {
       kEncoder,
       ds.agnosticEncoder,
       ds.agnosticEncoder,
-      Arrays.asList(session.expression(gf.apply(col("*")))),
+      Arrays.asList(toExpr(gf.apply(col("*")))),
       UdfUtils.identical(),
       () => ds.map(groupingFunc)(kEncoder))
   }
@@ -1138,7 +1141,7 @@ private object KeyValueGroupedDatasetImpl {
       kEncoder,
       vEncoder,
       vEncoder,
-      (Seq(dummyGroupingFunc) ++ groupingExprs).map(session.expression).asJava,
+      (Seq(dummyGroupingFunc) ++ groupingExprs).map(toExpr).asJava,
       UdfUtils.identical(),
       () => df.select(groupingExprs: _*).as(kEncoder))
   }

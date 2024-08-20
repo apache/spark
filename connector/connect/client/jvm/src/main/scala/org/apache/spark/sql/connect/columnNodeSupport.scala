@@ -23,6 +23,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering.{SORT_NULLS_FIRST, SORT_NULLS_LAST}
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection.{SORT_DIRECTION_ASCENDING, SORT_DIRECTION_DESCENDING}
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBoundary, FrameType}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
@@ -33,6 +34,10 @@ import org.apache.spark.sql.internal._
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.
  */
 object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
+  def toExpr(column: Column): proto.Expression = apply(column)
+
+  def apply(column: Column): proto.Expression = apply((column.node))
+
   override def apply(node: ColumnNode): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     // TODO(SPARK-49273) support Origin in Connect Scala Client.

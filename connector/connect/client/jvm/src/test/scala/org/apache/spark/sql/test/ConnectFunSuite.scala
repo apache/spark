@@ -18,6 +18,7 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
 
 import java.nio.file.Path
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
@@ -51,5 +52,5 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     getWorkspaceFilePath("sql", "connect", "common", "src", "test", "resources").toAbsolutePath
   }
 
-  protected def toExpr(c: Column): proto.Expression = c.secret() // TODO change to converter!
+  protected def toExpr(c: Column): proto.Expression = ColumnNodeToProtoConverter(c.node)
 }
