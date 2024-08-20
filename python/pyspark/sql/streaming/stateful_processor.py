@@ -106,7 +106,8 @@ class StatefulProcessorHandle:
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
     def getValueStateWithTTL(
-        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: int) -> ValueState:
+        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: int
+    ) -> ValueState:
         """
         Function to create new or return existing single value state variable with TTL.
         State values will not be returned past ttlDuration, and will be eventually removed
@@ -127,6 +128,7 @@ class StatefulProcessorHandle:
         """
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttlDurationMs)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
+
 
 class StatefulProcessor(ABC):
     """

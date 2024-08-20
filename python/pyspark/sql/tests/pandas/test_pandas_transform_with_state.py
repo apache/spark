@@ -67,12 +67,12 @@ class TransformWithStateInPandasTestsMixin:
                 fw.write(f"{e1}, {e2}\n")
 
     def _prepare_test_resource1(self, input_path):
-        self._prepare_input_data(input_path + "/text-test1.txt",
-                                 [0, 0, 1, 1], [123, 46, 146, 346])
+        self._prepare_input_data(input_path + "/text-test1.txt", [0, 0, 1, 1], [123, 46, 146, 346])
 
     def _prepare_test_resource2(self, input_path):
-        self._prepare_input_data(input_path + "/text-test2.txt",
-                                 [0, 0, 0, 1, 1], [123, 223, 323, 246, 6])
+        self._prepare_input_data(
+            input_path + "/text-test2.txt", [0, 0, 0, 1, 1], [123, 223, 323, 246, 6]
+        )
 
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
@@ -227,30 +227,47 @@ class TransformWithStateInPandasTestsMixin:
                 }
 
         self._test_transform_with_state_in_pandas_basic(
-            SimpleTTLStatefulProcessor(), check_results, False, "processingTime")
+            SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
+        )
 
     def test_value_state_ttl_expiration(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 assertDataFrameEqual(
                     batch_df,
-                    [Row(id="ttl-count-0", count=1), Row(id="count-0", count=1),
-                     Row(id="ttl-count-1", count=1), Row(id="count-1", count=1)])
+                    [
+                        Row(id="ttl-count-0", count=1),
+                        Row(id="count-0", count=1),
+                        Row(id="ttl-count-1", count=1),
+                        Row(id="count-1", count=1),
+                    ],
+                )
             elif batch_id == 1:
                 assertDataFrameEqual(
                     batch_df,
-                    [Row(id="ttl-count-0", count=2), Row(id="count-0", count=2),
-                     Row(id="ttl-count-1", count=2), Row(id="count-1", count=2)])
+                    [
+                        Row(id="ttl-count-0", count=2),
+                        Row(id="count-0", count=2),
+                        Row(id="ttl-count-1", count=2),
+                        Row(id="count-1", count=2),
+                    ],
+                )
             elif batch_id == 2:
                 # ttl-count-0 expire and restart from count 0.
                 # ttl-count-1 get reset in batch 1 and keep the state
                 # non-ttl state never expires
                 assertDataFrameEqual(
                     batch_df,
-                    [Row(id="ttl-count-0", count=1), Row(id="count-0", count=3),
-                     Row(id="ttl-count-1", count=3), Row(id="count-1", count=3)])
+                    [
+                        Row(id="ttl-count-0", count=1),
+                        Row(id="count-0", count=3),
+                        Row(id="ttl-count-1", count=3),
+                        Row(id="count-1", count=3),
+                    ],
+                )
             if batch_id == 0 or batch_id == 1:
                 time.sleep(6)
+
         input_path = tempfile.mkdtemp()
         df = self._build_test_df(input_path)
         self._prepare_input_data(input_path + "/batch1.txt", [1, 0], [0, 0])
@@ -267,16 +284,15 @@ class TransformWithStateInPandasTestsMixin:
 
         q = (
             df.groupBy("id")
-                .transformWithStateInPandas(
+            .transformWithStateInPandas(
                 statefulProcessor=TTLStatefulProcessor(),
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode="processingTime",
             )
-                .writeStream
-                .foreachBatch(check_results)
-                .outputMode("update")
-                .start()
+            .writeStream.foreachBatch(check_results)
+            .outputMode("update")
+            .start()
         )
         self.assertTrue(q.isActive)
         q.processAllAvailable()
@@ -324,7 +340,10 @@ class SimpleStatefulProcessor(StatefulProcessor):
 class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueStateWithTTL("numViolations", state_schema, 30000)
+        self.num_violations_state = handle.getValueStateWithTTL(
+            "numViolations", state_schema, 30000
+        )
+
 
 class TTLStatefulProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -347,10 +366,9 @@ class TTLStatefulProcessor(StatefulProcessor):
 
         self.count_state.update((count,))
         # skip updating state for the 2nd batch so that ttl state expire
-        if not (ttl_count == 2 and id == '0'):
+        if not (ttl_count == 2 and id == "0"):
             self.ttl_count_state.update((ttl_count,))
-        yield pd.DataFrame({"id": [f"ttl-count-{id}", f"count-{id}"],
-                            "count": [ttl_count, count]})
+        yield pd.DataFrame({"id": [f"ttl-count-{id}", f"count-{id}"], "count": [ttl_count, count]})
 
     def close(self) -> None:
         pass
