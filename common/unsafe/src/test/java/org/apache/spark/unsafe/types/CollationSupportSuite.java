@@ -3495,167 +3495,226 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE_CI", "𝔸", "a", "");
   }
 
-  private void assertStringTranslate(
-      String inputString,
-      String matchingString,
-      String replaceString,
-      String collationName,
-      String expectedResultString) throws SparkException {
+  /**
+   * Verify the behaviour of the `StringTranslate` collation support class.
+   */
+
+  private void assertStringTranslate(String inputString, String matchingString,
+    String replaceString, String collationName, String expected) throws SparkException {
     int collationId = CollationFactory.collationNameToId(collationName);
     Map<String, String> dict = buildDict(matchingString, replaceString);
     UTF8String source = UTF8String.fromString(inputString);
     UTF8String result = CollationSupport.StringTranslate.exec(source, dict, collationId);
-    assertEquals(expectedResultString, result.toString());
+    assertEquals(UTF8String.fromString(expected), result);
   }
 
   @Test
   public void testStringTranslate() throws SparkException {
-    // Basic tests - UTF8_BINARY.
+    // Empty strings.
+    assertStringTranslate("", "", "", "UTF8_BINARY", "");
+    assertStringTranslate("", "", "", "UTF8_LCASE", "");
+    assertStringTranslate("", "", "", "UNICODE", "");
+    assertStringTranslate("", "", "", "UNICODE_CI", "");
+    assertStringTranslate("abc", "", "", "UTF8_BINARY", "abc");
+    assertStringTranslate("abc", "", "", "UTF8_LCASE", "abc");
+    assertStringTranslate("abc", "", "", "UNICODE", "abc");
+    assertStringTranslate("abc", "", "", "UNICODE_CI", "abc");
+    assertStringTranslate("", "b", "", "UTF8_BINARY", "");
+    assertStringTranslate("", "b", "", "UTF8_LCASE", "");
+    assertStringTranslate("", "b", "", "UNICODE", "");
+    assertStringTranslate("", "b", "", "UNICODE_CI", "");
+    assertStringTranslate("", "", "x", "UTF8_BINARY", "");
+    assertStringTranslate("", "", "x", "UTF8_LCASE", "");
+    assertStringTranslate("", "", "x", "UNICODE", "");
+    assertStringTranslate("", "", "x", "UNICODE_CI", "");
+    assertStringTranslate("abc", "b", "", "UTF8_BINARY", "ac");
+    assertStringTranslate("abc", "b", "", "UTF8_LCASE", "ac");
+    assertStringTranslate("abc", "b", "", "UNICODE", "ac");
+    assertStringTranslate("abc", "b", "", "UNICODE_CI", "ac");
+    assertStringTranslate("abc", "", "x", "UTF8_BINARY", "abc");
+    assertStringTranslate("abc", "", "x", "UTF8_LCASE", "abc");
+    assertStringTranslate("abc", "", "x", "UNICODE", "abc");
+    assertStringTranslate("abc", "", "x", "UNICODE_CI", "abc");
+    assertStringTranslate("", "b", "x", "UTF8_BINARY", "");
+    assertStringTranslate("", "b", "x", "UTF8_LCASE", "");
+    assertStringTranslate("", "b", "x", "UNICODE", "");
+    assertStringTranslate("", "b", "x", "UNICODE_CI", "");
+    // Basic tests.
+    assertStringTranslate("abc", "b", "x", "UTF8_BINARY", "axc");
+    assertStringTranslate("abc", "b", "x", "UTF8_LCASE", "axc");
+    assertStringTranslate("abc", "b", "x", "UNICODE", "axc");
+    assertStringTranslate("abc", "b", "x", "UNICODE_CI", "axc");
     assertStringTranslate("Translate", "Rnlt", "12", "UTF8_BINARY", "Tra2sae");
-    assertStringTranslate("Translate", "Rn", "1234", "UTF8_BINARY", "Tra2slate");
-    assertStringTranslate("Translate", "Rnlt", "1234", "UTF8_BINARY", "Tra2s3a4e");
-    assertStringTranslate("TRanslate", "rnlt", "XxXx", "UTF8_BINARY", "TRaxsXaxe");
-    assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UTF8_BINARY", "TxaxsXaxeX");
-    assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UTF8_BINARY", "TXaxsXaxex");
-    assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UTF8_BINARY", "test大千世AX大千世A");
-    assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UTF8_BINARY", "大千世界test大千世界");
-    assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UTF8_BINARY", "Oeso大千世界大千世界");
-    assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UTF8_BINARY", "大千世界大千世界oesO");
-    assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UTF8_BINARY", "世世世界世世世界tesT");
-    assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UTF8_BINARY", "Tr4234e");
-    assertStringTranslate("Translate", "Rnlt", "123495834634", "UTF8_BINARY", "Tra2s3a4e");
-    assertStringTranslate("abcdef", "abcde", "123", "UTF8_BINARY", "123f");
-    // Basic tests - UTF8_LCASE.
     assertStringTranslate("Translate", "Rnlt", "12", "UTF8_LCASE", "1a2sae");
-    assertStringTranslate("Translate", "Rn", "1234", "UTF8_LCASE", "T1a2slate");
-    assertStringTranslate("Translate", "Rnlt", "1234", "UTF8_LCASE", "41a2s3a4e");
-    assertStringTranslate("TRanslate", "rnlt", "XxXx", "UTF8_LCASE", "xXaxsXaxe");
-    assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UTF8_LCASE", "xxaxsXaxex");
-    assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UTF8_LCASE", "xXaxsXaxeX");
-    assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UTF8_LCASE", "test大千世AB大千世A");
-    assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UTF8_LCASE", "大千世界abca大千世界");
-    assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UTF8_LCASE", "oeso大千世界大千世界");
-    assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UTF8_LCASE", "大千世界大千世界OesO");
-    assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UTF8_LCASE", "世世世界世世世界tesT");
-    assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UTF8_LCASE", "14234e");
-    assertStringTranslate("Translate", "Rnlt", "123495834634", "UTF8_LCASE", "41a2s3a4e");
-    assertStringTranslate("abcdef", "abcde", "123", "UTF8_LCASE", "123f");
-    // Basic tests - UNICODE.
     assertStringTranslate("Translate", "Rnlt", "12", "UNICODE", "Tra2sae");
-    assertStringTranslate("Translate", "Rn", "1234", "UNICODE", "Tra2slate");
-    assertStringTranslate("Translate", "Rnlt", "1234", "UNICODE", "Tra2s3a4e");
-    assertStringTranslate("TRanslate", "rnlt", "XxXx", "UNICODE", "TRaxsXaxe");
-    assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UNICODE", "TxaxsXaxeX");
-    assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UNICODE", "TXaxsXaxex");
-    assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UNICODE", "test大千世AX大千世A");
-    assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UNICODE", "大千世界test大千世界");
-    assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UNICODE", "Oeso大千世界大千世界");
-    assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UNICODE", "大千世界大千世界oesO");
-    assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UNICODE", "世世世界世世世界tesT");
-    assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UNICODE", "Tr4234e");
-    assertStringTranslate("Translate", "Rnlt", "123495834634", "UNICODE", "Tra2s3a4e");
-    assertStringTranslate("abcdef", "abcde", "123", "UNICODE", "123f");
-    // Basic tests - UNICODE_CI.
     assertStringTranslate("Translate", "Rnlt", "12", "UNICODE_CI", "1a2sae");
+    assertStringTranslate("Translate", "Rn", "1234", "UTF8_BINARY", "Tra2slate");
+    assertStringTranslate("Translate", "Rn", "1234", "UTF8_LCASE", "T1a2slate");
+    assertStringTranslate("Translate", "Rn", "1234", "UNICODE", "Tra2slate");
     assertStringTranslate("Translate", "Rn", "1234", "UNICODE_CI", "T1a2slate");
+    assertStringTranslate("Translate", "Rnlt", "1234", "UTF8_BINARY", "Tra2s3a4e");
+    assertStringTranslate("Translate", "Rnlt", "1234", "UTF8_LCASE", "41a2s3a4e");
+    assertStringTranslate("Translate", "Rnlt", "1234", "UNICODE", "Tra2s3a4e");
     assertStringTranslate("Translate", "Rnlt", "1234", "UNICODE_CI", "41a2s3a4e");
+    assertStringTranslate("TRanslate", "rnlt", "XxXx", "UTF8_BINARY", "TRaxsXaxe");
+    assertStringTranslate("TRanslate", "rnlt", "XxXx", "UTF8_LCASE", "xXaxsXaxe");
+    assertStringTranslate("TRanslate", "rnlt", "XxXx", "UNICODE", "TRaxsXaxe");
     assertStringTranslate("TRanslate", "rnlt", "XxXx", "UNICODE_CI", "xXaxsXaxe");
+    assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UTF8_BINARY", "TxaxsXaxeX");
+    assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UTF8_LCASE", "xxaxsXaxex");
+    assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UNICODE", "TxaxsXaxeX");
     assertStringTranslate("TRanslater", "Rrnlt", "xXxXx", "UNICODE_CI", "xxaxsXaxex");
+    assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UTF8_BINARY", "TXaxsXaxex");
+    assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UTF8_LCASE", "xXaxsXaxeX");
+    assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UNICODE", "TXaxsXaxex");
     assertStringTranslate("TRanslater", "Rrnlt", "XxxXx", "UNICODE_CI", "xXaxsXaxeX");
+    assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UTF8_BINARY", "test大千世AX大千世A");
+    assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UTF8_LCASE", "test大千世AB大千世A");
+    assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UNICODE", "test大千世AX大千世A");
     assertStringTranslate("test大千世界X大千世界", "界x", "AB", "UNICODE_CI", "test大千世AB大千世A");
+    assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UTF8_BINARY", "大千世界test大千世界");
+    assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UTF8_LCASE", "大千世界abca大千世界");
+    assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UNICODE", "大千世界test大千世界");
     assertStringTranslate("大千世界test大千世界", "TEST", "abcd", "UNICODE_CI", "大千世界abca大千世界");
+    assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UTF8_BINARY", "Oeso大千世界大千世界");
+    assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UTF8_LCASE", "oeso大千世界大千世界");
+    assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UNICODE", "Oeso大千世界大千世界");
     assertStringTranslate("Test大千世界大千世界", "tT", "oO", "UNICODE_CI", "oeso大千世界大千世界");
+    assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UTF8_BINARY", "大千世界大千世界oesO");
+    assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UTF8_LCASE", "大千世界大千世界OesO");
+    assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UNICODE", "大千世界大千世界oesO");
     assertStringTranslate("大千世界大千世界tesT", "Tt", "Oo", "UNICODE_CI", "大千世界大千世界OesO");
+    assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UTF8_BINARY", "世世世界世世世界tesT");
+    assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UTF8_LCASE", "世世世界世世世界tesT");
+    assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UNICODE", "世世世界世世世界tesT");
     assertStringTranslate("大千世界大千世界tesT", "大千", "世世", "UNICODE_CI", "世世世界世世世界tesT");
+    assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UTF8_BINARY", "Tr4234e");
+    assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UTF8_LCASE", "14234e");
+    assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UNICODE", "Tr4234e");
     assertStringTranslate("Translate", "Rnlasdfjhgadt", "1234", "UNICODE_CI", "14234e");
+    assertStringTranslate("Translate", "Rnlt", "123495834634", "UTF8_BINARY", "Tra2s3a4e");
+    assertStringTranslate("Translate", "Rnlt", "123495834634", "UTF8_LCASE", "41a2s3a4e");
+    assertStringTranslate("Translate", "Rnlt", "123495834634", "UNICODE", "Tra2s3a4e");
     assertStringTranslate("Translate", "Rnlt", "123495834634", "UNICODE_CI", "41a2s3a4e");
+    assertStringTranslate("abcdef", "abcde", "123", "UTF8_BINARY", "123f");
+    assertStringTranslate("abcdef", "abcde", "123", "UTF8_LCASE", "123f");
+    assertStringTranslate("abcdef", "abcde", "123", "UNICODE", "123f");
     assertStringTranslate("abcdef", "abcde", "123", "UNICODE_CI", "123f");
-
-    // One-to-many case mapping - UTF8_BINARY.
+    // One-to-many case mapping (e.g. Turkish dotted I).
     assertStringTranslate("İ", "i\u0307", "xy", "UTF8_BINARY", "İ");
-    assertStringTranslate("i\u0307", "İ", "xy", "UTF8_BINARY", "i\u0307");
-    assertStringTranslate("i\u030A", "İ", "x", "UTF8_BINARY", "i\u030A");
-    assertStringTranslate("i\u030A", "İi", "xy", "UTF8_BINARY", "y\u030A");
-    assertStringTranslate("İi\u0307", "İi\u0307", "123", "UTF8_BINARY", "123");
-    assertStringTranslate("İi\u0307", "İyz", "123", "UTF8_BINARY", "1i\u0307");
-    assertStringTranslate("İi\u0307", "xi\u0307", "123", "UTF8_BINARY", "İ23");
-    assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UTF8_BINARY", "12bc3");
-    assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UTF8_BINARY", "a2bcå");
-    assertStringTranslate("a\u030AβφδI\u0307", "Iİaå", "1234", "UTF8_BINARY", "3\u030Aβφδ1\u0307");
-    // One-to-many case mapping - UTF8_LCASE.
     assertStringTranslate("İ", "i\u0307", "xy", "UTF8_LCASE", "İ");
-    assertStringTranslate("i\u0307", "İ", "xy", "UTF8_LCASE", "x");
-    assertStringTranslate("i\u030A", "İ", "x", "UTF8_LCASE", "i\u030A");
-    assertStringTranslate("i\u030A", "İi", "xy", "UTF8_LCASE", "y\u030A");
-    assertStringTranslate("İi\u0307", "İi\u0307", "123", "UTF8_LCASE", "11");
-    assertStringTranslate("İi\u0307", "İyz", "123", "UTF8_LCASE", "11");
-    assertStringTranslate("İi\u0307", "xi\u0307", "123", "UTF8_LCASE", "İ23");
-    assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UTF8_LCASE", "12bc3");
-    assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UTF8_LCASE", "12bc3");
-    assertStringTranslate("A\u030Aβφδi\u0307", "Iİaå", "1234", "UTF8_LCASE", "3\u030Aβφδ2");
-    // One-to-many case mapping - UNICODE.
     assertStringTranslate("İ", "i\u0307", "xy", "UNICODE", "İ");
-    assertStringTranslate("i\u0307", "İ", "xy", "UNICODE", "i\u0307");
-    assertStringTranslate("i\u030A", "İ", "x", "UNICODE", "i\u030A");
-    assertStringTranslate("i\u030A", "İi", "xy", "UNICODE", "i\u030A");
-    assertStringTranslate("İi\u0307", "İi\u0307", "123", "UNICODE", "1i\u0307");
-    assertStringTranslate("İi\u0307", "İyz", "123", "UNICODE", "1i\u0307");
-    assertStringTranslate("İi\u0307", "xi\u0307", "123", "UNICODE", "İi\u0307");
-    assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UNICODE", "3bc3");
-    assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UNICODE", "a\u030Abcå");
-    assertStringTranslate("a\u030AβφδI\u0307", "Iİaå", "1234", "UNICODE", "4βφδ2");
-    // One-to-many case mapping - UNICODE_CI.
     assertStringTranslate("İ", "i\u0307", "xy", "UNICODE_CI", "İ");
+    assertStringTranslate("i\u0307", "İ", "xy", "UTF8_BINARY", "i\u0307");
+    assertStringTranslate("i\u0307", "İ", "xy", "UTF8_LCASE", "x");
+    assertStringTranslate("i\u0307", "İ", "xy", "UNICODE", "i\u0307");
     assertStringTranslate("i\u0307", "İ", "xy", "UNICODE_CI", "x");
+    assertStringTranslate("i\u030A", "İ", "x", "UTF8_BINARY", "i\u030A");
+    assertStringTranslate("i\u030A", "İ", "x", "UTF8_LCASE", "i\u030A");
+    assertStringTranslate("i\u030A", "İ", "x", "UNICODE", "i\u030A");
     assertStringTranslate("i\u030A", "İ", "x", "UNICODE_CI", "i\u030A");
+    assertStringTranslate("i\u030A", "İi", "xy", "UTF8_BINARY", "y\u030A");
+    assertStringTranslate("i\u030A", "İi", "xy", "UTF8_LCASE", "y\u030A");
+    assertStringTranslate("i\u030A", "İi", "xy", "UNICODE", "i\u030A");
     assertStringTranslate("i\u030A", "İi", "xy", "UNICODE_CI", "i\u030A");
+    assertStringTranslate("İi\u0307", "İi\u0307", "123", "UTF8_BINARY", "123");
+    assertStringTranslate("İi\u0307", "İi\u0307", "123", "UTF8_LCASE", "11");
+    assertStringTranslate("İi\u0307", "İi\u0307", "123", "UNICODE", "1i\u0307");
     assertStringTranslate("İi\u0307", "İi\u0307", "123", "UNICODE_CI", "11");
+    assertStringTranslate("İi\u0307", "İyz", "123", "UTF8_BINARY", "1i\u0307");
+    assertStringTranslate("İi\u0307", "İyz", "123", "UTF8_LCASE", "11");
+    assertStringTranslate("İi\u0307", "İyz", "123", "UNICODE", "1i\u0307");
     assertStringTranslate("İi\u0307", "İyz", "123", "UNICODE_CI", "11");
+    assertStringTranslate("İi\u0307", "xi\u0307", "123", "UTF8_BINARY", "İ23");
+    assertStringTranslate("İi\u0307", "xi\u0307", "123", "UTF8_LCASE", "İ23");
+    assertStringTranslate("İi\u0307", "xi\u0307", "123", "UNICODE", "İi\u0307");
     assertStringTranslate("İi\u0307", "xi\u0307", "123", "UNICODE_CI", "İi\u0307");
+    assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UTF8_BINARY", "12bc3");
+    assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UTF8_LCASE", "12bc3");
+    assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UNICODE", "3bc3");
     assertStringTranslate("a\u030Abcå", "a\u030Aå", "123", "UNICODE_CI", "3bc3");
+    assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UTF8_BINARY", "a2bcå");
+    assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UTF8_LCASE", "12bc3");
+    assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UNICODE", "a\u030Abcå");
     assertStringTranslate("a\u030Abcå", "A\u030AÅ", "123", "UNICODE_CI", "3bc3");
+    assertStringTranslate("a\u030AβφδI\u0307", "Iİaå", "1234", "UTF8_BINARY", "3\u030Aβφδ1\u0307");
+    assertStringTranslate("A\u030Aβφδi\u0307", "Iİaå", "1234", "UTF8_LCASE", "3\u030Aβφδ2");
+    assertStringTranslate("a\u030AβφδI\u0307", "Iİaå", "1234", "UNICODE", "4βφδ2");
     assertStringTranslate("A\u030Aβφδi\u0307", "Iİaå", "1234", "UNICODE_CI", "4βφδ2");
-
-    // Greek sigmas - UTF8_BINARY.
+    // Conditional case mapping (e.g. Greek sigmas).
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "σιι", "UTF8_BINARY", "σΥσΤΗΜΑΤΙΚΟσ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UTF8_BINARY", "ςΥςΤΗΜΑΤΙΚΟς");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("συστηματικος", "Συη", "σιι", "UTF8_BINARY", "σιστιματικος");
-    assertStringTranslate("συστηματικος", "συη", "σιι", "UTF8_BINARY", "σιστιματικος");
-    assertStringTranslate("συστηματικος", "ςυη", "σιι", "UTF8_BINARY", "σιστιματικοσ");
-    // Greek sigmas - UTF8_LCASE.
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "σιι", "UTF8_LCASE", "σισΤιΜΑΤΙΚΟσ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UTF8_LCASE", "σισΤιΜΑΤΙΚΟσ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UTF8_LCASE", "σισΤιΜΑΤΙΚΟσ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UTF8_LCASE", "ςιςΤιΜΑΤΙΚΟς");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UTF8_LCASE", "ςιςΤιΜΑΤΙΚΟς");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UTF8_LCASE", "ςιςΤιΜΑΤΙΚΟς");
-    assertStringTranslate("συστηματικος", "Συη", "σιι", "UTF8_LCASE", "σιστιματικοσ");
-    assertStringTranslate("συστηματικος", "συη", "σιι", "UTF8_LCASE", "σιστιματικοσ");
-    assertStringTranslate("συστηματικος", "ςυη", "σιι", "UTF8_LCASE", "σιστιματικοσ");
-    // Greek sigmas - UNICODE.
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "σιι", "UNICODE", "σΥσΤΗΜΑΤΙΚΟσ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UNICODE", "ςΥςΤΗΜΑΤΙΚΟς");
-    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
-    assertStringTranslate("συστηματικος", "Συη", "σιι", "UNICODE", "σιστιματικος");
-    assertStringTranslate("συστηματικος", "συη", "σιι", "UNICODE", "σιστιματικος");
-    assertStringTranslate("συστηματικος", "ςυη", "σιι", "UNICODE", "σιστιματικοσ");
-    // Greek sigmas - UNICODE_CI.
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "σιι", "UNICODE_CI", "σισΤιΜΑΤΙΚΟσ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UTF8_LCASE", "σισΤιΜΑΤΙΚΟσ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "σιι", "UNICODE_CI", "σισΤιΜΑΤΙΚΟσ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UTF8_LCASE", "σισΤιΜΑΤΙΚΟσ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "σιι", "UNICODE_CI", "σισΤιΜΑΤΙΚΟσ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UTF8_LCASE", "ςιςΤιΜΑΤΙΚΟς");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "συη", "ςιι", "UNICODE_CI", "ςιςΤιΜΑΤΙΚΟς");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UTF8_BINARY", "ςΥςΤΗΜΑΤΙΚΟς");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UTF8_LCASE", "ςιςΤιΜΑΤΙΚΟς");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UNICODE", "ςΥςΤΗΜΑΤΙΚΟς");
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "Συη", "ςιι", "UNICODE_CI", "ςιςΤιΜΑΤΙΚΟς");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UTF8_BINARY", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UTF8_LCASE", "ςιςΤιΜΑΤΙΚΟς");
+    assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UNICODE", "ΣΥΣΤΗΜΑΤΙΚΟΣ");
     assertStringTranslate("ΣΥΣΤΗΜΑΤΙΚΟΣ", "ςυη", "ςιι", "UNICODE_CI", "ςιςΤιΜΑΤΙΚΟς");
+    assertStringTranslate("συστηματικος", "Συη", "σιι", "UTF8_BINARY", "σιστιματικος");
+    assertStringTranslate("συστηματικος", "Συη", "σιι", "UTF8_LCASE", "σιστιματικοσ");
+    assertStringTranslate("συστηματικος", "Συη", "σιι", "UNICODE", "σιστιματικος");
     assertStringTranslate("συστηματικος", "Συη", "σιι", "UNICODE_CI", "σιστιματικοσ");
+    assertStringTranslate("συστηματικος", "συη", "σιι", "UTF8_BINARY", "σιστιματικος");
+    assertStringTranslate("συστηματικος", "συη", "σιι", "UTF8_LCASE", "σιστιματικοσ");
+    assertStringTranslate("συστηματικος", "συη", "σιι", "UNICODE", "σιστιματικος");
     assertStringTranslate("συστηματικος", "συη", "σιι", "UNICODE_CI", "σιστιματικοσ");
+    assertStringTranslate("συστηματικος", "ςυη", "σιι", "UTF8_BINARY", "σιστιματικοσ");
+    assertStringTranslate("συστηματικος", "ςυη", "σιι", "UTF8_LCASE", "σιστιματικοσ");
+    assertStringTranslate("συστηματικος", "ςυη", "σιι", "UNICODE", "σιστιματικοσ");
     assertStringTranslate("συστηματικος", "ςυη", "σιι", "UNICODE_CI", "σιστιματικοσ");
+    // Surrogate pairs.
+    assertStringTranslate("a🙃b🙃c", "a", "x", "UTF8_BINARY", "x🙃b🙃c");
+    assertStringTranslate("a🙃b🙃c", "a🙃", "xy", "UTF8_BINARY", "xybyc");
+    assertStringTranslate("a🙃b🙃c", "a🙃b", "xyz", "UTF8_BINARY", "xyzyc");
+    assertStringTranslate("a🙃b🙃c", "a🙃bc", "xyzw", "UTF8_BINARY", "xyzyw");
+    assertStringTranslate("😀😆😃😄", "😄😆", "😅😂", "UTF8_BINARY", "😀😂😃😅");
+    assertStringTranslate("😀😆😃😄", "😄😆", "😅😂", "UTF8_LCASE", "😀😂😃😅");
+    assertStringTranslate("😀😆😃😄", "😄😆", "😅😂", "UNICODE", "😀😂😃😅");
+    assertStringTranslate("😀😆😃😄", "😄😆", "😅😂", "UNICODE_CI", "😀😂😃😅");
+    assertStringTranslate("𐐅", "𐐅", "x", "UTF8_BINARY", "x");
+    assertStringTranslate("𐐅", "𐐅", "x", "UTF8_LCASE", "x");
+    assertStringTranslate("𐐅", "𐐅", "x", "UNICODE", "x");
+    assertStringTranslate("𐐅", "𐐅", "x", "UNICODE_CI", "x");
+    assertStringTranslate("𐐅", "𐐭", "x", "UTF8_BINARY", "𐐅");
+    assertStringTranslate("𐐅", "𐐭", "x", "UTF8_LCASE", "x");
+    assertStringTranslate("𐐅", "𐐭", "x", "UNICODE", "𐐅");
+    assertStringTranslate("𐐅", "𐐭", "x", "UNICODE_CI", "x");
+    assertStringTranslate("A", "A", "𐐅", "UTF8_BINARY", "𐐅");
+    assertStringTranslate("A", "A", "𐐅", "UTF8_LCASE", "𐐅");
+    assertStringTranslate("A", "A", "𐐅", "UNICODE", "𐐅");
+    assertStringTranslate("A", "A", "𐐅", "UNICODE_CI", "𐐅");
+    assertStringTranslate("A", "a", "𐐅", "UTF8_BINARY", "A");
+    assertStringTranslate("A", "a", "𐐅", "UTF8_LCASE", "𐐅");
+    assertStringTranslate("A", "a", "𐐅", "UNICODE", "A");
+    assertStringTranslate("A", "a", "𐐅", "UNICODE_CI", "𐐅");
+    assertStringTranslate("a", "A", "𐐅", "UTF8_BINARY", "a");
+    assertStringTranslate("a", "A", "𐐅", "UTF8_LCASE", "𐐅");
+    assertStringTranslate("a", "A", "𐐅", "UNICODE", "a");
+    assertStringTranslate("a", "A", "𐐅", "UNICODE_CI", "𐐅");
+    assertStringTranslate("𝔸", "𝔸", "x", "UTF8_BINARY", "x");
+    assertStringTranslate("𝔸", "𝔸", "x", "UTF8_LCASE", "x");
+    assertStringTranslate("𝔸", "𝔸", "x", "UNICODE", "x");
+    assertStringTranslate("𝔸", "𝔸", "x", "UNICODE_CI", "x");
+    assertStringTranslate("𝔸", "𝕒", "x", "UTF8_BINARY", "𝔸");
+    assertStringTranslate("𝔸", "𝕒", "x", "UTF8_LCASE", "𝔸");
+    assertStringTranslate("𝔸", "𝕒", "x", "UNICODE", "𝔸");
+    assertStringTranslate("𝔸", "𝕒", "x", "UNICODE_CI", "x");
   }
 
   private Map<String, String> buildDict(String matching, String replace) {
