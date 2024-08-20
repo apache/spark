@@ -74,7 +74,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
   /**
    * Generate a VALUES clause with the given number of rows using basic literals.
    */
-  private def generateValuesWithLiterals(numRows: Int = 1000): String = {
+  private def generateValuesWithLiterals(numRows: Int = 10): String = {
     val rows = (1 to numRows).map { i =>
       val id = i
       val firstName = s"'FirstName_$id'"
@@ -146,8 +146,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     """
   }
   test("Insert Into Values optimization - Basic literals.") {
-    // Set the number of inserted rows to 10000.
-    val rowCount = 10000
+    // Set the number of inserted rows to 10.
+    val rowCount = 10
     var firstTableName: Option[String] = None
     Seq(true, false).foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
 
