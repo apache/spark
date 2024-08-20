@@ -432,6 +432,80 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - lazy iterators can properly get/set keyed state") {
+    class ProcessorWithLazyIterators
+      extends StatefulProcessor[Long, Long, Long] {
+      @transient protected var _myValueState: ValueState[Long] = _
+      var hasSetTimer = false
+
+      override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+        _myValueState = getHandle.getValueState[Long](
+          "myValueState",
+          Encoders.scalaLong
+        )
+      }
+
+      override def handleInputRows(
+          key: Long,
+          inputRows: Iterator[Long],
+          timerValues: TimerValues,
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
+        // Eagerly get/set a state variable
+        _myValueState.get()
+        _myValueState.update(1)
+
+        // Create a timer (but only once) so that we can test timers have their implicit key set
+        if (!hasSetTimer) {
+            getHandle.registerTimer(0)
+            hasSetTimer = true
+        }
+
+        // In both of these cases, we return a lazy iterator that gets/sets state variables.
+        // This is to test that the stateful processor can handle lazy iterators.
+        //
+        // The timer uses a Seq(42L) since when the timer fires, inputRows is empty.
+        if (expiredTimerInfo.isValid()) {
+          Seq(42L).iterator.map { r =>
+            _myValueState.get()
+            _myValueState.update(r)
+            r
+          }
+        } else {
+          inputRows.map { r =>
+            _myValueState.get()
+            _myValueState.update(r)
+            r
+          }
+        }
+      }
+    }
+
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
+    ) {
+      val inputData = MemoryStream[Int]
+      val result = inputData
+        .toDS()
+        .select(timestamp_seconds($"value").as("timestamp"))
+        .withWatermark("timestamp", "10 seconds")
+        .as[Long]
+        .groupByKey(x => x)
+        .transformWithState(
+          new ProcessorWithLazyIterators(), TimeMode.EventTime(), OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(),
+        // Use 12 so that the watermark advances to 2 seconds and causes the timer to fire
+        AddData(inputData, 12),
+        // The 12 is from the input data; the 42 is from the timer
+        CheckAnswer(12, 42)
+      )
+    }
+  }
+
   test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
