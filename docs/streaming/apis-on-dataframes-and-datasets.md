@@ -45,7 +45,7 @@ There are a few built-in sources.
 
 Some sources are not fault-tolerant because they do not guarantee that data can be replayed using
 checkpointed offsets after a failure. See the earlier section on
-[fault-tolerance semantics](./getting-started#fault-tolerance-semantics)
+[fault-tolerance semantics](./getting-started.html#fault-tolerance-semantics)
 Here are the details of all the sources in Spark.
 
 <table>
