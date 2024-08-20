@@ -2676,7 +2676,7 @@
         ]
       },
       "DTYPE" : {
-        "message": [
+        "message" : [
           "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },

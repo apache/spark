@@ -105,7 +105,8 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None, SparkSession.applyExtensions(sc, new SparkSessionExtensions),
+    this(sc, None, None,
+      SparkSession.loadExtensions(SparkSession.applyExtensions(sc, new SparkSessionExtensions)),
       initialSessionOptions.asScala.toMap)
   }
 
@@ -1406,7 +1407,7 @@ object SparkSession extends Logging {
   /**
    * Load extensions from [[ServiceLoader]] and use them
    */
-  private def loadExtensions(extensions: SparkSessionExtensions): Unit = {
+  private def loadExtensions(extensions: SparkSessionExtensions): SparkSessionExtensions = {
     val loader = ServiceLoader.load(classOf[SparkSessionExtensionsProvider],
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
@@ -1419,5 +1420,6 @@ object SparkSession extends Logging {
         case e: Throwable => logWarning("Failed to load session extension", e)
       }
     }
+    extensions
   }
 }
