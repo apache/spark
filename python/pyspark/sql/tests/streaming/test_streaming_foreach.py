@@ -222,8 +222,6 @@ class StreamingTestsForeachMixin:
             self.fail("bad writer did not fail the query")  # this is not expected
         except StreamingQueryException as e:
             err_msg = str(e)
-            print("I am here inside streaming query exception, err message: "
-                  + err_msg + "\n")
             self.assertTrue("test error" in err_msg)
             self.assertTrue("FOREACH_USER_FUNCTION_ERROR" in err_msg)
 
