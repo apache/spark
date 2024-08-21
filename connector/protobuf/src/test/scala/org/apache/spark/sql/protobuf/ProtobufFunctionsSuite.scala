@@ -2195,7 +2195,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment =
-            s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42))",
+            s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
           start = 10,
           stop = 173))
       )
