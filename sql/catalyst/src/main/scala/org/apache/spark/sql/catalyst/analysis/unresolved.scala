@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Unary
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -106,10 +107,36 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
+  def requireWritePrivileges(privileges: Seq[TableWritePrivilege]): UnresolvedRelation = {
+    if (privileges.nonEmpty) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.put(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES, privileges.mkString(","))
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
+  def clearWritePrivileges: UnresolvedRelation = {
+    if (options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.remove(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
 object UnresolvedRelation {
+  // An internal option of `UnresolvedRelation` to specify the required write privileges when
+  // writing data to this relation.
+  val REQUIRED_WRITE_PRIVILEGES = "__required_write_privileges__"
+
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
