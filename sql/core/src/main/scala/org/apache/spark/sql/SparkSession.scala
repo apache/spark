@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -34,7 +35,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.scheduler.{ActiveJob, SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
@@ -122,6 +123,15 @@ class SparkSession private(
     SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
       .getOrElse(SQLConf.getFallbackConf)
   })
+
+  private lazy val sessionJobTag = s"spark-session-$sessionUUID"
+
+  /**
+   * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
+   * Real tag have the current session ID attached:
+   *   "tag1" -> s"spark-514b7fac-51bf-458e-8bd8-0340d646326c-tag1"
+   */
+  private val userDefinedToRealTagsMap: ConcurrentHashMap[String, String] = new ConcurrentHashMap()
 
   /**
    * The version of Spark on which this application is running.
@@ -820,7 +830,10 @@ class SparkSession private(
    *
    * @since 4.0.0
    */
-  def addTag(tag: String): Unit = sparkContext.addJobTag(tag)
+  def addTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    userDefinedToRealTagsMap.put(tag, s"spark-$sessionUUID-$tag")
+  }
 
   /**
    * Remove a tag previously added to be assigned to all the operations started by this thread in
@@ -831,7 +844,10 @@ class SparkSession private(
    *
    * @since 4.0.0
    */
-  def removeTag(tag: String): Unit = sparkContext.removeJobTag(tag)
+  def removeTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    userDefinedToRealTagsMap.remove(tag)
+  }
 
   /**
    * Get the tags that are currently set to be assigned to all the operations started by this
@@ -839,14 +855,14 @@ class SparkSession private(
    *
    * @since 4.0.0
    */
-  def getTags(): Set[String] = sparkContext.getJobTags()
+  def getTags(): Set[String] = userDefinedToRealTagsMap.keys().asScala.toSet
 
   /**
    * Clear the current thread's operation tags.
    *
    * @since 4.0.0
    */
-  def clearTags(): Unit = sparkContext.clearJobTags()
+  def clearTags(): Unit = userDefinedToRealTagsMap.clear()
 
   /**
    * Interrupt all operations of this session that are currently running.
@@ -857,9 +873,15 @@ class SparkSession private(
    * @since 4.0.0
    */
   def interruptAll(): Seq[String] = {
-    val jobIds = mutable.Set[Int]()
-    sparkContext.cancelAllJobs(jobIdCallback = (jobId: Int) => jobIds.add(jobId))
-    jobIds.toSeq.map(_.toString)
+    val cancelledIds = mutable.Set[Int]()
+    sparkContext.cancelJobsWithTag(
+      sessionJobTag,
+      "Interrupted by user",
+      shouldCancelJob = (id: Int) => {
+        cancelledIds += id
+        true
+      })
+    cancelledIds.toSeq.map(_.toString)
   }
 
   /**
@@ -871,12 +893,18 @@ class SparkSession private(
    * @since 4.0.0
    */
   def interruptTag(tag: String): Seq[String] = {
-    val jobIds = mutable.Set[Int]()
+    val realTag = userDefinedToRealTagsMap.get(tag)
+    if (realTag == null) return Seq.empty
+
+    val cancelledIds = mutable.Set[Int]()
     sparkContext.cancelJobsWithTag(
-      tag,
+      realTag,
       "Interrupted by user",
-      jobIdCallback = (jobId: Int) => jobIds.add(jobId))
-    jobIds.toSeq.map(_.toString)
+      shouldCancelJob = (id: Int) => {
+        cancelledIds += id
+        true
+      })
+    cancelledIds.toSeq.map(_.toString)
   }
 
   /**
@@ -888,10 +916,22 @@ class SparkSession private(
    * @since 4.0.0
    */
   def interruptOperation(jobId: String): Seq[String] = {
+    val cancelledIds = mutable.Set[Int]()
     scala.util.Try(jobId.toInt).toOption match {
-      case Some(id) =>
-        sparkContext.cancelJob(id, "Interrupted by user")
-        Seq(jobId)
+      case Some(jobIdToBeCancelled) =>
+        sparkContext.cancelJobsWithTag(
+          sessionJobTag,
+          "Interrupted by user",
+          shouldCancelJob = (givenId: Int) => {
+            // Test all jobs owned by this session, and kill only the one with the given ID.
+            if (givenId == jobIdToBeCancelled) {
+              cancelledIds += jobIdToBeCancelled
+              true
+            } else {
+              false
+            }
+          })
+        cancelledIds.toSeq.map(_.toString)
       case None =>
         throw new IllegalArgumentException("jobId must be a number.")
     }
@@ -1015,7 +1055,7 @@ class SparkSession private(
   }
 
   /**
-   * Execute a block of code with the this session set as the active session, and restore the
+   * Execute a block of code with this session set as the active session, and restore the
    * previous session on completion.
    */
   private[sql] def withActive[T](block: => T): T = {
@@ -1274,6 +1314,9 @@ object SparkSession extends Logging {
    */
   def setActiveSession(session: SparkSession): Unit = {
     activeThreadSession.set(session)
+    if (session != null) {
+      session.userDefinedToRealTagsMap.values().asScala.foreach(session.sparkContext.addJobTag)
+    }
   }
 
   /**
@@ -1283,7 +1326,14 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
+    getActiveSession match {
+      case Some(session) =>
+        if (session != null) {
+          session.userDefinedToRealTagsMap.values().asScala.foreach(session.sparkContext.addJobTag)
+        }
+        activeThreadSession.remove()
+      case None => // do nothing
+    }
   }
 
   /**

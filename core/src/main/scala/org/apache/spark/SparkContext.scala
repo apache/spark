@@ -2689,15 +2689,18 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @param reason reason for cancellation
-   * @param jobIdCallback callback function to be called with the job ID of each job that is being
-   *   cancelled.
+   * @param shouldCancelJob callback function to be called with the job ID of each job that matches
+   *    the given tag. If the function returns true, the job will be cancelled.
    *
    * @since 4.0.0
    */
-  def cancelJobsWithTag(tag: String, reason: String, jobIdCallback: Int => Unit): Unit = {
+  def cancelJobsWithTag(
+      tag: String,
+      reason: String,
+      shouldCancelJob: Int => Boolean): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(tag, Option(reason))
+    dagScheduler.cancelJobsWithTag(tag, Option(reason), Some(shouldCancelJob))
   }
 
   /**
@@ -2731,12 +2734,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelAllJobs(): Unit = {
     assertNotStopped()
     dagScheduler.cancelAllJobs()
-  }
-
-  /** Cancel all jobs that have been scheduled or are running.  */
-  def cancelAllJobs(jobIdCallback: Int => Unit): Unit = {
-    assertNotStopped()
-    dagScheduler.cancelAllJobs(Some(jobIdCallback))
   }
 
   /**
