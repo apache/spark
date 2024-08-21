@@ -53,8 +53,10 @@ class CogroupedMapInArrowTestsMixin:
 
     @staticmethod
     def apply_in_arrow_func(left, right):
-        return pa.Table.from_batches(CogroupedMapInArrowTests.apply_in_arrow_iterator_func(left, right))
-    
+        return pa.Table.from_batches(
+            CogroupedMapInArrowTests.apply_in_arrow_iterator_func(left, right)
+        )
+
     @staticmethod
     def apply_in_arrow_iterator_func(left, right):
         assert isinstance(left, pa.Table)

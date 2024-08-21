@@ -342,6 +342,7 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             result = f(key, left_value_table, right_value_table)
 
         if isinstance(result, Iterator):
+
             def verify_element(batch):
                 verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
                 return batch
@@ -437,7 +438,8 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
                     )
                 },
             )
-        
+
+
 def verify_arrow_table(table, assign_cols_by_name, expected_cols_and_types):
     import pyarrow as pa
 
@@ -449,8 +451,9 @@ def verify_arrow_table(table, assign_cols_by_name, expected_cols_and_types):
                 "actual": type(table).__name__,
             },
         )
-    
+
     verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types)
+
 
 def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
     import pyarrow as pa
@@ -463,7 +466,7 @@ def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
                 "actual": type(batch).__name__,
             },
         )
-    
+
     verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
@@ -487,6 +490,7 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             result = f(key, value_table)
 
         if isinstance(result, Iterator):
+
             def verify_element(batch):
                 verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
                 return batch
