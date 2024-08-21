@@ -1107,7 +1107,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { interval =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), YearMonthIntervalType()),
-          "_LEGACY_ERROR_TEMP_3213",
+          "INTERVAL_ERROR.INTERVAL_PARSING",
           Map("interval" -> "year-month", "msg" -> "integer overflow"))
       }
 
@@ -1176,7 +1176,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val dataType = YearMonthIntervalType()
       checkErrorInExpression[SparkIllegalArgumentException](
         cast(Literal.create(interval), dataType),
-        "_LEGACY_ERROR_TEMP_3214",
+        "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
         Map(
           "fallBackNotice" -> "",
           "typeName" -> "interval year to month",
@@ -1198,7 +1198,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
+          "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
           Map(
             "fallBackNotice" -> "",
             "typeName" -> dataType.typeName,
@@ -1322,7 +1322,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
+          "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
           Map("fallBackNotice" -> (", set spark.sql.legacy.fromDayTimeString.enabled" +
             " to true to restore the behavior before Spark 3.0."),
             "intervalStr" -> "day-time",
@@ -1348,7 +1348,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
+          "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
           Map("fallBackNotice" -> (", set spark.sql.legacy.fromDayTimeString.enabled" +
             " to true to restore the behavior before Spark 3.0."),
             "intervalStr" -> "day-time",

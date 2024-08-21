@@ -896,13 +896,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         getDayOfWeekFromString(UTF8String.fromString("xx"))
       },
-      condition = "_LEGACY_ERROR_TEMP_3209",
+      condition = "INTERVAL_ERROR.ILLEGAL_DAY_OF_WEEK",
       parameters = Map("string" -> "xx"))
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         getDayOfWeekFromString(UTF8String.fromString("\"quote"))
       },
-      condition = "_LEGACY_ERROR_TEMP_3209",
+      condition = "INTERVAL_ERROR.ILLEGAL_DAY_OF_WEEK",
       parameters = Map("string" -> "\"quote"))
   }
 

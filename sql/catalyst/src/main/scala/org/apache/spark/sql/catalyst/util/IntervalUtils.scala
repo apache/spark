@@ -107,7 +107,7 @@ object IntervalUtils extends SparkIntervalUtils {
       typeName: String,
       fallBackNotice: Option[String] = None) = {
     throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3214",
+      errorClass = "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
       messageParameters = Map(
         "intervalStr" -> intervalStr,
         "supportedFormat" -> supportedFormat((intervalStr, startFiled, endField))
@@ -209,7 +209,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case e: SparkThrowable => throw e
       case NonFatal(e) =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3213",
+          errorClass = "INTERVAL_ERROR.INTERVAL_PARSING",
           messageParameters = Map("interval" -> interval, "msg" -> e.getMessage),
           cause = e)
     }
@@ -512,7 +512,7 @@ object IntervalUtils extends SparkIntervalUtils {
         case DT.SECOND =>
           // No-op
         case _ => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3212",
+          errorClass = "INTERVAL_ERROR.UNSUPPORTED_FROM_TO_EXPRESSION",
           messageParameters = Map(
             "input" -> input,
             "from" -> DT.fieldToString(from),
@@ -526,7 +526,7 @@ object IntervalUtils extends SparkIntervalUtils {
     } catch {
       case e: Exception =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3211",
+          errorClass = "INTERVAL_ERROR.DAY_TIME_PARSING",
           messageParameters = Map("msg" -> e.getMessage),
           cause = e)
     }
@@ -564,7 +564,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case Array(secondsStr, nanosStr) =>
         val seconds = parseSeconds(secondsStr)
         Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
-      case _ => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3210")
+      case _ => throw new SparkIllegalArgumentException("INTERVAL_ERROR.SECOND_NANO_FORMAT")
     }
   }
 

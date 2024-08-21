@@ -1834,6 +1834,44 @@
     },
     "sqlState" : "XXKUC"
   },
+  "INTERVAL_ERROR" : {
+    "message" : [
+      "Interval error."
+    ],
+    "subClass" : {
+      "ILLEGAL_DAY_OF_WEEK" : {
+        "message" : [
+          "Illegal input for day of week: <string>."
+        ]
+      },
+      "SECOND_NANO_FORMAT" : {
+        "message" : [
+          "Interval string does not match second-nano format of ss.nnnnnnnnn."
+        ]
+      },
+      "DAY_TIME_PARSING" : {
+        "message" : [
+          "Error parsing interval day-time string: <msg>."
+        ]
+      },
+      "UNSUPPORTED_FROM_TO_EXPRESSION" : {
+        "message" : [
+          "Cannot support (interval '<input>' <from> to <to>) expression."
+        ]
+      },
+      "INTERVAL_PARSING" : {
+        "message" : [
+          "Error parsing interval <interval> string: <msg>."
+        ]
+      },
+      "UNMATCHED_FORMAT_STRING" : {
+        "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
+        ]
+      }
+    },
+    "sqlState" : "22015"
+  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -8436,36 +8474,6 @@
   "_LEGACY_ERROR_TEMP_3208" : {
     "message" : [
       "The number of fields (<numFields>) in the partition identifier is not equal to the partition schema length (<schemaLen>). The identifier might not refer to one partition."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3209" : {
-    "message" : [
-      "Illegal input for day of week: <string>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3210" : {
-    "message" : [
-      "Interval string does not match second-nano format of ss.nnnnnnnnn"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3211" : {
-    "message" : [
-      "Error parsing interval day-time string: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3212" : {
-    "message" : [
-      "Cannot support (interval '<input>' <from> to <to>) expression"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3213" : {
-    "message" : [
-      "Error parsing interval <interval> string: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3214" : {
-    "message" : [
-      "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3215" : {
