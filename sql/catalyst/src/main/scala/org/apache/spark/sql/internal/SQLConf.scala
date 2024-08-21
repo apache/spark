@@ -969,11 +969,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
-    buildConf("spark.sql.parser.optimizeInsertIntoValuesParser")
+  val EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED =
+    buildConf("spark.sql.parser.eagerEvalOfUnresolvedInlineTable")
       .internal()
       .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
-        "`insert into ... values` DML statements.")
+        "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
       .booleanConf
       .createWithDefault(true)
 

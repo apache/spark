@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import scala.annotation.nowarn
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -1009,14 +1009,28 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("inline table") {
-    assertEqual("values 1, 2, 3, 4",
-      UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
+    for (optimizeValues <- Seq(true, false)) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+          optimizeValues.toString) {
+        val unresolvedTable1 =
+          UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x))))
+        val table1 = if (optimizeValues) {
+          EvaluateUnresolvedInlineTable.evaluate(unresolvedTable1)
+        } else {
+          unresolvedTable1
+        }
+        assertEqual("values 1, 2, 3, 4", table1)
 
-    assertEqual(
-      "values (1, 'a'), (2, 'b') as tbl(a, b)",
-      UnresolvedInlineTable(
-        Seq("a", "b"),
-        Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil).as("tbl"))
+        val unresolvedTable2 = UnresolvedInlineTable(
+          Seq("a", "b"), Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil)
+        val table2 = if (optimizeValues) {
+          EvaluateUnresolvedInlineTable.evaluate(unresolvedTable2)
+        } else {
+          unresolvedTable2
+        }
+        assertEqual("values (1, 'a'), (2, 'b') as tbl(a, b)", table2.as("tbl"))
+      }
+    }
   }
 
   test("simple select query with !> and !<") {
@@ -1914,12 +1928,22 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("SPARK-42553: NonReserved keyword 'interval' can be column name") {
-    comparePlans(
-      parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
-      UnresolvedInlineTable(
-        Seq("interval"),
-        Seq(Literal("abc")) :: Nil).as("tbl").select($"interval")
-    )
+    for (optimizeValues <- Seq(true, false)) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+          optimizeValues.toString) {
+        val unresolvedTable =
+          UnresolvedInlineTable(Seq("interval"), Seq(Literal("abc")) :: Nil)
+        val table = if (optimizeValues) {
+          EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
+        } else {
+          unresolvedTable
+        }
+        comparePlans(
+          parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
+          table.as("tbl").select($"interval")
+        )
+      }
+    }
   }
 
   test("SPARK-44066: parsing of positional parameters") {
