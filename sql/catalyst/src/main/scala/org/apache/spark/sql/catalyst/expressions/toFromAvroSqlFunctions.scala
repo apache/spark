@@ -145,6 +145,9 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
 // scalastyle:on line.size.limit
 case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   extends BinaryExpression with RuntimeReplaceable {
+
+  def this(child: Expression) = this(child, Literal(null))
+
   override def left: Expression = child
 
   override def right: Expression = jsonFormatSchema
@@ -156,6 +159,9 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     jsonFormatSchema.dataType match {
       case _: StringType if jsonFormatSchema.foldable =>
+        TypeCheckResult.TypeCheckSuccess
+      case _: NullType =>
+        // The 'jsonFormatSchema' argument is optional.
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(
