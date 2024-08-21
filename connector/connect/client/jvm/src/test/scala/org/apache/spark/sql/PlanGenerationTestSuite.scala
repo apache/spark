@@ -3264,7 +3264,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
