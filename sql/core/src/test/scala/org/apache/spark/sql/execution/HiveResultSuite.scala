@@ -24,6 +24,9 @@ import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.HiveResult._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.YearMonthIntervalType
+
 
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
@@ -117,6 +120,34 @@ class HiveResultSuite extends SharedSparkSession {
     assert(hiveResultString(plan1) === Seq("-10-1"))
     val plan2 = df.selectExpr("array(i)").queryExecution.executedPlan
     assert(hiveResultString(plan2) === Seq("[-10-1]"))
+  }
+
+  test("SPARK-49208: negative month intervals") {
+    Seq(
+      "0-0" -> (11, YM.YEAR, YM.YEAR),
+      "0-0" -> (-11, YM.YEAR, YM.YEAR),
+      "0-11" -> (11, YM.YEAR, YM.MONTH),
+      "-0-11" -> (-11, YM.YEAR, YM.MONTH),
+      "0-11" -> (11, YM.MONTH, YM.MONTH),
+      "-0-11" -> (-11, YM.MONTH, YM.MONTH),
+      "1-0" -> (12, YM.YEAR, YM.YEAR),
+      "-1-0" -> (-12, YM.YEAR, YM.YEAR),
+      "1-0" -> (12, YM.YEAR, YM.MONTH),
+      "-1-0" -> (-12, YM.YEAR, YM.MONTH),
+      "1-0" -> (12, YM.MONTH, YM.MONTH),
+      "-1-0" -> (-12, YM.MONTH, YM.MONTH),
+      "1-0" -> (13, YM.YEAR, YM.YEAR),
+      "-1-0" -> (-13, YM.YEAR, YM.YEAR),
+      "1-1" -> (13, YM.YEAR, YM.MONTH),
+      "-1-1" -> (-13, YM.YEAR, YM.MONTH),
+      "1-1" -> (13, YM.MONTH, YM.MONTH),
+      "-1-1" -> (-13, YM.MONTH, YM.MONTH)
+    ).foreach { case (hiveString, (months, startField, endField)) =>
+      assert(toHiveString((Period.ofMonths(months), YearMonthIntervalType(startField, endField)),
+        false,
+        getTimeFormatters,
+        getBinaryFormatter) === hiveString)
+    }
   }
 
   test("SPARK-34984, SPARK-35016: day-time interval formatting in hive result") {

@@ -143,6 +143,7 @@ class DataStreamReader(OptionUtils):
         pathGlobFilter: Optional[Union[bool, str]] = None,
         recursiveFileLookup: Optional[Union[bool, str]] = None,
         allowNonNumericNumbers: Optional[Union[bool, str]] = None,
+        useUnsafeRow: Optional[Union[bool, str]] = None,
     ) -> "DataFrame":
         self._set_opts(
             schema=schema,
@@ -166,6 +167,7 @@ class DataStreamReader(OptionUtils):
             pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup,
             allowNonNumericNumbers=allowNonNumericNumbers,
+            useUnsafeRow=useUnsafeRow,
         )
         if isinstance(path, str):
             return self.load(path=path, format="json")

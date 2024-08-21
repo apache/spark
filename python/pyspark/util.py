@@ -60,6 +60,7 @@ if typing.TYPE_CHECKING:
         PandasGroupedMapUDFWithStateType,
         ArrowGroupedMapUDFType,
         ArrowCogroupedMapUDFType,
+        PandasGroupedMapUDFTransformWithStateType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
@@ -585,6 +586,7 @@ class PythonEvalType:
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
     SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
     SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
+    SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: "PandasGroupedMapUDFTransformWithStateType" = 211
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301

@@ -119,10 +119,6 @@
       <artifactId>xmlschema-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.glassfish.jaxb</groupId>
-      <artifactId>txw2</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.datasketches</groupId>
       <artifactId>datasketches-java</artifactId>
     </dependency>
