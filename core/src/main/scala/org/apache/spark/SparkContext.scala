@@ -2689,7 +2689,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @param reason reason for cancellation
-   * @param shouldCancelJob callback function to be called with the job ID of each job that matches
+   * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
    *    the given tag. If the function returns true, the job will be cancelled.
    *
    * @since 4.0.0

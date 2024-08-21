@@ -1116,12 +1116,20 @@ private[spark] class DAGScheduler(
 
   /**
    * Cancel all jobs with a given tag.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation
    */
   def cancelJobsWithTag(tag: String, reason: Option[String]): Unit =
     cancelJobsWithTag(tag, reason, shouldCancelJob = None)
 
   /**
    * Cancel all jobs with a given tag.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation
+   * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
+   *    the given tag. If the function returns true, the job will be cancelled.
    */
   def cancelJobsWithTag(
       tag: String,
