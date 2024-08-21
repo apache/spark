@@ -1312,8 +1312,10 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def setActiveSession(session: SparkSession): Unit = {
+    clearActiveSession()
     activeThreadSession.set(session)
     if (session != null) {
+      session.sparkContext.addJobTag(session.sessionJobTag)
       session.userDefinedToRealTagsMap.values().asScala.foreach(session.sparkContext.addJobTag)
     }
   }
@@ -1328,6 +1330,7 @@ object SparkSession extends Logging {
     getActiveSession match {
       case Some(session) =>
         if (session != null) {
+          session.sparkContext.removeJobTag(session.sessionJobTag)
           session.userDefinedToRealTagsMap.values().asScala.foreach(session.sparkContext.addJobTag)
         }
         activeThreadSession.remove()
