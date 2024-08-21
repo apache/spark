@@ -317,7 +317,9 @@ class AbbreviateSuite extends SparkFunSuite {
         } else {
           assert(truncatedDrop.getColumnNamesList.asScala.toSeq === Seq("a", "b"))
           val truncatedSql = truncatedDrop.getInput.getSql
+
           if (maxLevel == 5) {
+            // The query string must have been truncated.
             assert(truncatedSql.getQuery.indexOf("[truncated") === threshold)
           }
         }
