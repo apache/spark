@@ -2197,7 +2197,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           fragment =
             s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42))",
           start = 10,
-          stop = 174))
+          stop = 173))
       )
     }
   }
