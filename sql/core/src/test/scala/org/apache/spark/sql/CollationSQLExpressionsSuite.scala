@@ -996,6 +996,30 @@ class CollationSQLExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(dataType))
       }
     })
+
+    val tableName = "t_diff_collation"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (" +
+        s"text STRING COLLATE UTF8_BINARY, " +
+        s"pairDelim STRING COLLATE UTF8_LCASE, " +
+        s"keyValueDelim STRING COLLATE UTF8_BINARY) " +
+        s"USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT str_to_map(text, pairDelim, keyValueDelim) from $tableName")
+        },
+        errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+        sqlState = "42K09",
+        parameters = Map(
+          "functionName" -> "`str_to_map`",
+          "dataType" -> "[\"STRING\", \"STRING COLLATE UTF8_LCASE\", \"STRING\"]",
+          "sqlExpr" -> "\"str_to_map(text, pairDelim, keyValueDelim)\""),
+        context = ExpectedContext(
+          fragment = "str_to_map(text, pairDelim, keyValueDelim)",
+          start = 7,
+          stop = 48)
+      )
+    }
   }
 
   test("Support RaiseError misc expression with collation") {

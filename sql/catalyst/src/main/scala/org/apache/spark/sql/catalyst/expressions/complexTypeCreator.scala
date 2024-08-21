@@ -583,6 +583,21 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def dataType: DataType = MapType(first.dataType, first.dataType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val childrenDataTypes = children.map(_.dataType)
+    if (!TypeCoercion.haveSameType(childrenDataTypes)) {
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> childrenDataTypes.map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
+
   private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
 
   private final lazy val collationId: Int = text.dataType.asInstanceOf[StringType].collationId
