@@ -295,7 +295,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     try {
       Utils.redact(
         executeHolder.sessionHolder.session.sessionState.conf.stringRedactionPattern,
-        ProtoUtils.abbreviate(request).toString)
+        ProtoUtils.abbreviate(request, maxLevel = 8).toString)
     } catch {
       case NonFatal(e) =>
         logWarning("Fail to extract debug information", e)

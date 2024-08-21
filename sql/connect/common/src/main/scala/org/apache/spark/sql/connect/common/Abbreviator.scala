@@ -26,11 +26,17 @@ private[connect] class Abbreviator(thresholds: Map[String, Int]) extends Seriali
   private val format = java.text.NumberFormat.getInstance()
   private val MAX_BYTES_SIZE = 8
   private val MAX_STRING_SIZE = 1024
+  private val MAX_LEVEL = Int.MaxValue
 
   private val maxStringSize = thresholds.getOrElse("STRING", MAX_STRING_SIZE)
   private val maxBytesSize = thresholds.getOrElse("BYTES", MAX_BYTES_SIZE)
+  private val maxLevel = thresholds.getOrElse("MAX_LEVEL", MAX_LEVEL)
 
   def abbreviate[T <: Message](message: T): T = {
+    abbreviateRecursive(message, 0)
+  }
+
+  private def abbreviateRecursive[T <: Message](message: T, level: Int): T = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {
@@ -61,14 +67,14 @@ private[connect] class Abbreviator(thresholds: Map[String, Int]) extends Seriali
       case (field, msg: Message)
           if field.getJavaType == JavaType.MESSAGE && !field.isRepeated
             && msg != null =>
-        builder.setField(field, abbreviate(msg))
+        builder.setField(field, truncateMessage(msg, level))
 
       case (field, msgs: java.util.List[_])
           if field.getJavaType == JavaType.MESSAGE && field.isRepeated
             && msgs != null && !msgs.isEmpty =>
         msgs.iterator().asScala.zipWithIndex.foreach {
           case (msg: Message, i) if msg != null =>
-            builder.setRepeatedField(field, i, abbreviate(msg))
+            builder.setRepeatedField(field, i, truncateMessage(msg, level))
           case _ =>
         }
 
@@ -92,5 +98,15 @@ private[connect] class Abbreviator(thresholds: Map[String, Int]) extends Seriali
 
   private def byteStringSuffix(size: Int): ByteString = {
     ByteString.copyFromUtf8(s"[truncated(size=${format.format(size)})]")
+  }
+
+  private def truncateMessage[T <: Message](msg: T, level: Int): T = {
+    if (level == maxLevel) {
+      val builder = msg.toBuilder
+      builder.clear()
+      builder.buildPartial().asInstanceOf[T]
+    } else {
+      abbreviateRecursive(msg, level + 1)
+    }
   }
 }

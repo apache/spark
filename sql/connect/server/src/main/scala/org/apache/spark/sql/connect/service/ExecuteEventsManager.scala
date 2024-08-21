@@ -30,6 +30,7 @@ import org.apache.spark.util.{Clock, Utils}
 object ExecuteEventsManager {
   // TODO: Make this configurable
   val MAX_STATEMENT_TEXT_SIZE = 65535
+  val MAX_STATEMENT_NESTING_LEVEL = 8
 }
 
 sealed abstract class ExecuteStatus(value: Int)
@@ -128,7 +129,12 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       request.getUserContext.getUserName,
       Utils.redact(
         sessionHolder.session.sessionState.conf.stringRedactionPattern,
-        ProtoUtils.abbreviate(plan, ExecuteEventsManager.MAX_STATEMENT_TEXT_SIZE).toString),
+        ProtoUtils
+          .abbreviate(
+            plan,
+            ExecuteEventsManager.MAX_STATEMENT_TEXT_SIZE,
+            ExecuteEventsManager.MAX_STATEMENT_NESTING_LEVEL)
+          .toString),
       sparkSessionTags)
     event.planRequest = Some(request)
     listenerBus.post(event)
