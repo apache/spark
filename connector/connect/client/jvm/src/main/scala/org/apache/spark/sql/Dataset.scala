@@ -1328,6 +1328,14 @@ class Dataset[T] private[sql] (
     }
   }
 
+  private def buildTranspose(indexColumnOption: Option[Column]): DataFrame =
+    sparkSession.newDataFrame { builder =>
+      val transpose = builder.getTransposeBuilder.setInput(plan.getRoot)
+      indexColumnOption.foreach { indexColumn =>
+        transpose.setIndexColumn(indexColumn.expr)
+    }
+  }
+
   /**
    * Groups the Dataset using the specified columns, so we can run aggregation on them. See
    * [[RelationalGroupedDataset]] for all the available aggregate functions.
@@ -1779,6 +1787,46 @@ class Dataset[T] private[sql] (
    */
   def melt(ids: Array[Column], variableColumnName: String, valueColumnName: String): DataFrame =
     unpivot(ids, variableColumnName, valueColumnName)
+
+  /**
+   * Transpose a DataFrame, switching rows to columns.
+   * This function transforms the DataFrame such that the values in the specified index
+   * column become the new columns of the DataFrame.
+   *
+   * Please note:
+   * - The values transposed must share the least common type.
+   * - The name of the column into which the original column names are transposed defaults to "key".
+   * - Non-"key" column names for the transposed table are ordered in ascending order.
+   *
+   * @param indexColumn The single column that will be treated as the index for the transpose
+   * operation.This column will be used to pivot the data, transforming the DataFrame such that
+   * the values of the indexColumn become the new columns in the transposed DataFrame.
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def transpose(indexColumn: Column): DataFrame =
+    buildTranspose(Option(indexColumn))
+
+  /**
+   * Transpose a DataFrame, switching rows to columns.
+   * This function transforms the DataFrame such that the values in the first
+   * column become the new columns of the DataFrame.
+   *
+   * This is equivalent to calling `Dataset#transpose(Column)`
+   * where `indexColumn` is set to the first column.
+   *
+   * Please note:
+   * - The values transposed must share the least common type.
+   * - The name of the column into which the original column names are transposed defaults to "key".
+   * - Non-"key" column names for the transposed table are ordered in ascending order.
+   *
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def transpose(): DataFrame =
+    buildTranspose(None)
 
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function and
