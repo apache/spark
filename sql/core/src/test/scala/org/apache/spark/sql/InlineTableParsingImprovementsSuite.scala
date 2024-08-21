@@ -19,10 +19,18 @@ package org.apache.spark.sql
 
 import java.util.UUID
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedInlineTable
+import org.apache.spark.sql.catalyst.expressions.{Expression, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSession {
+
+  /**
+   * SQL parser.
+   */
+  private lazy val parser = spark.sessionState.sqlParser
 
   /**
    * Generate a random table name.
@@ -59,7 +67,14 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    */
   private def generateInsertStatementWithLiterals(tableName: String, numRows: Int): String = {
     val baseQuery = s"INSERT INTO $tableName (id, first_name, last_name, age, gender," +
-      s" email, phone_number, address, city, state, zip_code, country, registration_date) VALUES "
+      s" email, phone_number, address, city, state, zip_code, country, registration_date) "
+    baseQuery + generateValuesWithLiterals(numRows) + ";"
+  }
+
+  /**
+   * Generate a VALUES clause with the given number of rows using basic literals.
+   */
+  private def generateValuesWithLiterals(numRows: Int = 10): String = {
     val rows = (1 to numRows).map { i =>
       val id = i
       val firstName = s"'FirstName_$id'"
@@ -79,7 +94,33 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         s" $address, $city, $state, $zipCode, $country, $registrationDate)"
     }.mkString(",\n")
 
-    baseQuery + rows + ";"
+    s" VALUES $rows"
+  }
+
+  /**
+   * Traverse the plan and check for the presence of the given node type.
+   */
+  private def traversePlanAndCheckForNodeType[T <: LogicalPlan](
+      plan: LogicalPlan, nodeType: Class[T]): Boolean = plan match {
+    case node if nodeType.isInstance(node) => true
+    case n: Project =>
+      // If the plan node is a Project, we need to check the expressions in the project list
+      // and the child nodes.
+      n.projectList.exists(traverseExpressionAndCheckForNodeType(_, nodeType)) ||
+      n.children.exists(traversePlanAndCheckForNodeType(_, nodeType))
+    case node if node.children.isEmpty => false
+    case _ => plan.children.exists(traversePlanAndCheckForNodeType(_, nodeType))
+  }
+
+  /**
+   * Traverse the expression and check for the presence of the given node type.
+   */
+  private def traverseExpressionAndCheckForNodeType[T <: LogicalPlan](
+        expression: Expression, nodeType: Class[T]): Boolean = expression match {
+    case scalarSubquery: ScalarSubquery => scalarSubquery.plan.exists(
+      traversePlanAndCheckForNodeType(_, nodeType))
+    case _ =>
+      expression.children.exists(traverseExpressionAndCheckForNodeType(_, nodeType))
   }
 
   /**
@@ -87,54 +128,64 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    */
   private def generateInsertStatementsWithComplexExpressions(
       tableName: String): String = {
-        s"""
-          INSERT INTO $tableName (id, first_name, last_name, age, gender,
-            email, phone_number, address, city, state, zip_code, country, registration_date) VALUES
+    s"""
+      INSERT INTO $tableName (id, first_name, last_name, age, gender,
+        email, phone_number, address, city, state, zip_code, country, registration_date) VALUES
+      (1, base64('FirstName_1'), base64('LastName_1'), 10+10, 'M', 'usr' || '@gmail.com',
+        concat('555','-1234'), hex('123 Fake St'), 'Anytown', 'CA', '12345', 'USA',
+        '2021-01-01'),
 
-            (1, base64('FirstName_1'), base64('LastName_1'), 10+10, 'M', 'usr' || '@gmail.com',
-             concat('555','-1234'), hex('123 Fake St'), 'Anytown', 'CA', '12345', 'USA',
-             '2021-01-01'),
+      (2, 'FirstName_2', string(5), abs(-8), 'F', 'usr@gmail.com', '555-1234', '123 Fake St',
+        concat('Anytown', 'sada'), 'CA', '12345', 'USA', '2021-01-01'),
 
-            (2, 'FirstName_2', string(5), abs(-8), 'F', 'usr@gmail.com', '555-1234', '123 Fake St',
-             concat('Anytown', 'sada'), 'CA', '12345', 'USA', '2021-01-01'),
+      (3, 'FirstName_3', 'LastName_3', 34::int, 'M', 'usr@gmail.com', '555-1234',
+        '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01'),
 
-            (3, 'FirstName_3', 'LastName_3', 34::int, 'M', 'usr@gmail.com', '555-1234',
-             '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01'),
-
-            (4, left('FirstName_4', 5), upper('LastName_4'), acos(1), 'F', 'user@gmail.com',
-             '555-1234', '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01');
-        """
-      }
-
+      (4, left('FirstName_4', 5), upper('LastName_4'), acos(1), 'F', 'user@gmail.com',
+        '555-1234', '123 Fake St', 'Anytown', 'CA', '12345', 'USA', '2021-01-01');
+    """
+  }
   test("Insert Into Values optimization - Basic literals.") {
-    // Set the number of inserted rows to 10000.
-    val rowCount = 10000
+    // Set the number of inserted rows to 10.
+    val rowCount = 10
     var firstTableName: Option[String] = None
-    Seq(true, false).foreach { insertIntoValueImprovementEnabled =>
+    Seq(true, false).foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
 
       // Create a table with a randomly generated name.
       val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
-        insertIntoValueImprovementEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement.
         val sqlStatement = generateInsertStatementWithLiterals(tableName, rowCount)
+
+        // Parse the SQL statement.
+        val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
+        if (eagerEvalOfUnresolvedInlineTableEnabled) {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
+        } else {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
+        }
+
         spark.sql(sqlStatement)
 
-         // Double check that the insertion was successful.
-         val countStar = spark.sql(s"SELECT count(*) FROM $tableName").collect()
-         assert(countStar.head.getLong(0) == rowCount,
-           "The number of rows in the table should match the number of rows inserted.")
+        // Double check that the insertion was successful.
+        val countStar = spark.sql(s"SELECT count(*) FROM $tableName").collect()
+        assert(countStar.head.getLong(0) == rowCount,
+          "The number of rows in the table should match the number of rows inserted.")
 
         // Check that both insertions will produce equivalent tables.
         if (firstTableName.isEmpty) {
           firstTableName = Some(tableName)
         } else {
-            val df1 = spark.table(firstTableName.get)
-            val df2 = spark.table(tableName)
-            checkAnswer(df1, df2)
+          val df1 = spark.table(firstTableName.get)
+          val df2 = spark.table(tableName)
+          checkAnswer(df1, df2)
         }
       }
     }
@@ -142,16 +193,27 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
 
   test("Insert Into Values optimization - Basic literals & expressions.") {
     var firstTableName: Option[String] = None
-    Seq(true, false).foreach { insertIntoValueImprovementEnabled =>
+    Seq(true, false).foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
       // Create a table with a randomly generated name.
       val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
-        insertIntoValueImprovementEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement.
         val sqlStatement = generateInsertStatementsWithComplexExpressions(tableName)
+
+        // Parse the SQL statement.
+        val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes.
+        // In this case, the plan should always contain a UnresolvedInlineTable node
+        // because the expressions are not eagerly resolved, therefore
+        // `plan.expressionsResolved` in `EvaluateUnresolvedInlineTable.evaluate` will
+        // always be false.
+        assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
+
         spark.sql(sqlStatement)
 
         // Check that both insertions will produce equivalent tables.
@@ -168,17 +230,30 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
 
   test("Insert Into Values with defaults.") {
     var firstTableName: Option[String] = None
-    Seq(true, false).foreach { insertIntoValueImprovementEnabled =>
+    Seq(true, false).foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
       // Create a table with default values specified.
       val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
-        insertIntoValueImprovementEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement that omits all columns
         // containing a DEFAULT value.
-        spark.sql(s"INSERT INTO $tableName (id) VALUES (1);")
+        val sqlStatement = s"INSERT INTO $tableName (id) VALUES (1);"
+
+        // Parse the SQL statement.
+        val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
+        if (eagerEvalOfUnresolvedInlineTableEnabled) {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
+        } else {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
+        }
+
+        spark.sql(sqlStatement)
 
         // Verify that the default values are applied correctly.
         val resultRow = spark.sql(
@@ -222,6 +297,74 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
           val df1 = spark.table(firstTableName.get)
           val df2 = spark.table(tableName)
           checkAnswer(df1, df2)
+        }
+      }
+    }
+  }
+
+  test("SPARK-49269: Value list in subquery") {
+    var firstDF: Option[DataFrame] = None
+    val flagVals = Seq(true, false)
+    flagVals.foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
+      // Set the feature flag for the InsertIntoValues improvement.
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+
+        // Generate a subquery with a VALUES clause.
+        val sqlStatement = s"SELECT * FROM (${generateValuesWithLiterals()});"
+
+        // Parse the SQL statement.
+        val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
+        if (eagerEvalOfUnresolvedInlineTableEnabled) {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
+        } else {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
+        }
+
+        val res = spark.sql(sqlStatement)
+
+        // Check that both insertions will produce equivalent tables.
+        if (flagVals.head == eagerEvalOfUnresolvedInlineTableEnabled) {
+          firstDF = Some(res)
+        } else {
+          checkAnswer(res, firstDF.get)
+        }
+      }
+    }
+  }
+
+  test("SPARK-49269: Value list in projection list subquery") {
+    var firstDF: Option[DataFrame] = None
+    val flagVals = Seq(true, false)
+    flagVals.foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
+      // Set the feature flag for the InsertIntoValues improvement.
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+
+        // Generate a subquery with a VALUES clause in the projection list.
+        val sqlStatement = s"SELECT (SELECT COUNT(*) FROM ${generateValuesWithLiterals()});"
+
+        // Parse the SQL statement.
+        val plan = parser.parsePlan(sqlStatement)
+
+        // Traverse the plan and check for the presence of appropriate nodes depending on the
+        // feature flag.
+        if (eagerEvalOfUnresolvedInlineTableEnabled) {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[LocalRelation]))
+        } else {
+          assert(traversePlanAndCheckForNodeType(plan, classOf[UnresolvedInlineTable]))
+        }
+
+        val res = spark.sql(sqlStatement)
+
+        // Check that both insertions will produce equivalent tables.
+        if (flagVals.head == eagerEvalOfUnresolvedInlineTableEnabled) {
+          firstDF = Some(res)
+        } else {
+          checkAnswer(res, firstDF.get)
         }
       }
     }

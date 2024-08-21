@@ -2633,7 +2633,7 @@ class DDLParserSuite extends AnalysisTest {
 
     for (optimizeInsertIntoValues <- Seq(true, false)) {
       withSQLConf(
-        SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
           optimizeInsertIntoValues.toString) {
         comparePlans(parsePlan(dateTypeSql), insertPartitionPlan(
           "2019-01-02", optimizeInsertIntoValues))
