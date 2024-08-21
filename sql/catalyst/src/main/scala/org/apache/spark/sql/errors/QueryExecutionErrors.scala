@@ -1943,7 +1943,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotCreateParquetConverterForTypeError(
       t: DecimalType, parquetType: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "PARQUET_CONVERSION_FAILURE_WITHOUT_DECIMAL_METADATA",
+      errorClass = "PARQUET_CONVERSION_FAILURE.WITHOUT_DECIMAL_METADATA",
       messageParameters = Map(
         "typeName" -> t.typeName,
         "parquetType" -> parquetType))
@@ -1952,9 +1952,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotCreateParquetConverterForDecimalTypeError(
       t: DecimalType, parquetType: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "PARQUET_DECIMAL_CONVERSION_FAILURE",
+      errorClass = "PARQUET_CONVERSION_FAILURE.DECIMAL",
       messageParameters = Map(
-        "t" -> t.json,
+        "t" -> t.sql,
         "parquetType" -> parquetType))
   }
 
@@ -1963,7 +1963,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARQUET_CONVERSION_FAILURE",
       messageParameters = Map(
-        "t" -> t.json,
+        "dataType" -> t.sql,
         "parquetType" -> parquetType))
   }
 

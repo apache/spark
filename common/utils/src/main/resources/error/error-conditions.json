@@ -3582,18 +3582,20 @@
   },
   "PARQUET_CONVERSION_FAILURE" : {
     "message" : [
-      "Unable to create Parquet converter for data type <t> whose Parquet type is <parquetType>."
-    ]
-  },
-  "PARQUET_CONVERSION_FAILURE_WITHOUT_DECIMAL_METADATA" : {
-    "message" : [
-      "Unable to create Parquet converter for <typeName> whose Parquet type is <parquetType> without decimal metadata. Please read this column/field as Spark BINARY type."
-    ]
-  },
-  "PARQUET_DECIMAL_CONVERSION_FAILURE" : {
-    "message" : [
-      "Unable to create Parquet converter for decimal type <t> whose Parquet type is <parquetType>.  Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
-    ]
+      "Unable to create a Parquet converter for the data type <dataType> whose Parquet type is <parquetType>."
+    ],
+    "subClass": {
+      "WITHOUT_DECIMAL_METADATA" : {
+        "message" : [
+          "Unable to create a Parquet converter for <typeName> whose Parquet type is <parquetType> without decimal metadata. Please read this column/field as Spark BINARY type."
+        ]
+      },
+      "DECIMAL" : {
+        "message" : [
+          "Unable to create a Parquet converter for the decimal type <t> whose Parquet type is <parquetType>. Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
+        ]
+      }
+    }
   },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
