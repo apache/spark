@@ -1686,12 +1686,24 @@ public class CollationSupportSuite {
     // Basic tests.
     assertFindInSet("xx", UTF8String.fromString("xx"), "UTF8_BINARY", 1);
     assertFindInSet(" xx ", UTF8String.fromString("xx"), "UTF8_BINARY_TRIM", 1);
+    assertFindInSet(" x ", UTF8String.fromString("x,y,z"), "UTF8_BINARY_TRIM", 1);
+    assertFindInSet(" y ", UTF8String.fromString(" x,y,z "), "UTF8_BINARY_TRIM", 2);
+    assertFindInSet(" z ", UTF8String.fromString(" x , y , z "), "UTF8_BINARY_TRIM", 3);
     assertFindInSet("xx", UTF8String.fromString("xx"), "UTF8_LCASE", 1);
     assertFindInSet(" xx", UTF8String.fromString("xx"), "UTF8_LCASE_LTRIM", 1);
+    assertFindInSet(" X", UTF8String.fromString("x,y,z"), "UTF8_LCASE_LTRIM", 1);
+    assertFindInSet(" Y", UTF8String.fromString(" x,y,z"), "UTF8_LCASE_LTRIM", 2);
+    assertFindInSet(" Z", UTF8String.fromString(" x, y, z"), "UTF8_LCASE_LTRIM", 3);
     assertFindInSet("xx", UTF8String.fromString("xx"), "UNICODE", 1);
     assertFindInSet("xx", UTF8String.fromString("xx "), "UNICODE_RTRIM", 1);
+    assertFindInSet("x ", UTF8String.fromString("x,y,z"), "UNICODE_RTRIM", 1);
+    assertFindInSet("y ", UTF8String.fromString("x,y,z "), "UNICODE_RTRIM", 2);
+    assertFindInSet("z ", UTF8String.fromString("x ,y ,z "), "UNICODE_RTRIM", 3);
     assertFindInSet("xx", UTF8String.fromString("xx"), "UNICODE_CI", 1);
     assertFindInSet(" xx", UTF8String.fromString("xx "), "UNICODE_CI_TRIM", 1);
+    assertFindInSet(" X ", UTF8String.fromString("x,y,z"), "UNICODE_CI_TRIM", 1);
+    assertFindInSet(" Y ", UTF8String.fromString(" x,y,z "), "UNICODE_CI_TRIM", 2);
+    assertFindInSet(" Z ", UTF8String.fromString(" x , y , z "), "UNICODE_CI_TRIM", 3);
     assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
     assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_LCASE", 0);
     assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);

@@ -299,10 +299,7 @@ public final class CollationSupport {
   public static class FindInSet {
     public static int exec(UTF8String word, UTF8String set, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if (collation.supportsTrimming) {
-        word = collation.trimmer.apply(word);
-        collation = CollationFactory.fetchCollationIgnoreTrim(collationId);
-      }
+      // Note: CollationAwareUTF8String.findInSet will already handle trimming if necessary.
       if (collation.supportsBinaryEquality) {
         return execBinary(word, set);
       } else {
