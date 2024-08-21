@@ -1222,10 +1222,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
-    def dropDuplicates(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
+    def dropDuplicates(
+        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+    ) -> ParentDataFrame:
         if not subset:
             jdf = self._jdf.dropDuplicates()
         elif isinstance(subset, str):
@@ -1249,10 +1248,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
+    def dropDuplicatesWithinWatermark(
+        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+    ) -> ParentDataFrame:
         if len(subset) > 1:
             assert all(isinstance(c, str) for c in subset)
 

@@ -430,23 +430,18 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    def dropDuplicates(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
-
+    def dropDuplicates(
+        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+    ) -> ParentDataFrame:
         # No parameter passed in (e.g. dropDuplicates())
         if not subset:
-            print("wei== subset is: " + str(subset))
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         # Parameters passed in as varargs
         # (e.g. dropDuplicates("col"), dropDuplicates("col1", "col2"), ...)
         elif isinstance(subset, str):
-            print("wei== subset is: " + subset + " varargs is: " + str(subset_varargs))
             item = [subset] + list(subset_varargs)
-            print("wei== item is: " + str(item))
             for c in item:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -460,7 +455,6 @@ class DataFrame(ParentDataFrame):
         # Parameters passed in as list
         # (e.g. dropDuplicates(["col"]), dropDuplicates(subset=["col1", "col2"]), ...)
         else:
-            print("wei== 3rd subset is: " + str(subset))
             for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -477,10 +471,9 @@ class DataFrame(ParentDataFrame):
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
+    def dropDuplicatesWithinWatermark(
+        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+    ) -> ParentDataFrame:
         if len(subset) > 1:
             assert all(isinstance(c, str) for c in subset)
 

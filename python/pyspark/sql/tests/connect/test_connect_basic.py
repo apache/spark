@@ -678,13 +678,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             df2.dropDuplicates(["col1", "col2"]).toPandas(),
         )
 
+        self.assert_eq(df.dropDuplicates("col1").toPandas(), df2.dropDuplicates("col1").toPandas())
         self.assert_eq(
-            df.dropDuplicates("col1").toPandas(),
-            df2.dropDuplicates("col1").toPandas()
-        )
-        self.assert_eq(
-            df.drop_duplicates("col1").toPandas(),
-            df2.drop_duplicates("col1").toPandas()
+            df.drop_duplicates("col1").toPandas(), df2.drop_duplicates("col1").toPandas()
         )
 
         self.assert_eq(
@@ -707,11 +703,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # Verify existing use case with named parameter
         self.assert_eq(
             df.dropDuplicates(subset=["col1"]).toPandas(),
-            df2.dropDuplicates(subset=["col1"]).toPandas()
+            df2.dropDuplicates(subset=["col1"]).toPandas(),
         )
         self.assert_eq(
             df.drop_duplicates(subset=["col1"]).toPandas(),
-            df2.drop_duplicates(subset=["col1"]).toPandas()
+            df2.drop_duplicates(subset=["col1"]).toPandas(),
         )
         self.assert_eq(
             df.dropDuplicates(subset=["col1", "col2"]).toPandas(),
