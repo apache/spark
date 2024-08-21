@@ -404,7 +404,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI_RTRIM", " aaa ", "AAA", -1),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA", 0),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AA", 1),
-      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "BBB", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "BBB", -1)
     )
 
     checks.foreach(testCase => {
@@ -681,17 +681,17 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_AI_AI", "UNICODE_AI"),
       ("UNICODE_AS_AI", "UNICODE_AS"),
       ("UNICODE_AI_AS", "UNICODE_AS"),
-//      ("UNICODE_TRIM_AS", "UNICODE_AS"),
-//      ("TRIM_UNICODE_AS", "UNICODE_AS"),
+      ("UNICODE_TRIM_AS", "UNICODE_AS"),
+      ("TRIM_UNICODE_AS", "UNICODE_AS"),
       ("UNICODE_AS_CS_AI", "UNICODE_AS_CS"),
       ("UNICODE_CS_AI_CI", "UNICODE_CS_AI"),
       ("UNICODE_CS_AS_CI_AI", "UNICODE_CS_AS"),
       ("UNICODE__CS__AS", "UNICODE_AS"),
       ("UNICODE-CS-AS", "UNICODE"),
       ("UNICODECSAS", "UNICODE"),
-//      ("UNICODETRIM", "UNICODE"),
-//      ("_CS_AS_UNICODE", "UNICODE"),
-//      ("_UNICODE_TRIM", "UNICODE")
+      ("UNICODETRIM", "UNICODE"),
+      ("_CS_AS_UNICODE", "UNICODE"),
+      ("_UNICODE_TRIM", "UNICODE_TRIM")
     ).foreach { case (collationName, proposals) =>
       checkCollationNameError(collationName, proposals)
     }
