@@ -1945,7 +1945,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARQUET_CONVERSION_FAILURE.WITHOUT_DECIMAL_METADATA",
       messageParameters = Map(
-        "typeName" -> t.typeName,
+        "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))
   }
 
@@ -1954,7 +1954,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARQUET_CONVERSION_FAILURE.DECIMAL",
       messageParameters = Map(
-        "t" -> t.sql,
+        "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))
   }
 
@@ -1963,7 +1963,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARQUET_CONVERSION_FAILURE",
       messageParameters = Map(
-        "dataType" -> t.sql,
+        "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))
   }
 
