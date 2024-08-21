@@ -1961,7 +1961,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotCreateParquetConverterForDataTypeError(
       t: DataType, parquetType: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "PARQUET_CONVERSION_FAILURE",
+      errorClass = "PARQUET_CONVERSION_FAILURE.UNSUPPORTED",
       messageParameters = Map(
         "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))

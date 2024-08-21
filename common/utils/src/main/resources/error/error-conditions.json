@@ -3594,6 +3594,11 @@
         "message" : [
           "Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
         ]
+      },
+      "UNSUPPORTED" : {
+        "message" : [
+          "Please modify the conversion making sure it is supported."
+        ]
       }
     },
     "sqlState" : "42846"
