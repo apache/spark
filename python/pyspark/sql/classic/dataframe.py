@@ -1225,8 +1225,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def dropDuplicates(
         self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
     ) -> ParentDataFrame:
+        # No parameter passed in (e.g. dropDuplicates())
         if not subset:
             jdf = self._jdf.dropDuplicates()
+        # Parameters passed in as varargs
+        # (e.g. dropDuplicates("col"), dropDuplicates("col1", "col2"), ...)
         elif isinstance(subset, str):
             item = [subset] + list(subset_varargs)
             for c in item:
@@ -1236,6 +1239,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             jdf = self._jdf.dropDuplicates(self._jseq(item))
+        # Parameters passed in as list
+        # (e.g. dropDuplicates(["col"]), dropDuplicates(subset=["col1", "col2"]), ...)
         else:
             for c in subset:
                 if not isinstance(c, str):
@@ -1251,8 +1256,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def dropDuplicatesWithinWatermark(
         self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
     ) -> ParentDataFrame:
+        # No parameter passed in (e.g. dropDuplicatesWithinWatermark())
         if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
+        # Parameters passed in as varargs
+        # (e.g. dropDuplicatesWithinWatermark("col"),
+        #       dropDuplicatesWithinWatermark("col1", "col2"), ...)
         elif isinstance(subset, str):
             item = [subset] + list(subset_varargs)
             for c in item:
@@ -1262,6 +1271,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(item))
+        # Parameters passed in as list
+        # (e.g. dropDuplicatesWithinWatermark(["col"]),
+        #       dropDuplicatesWithinWatermark(subset=["col1", "col2"]), ...)
         else:
             for c in subset:
                 if not isinstance(c, str):
