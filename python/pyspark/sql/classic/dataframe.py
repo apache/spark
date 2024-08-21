@@ -1237,7 +1237,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                     )
             jdf = self._jdf.dropDuplicates(self._jseq(item))
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",
@@ -1251,9 +1251,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def dropDuplicatesWithinWatermark(
         self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
     ) -> ParentDataFrame:
-        if len(subset) > 1:
-            assert all(isinstance(c, str) for c in subset)
-
         if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
         elif isinstance(subset, str):
@@ -1266,7 +1263,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                     )
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(item))
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",

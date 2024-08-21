@@ -474,9 +474,6 @@ class DataFrame(ParentDataFrame):
     def dropDuplicatesWithinWatermark(
         self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
     ) -> ParentDataFrame:
-        if len(subset) > 1:
-            assert all(isinstance(c, str) for c in subset)
-
         # No parameter passed in (e.g. dropDuplicatesWithinWatermark())
         if not subset:
             return DataFrame(
