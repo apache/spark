@@ -32,6 +32,7 @@
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
+    <opentelemetry.exclude>**/*Opentelemetry*.scala</opentelemetry.exclude>
   </properties>
   
   <dependencies>
@@ -618,23 +619,44 @@
     </profile>
     <profile>
       <id>opentelemetry-reporter</id>
+      <properties>
+        <opentelemetry.exclude></opentelemetry.exclude>
+      </properties>
       <dependencies>
         <dependency>
           <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-sdk</artifactId>
           <version>1.41.0</version>
+          <scope>provided</scope>
         </dependency>
         <dependency>
           <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-api</artifactId>
           <version>1.41.0</version>
+          <scope>provided</scope>
         </dependency>
         <dependency>
           <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-exporter-otlp</artifactId>
           <version>1.41.0</version>
+          <scope>provided</scope>
         </dependency>
       </dependencies>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <configuration>
+                <excludes>
+                  <exclude>${opentelemetry.exclude}</exclude>
+                </excludes>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
     <profile>
       <id>sparkr</id>
@@ -716,24 +738,6 @@
                   <inputDirectories>
                     <include>src/main/protobuf</include>
                   </inputDirectories>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>add-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/main/scala/org.apache.spark/metrics/sink/opentelemetry</source>
-                  </sources>
                 </configuration>
               </execution>
             </executions>
