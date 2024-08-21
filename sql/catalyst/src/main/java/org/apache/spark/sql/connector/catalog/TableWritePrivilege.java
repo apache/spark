@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 /**
  * The table write privileges that will be provided when loading a table.
  *
- * @since 4.0.0
+ * @since 3.5.3
  */
 public enum TableWritePrivilege {
   /**

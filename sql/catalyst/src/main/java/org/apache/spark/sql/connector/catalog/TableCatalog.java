@@ -122,7 +122,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist or is a view
    *
-   * @since 4.0.0
+   * @since 3.5.3
    */
   default Table loadTable(
       Identifier ident,
