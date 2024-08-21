@@ -274,6 +274,17 @@ public class CollationSupportSuite {
       assertContains("a", "", collationName, true);
       assertContains("", "x", collationName, false);
       // Basic tests.
+      assertContains("a", "a", collationName, true);
+      assertContains("_a_", "_a_", collationName, true);
+      assertContains("_a_", "a", collationName, true);
+      assertContains("%a%", "%a%", collationName, true);
+      assertContains("%a%", "a", collationName, true);
+      assertContains("*a*", "*a*", collationName, true);
+      assertContains("*a*", "a", collationName, true);
+      assertContains("?a?", "?a?", collationName, true);
+      assertContains("?a?", "a", collationName, true);
+      assertContains("/a/", "/a/", collationName, true);
+      assertContains("/a/", "a", collationName, true);
       assertContains("abcde", "xyz", collationName, false);
       assertContains("abcde", "bcd", collationName, true);
       assertContains("abcde", "abc", collationName, true);
@@ -512,6 +523,17 @@ public class CollationSupportSuite {
       assertStartsWith("a", "", collationName, true);
       assertStartsWith("", "x", collationName, false);
       // Basic tests.
+      assertStartsWith("a", "a", collationName, true);
+      assertStartsWith("_a_", "_a", collationName, true);
+      assertStartsWith("_a_", "a", collationName, false);
+      assertStartsWith("%a%", "%a", collationName, true);
+      assertStartsWith("%a%", "a", collationName, false);
+      assertStartsWith("*a*", "*a", collationName, true);
+      assertStartsWith("*a*", "a", collationName, false);
+      assertStartsWith("?a?", "?a", collationName, true);
+      assertStartsWith("?a?", "a", collationName, false);
+      assertStartsWith("/a/", "/a", collationName, true);
+      assertStartsWith("/a/", "a", collationName, false);
       assertStartsWith("abcde", "xyz", collationName, false);
       assertStartsWith("abcde", "bcd", collationName, false);
       assertStartsWith("abcde", "abc", collationName, true);
@@ -755,6 +777,17 @@ public class CollationSupportSuite {
       assertEndsWith("a", "", collationName, true);
       assertEndsWith("", "x", collationName, false);
       // Basic tests.
+      assertEndsWith("a", "a", collationName, true);
+      assertEndsWith("_a_", "a_", collationName, true);
+      assertEndsWith("_a_", "a", collationName, false);
+      assertEndsWith("%a%", "a%", collationName, true);
+      assertEndsWith("%a%", "a", collationName, false);
+      assertEndsWith("*a*", "a*", collationName, true);
+      assertEndsWith("*a*", "a", collationName, false);
+      assertEndsWith("?a?", "a?", collationName, true);
+      assertEndsWith("?a?", "a", collationName, false);
+      assertEndsWith("/a/", "a/", collationName, true);
+      assertEndsWith("/a/", "a", collationName, false);
       assertEndsWith("abcde", "xyz", collationName, false);
       assertEndsWith("abcde", "bcd", collationName, false);
       assertEndsWith("abcde", "abc", collationName, false);
