@@ -3587,15 +3587,16 @@
     "subClass": {
       "WITHOUT_DECIMAL_METADATA" : {
         "message" : [
-          " Please read this column/field as Spark BINARY type."
+          "Please read this column/field as Spark BINARY type."
         ]
       },
       "DECIMAL" : {
         "message" : [
-          " Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
+          "Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
         ]
       }
-    }
+    },
+    "sqlState" : "42846"
   },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
