@@ -79,11 +79,7 @@ private[spark] class SparkSubmit extends Logging {
     } else {
       // For non-shell applications, enable structured logging if it's not explicitly disabled
       // via the configuration `spark.log.structuredLogging.enabled`.
-      if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
-        Logging.enableStructuredLogging()
-      } else {
-        Logging.disableStructuredLogging()
-      }
+      Utils.resetStructuredLogging(sparkConf)
     }
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.

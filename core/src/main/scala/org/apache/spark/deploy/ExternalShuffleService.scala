@@ -167,6 +167,7 @@ object ExternalShuffleService extends Logging {
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
     Utils.initDaemon(log)
     val sparkConf = new SparkConf
+    Utils.resetStructuredLogging(sparkConf)
     Utils.loadDefaultSparkProperties(sparkConf)
     val securityManager = new SecurityManager(sparkConf)
 

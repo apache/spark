@@ -297,6 +297,7 @@ object HistoryServer extends Logging {
   val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]): Unit = {
+    Utils.resetStructuredLogging(conf)
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()

@@ -118,6 +118,7 @@ object HiveThriftServer2 extends Logging {
 
     logInfo("Starting SparkContext")
     SparkSQLEnv.init()
+    Utils.resetStructuredLogging(SparkSQLEnv.sparkContext.getConf)
 
     ShutdownHookManager.addShutdownHook { () =>
       SparkSQLEnv.stop()

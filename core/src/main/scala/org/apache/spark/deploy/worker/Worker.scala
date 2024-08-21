@@ -982,6 +982,7 @@ private[deploy] object Worker extends Logging {
       exitOnUncaughtException = false))
     Utils.initDaemon(log)
     val conf = new SparkConf
+    Utils.resetStructuredLogging(conf)
     val args = new WorkerArguments(argStrings, conf)
     val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir, conf = conf,

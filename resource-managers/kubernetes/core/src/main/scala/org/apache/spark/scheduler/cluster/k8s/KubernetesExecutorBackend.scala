@@ -71,6 +71,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
+      Utils.resetStructuredLogging(executorConf)
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
         arguments.bindAddress,

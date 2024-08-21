@@ -1384,6 +1384,7 @@ private[deploy] object Master extends Logging {
       exitOnUncaughtException = false))
     Utils.initDaemon(log)
     val conf = new SparkConf
+    Utils.resetStructuredLogging(conf)
     val args = new MasterArguments(argStrings, conf)
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)
     rpcEnv.awaitTermination()
