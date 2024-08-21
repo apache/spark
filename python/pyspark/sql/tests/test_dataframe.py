@@ -260,6 +260,9 @@ class DataFrameTestsMixin:
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
+        self.assertEqual(df.dropDuplicates(subset=["name"]).count(), 1)
+        self.assertEqual(df.dropDuplicates(subset=["name", "age"]).count(), 2)
+
         self.assertEqual(df.drop_duplicates(["name"]).count(), 1)
         self.assertEqual(df.drop_duplicates(["name", "age"]).count(), 2)
 
@@ -272,15 +275,6 @@ class DataFrameTestsMixin:
         # Should raise proper error when taking non-string values
         with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates([None]).show()
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicates(None).show()
 
         self.check_error(
             exception=pe.exception,

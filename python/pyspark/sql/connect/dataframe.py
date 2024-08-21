@@ -454,7 +454,7 @@ class DataFrame(ParentDataFrame):
             )
         # Parameters passed in as list
         # (e.g. dropDuplicates(["col"]), dropDuplicates(subset=["col1", "col2"]), ...)
-        else:
+        elif isinstance(subset, list):
             for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -464,6 +464,11 @@ class DataFrame(ParentDataFrame):
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset),
                 session=self._session,
+            )
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
         res._cached_schema = self._cached_schema
@@ -498,7 +503,7 @@ class DataFrame(ParentDataFrame):
         # Parameters passed in as list
         # (e.g. dropDuplicatesWithinWatermark(["col"]),
         #       dropDuplicatesWithinWatermark(subset=["col1", "col2"]), ...)
-        else:
+        elif isinstance(subset, list):
             for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -512,6 +517,11 @@ class DataFrame(ParentDataFrame):
                     within_watermark=True,
                 ),
                 session=self._session,
+            )
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
     def distinct(self) -> ParentDataFrame:

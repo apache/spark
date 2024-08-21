@@ -1241,7 +1241,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates(self._jseq(item))
         # Parameters passed in as list
         # (e.g. dropDuplicates(["col"]), dropDuplicates(subset=["col1", "col2"]), ...)
-        else:
+        elif isinstance(subset, list):
             for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -1249,6 +1249,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
         return DataFrame(jdf, self.sparkSession)
 
     drop_duplicates = dropDuplicates
@@ -1274,7 +1279,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         # Parameters passed in as list
         # (e.g. dropDuplicatesWithinWatermark(["col"]),
         #       dropDuplicatesWithinWatermark(subset=["col1", "col2"]), ...)
-        else:
+        elif isinstance(subset, list):
             for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -1282,6 +1287,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
         return DataFrame(jdf, self.sparkSession)
 
     def dropna(
