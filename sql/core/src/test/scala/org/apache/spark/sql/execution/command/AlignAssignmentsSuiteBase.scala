@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -160,6 +160,8 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("cat")
     newCatalog
   }

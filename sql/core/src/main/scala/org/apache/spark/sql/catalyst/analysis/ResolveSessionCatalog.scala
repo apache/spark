@@ -669,7 +669,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) &&
-      !SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
+    isSessionCatalog(catalog) &&
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty
   }
 }
