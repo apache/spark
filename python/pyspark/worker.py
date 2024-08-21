@@ -321,7 +321,7 @@ def wrap_arrow_batch_iter_udf(f, return_type):
     )
 
 
-def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_conf):
+def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
     if _assign_cols_by_name:
@@ -341,14 +341,14 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_c
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, left_value_table, right_value_table)
 
-        if is_generator:
+        if isinstance(result, Iterator):
             def verify_element(batch):
-                verify_arrow_result(batch, _assign_cols_by_name, expected_cols_and_types)
+                verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
                 return batch
 
             return map(verify_element, result)
         else:
-            verify_arrow_result(result, _assign_cols_by_name, expected_cols_and_types)
+            verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
             return result.to_batches()
 
     return lambda kl, vl, kr, vr: (wrapped(kl, vl, kr, vr), to_arrow_type(return_type))
@@ -378,25 +378,14 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
-def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
-    import pyarrow as pa
-
-    if not isinstance(table, (pa.Table, pa.RecordBatch)):
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "pyarrow.Table or pyarrow.RecordBatch",
-                "actual": type(table).__name__,
-            },
-        )
-
+def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
     # the types of the fields have to be identical to return type
     # an empty table can have no columns; if there are columns, they have to match
-    if table.num_columns != 0 or table.num_rows != 0:
+    if result.num_columns != 0 or result.num_rows != 0:
         # columns are either mapped by name or position
         if assign_cols_by_name:
             actual_cols_and_types = {
-                name: dataType for name, dataType in zip(table.schema.names, table.schema.types)
+                name: dataType for name, dataType in zip(result.schema.names, result.schema.types)
             }
             missing = sorted(
                 list(set(expected_cols_and_types.keys()).difference(actual_cols_and_types.keys()))
@@ -423,7 +412,7 @@ def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
             ]
         else:
             actual_cols_and_types = [
-                (name, dataType) for name, dataType in zip(table.schema.names, table.schema.types)
+                (name, dataType) for name, dataType in zip(result.schema.names, result.schema.types)
             ]
             column_types = [
                 (expected_name, expected_type, actual_type)
@@ -448,10 +437,37 @@ def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
                     )
                 },
             )
+        
+def verify_arrow_table(table, assign_cols_by_name, expected_cols_and_types):
+    import pyarrow as pa
+
+    if not isinstance(table, pa.Table):
+        raise PySparkTypeError(
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
+                "expected": "pyarrow.Table",
+                "actual": type(table).__name__,
+            },
+        )
+    
+    verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types)
+
+def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
+    import pyarrow as pa
+
+    if not isinstance(batch, pa.RecordBatch):
+        raise PySparkTypeError(
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
+                "expected": "pyarrow.RecordBatch",
+                "actual": type(batch).__name__,
+            },
+        )
+    
+    verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
-def wrap_grouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_conf):
-    print('IS GENERATOR', is_generator)
+def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
     if _assign_cols_by_name:
@@ -470,14 +486,14 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_con
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, value_table)
 
-        if is_generator:
+        if isinstance(result, Iterator):
             def verify_element(batch):
-                verify_arrow_result(batch, _assign_cols_by_name, expected_cols_and_types)
+                verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
                 return batch
 
             return map(verify_element, result)
         else:
-            verify_arrow_result(result, _assign_cols_by_name, expected_cols_and_types)
+            verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
             return result.to_batches()
 
     return lambda k, v: (wrapped(k, v), to_arrow_type(return_type))
@@ -859,8 +875,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        is_generator = inspect.isgeneratorfunction(chained_func)
-        return args_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, is_generator, runner_conf)
+        return args_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
@@ -872,8 +887,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        is_generator = inspect.isgeneratorfunction(chained_func)
-        return args_offsets, wrap_cogrouped_map_arrow_udf(func, return_type, argspec, is_generator, runner_conf)
+        return args_offsets, wrap_cogrouped_map_arrow_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return wrap_grouped_agg_pandas_udf(func, args_offsets, kwargs_offsets, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
