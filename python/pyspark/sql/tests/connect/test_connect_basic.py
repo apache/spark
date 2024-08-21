@@ -663,25 +663,72 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_deduplicate(self):
         # SPARK-41326: test distinct and dropDuplicates.
-        df = self.connect.read.table(self.tbl_name)
-        df2 = self.spark.read.table(self.tbl_name)
+        df = self.connect.read.table(self.tbl_name2)
+        df2 = self.spark.read.table(self.tbl_name2)
         self.assert_eq(df.distinct().toPandas(), df2.distinct().toPandas())
         self.assert_eq(df.dropDuplicates().toPandas(), df2.dropDuplicates().toPandas())
         self.assert_eq(
-            df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
+            df.dropDuplicates(["col1"]).toPandas(), df2.dropDuplicates(["col1"]).toPandas()
         )
         self.assert_eq(
-            df.drop_duplicates(["name"]).toPandas(), df2.drop_duplicates(["name"]).toPandas()
+            df.drop_duplicates(["col1"]).toPandas(), df2.drop_duplicates(["col1"]).toPandas()
         )
         self.assert_eq(
-            df.dropDuplicates(["name", "id"]).toPandas(),
-            df2.dropDuplicates(["name", "id"]).toPandas(),
+            df.dropDuplicates(["col1", "col2"]).toPandas(),
+            df2.dropDuplicates(["col1", "col2"]).toPandas(),
+        )
+
+        self.assert_eq(
+            df.dropDuplicates("col1").toPandas(),
+            df2.dropDuplicates("col1").toPandas()
         )
         self.assert_eq(
-            df.drop_duplicates(["name", "id"]).toPandas(),
-            df2.drop_duplicates(["name", "id"]).toPandas(),
+            df.drop_duplicates("col1").toPandas(),
+            df2.drop_duplicates("col1").toPandas()
         )
-        self.assert_eq(df.dropDuplicates("name").toPandas(), df2.dropDuplicates("name").toPandas())
+
+        self.assert_eq(
+            df.dropDuplicates("col1", "col2").toPandas(),
+            df2.dropDuplicates("col1", "col2").toPandas(),
+        )
+        self.assert_eq(
+            df.drop_duplicates(["col1", "col2"]).toPandas(),
+            df2.drop_duplicates(["col1", "col2"]).toPandas(),
+        )
+        self.assert_eq(
+            df.dropDuplicates("col1", "col2", "col3").toPandas(),
+            df2.dropDuplicates("col1", "col2", "col3").toPandas(),
+        )
+        self.assert_eq(
+            df.drop_duplicates(["col1", "col2"]).toPandas(),
+            df2.drop_duplicates(["col1", "col2"]).toPandas(),
+        )
+
+        # Verify existing use case with named parameter
+        self.assert_eq(
+            df.dropDuplicates(subset=["col1"]).toPandas(),
+            df2.dropDuplicates(subset=["col1"]).toPandas()
+        )
+        self.assert_eq(
+            df.drop_duplicates(subset=["col1"]).toPandas(),
+            df2.drop_duplicates(subset=["col1"]).toPandas()
+        )
+        self.assert_eq(
+            df.dropDuplicates(subset=["col1", "col2"]).toPandas(),
+            df2.dropDuplicates(subset=["col1", "col2"]).toPandas(),
+        )
+        self.assert_eq(
+            df.drop_duplicates(subset=["col1", "col2"]).toPandas(),
+            df2.drop_duplicates(subset=["col1", "col2"]).toPandas(),
+        )
+        self.assert_eq(
+            df.drop_duplicates(subset=["col1", "col2"]).toPandas(),
+            df2.drop_duplicates(subset=["col1", "col2"]).toPandas(),
+        )
+        self.assert_eq(
+            df.dropDuplicates(subset=["col1", "col2", "col3"]).toPandas(),
+            df2.dropDuplicates(subset=["col1", "col2", "col3"]).toPandas(),
+        )
 
     def test_drop(self):
         # SPARK-41169: test drop

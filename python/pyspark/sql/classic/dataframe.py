@@ -1222,14 +1222,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+    def dropDuplicates(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
         # if subset length is greater than 1, it must be a sequence of str
         if not subset:
             jdf = self._jdf.dropDuplicates()
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            item = subset[0]
+        elif isinstance(subset, str):
+            item = [subset] + list(subset_varargs)
             for c in item:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -1249,7 +1249,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+    def dropDuplicatesWithinWatermark(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
         # if subset length is greater than 1, it must be a sequence of str
@@ -1258,9 +1258,22 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset[0]))
+        elif isinstance(subset, str):
+            item = [subset] + list(subset_varargs)
+            for c in item:
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
+            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(item))
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 

@@ -430,16 +430,23 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+    def dropDuplicates(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
         # if subset length is greater than 1, it must be a sequence of str
+
+        # No parameter passed in (e.g. dropDuplicates())
         if not subset:
+            print("wei== subset is: " + str(subset))
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            item = subset[0]
+        # Parameters passed in as varargs
+        # (e.g. dropDuplicates("col"), dropDuplicates("col1", "col2"), ...)
+        elif isinstance(subset, str):
+            print("wei== subset is: " + subset + " varargs is: " + str(subset_varargs))
+            item = [subset] + list(subset_varargs)
+            print("wei== item is: " + str(item))
             for c in item:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
@@ -450,15 +457,18 @@ class DataFrame(ParentDataFrame):
                 plan.Deduplicate(child=self._plan, column_names=item),
                 session=self._session,
             )
+        # Parameters passed in as list
+        # (e.g. dropDuplicates(["col"]), dropDuplicates(subset=["col1", "col2"]), ...)
         else:
-            for c in subset:  # type: ignore[assignment]
+            print("wei== 3rd subset is: " + str(subset))
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             res = DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
+                plan.Deduplicate(child=self._plan, column_names=subset),
                 session=self._session,
             )
 
@@ -467,28 +477,48 @@ class DataFrame(ParentDataFrame):
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+    def dropDuplicatesWithinWatermark(self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str) -> ParentDataFrame:
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
         # if subset length is greater than 1, it must be a sequence of str
         if len(subset) > 1:
             assert all(isinstance(c, str) for c in subset)
 
+        # No parameter passed in (e.g. dropDuplicatesWithinWatermark())
         if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
                 session=self._session,
             )
-        elif len(subset) == 1 and isinstance(subset[0], list):
+        # Parameters passed in as varargs
+        # (e.g. dropDuplicatesWithinWatermark("col"),
+        #       dropDuplicatesWithinWatermark("col1", "col2"), ...)
+        elif isinstance(subset, str):
+            item = [subset] + list(subset_varargs)
+            for c in item:
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset[0], within_watermark=True),
+                plan.Deduplicate(child=self._plan, column_names=item, within_watermark=True),
                 session=self._session,
             )
+        # Parameters passed in as list
+        # (e.g. dropDuplicatesWithinWatermark(["col"]),
+        #       dropDuplicatesWithinWatermark(subset=["col1", "col2"]), ...)
         else:
+            for c in subset:
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             return DataFrame(
                 plan.Deduplicate(
                     child=self._plan,
-                    column_names=cast(List[str], subset),
+                    column_names=subset,
                     within_watermark=True,
                 ),
                 session=self._session,
