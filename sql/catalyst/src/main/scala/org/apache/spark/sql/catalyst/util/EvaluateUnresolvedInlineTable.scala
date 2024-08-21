@@ -35,17 +35,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 object EvaluateUnresolvedInlineTable extends SQLConfHelper
   with AliasHelper with EvalHelper with CastSupport {
 
-  def evaluate(plan: LogicalPlan): LogicalPlan = {
-    traversePlanAndEvalUnresolvedInlineTable(plan)
-  }
-
-  def traversePlanAndEvalUnresolvedInlineTable(plan: LogicalPlan): LogicalPlan = {
-    plan match {
-      case table: UnresolvedInlineTable if table.expressionsResolved =>
-        evaluateUnresolvedInlineTable(table)
-      case _ => plan.mapChildren(traversePlanAndEvalUnresolvedInlineTable)
-    }
-  }
+  def evaluate(plan: UnresolvedInlineTable): LogicalPlan =
+    if (plan.expressionsResolved) evaluateUnresolvedInlineTable(plan) else plan
 
   def evaluateUnresolvedInlineTable(table: UnresolvedInlineTable): LogicalPlan = {
     validateInputDimension(table)
@@ -62,7 +53,7 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
    */
   private def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
     val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
-    if (earlyEvalPossible) EvalInlineTables(table) else table
+    if (earlyEvalPossible) EvalInlineTables.eval(table) else table
   }
 
   /**

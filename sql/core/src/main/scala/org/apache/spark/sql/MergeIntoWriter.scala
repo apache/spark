@@ -46,7 +46,8 @@ class MergeIntoWriter[T] private[sql] (
 
   private val df: DataFrame = ds.toDF()
 
-  private val sparkSession = ds.sparkSession
+  private[sql] val sparkSession = ds.sparkSession
+  import sparkSession.RichColumn
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
@@ -188,7 +189,8 @@ class MergeIntoWriter[T] private[sql] (
     }
 
     val merge = MergeIntoTable(
-      UnresolvedRelation(tableName),
+      UnresolvedRelation(tableName).requireWritePrivileges(MergeIntoTable.getWritePrivileges(
+        matchedActions, notMatchedActions, notMatchedBySourceActions)),
       logicalPlan,
       on.expr,
       matchedActions,
@@ -231,6 +233,8 @@ class MergeIntoWriter[T] private[sql] (
 case class WhenMatched[T] private[sql](
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Expression]) {
+  import mergeIntoWriter.sparkSession.RichColumn
+
   /**
    * Specifies an action to update all matched rows in the DataFrame.
    *
@@ -277,6 +281,7 @@ case class WhenMatched[T] private[sql](
 case class WhenNotMatched[T] private[sql](
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Expression]) {
+  import mergeIntoWriter.sparkSession.RichColumn
 
   /**
    * Specifies an action to insert all non-matched rows into the DataFrame.
@@ -312,6 +317,7 @@ case class WhenNotMatched[T] private[sql](
 case class WhenNotMatchedBySource[T] private[sql](
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Expression]) {
+  import mergeIntoWriter.sparkSession.RichColumn
 
   /**
    * Specifies an action to update all non-matched rows in the target DataFrame when

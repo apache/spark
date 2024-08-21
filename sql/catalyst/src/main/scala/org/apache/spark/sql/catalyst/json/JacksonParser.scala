@@ -514,7 +514,7 @@ class JacksonParser(
       throw CannotParseJSONFieldException(parser.currentName, parser.getText, token, dataType)
   }
 
-  private val useUnsafeRow = SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW)
+  private val useUnsafeRow = options.useUnsafeRow
   private val cachedUnsafeProjection = mutable.HashMap.empty[StructType, UnsafeProjection]
 
   protected final def convertRow(row: InternalRow, schema: StructType): InternalRow = {

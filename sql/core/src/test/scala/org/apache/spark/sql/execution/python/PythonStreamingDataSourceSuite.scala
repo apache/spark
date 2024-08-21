@@ -1035,10 +1035,11 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           runQuery("complete")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3102",
+        errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+        sqlState = "42KDE",
         parameters = Map(
-          "msg" -> ("Complete output mode not supported when there are no streaming aggregations" +
-            " on streaming DataFrames/Datasets")))
+          "outputMode" -> "complete",
+          "operation" -> "no streaming aggregations"))
 
       // Query should fail in planning with "invalid" mode.
       val error2 = intercept[IllegalArgumentException] {

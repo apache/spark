@@ -46,7 +46,7 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * A reserved property to specify the location of the table. The files of the table
-   * should be under this location.
+   * should be under this location. The location is a Hadoop Path string.
    */
   String PROP_LOCATION = "location";
 
@@ -109,6 +109,26 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
+   * into this table later.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param writePrivileges
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   *
+   * @since 3.5.3
+   */
+  default Table loadTable(
+      Identifier ident,
+      Set<TableWritePrivilege> writePrivileges) throws NoSuchTableException {
+    return loadTable(ident);
+  }
 
   /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
