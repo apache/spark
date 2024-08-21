@@ -165,11 +165,17 @@ trait Logging {
   }
 
   protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
-    val threadContext = CloseableThreadContext.putAll(context)
+    // put into thread context only when structured logging is enabled
+    val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
+      Some(CloseableThreadContext.putAll(context))
+    } else {
+      None
+    }
+
     try {
       body
     } finally {
-      threadContext.close()
+      closeableThreadContextOpt.foreach(_.close())
     }
   }
 

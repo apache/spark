@@ -247,5 +247,20 @@ object AgnosticEncoders {
     ScalaDecimalEncoder(DecimalType.SYSTEM_DEFAULT)
   val DEFAULT_JAVA_DECIMAL_ENCODER: JavaDecimalEncoder =
     JavaDecimalEncoder(DecimalType.SYSTEM_DEFAULT, lenientSerialization = false)
-}
 
+  /**
+   * Encoder that transforms external data into a representation that can be further processed by
+   * another encoder. This is fallback for scenarios where objects can't be represented using
+   * standard encoders, an example of this is where we use a different (opaque) serialization
+   * format (i.e. java serialization, kryo serialization, or protobuf).
+   */
+  case class TransformingEncoder[I, O](
+      clsTag: ClassTag[I],
+      transformed: AgnosticEncoder[O],
+      codecProvider: () => Codec[_ >: I, O]) extends AgnosticEncoder[I] {
+    override def isPrimitive: Boolean = transformed.isPrimitive
+    override def dataType: DataType = transformed.dataType
+    override def schema: StructType = transformed.schema
+    override def isStruct: Boolean = transformed.isStruct
+  }
+}

@@ -432,11 +432,20 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMN point.z double")
-      }
-
-      assert(exc.getMessage.contains("Missing field point"))
+      val sqlText = s"ALTER TABLE $t ADD COLUMN point.z double"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(
+          fragment = "point.z double",
+          start = 24 + t.length,
+          stop = 37 + t.length))
     }
   }
 
@@ -758,11 +767,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN data TYPE string")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN data TYPE string"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
@@ -771,11 +786,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
-      }
-
-      assert(exc.getMessage.contains("Missing field point.x"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN point.x TYPE double"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
@@ -840,9 +861,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           .add("z", IntegerType))
         .add("b", IntegerType))
 
-      val e1 = intercept[AnalysisException](
-        sql(s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"))
-      assert(e1.getMessage.contains("Missing field non_exist"))
+      val sqlText1 = s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText1)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`non_exist`",
+          "proposal" -> "`a`, `point`, `b`"),
+        context = ExpectedContext(fragment = sqlText1, start = 0, stop = sqlText1.length - 1))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
       assert(getTableMetadata(t).schema == new StructType()
@@ -862,9 +891,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           .add("y", IntegerType))
         .add("b", IntegerType))
 
-      val e2 = intercept[AnalysisException](
-        sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"))
-      assert(e2.getMessage.contains("Missing field point.non_exist"))
+      val sqlText2 = s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText2)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`non_exist`",
+          "proposal" -> "`a`, `point`, `b`"),
+        context = ExpectedContext(fragment = sqlText2, start = 0, stop = sqlText2.length - 1))
 
       // `AlterTable.resolved` checks column existence.
       intercept[AnalysisException](
@@ -947,11 +984,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
@@ -960,11 +1003,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'")
-      }
-
-      assert(exc.getMessage.contains("Missing field point.x"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
@@ -1056,11 +1105,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RENAME COLUMN data TO some_string")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t RENAME COLUMN data TO some_string"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
@@ -1069,11 +1124,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RENAME COLUMN point.x TO z")
-      }
-
-      assert(exc.getMessage.contains("Missing field point.x"))
+      val sqlText = s"ALTER TABLE $t RENAME COLUMN point.x TO z"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
@@ -1216,11 +1277,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP COLUMN data")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t DROP COLUMN data"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
 
       // with if exists it should pass
       sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
@@ -1234,11 +1301,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP COLUMN point.x")
-      }
-
-      assert(exc.getMessage.contains("Missing field point.x"))
+      val sqlText = s"ALTER TABLE $t DROP COLUMN point.x"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
 
       // with if exists it should pass
       sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")

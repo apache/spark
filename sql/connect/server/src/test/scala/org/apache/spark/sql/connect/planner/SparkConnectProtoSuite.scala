@@ -42,7 +42,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog,
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, Metadata, ShortType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -64,6 +64,11 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
       Seq.empty)
 
+  lazy val connectTestRelation3 =
+    createLocalRelationProto(
+      Seq(AttributeReference("id", IntegerType)(), AttributeReference("date", TimestampType)()),
+      Seq.empty)
+
   lazy val connectTestRelationMap =
     createLocalRelationProto(
       Seq(AttributeReference("id", MapType(StringType, StringType))()),
@@ -79,6 +84,11 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       new java.util.ArrayList[Row](),
       StructType(Seq(StructField("id", IntegerType), StructField("name", StringType))))
 
+  lazy val sparkTestRelation3: DataFrame =
+    spark.createDataFrame(
+      new java.util.ArrayList[Row](),
+      StructType(Seq(StructField("id", IntegerType), StructField("date", TimestampType))))
+
   lazy val sparkTestRelationMap: DataFrame =
     spark.createDataFrame(
       new java.util.ArrayList[Row](),
@@ -90,6 +100,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
     val sparkPlan = sparkTestRelation.select("id")
+    comparePlans(connectPlan, sparkPlan)
+  }
+
+  test("Basic select timestamp") {
+    val connectPlan = connectTestRelation3.select("date".protoAttr)
+    val sparkPlan = sparkTestRelation3.select("date")
     comparePlans(connectPlan, sparkPlan)
   }
 

@@ -28,8 +28,11 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
@@ -166,18 +169,31 @@ object OperatorStateMetadataUtils extends Logging {
           s"version=${operatorStateMetadata.version}")
     }
   }
+
+  def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
+    val offsetLog = new OffsetSeqLog(session,
+      new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
+    offsetLog.getLatest().map(_._1).getOrElse(throw
+      StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
+  }
+
+  def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
+    val commitLog = new CommitLog(session, new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    commitLog.getLatest().map(_._1)
+  }
 }
 
 object OperatorStateMetadataReader {
   def createReader(
       stateCheckpointPath: Path,
       hadoopConf: Configuration,
-      version: Int): OperatorStateMetadataReader = {
+      version: Int,
+      batchId: Long): OperatorStateMetadataReader = {
     version match {
       case 1 =>
         new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
       case 2 =>
-        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf)
+        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId)
       case _ =>
         throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
           s"with version=$version")
@@ -291,15 +307,37 @@ class OperatorStateMetadataV2Writer(
 
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
-    hadoopConf: Configuration) extends OperatorStateMetadataReader {
+    hadoopConf: Configuration,
+    batchId: Long) extends OperatorStateMetadataReader {
+
+  // Check that the requested batchId is available in the checkpoint directory
+  val baseCheckpointDir = stateCheckpointPath.getParent.getParent
+  val lastAvailOffset = listOffsets(baseCheckpointDir).lastOption.getOrElse(-1L)
+  if (batchId > lastAvailOffset) {
+    throw StateDataSourceErrors.failedToReadOperatorMetadata(baseCheckpointDir.toString, batchId)
+  }
 
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
   fm.mkdirs(metadataDirPath.getParent)
+
   override def version: Int = 2
 
-  private def listBatches(): Array[Long] = {
+  // List the available offsets in the offset directory
+  private def listOffsets(baseCheckpointDir: Path): Array[Long] = {
+    val offsetLog = new Path(baseCheckpointDir, DIR_NAME_OFFSETS)
+    val fm = CheckpointFileManager.create(offsetLog, hadoopConf)
+    if (!fm.exists(offsetLog)) {
+      return Array.empty
+    }
+    fm.list(offsetLog)
+      .filter(f => !f.getPath.getName.startsWith(".")) // ignore hidden files
+      .map(_.getPath.getName.toLong).sorted
+  }
+
+  // List the available batches in the operator metadata directory
+  private def listOperatorMetadataBatches(): Array[Long] = {
     if (!fm.exists(metadataDirPath)) {
       return Array.empty
     }
@@ -307,14 +345,16 @@ class OperatorStateMetadataV2Reader(
   }
 
   override def read(): Option[OperatorStateMetadata] = {
-    val batches = listBatches()
-    if (batches.isEmpty) {
-      return None
+    val batches = listOperatorMetadataBatches()
+    val lastBatchId = batches.filter(_ <= batchId).lastOption
+    if (lastBatchId.isEmpty) {
+      throw StateDataSourceErrors.failedToReadOperatorMetadata(stateCheckpointPath.toString,
+        batchId)
+    } else {
+      val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
+        stateCheckpointPath, lastBatchId.get)
+      val inputStream = fm.open(metadataFilePath)
+      OperatorStateMetadataUtils.readMetadata(inputStream, version)
     }
-    val lastBatchId = batches.last
-    val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
-      stateCheckpointPath, lastBatchId)
-    val inputStream = fm.open(metadataFilePath)
-    OperatorStateMetadataUtils.readMetadata(inputStream, version)
   }
 }

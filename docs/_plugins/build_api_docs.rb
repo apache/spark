@@ -157,6 +157,7 @@ def build_python_docs
   mkdir_p "api/python"
 
   puts "cp -r ../python/docs/build/html/. api/python"
+  rm_r("../python/docs/build/html/_sources")
   cp_r("../python/docs/build/html/.", "api/python")
 end
 
@@ -194,11 +195,18 @@ end
 
 def build_error_docs
   print_header "Building error docs."
-  system("python '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+
+  if !system("which python3 >/dev/null 2>&1")
+    raise("Missing python3 in your path, stopping error doc generation")
+  end
+
+  system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
 
-build_error_docs
+if not (ENV['SKIP_ERRORDOC'] == '1')
+  build_error_docs
+end
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')

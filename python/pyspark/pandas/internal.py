@@ -915,10 +915,8 @@ class InternalFrame:
         if is_remote():
             return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
         jvm = sdf.sparkSession._jvm
-        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
-        jexpr = F.monotonically_increasing_id()._jc.expr()
-        jexpr.setTagValue(tag, "distributed_index")
-        return sdf.select(PySparkColumn(jvm.Column(jexpr)).alias(column_name), *scols)
+        jcol = jvm.PythonSQLUtils.distributedIndex()
+        return sdf.select(PySparkColumn(jcol).alias(column_name), *scols)
 
     @staticmethod
     def attach_distributed_sequence_column(

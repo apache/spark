@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.types._
 
 class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
@@ -612,5 +612,21 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
       case (rowForSingle, rowForMultiCols) =>
         assert(rowForSingle === rowForMultiCols)
     }
+  }
+
+  test("nested input columns") {
+    val attr = NominalAttribute.defaultAttr.withValues("small", "medium", "large")
+    val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("size")
+      .select(col("size").as("size", attr.toMetadata()))
+      .select(struct("size").as("nest"))
+    val encoder = new OneHotEncoder()
+      .setInputCols(Array("nest.size"))
+      .setOutputCols(Array("encoded"))
+    val model = encoder.fit(df)
+    val rows = model.transform(df).select("encoded").collect().toSeq
+    val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
+    assert(group.size === 2)
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
   }
 }

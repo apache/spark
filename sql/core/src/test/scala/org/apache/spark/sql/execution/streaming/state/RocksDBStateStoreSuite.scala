@@ -1026,15 +1026,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  // TODO SPARK-48796 after restart state id will not be the same
-  ignore(s"get, put, iterator, commit, load with multiple column families") {
+  test(s"get, put, iterator, commit, load with multiple column families") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
       def get(store: StateStore, col1: String, col2: Int, colFamilyName: String): UnsafeRow = {
         store.get(dataToKeyRow(col1, col2), colFamilyName)
       }
 
-      def iterator(store: StateStore, colFamilyName: String): Seq[((String, Int), Int)] = {
-        store.iterator(colFamilyName).toSeq.map {
+      def iterator(store: StateStore, colFamilyName: String): Iterator[((String, Int), Int)] = {
+        store.iterator(colFamilyName).map {
           case unsafePair =>
             (keyRowToData(unsafePair.key), valueRowToData(unsafePair.value))
         }
@@ -1063,12 +1062,21 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       put(store, ("a", 1), 1, colFamily2)
       assert(valueRowToData(get(store, "a", 1, colFamily2)) === 1)
 
+      // calling commit on this store creates version 1
       store.commit()
 
       // reload version 0
       store = provider.getStore(0)
-      assert(get(store, "a", 1, colFamily1) === null)
-      assert(iterator(store, colFamily1).isEmpty)
+
+      val e = intercept[Exception]{
+        get(store, "a", 1, colFamily1)
+      }
+      checkError(
+        exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        sqlState = Some("42802"),
+        parameters = Map("operationType" -> "get", "colFamilyName" -> colFamily1)
+      )
 
       store = provider.getStore(1)
       // version 1 data recovered correctly
@@ -1087,6 +1095,50 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(iterator(store, colFamily2).toSet === Set((("a", 1), 1), (("b", 1), 2)))
 
       store.commit()
+    }
+  }
+
+
+  test("verify that column family id is assigned correctly after removal") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
+      var store = provider.getRocksDBStateStore(0)
+      val colFamily1: String = "abc"
+      val colFamily2: String = "def"
+      val colFamily3: String = "ghi"
+      val colFamily4: String = "jkl"
+      val colFamily5: String = "mno"
+
+      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.commit()
+
+      store = provider.getRocksDBStateStore(1)
+      store.removeColFamilyIfExists(colFamily2)
+      store.commit()
+
+      store = provider.getRocksDBStateStore(2)
+      store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily3) == 3)
+      store.removeColFamilyIfExists(colFamily1)
+      store.removeColFamilyIfExists(colFamily3)
+      store.commit()
+
+      store = provider.getRocksDBStateStore(1)
+      // this should return the old id, because we didn't remove this colFamily for version 1
+      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily1) == 1)
+
+      store = provider.getRocksDBStateStore(3)
+      store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily4) == 4)
+      store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      assert(store.getColumnFamilyId(colFamily5) == 5)
     }
   }
 

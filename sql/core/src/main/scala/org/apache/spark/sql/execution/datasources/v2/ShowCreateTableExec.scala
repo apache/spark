@@ -120,7 +120,7 @@ case class ShowCreateTableExec(
   private def showTableLocation(table: Table, builder: StringBuilder): Unit = {
     val isManagedOption = Option(table.properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
     // Only generate LOCATION clause if it's not managed.
-    if (isManagedOption.forall(_.equalsIgnoreCase("false"))) {
+    if (isManagedOption.isEmpty || !isManagedOption.get.equalsIgnoreCase("true")) {
       Option(table.properties.get(TableCatalog.PROP_LOCATION))
         .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
         .foreach(builder.append)

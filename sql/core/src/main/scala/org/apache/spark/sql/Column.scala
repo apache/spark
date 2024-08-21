@@ -22,60 +22,41 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.TypedAggUtils
+import org.apache.spark.sql.internal.ColumnNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
-private[sql] object Column {
+private[spark] object Column {
 
   def apply(colName: String): Column = new Column(colName)
 
-  def apply(expr: Expression): Column = new Column(expr)
-
-  def unapply(col: Column): Option[Expression] = Some(col.expr)
-
-  private[sql] def generateAlias(e: Expression): String = {
-    e match {
-      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-        a.aggregateFunction.toString
-      case expr => toPrettySQL(expr)
-    }
-  }
-
-  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
-    val metadataWithoutId = new MetadataBuilder()
-      .withMetadata(a.metadata)
-      .remove(Dataset.DATASET_ID_KEY)
-      .remove(Dataset.COL_POS_KEY)
-      .build()
-    a.withMetadata(metadataWithoutId)
-  }
+  def apply(node: => ColumnNode): Column = withOrigin(new Column(node))
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
-    fn(name, isDistinct = false, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = false, inputs: _*)
   }
 
   private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
-    fn(name, isDistinct = isDistinct, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = isDistinct, isInternal = false, inputs)
   }
 
-  private[sql] def fn(
+  private[sql] def internalFn(name: String, inputs: Column*): Column = {
+    fn(name, isDistinct = false, isInternal = true, inputs)
+  }
+
+  private def fn(
       name: String,
       isDistinct: Boolean,
-      ignoreNulls: Boolean,
-      inputs: Column*): Column = withOrigin {
-    Column {
-      UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
-    }
+      isInternal: Boolean,
+      inputs: Seq[Column]): Column = withOrigin {
+    Column(internal.UnresolvedFunction(
+      name,
+      inputs.map(_.node),
+      isDistinct = isDistinct,
+      isInternal = isInternal))
   }
 }
 
@@ -91,20 +72,9 @@ private[sql] object Column {
  */
 @Stable
 class TypedColumn[-T, U](
-    expr: Expression,
-    private[sql] val encoder: ExpressionEncoder[U])
-  extends Column(expr) {
-
-  /**
-   * Inserts the specific input type and schema into any expressions that are expected to operate
-   * on a decoded object.
-   */
-  private[sql] def withInputType(
-      inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val newExpr = TypedAggUtils.withInputType(expr, inputEncoder, inputAttributes)
-    new TypedColumn[T, U](newExpr, encoder)
-  }
+    node: ColumnNode,
+    private[sql] val encoder: Encoder[U])
+  extends Column(node) {
 
   /**
    * Gives the [[TypedColumn]] a name (alias).
@@ -115,7 +85,7 @@ class TypedColumn[-T, U](
    * @since 2.0.0
    */
   override def name(alias: String): TypedColumn[T, U] =
-    new TypedColumn[T, U](super.name(alias).expr, encoder)
+    new TypedColumn[T, U](super.name(alias).node, encoder)
 
 }
 
@@ -139,9 +109,6 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
- * @note The internal Catalyst expression can be accessed via [[expr]], but this method is for
- * debugging purposes only and can change in any future Spark releases.
- *
  * @groupname java_expr_ops Java-specific expression operators
  * @groupname expr_ops Expression operators
  * @groupname df_ops DataFrame functions
@@ -150,15 +117,12 @@ class TypedColumn[-T, U](
  * @since 1.3.0
  */
 @Stable
-class Column(val expr: Expression) extends Logging {
-
+class Column(val node: ColumnNode) extends Logging {
   def this(name: String) = this(withOrigin {
     name match {
-      case "*" => UnresolvedStar(None)
-      case _ if name.endsWith(".*") =>
-        val parts = UnresolvedAttribute.parseAttributeName(name.dropRight(2))
-        UnresolvedStar(Some(parts))
-      case _ => UnresolvedAttribute.quotedString(name)
+      case "*" => internal.UnresolvedStar(None)
+      case _ if name.endsWith(".*") => internal.UnresolvedStar(Option(name))
+      case _ => internal.UnresolvedAttribute(name)
     }
   })
 
@@ -172,46 +136,14 @@ class Column(val expr: Expression) extends Logging {
     Column.fn(name, this, lit(other))
   }
 
-  override def toString: String = toPrettySQL(expr)
+  override def toString: String = node.sql
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.normalizedExpr() == this.normalizedExpr()
+    case that: Column => that.node.normalized == this.node.normalized
     case _ => false
   }
 
-  override def hashCode: Int = this.normalizedExpr().hashCode()
-
-  private def normalizedExpr(): Expression = expr transform {
-    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
-  }
-
-  /** Creates a column based on the given expression. */
-  private def withExpr(newExpr: => Expression): Column = withOrigin {
-    new Column(newExpr)
-  }
-
-  /**
-   * Returns the expression for this column either with an existing or auto assigned name.
-   */
-  private[sql] def named: NamedExpression = expr match {
-    case expr: NamedExpression => expr
-
-    // Leave an unaliased generator with an empty list of names since the analyzer will generate
-    // the correct defaults after the nested expression's type has been resolved.
-    case g: Generator => MultiAlias(g, Nil)
-
-    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
-    // NamedExpression under this Cast.
-    case c: Cast =>
-      c.transformUp {
-        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
-      } match {
-        case ne: NamedExpression => ne
-        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
-      }
-
-    case expr: Expression => UnresolvedAlias(expr, Some(Column.generateAlias))
-  }
+  override def hashCode: Int = this.node.normalized.hashCode()
 
   /**
    * Provides a type hint about the expected return value of this column.  This information can
@@ -219,7 +151,7 @@ class Column(val expr: Expression) extends Logging {
    * results into the correct JVM types.
    * @since 1.6.0
    */
-  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](expr, encoderFor[U])
+  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](node, implicitly[Encoder[U]])
 
   /**
    * Extracts a value or values from a complex type.
@@ -234,8 +166,8 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def apply(extraction: Any): Column = withExpr {
-    UnresolvedExtractValue(expr, lit(extraction).expr)
+  def apply(extraction: Any): Column = Column {
+    internal.UnresolvedExtractValue(node, lit(extraction).node)
   }
 
   /**
@@ -285,14 +217,18 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def ===(other: Any): Column = {
-    val right = lit(other).expr
-    if (this.expr == right) {
+    val right = lit(other)
+    checkTrivialPredicate(right)
+    fn("=", other)
+  }
+
+  private def checkTrivialPredicate(right: Column): Unit = {
+    if (this == right) {
       logWarning(
         log"Constructing trivially true equals predicate, " +
-          log"'${MDC(LEFT_EXPR, this.expr)} = ${MDC(RIGHT_EXPR, right)}'. " +
+          log"'${MDC(LEFT_EXPR, this)} == ${MDC(RIGHT_EXPR, right)}'. " +
           log"Perhaps you need to use aliases.")
     }
-    fn("=", other)
   }
 
   /**
@@ -492,14 +428,9 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def <=>(other: Any): Column = {
-    val right = lit(other).expr
-    if (this.expr == right) {
-      logWarning(
-        log"Constructing trivially true equals predicate, " +
-          log"'${MDC(LEFT_EXPR, this.expr)} <=> ${MDC(RIGHT_EXPR, right)}'. " +
-          log"Perhaps you need to use aliases.")
-    }
-    fn("<=>", other)
+    val right = lit(other)
+    checkTrivialPredicate(right)
+    fn("<=>", right)
   }
 
   /**
@@ -531,11 +462,11 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def when(condition: Column, value: Any): Column = withExpr {
-    this.expr match {
-      case CaseWhen(branches, None) =>
-        CaseWhen(branches :+ ((condition.expr, lit(value).expr)))
-      case CaseWhen(_, Some(_)) =>
+  def when(condition: Column, value: Any): Column = Column {
+    node match {
+      case internal.CaseWhenOtherwise(branches, None, _) =>
+        internal.CaseWhenOtherwise(branches :+ ((condition.node, lit(value).node)), None)
+      case internal.CaseWhenOtherwise(_, Some(_), _) =>
         throw new IllegalArgumentException(
           "when() cannot be applied once otherwise() is applied")
       case _ =>
@@ -565,11 +496,11 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def otherwise(value: Any): Column = withExpr {
-    this.expr match {
-      case CaseWhen(branches, None) =>
-        CaseWhen(branches, Option(lit(value).expr))
-      case CaseWhen(_, Some(_)) =>
+  def otherwise(value: Any): Column = Column {
+    node match {
+      case internal.CaseWhenOtherwise(branches, None, _) =>
+        internal.CaseWhenOtherwise(branches, Option(lit(value).node))
+      case internal.CaseWhenOtherwise(_, Some(_), _) =>
         throw new IllegalArgumentException(
           "otherwise() can only be applied once on a Column previously generated by when()")
       case _ =>
@@ -945,10 +876,10 @@ class Column(val expr: Expression) extends Logging {
    * @since 3.1.0
    */
   // scalastyle:on line.size.limit
-  def withField(fieldName: String, col: Column): Column = withExpr {
+  def withField(fieldName: String, col: Column): Column = {
     require(fieldName != null, "fieldName cannot be null")
     require(col != null, "col cannot be null")
-    UpdateFields(expr, fieldName, col.expr)
+    Column(internal.UpdateFields(node, fieldName, Option(col.node)))
   }
 
   // scalastyle:off line.size.limit
@@ -1011,9 +942,9 @@ class Column(val expr: Expression) extends Logging {
    * @since 3.1.0
    */
   // scalastyle:on line.size.limit
-  def dropFields(fieldNames: String*): Column = withExpr {
-    fieldNames.tail.foldLeft(UpdateFields(expr, fieldNames.head)) {
-      (resExpr, fieldName) => UpdateFields(resExpr, fieldName)
+  def dropFields(fieldNames: String*): Column = Column {
+    fieldNames.tail.foldLeft(internal.UpdateFields(node, fieldNames.head)) {
+      (resExpr, fieldName) => internal.UpdateFields(resExpr, fieldName)
     }
   }
 
@@ -1123,7 +1054,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Seq[String]): Column = withExpr { MultiAlias(expr, aliases) }
+  def as(aliases: Seq[String]): Column = Column(internal.Alias(node, aliases))
 
   /**
    * Assigns the given aliases to the results of a table generating function.
@@ -1135,9 +1066,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Array[String]): Column = withExpr {
-    MultiAlias(expr, aliases.toImmutableArraySeq)
-  }
+  def as(aliases: Array[String]): Column = as(aliases.toImmutableArraySeq)
 
   /**
    * Gives the column an alias.
@@ -1165,9 +1094,8 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String, metadata: Metadata): Column = withExpr {
-    Alias(expr, alias)(explicitMetadata = Some(metadata))
-  }
+  def as(alias: String, metadata: Metadata): Column =
+    Column(internal.Alias(node, alias :: Nil, metadata = Option(metadata)))
 
   /**
    * Gives the column a name (alias).
@@ -1183,13 +1111,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.0.0
    */
-  def name(alias: String): Column = withExpr {
-    // SPARK-33536: an alias is no longer a column reference. Therefore,
-    // we should not inherit the column reference related metadata in an alias
-    // so that it is not caught as a column reference in DetectAmbiguousSelfJoin.
-    Alias(expr, alias)(
-      nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
-  }
+  def name(alias: String): Column = Column(internal.Alias(node, alias :: Nil))
 
   /**
    * Casts the column to a different data type.
@@ -1205,11 +1127,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: DataType): Column = withExpr {
-    val cast = Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
-    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
-    cast
-  }
+  def cast(to: DataType): Column = Column(internal.Cast(node, to))
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -1223,7 +1141,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
+  def cast(to: String): Column = cast(DataTypeParser.parseDataType(to))
 
   /**
    * Casts the column to a different data type and the result is null on failure.
@@ -1239,13 +1157,8 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 4.0.0
    */
-  def try_cast(to: DataType): Column = withExpr {
-    val cast = Cast(
-      child = expr,
-      dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(to),
-      evalMode = EvalMode.TRY)
-    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
-    cast
+  def try_cast(to: DataType): Column = {
+    Column(internal.Cast(node, to, Option(internal.Cast.Try)))
   }
 
   /**
@@ -1259,7 +1172,18 @@ class Column(val expr: Expression) extends Logging {
    * @since 4.0.0
    */
   def try_cast(to: String): Column = {
-    try_cast(CatalystSqlParser.parseDataType(to))
+    try_cast(DataTypeParser.parseDataType(to))
+  }
+
+  private def sortOrder(
+      sortDirection: internal.SortOrder.SortDirection,
+      nullOrdering: internal.SortOrder.NullOrdering): Column = {
+    Column(internal.SortOrder(node, sortDirection, nullOrdering))
+  }
+
+  private[sql] def sortOrder: internal.SortOrder = node match {
+    case order: internal.SortOrder => order
+    case _ => asc.node.asInstanceOf[internal.SortOrder]
   }
 
   /**
@@ -1275,7 +1199,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def desc: Column = withExpr { SortOrder(expr, Descending) }
+  def desc: Column = desc_nulls_last
 
   /**
    * Returns a sort expression based on the descending order of the column,
@@ -1291,7 +1215,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Seq.empty) }
+  def desc_nulls_first: Column = sortOrder(
+    internal.SortOrder.Descending,
+    internal.SortOrder.NullsFirst)
 
   /**
    * Returns a sort expression based on the descending order of the column,
@@ -1307,7 +1233,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Seq.empty) }
+  def desc_nulls_last: Column = sortOrder(
+    internal.SortOrder.Descending,
+    internal.SortOrder.NullsLast)
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1322,7 +1250,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def asc: Column = withExpr { SortOrder(expr, Ascending) }
+  def asc: Column = asc_nulls_first
 
   /**
    * Returns a sort expression based on ascending order of the column,
@@ -1338,7 +1266,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Seq.empty) }
+  def asc_nulls_first: Column = sortOrder(
+    internal.SortOrder.Ascending,
+    internal.SortOrder.NullsFirst)
 
   /**
    * Returns a sort expression based on ascending order of the column,
@@ -1354,7 +1284,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Seq.empty) }
+  def asc_nulls_last: Column = sortOrder(
+    internal.SortOrder.Ascending,
+    internal.SortOrder.NullsLast)
 
   /**
    * Prints the expression to the console for debugging purposes.
@@ -1365,9 +1297,9 @@ class Column(val expr: Expression) extends Logging {
   def explain(extended: Boolean): Unit = {
     // scalastyle:off println
     if (extended) {
-      println(expr)
+      println(node)
     } else {
-      println(expr.sql)
+      println(node.sql)
     }
     // scalastyle:on println
   }
