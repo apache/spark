@@ -292,11 +292,12 @@ class HistoryServer(
  * This launches the HistoryServer as a Spark daemon.
  */
 object HistoryServer extends Logging {
-  private val conf = new SparkConf
+  private lazy val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
