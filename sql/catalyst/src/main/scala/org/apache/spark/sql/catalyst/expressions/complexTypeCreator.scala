@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -565,11 +565,12 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
 
   def this(child: Expression, pairDelim: Expression) = {
-    this(child, pairDelim, Literal(":"))
+    this(child, pairDelim, Literal(UTF8String.fromString(":"), child.dataType))
   }
 
   def this(child: Expression) = {
-    this(child, Literal(","), Literal(":"))
+    this(child, Literal(UTF8String.fromString(","), child.dataType),
+      Literal(UTF8String.fromString(":"), child.dataType))
   }
 
   override def stateful: Boolean = true
@@ -584,17 +585,19 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def dataType: DataType = MapType(first.dataType, first.dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val childrenDataTypes = children.map(_.dataType)
-    if (!TypeCoercion.haveSameType(childrenDataTypes)) {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!TypeCoercion.haveSameType(children.map(_.dataType))) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> childrenDataTypes.map(toSQLType).mkString("[", ", ", "]")
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
         )
       )
     } else {
-      super.checkInputDataTypes()
+      TypeCheckSuccess
     }
   }
 
