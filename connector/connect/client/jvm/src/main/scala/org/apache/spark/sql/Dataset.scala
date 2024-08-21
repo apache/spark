@@ -36,7 +36,7 @@ import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.internal.{UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -1391,7 +1391,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def reduce(func: (T, T) => T): T = {
-    val udf = ScalaUserDefinedFunction(
+    val udf = SparkUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: agnosticEncoder :: Nil,
       outputEncoder = agnosticEncoder)
@@ -2709,7 +2709,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def filter(func: T => Boolean): Dataset[T] = {
-    val udf = ScalaUserDefinedFunction(
+    val udf = SparkUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = PrimitiveBooleanEncoder)
@@ -2762,7 +2762,7 @@ class Dataset[T] private[sql] (
    */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     val outputEncoder = encoderFor[U]
-    val udf = ScalaUserDefinedFunction(
+    val udf = SparkUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = outputEncoder)
@@ -2834,7 +2834,7 @@ class Dataset[T] private[sql] (
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
-    val generator = ScalaUserDefinedFunction(
+    val generator = SparkUserDefinedFunction(
       UdfUtils.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
       ScalaReflection.encoderFor[Seq[A]])
@@ -2866,7 +2866,7 @@ class Dataset[T] private[sql] (
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
       f: A => IterableOnce[B]): DataFrame = {
-    val generator = ScalaUserDefinedFunction(
+    val generator = SparkUserDefinedFunction(
       UdfUtils.iterableOnceToSeq(f),
       Nil,
       ScalaReflection.encoderFor[Seq[B]])

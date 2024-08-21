@@ -22,7 +22,7 @@ import org.apache.spark.connect.proto.Expression.Window.WindowFrame.FrameBoundar
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveIntEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoDataTypes}
-import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, LongType, MetadataBuilder, ShortType, StringType, StructType}
@@ -360,8 +360,21 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
   }
 
   test("udf") {
-    val udf =
-      ScalaUserDefinedFunction((i: Int) => i, Seq(PrimitiveIntEncoder), PrimitiveIntEncoder)
+    // TODO add Aggregator!
+    val udf = SparkUserDefinedFunction(
+      (i: Int) => i,
+      Seq(PrimitiveIntEncoder),
+      PrimitiveIntEncoder)
+    val scalaUdf = proto.ScalarScalaUDF.newBuilder()
+      .setPayload(UdfToProtoUtils.toUdfPacketBytes(
+        udf.f,
+        Seq(PrimitiveIntEncoder),
+        PrimitiveIntEncoder))
+      .addInputTypes(ProtoDataTypes.IntegerType)
+      .setOutputType(ProtoDataTypes.IntegerType)
+      .setNullable(false)
+      .setAggregate(false)
+      .build()
     val named = udf.withName("boo")
     testConversion(
       InvokeInlineUserDefinedFunction(named, Seq(UnresolvedAttribute(("a")))),
@@ -369,7 +382,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
         _.getCommonInlineUserDefinedFunctionBuilder
           .setFunctionName("boo")
           .setDeterministic(true)
-          .setScalarScalaUdf(named.udf)
+          .setScalarScalaUdf(scalaUdf)
           .addArguments(attribute("a"))))
   }
 

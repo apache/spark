@@ -27,7 +27,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
-import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal._
 
 /**
@@ -130,12 +130,11 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunction(apply(function))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
-      case InvokeInlineUserDefinedFunction(udf: ScalaUserDefinedFunction, arguments, false, _) =>
-        val b = builder.getCommonInlineUserDefinedFunctionBuilder
-          .setScalarScalaUdf(udf.udf)
-          .setDeterministic(udf.deterministic)
-          .addAllArguments(arguments.map(apply).asJava)
-        udf.givenName.foreach(b.setFunctionName)
+      case InvokeInlineUserDefinedFunction(a: Aggregator[_, _, _], _, false, _) =>
+        throw SparkException.internalError("NOT YET")
+
+      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
+        UdfToProtoUtils.toProto(udf, args.map(apply))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder

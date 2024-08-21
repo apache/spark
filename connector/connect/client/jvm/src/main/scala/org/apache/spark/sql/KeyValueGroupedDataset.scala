@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toExpr
 import org.apache.spark.sql.connect.common.UdfUtils
-import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
@@ -1027,7 +1027,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val inputEncoders = Seq(vEncoder, vEncoder)
-    val udf = ScalaUserDefinedFunction(
+    val udf = SparkUserDefinedFunction(
       function = f,
       inputEncoders = inputEncoders,
       outputEncoder = vEncoder)
@@ -1087,7 +1087,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
       inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
     val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
-    val udf = ScalaUserDefinedFunction(
+    val udf = SparkUserDefinedFunction(
       function = nf,
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
@@ -1106,7 +1106,7 @@ private object KeyValueGroupedDatasetImpl {
       ds: Dataset[V],
       kEncoder: AgnosticEncoder[K],
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, K, V] = {
-    val gf = ScalaUserDefinedFunction(
+    val gf = SparkUserDefinedFunction(
       function = groupingFunc,
       inputEncoders = ds.agnosticEncoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
@@ -1129,7 +1129,7 @@ private object KeyValueGroupedDatasetImpl {
       vEncoder: AgnosticEncoder[V],
       groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     // Use a dummy udf to pass the K V encoders
-    val dummyGroupingFunc = ScalaUserDefinedFunction(
+    val dummyGroupingFunc = SparkUserDefinedFunction(
       function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
       outputEncoder = kEncoder).apply(col("*"))
