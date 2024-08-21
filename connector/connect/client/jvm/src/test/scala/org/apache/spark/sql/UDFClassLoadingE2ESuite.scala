@@ -43,7 +43,7 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       serializedUdfPacket = udfByteArray,
       inputTypes = Seq(ProtoDataTypes.IntegerType),
       outputType = ProtoDataTypes.IntegerType,
-      name = Some("dummyUdf"),
+      givenName = Some("dummyUdf"),
       nullable = true,
       deterministic = true,
       aggregate = false)
