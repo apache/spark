@@ -22,15 +22,16 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 
 /*
- * The [[MockObserver]] class is a mock of the [[StreamObserver]] class from the gRPC library,
- * used for testing the process function of [[SparkConnectPlanner]].
+ * The [[MockObserver]] class is a mock of the [[StreamObserver]] class from
+ * the gRPC library, used for testing the process function of [[SparkConnectPlanner]].
  *
  * Currently, the [[MockObserver]] class is located in the test folder,
  * which is not shaded by sbt-assembly, unlike the main folder.
  *
  * This results in a compilation error when open-source libraries call the
- * [[transform(spark: SparkSession, command: proto.Command)]] function in [[SparkConnectPlannerTestUtils]],
- * which in turn calls [[SparkConnectPlanner(executeHolder).process(command, new MockObserver())]].
+ * [[transform(spark: SparkSession, command: proto.Command)]] function in
+ * [[SparkConnectPlannerTestUtils]], which in turn calls
+ * [[SparkConnectPlanner(executeHolder).process(command, new MockObserver())]].
  *
  * To resolve this, the [[MockObserver]] class should be moved to the main folder
  * to be shaded as well.
