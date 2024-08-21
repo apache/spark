@@ -969,6 +969,27 @@ class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
             messageParameters={"member": "queryExecution"},
         )
 
+    def test_transpose(self):
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
+
+        # default index column
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("x", StringType(), True)]
+        )
+        expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
+        self.assertEqual(transposed_df.schema, expected_schema)
+        self.assertEqual(transposed_df.collect(), expected_data)
+
+        # specified index column
+        transposed_df = df.transpose(df.c)
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("z", StringType(), True)]
+        )
+        expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
+        self.assertEqual(transposed_df.schema, expected_schema)
+        self.assertEqual(transposed_df.collect(), expected_data)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_dataframe import *  # noqa: F401
