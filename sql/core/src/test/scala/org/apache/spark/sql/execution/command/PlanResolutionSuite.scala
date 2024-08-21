@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCom
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -158,6 +158,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("testcat")
     newCatalog
   }
@@ -175,6 +177,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
   }
