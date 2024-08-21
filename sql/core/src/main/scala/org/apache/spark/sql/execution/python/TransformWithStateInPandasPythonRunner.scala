@@ -128,7 +128,7 @@ class TransformWithStateInPandasPythonRunner(
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
   }
 
-  private var pandasWriter: TransformWithStateInPandasWriter = _
+  private var pandasWriter: BaseStreamingArrowWriter = _
 
   override protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
@@ -136,7 +136,7 @@ class TransformWithStateInPandasPythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new TransformWithStateInPandasWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
     }
 
     if (inputIterator.hasNext) {

@@ -24,23 +24,26 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 
 /**
- * Class to handle writing data to Arrow stream in batches for TransformWithState. When the rows
+ * Base class to handle writing data to Arrow stream to Python workers. When the rows
  * for a group exceed the maximum number of records per batch, we chunk the data into multiple
  * batches.
  */
-class TransformWithStateInPandasWriter(
+class BaseStreamingArrowWriter(
     root: VectorSchemaRoot,
     writer: ArrowStreamWriter,
     arrowMaxRecordsPerBatch: Int,
     arrowWriterForTest: ArrowWriter = null) {
-  private val arrowWriter: ArrowWriter = if (arrowWriterForTest == null) {
+  protected val arrowWriterForData: ArrowWriter = if (arrowWriterForTest == null) {
     ArrowWriter.create(root)
   } else {
     arrowWriterForTest
   }
 
   // variables for tracking the status of current batch
-  private var numRowsForBatch = 0
+  protected var totalNumRowsForBatch = 0
+
+  // variables for tracking the status of current chunk
+  protected var numRowsForCurrentChunk = 0
 
   /**
    * Indicates writer to write a row for current batch.
@@ -50,20 +53,33 @@ class TransformWithStateInPandasWriter(
   def writeRow(dataRow: InternalRow): Unit = {
     // If it exceeds the condition of batch (number of records) and there is more data for the
     // same group, finalize and construct a new batch.
-    if (numRowsForBatch >= arrowMaxRecordsPerBatch) {
+
+    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
+      finalizeCurrentChunk(isLastChunkForGroup = false)
       finalizeCurrentArrowBatch()
     }
-    arrowWriter.write(dataRow)
-    numRowsForBatch += 1
+
+    arrowWriterForData.write(dataRow)
+
+    numRowsForCurrentChunk += 1
+    totalNumRowsForBatch += 1
   }
 
   /**
    * Finalizes the current batch and writes it to the Arrow stream.
    */
   def finalizeCurrentArrowBatch(): Unit = {
-    arrowWriter.finish()
+    arrowWriterForData.finish()
     writer.writeBatch()
-    arrowWriter.reset()
-    numRowsForBatch = 0
+    arrowWriterForData.reset()
+    totalNumRowsForBatch = 0
+  }
+
+  /**
+   * Finalizes the current chunk. We only reset the number of rows for the current chunk here since
+   * not all the writers need this step.
+   */
+  protected def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
+    numRowsForCurrentChunk = 0
   }
 }

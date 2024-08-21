@@ -25,10 +25,10 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 
-class TransformWithStateInPandasWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
   // Setting the maximum number of records per batch to 2 to make test easier.
   val arrowMaxRecordsPerBatch = 2
-  var transformWithStateInPandasWriter: TransformWithStateInPandasWriter = _
+  var transformWithStateInPandasWriter: BaseStreamingArrowWriter = _
   var arrowWriter: ArrowWriter = _
   var writer: ArrowStreamWriter = _
 
@@ -36,7 +36,7 @@ class TransformWithStateInPandasWriterSuite extends SparkFunSuite with BeforeAnd
     val root: VectorSchemaRoot = mock(classOf[VectorSchemaRoot])
     writer = mock(classOf[ArrowStreamWriter])
     arrowWriter = mock(classOf[ArrowWriter])
-    transformWithStateInPandasWriter = new TransformWithStateInPandasWriter(
+    transformWithStateInPandasWriter = new BaseStreamingArrowWriter(
       root, writer, arrowMaxRecordsPerBatch, arrowWriter)
   }
 
