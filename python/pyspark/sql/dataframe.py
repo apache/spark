@@ -56,8 +56,10 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import (
         ColumnOrName,
         ColumnOrNameOrOrdinal,
+        Concatenate,
         LiteralType,
         OptionalPrimitiveType,
+        P,
     )
     from pyspark.sql.context import SQLContext
     from pyspark.sql.session import SparkSession
@@ -70,10 +72,6 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
-
-    from typing_extensions import Concatenate, ParamSpec
-
-    P = ParamSpec("P")
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
