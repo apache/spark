@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
+// scalastyle:off println
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   def conf: SQLConf
@@ -449,6 +450,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       plan: LogicalPlan,
       throws: Boolean = false,
       includeLastResort: Boolean = false): Expression = {
+    println(s"resolveExpressionByPlanOutput: e = $expr")
+    println(s"resolveExpressionByPlanOutput: q = \n$plan")
+    println()
+    println()
+    println()
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
@@ -471,6 +477,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       e: Expression,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Expression = {
+    println(s"resolveExpressionByPlanChildren: e = $e")
+    println(s"resolveExpressionByPlanChildren: q = \n$q")
+    println()
+    println()
+    println()
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
@@ -528,6 +539,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     if (planIdOpt.isEmpty) return None
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
+    println()
+    println()
+    println(s"Extract plan_id $planId from $u")
+    println()
+    println()
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
 
@@ -557,7 +573,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       .foldLeft(Option.empty[(NamedExpression, Int)]) {
         case (None, (r2, d2)) => Some((r2, d2))
         case (Some((r1, 0)), (r2, d2)) if d2 != 0 => Some((r1, 0))
-        case _ => throw QueryCompilationErrors.ambiguousColumnReferences(u)
+        case other =>
+          println("ambiguousColumnReferences")
+          println(s"${u} with id = $id")
+          println()
+          q.foreach(p => println(p))
+          println()
+          println(s"resolved: ${resolved}")
+          throw QueryCompilationErrors.ambiguousColumnReferences(u)
       }
     val matched = resolved.exists(_._2)
     (merged, matched)
