@@ -1449,7 +1449,6 @@ private[spark] object TaskSetManager {
 
   // 1 minute
   val BARRIER_LOGGING_INTERVAL = 60000
-
 }
 
 /**
