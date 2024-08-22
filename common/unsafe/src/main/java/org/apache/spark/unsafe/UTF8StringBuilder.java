@@ -93,7 +93,38 @@ public class UTF8StringBuilder {
     cursor += length;
   }
 
+  public void appendByte(byte singleByte) {
+    grow(1);
+    buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = singleByte;
+    cursor++;
+  }
+
   public UTF8String build() {
     return UTF8String.fromBytes(buffer, 0, totalSize());
   }
+
+  public void appendCodePoint(int codePoint) {
+    if (codePoint <= 0x7F) {
+      appendByte((byte) codePoint);
+    }
+    else if (codePoint <= 0x7FF) {
+      appendByte((byte) (0xC0 | (codePoint >> 6)));
+      appendByte((byte) (0x80 | (codePoint & 0x3F)));
+    }
+    else if (codePoint <= 0xFFFF) {
+      appendByte((byte) (0xE0 | (codePoint >> 12)));
+      appendByte((byte) (0x80 | ((codePoint >> 6) & 0x3F)));
+      appendByte((byte) (0x80 | (codePoint & 0x3F)));
+    }
+    else if (codePoint <= 0x10FFFF) {
+      appendByte((byte) (0xF0 | (codePoint >> 18)));
+      appendByte((byte) (0x80 | ((codePoint >> 12) & 0x3F)));
+      appendByte((byte) (0x80 | ((codePoint >> 6) & 0x3F)));
+      appendByte((byte) (0x80 | (codePoint & 0x3F)));
+    }
+    else {
+      throw new IllegalArgumentException("Invalid Unicode codePoint: " + codePoint);
+    }
+  }
+
 }

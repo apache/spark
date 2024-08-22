@@ -26,6 +26,8 @@ import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UTF8StringBuilder;
+
 import org.junit.jupiter.api.Test;
 
 import static org.apache.spark.unsafe.types.UTF8String.fromString;
@@ -1361,5 +1363,19 @@ public class UTF8StringSuite {
     assertEquals(
       UTF8String.fromString("111111111111111111111111111111111111111111111111111111111111111"),
       UTF8String.toBinaryString(Long.MAX_VALUE));
+  }
+
+  @Test
+  public void testAppendCodepointToUTF8StringBuilder() {
+    int surrogateRangeLowerBound = 0xD800;
+    int surrogateRangeUpperBound = 0xDFFF;
+    for(int i = Character.MIN_CODE_POINT;i <= Character.MAX_CODE_POINT;i++) {
+      if(surrogateRangeLowerBound <= i && i <= surrogateRangeUpperBound) continue;
+      UTF8StringBuilder usb = new UTF8StringBuilder();
+      usb.appendCodePoint(i);
+      StringBuilder sb = new StringBuilder();
+      sb.appendCodePoint(i);
+      assert(usb.build().equals(UTF8String.fromString(sb.toString())));
+    }
   }
 }
