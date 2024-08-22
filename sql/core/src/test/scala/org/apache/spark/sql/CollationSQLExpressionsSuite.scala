@@ -997,27 +997,43 @@ class CollationSQLExpressionsSuite
       }
     })
 
-    val tableName = "t_diff_collation"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (" +
+    // IMPLICIT
+    val implicitTableName = "t_diff_collation_implicit"
+    withTable(implicitTableName) {
+      sql(s"CREATE TABLE $implicitTableName (" +
         s"text STRING COLLATE UTF8_BINARY, " +
         s"pairDelim STRING COLLATE UTF8_LCASE, " +
         s"keyValueDelim STRING COLLATE UTF8_BINARY) " +
         s"USING parquet")
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"SELECT str_to_map(text, pairDelim, keyValueDelim) from $tableName")
+          sql(s"SELECT str_to_map(text, pairDelim, keyValueDelim) from $implicitTableName")
         },
-        errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-        sqlState = "42K09",
-        parameters = Map(
-          "functionName" -> "`str_to_map`",
-          "dataType" -> "[\"STRING\", \"STRING COLLATE UTF8_LCASE\", \"STRING\"]",
-          "sqlExpr" -> "\"str_to_map(text, pairDelim, keyValueDelim)\""),
-        context = ExpectedContext(
-          fragment = "str_to_map(text, pairDelim, keyValueDelim)",
-          start = 7,
-          stop = 48)
+        errorClass = "COLLATION_MISMATCH.IMPLICIT",
+        sqlState = "42P21",
+        parameters = Map.empty
+      )
+    }
+
+    // EXPLICIT
+    val explicitTableName = "t_diff_collation_explicit"
+    withTable(explicitTableName) {
+      sql(s"CREATE TABLE $explicitTableName (" +
+        s"text STRING, " +
+        s"pairDelim STRING, " +
+        s"keyValueDelim STRING) " +
+        s"USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT str_to_map(" +
+            s"collate(text, 'UTF8_BINARY'), " +
+            s"collate(pairDelim, 'UTF8_LCASE'), " +
+            s"collate(keyValueDelim, 'UTF8_BINARY')" +
+            s") from $explicitTableName")
+        },
+        errorClass = "COLLATION_MISMATCH.EXPLICIT",
+        sqlState = "42P21",
+        parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
       )
     }
   }
