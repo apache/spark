@@ -32,7 +32,7 @@
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
-    <opentelemetry.exclude>**/*Opentelemetry*.scala</opentelemetry.exclude>
+    <opentelemetry.exclude>**/OpenTelemetry*.scala</opentelemetry.exclude>
   </properties>
   
   <dependencies>
@@ -517,6 +517,15 @@
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>${opentelemetry.exclude}</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
@@ -627,36 +636,18 @@
           <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-sdk</artifactId>
           <version>1.41.0</version>
-          <scope>provided</scope>
         </dependency>
         <dependency>
           <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-api</artifactId>
           <version>1.41.0</version>
-          <scope>provided</scope>
         </dependency>
         <dependency>
           <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-exporter-otlp</artifactId>
           <version>1.41.0</version>
-          <scope>provided</scope>
         </dependency>
       </dependencies>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>net.alchim31.maven</groupId>
-              <artifactId>scala-maven-plugin</artifactId>
-              <configuration>
-                <excludes>
-                  <exclude>${opentelemetry.exclude}</exclude>
-                </excludes>
-              </configuration>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-      </build>
     </profile>
     <profile>
       <id>sparkr</id>
