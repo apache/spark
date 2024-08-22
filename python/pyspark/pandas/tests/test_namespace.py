@@ -639,7 +639,7 @@ class NamespaceTestsMixin:
         ]
         assert_frame_equal(pd.json_normalize(data), ps.json_normalize(data))
 
-        # Test case with various data types (integers, booleans, etc.)
+        # Test case with various data types
         data = [
             {
                 "id": 1,
@@ -678,9 +678,6 @@ class NamespaceTestsMixin:
 
 
 class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
-    def test_json_normalize(self):
-        super().test_json_normalize()
-
     pass
 
 
