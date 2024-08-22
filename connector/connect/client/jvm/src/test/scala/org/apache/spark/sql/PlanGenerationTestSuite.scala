@@ -118,6 +118,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+    internal.UnresolvedNamedLambdaVariable.resetIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -2433,6 +2434,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("aggregate with finish lambda") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y, x => x + lit(2))
+  }
+
   functionTest("reduce") {
     fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
@@ -2491,6 +2496,10 @@ class PlanGenerationTestSuite
 
   functionTest("from_json") {
     fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_json with json schema") {
+    fn.from_json(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   functionTest("schema_of_json") {
@@ -2966,6 +2975,14 @@ class PlanGenerationTestSuite
 
   functionTest("call_function") {
     fn.call_function("lower", fn.col("g"))
+  }
+
+  functionTest("from_xml") {
+    fn.from_xml(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_xml with json schema") {
+    fn.from_xml(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   test("hll_sketch_agg with column lgConfigK") {

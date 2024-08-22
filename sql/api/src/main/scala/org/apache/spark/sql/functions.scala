@@ -21,6 +21,7 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
@@ -156,8 +157,8 @@ object functions {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
       case _ =>
-        val dataType = ScalaReflection.schemaFor[T].dataType
-        Column(internal.Literal(literal, Option(dataType)))
+        val dataType = Try(ScalaReflection.schemaFor[T].dataType).toOption
+        Column(internal.Literal(literal, dataType))
     }
   }
 
@@ -3651,7 +3652,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def random(seed: Column): Column = call_function("random", seed)
+  def random(seed: Column): Column = Column.fn("random", seed)
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly

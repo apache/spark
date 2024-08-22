@@ -53,5 +53,5 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     getWorkspaceFilePath("sql", "connect", "common", "src", "test", "resources").toAbsolutePath
   }
 
-  protected def toExpr(c: Column): proto.Expression = ColumnNodeToProtoConverter(c.node)
+  protected def toExpr(c: Column): proto.Expression = ColumnNodeToProtoConverter.toExpr(c)
 }

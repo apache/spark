@@ -28,7 +28,7 @@
                     "functionName": "\u003e",
                     "arguments": [{
                       "unresolvedNamedLambdaVariable": {
-                        "nameParts": ["x"]
+                        "nameParts": ["x_1"]
                       }
                     }, {
                       "literal": {
@@ -41,7 +41,7 @@
                     "functionName": "\u003e",
                     "arguments": [{
                       "unresolvedNamedLambdaVariable": {
-                        "nameParts": ["y"]
+                        "nameParts": ["y_2"]
                       }
                     }, {
                       "literal": {
@@ -53,9 +53,9 @@
               }
             },
             "arguments": [{
-              "nameParts": ["x"]
+              "nameParts": ["x_1"]
             }, {
-              "nameParts": ["y"]
+              "nameParts": ["y_2"]
             }]
           }
         }]

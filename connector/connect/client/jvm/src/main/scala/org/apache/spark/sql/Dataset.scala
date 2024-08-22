@@ -1061,9 +1061,7 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  def col(colName: String): Column = {
-    Column(UnresolvedAttribute(colName, getPlanId))
-  }
+  def col(colName: String): Column = new Column(colName, getPlanId)
 
   /**
    * Selects a metadata column based on its logical column name, and returns it as a [[Column]].
@@ -1182,15 +1180,15 @@ class Dataset[T] private[sql] (
    */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
     val encoder = encoderFor(c1.encoder)
-    val expr = if (encoder.schema == encoder.dataType) {
-      functions.inline(functions.array(c1)).expr
+    val col = if (encoder.schema == encoder.dataType) {
+      functions.inline(functions.array(c1))
     } else {
-      c1.expr
+      c1
     }
     sparkSession.newDataset(encoder) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
-        .addExpressions(expr)
+        .addExpressions(col.typedExpr(this.encoder))
     }
   }
 
@@ -1212,7 +1210,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(encoder) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
-        .addAllExpressions(cols.map(_.expr).asJava)
+        .addAllExpressions(cols.map(_.typedExpr(this.encoder)).asJava)
     }
   }
 

@@ -79,10 +79,14 @@ private[sql] object UdfToProtoUtils {
       case f: SparkUserDefinedFunction =>
         val outputEncoder = f.outputEncoder.map(e => encoderFor(e))
           .getOrElse(RowEncoder.encoderForDataType(f.dataType, lenient = false))
-        val inputEncoders = f.inputEncoders.map(e => encoderFor(e.get)) // TODO support any?
+        val inputEncoders = if (f.inputEncoders.forall(_.isEmpty)) {
+          Nil // Java UDFs have no bindings for their inputs.
+        } else {
+          f.inputEncoders.map(e => encoderFor(e.get)) // TODO support Any and UnboundRow.
+        }
         inputEncoders.foreach(e => protoUdf.addInputTypes(toConnectProtoType(e.dataType)))
         protoUdf
-          .setPayload(toUdfPacketBytes(f, inputEncoders, outputEncoder))
+          .setPayload(toUdfPacketBytes(f.f, inputEncoders, outputEncoder))
           .setOutputType(toConnectProtoType(outputEncoder.dataType))
           .setAggregate(false)
         f.givenName.foreach(invokeUdf.setFunctionName)
@@ -90,7 +94,7 @@ private[sql] object UdfToProtoUtils {
         val outputEncoder = encoderFor(f.aggregator.outputEncoder)
         val inputEncoder = encoderFor(f.inputEncoder)
         protoUdf
-          .setPayload(toUdfPacketBytes(f, inputEncoder :: Nil, outputEncoder))
+          .setPayload(toUdfPacketBytes(f.aggregator, inputEncoder :: Nil, outputEncoder))
           .addInputTypes(toConnectProtoType(inputEncoder.dataType))
           .setOutputType(toConnectProtoType(outputEncoder.dataType))
           .setAggregate(true)

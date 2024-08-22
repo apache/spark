@@ -20,25 +20,30 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering.{SORT_NULLS_FIRST, SORT_NULLS_LAST}
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection.{SORT_DIRECTION_ASCENDING, SORT_DIRECTION_DESCENDING}
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBoundary, FrameType}
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
-import org.apache.spark.sql.expressions.{Aggregator, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal._
 
 /**
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.
  */
 object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
-  def toExpr(column: Column): proto.Expression = apply(column)
+  def toExpr(column: Column): proto.Expression = apply(column.node, None)
 
-  def apply(column: Column): proto.Expression = apply((column.node))
+  def toTypedExpr[I](column: Column, encoder: Encoder[I]): proto.Expression = {
+    apply(column.node, Option(encoder))
+  }
 
-  override def apply(node: ColumnNode): proto.Expression = {
+  override def apply(node: ColumnNode): Expression = apply(node, None)
+
+  private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     // TODO(SPARK-49273) support Origin in Connect Scala Client.
     node match {
@@ -51,7 +56,11 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
         val b = builder.getUnresolvedAttributeBuilder
           .setUnparsedIdentifier(unparsedIdentifier)
-          .setIsMetadataColumn(isMetadataColumn)
+        if (isMetadataColumn) {
+          // We only set this field when it is needed. If we would always set it,
+          // too many of the verbatims we use for testing would have to be regenerated.
+          b.setIsMetadataColumn(true)
+        }
         planId.foreach(b.setPlanId)
 
       case UnresolvedStar(unparsedTarget, planId, _) =>
@@ -70,16 +79,16 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
-          .addAllArguments(arguments.map(apply).asJava)
+          .addAllArguments(arguments.map(apply(_, e)).asJava)
 
       case Alias(child, name, metadata, _) =>
-        val b = builder.getAliasBuilder.setExpr(apply(child))
+        val b = builder.getAliasBuilder.setExpr(apply(child, e))
         name.foreach(b.addName)
         metadata.foreach(m => b.setMetadata(m.json))
 
       case Cast(child, dataType, evalMode, _) =>
         val b = builder.getCastBuilder
-          .setExpr(apply(child))
+          .setExpr(apply(child, e))
           .setType(DataTypeProtoConverter.toConnectProtoType(dataType))
         evalMode.foreach { mode =>
           val convertedMode = mode match {
@@ -94,57 +103,62 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         builder.getExpressionStringBuilder.setExpression(expression)
 
       case s: SortOrder =>
-        builder.setSortOrder(convertSortOrder(s))
+        builder.setSortOrder(convertSortOrder(s, e))
 
       case Window(windowFunction, windowSpec, _) =>
         val b = builder.getWindowBuilder
-          .setWindowFunction(apply(windowFunction))
-          .addAllPartitionSpec(windowSpec.partitionColumns.map(apply).asJava)
-          .addAllOrderSpec(windowSpec.sortColumns.map(convertSortOrder).asJava)
+          .setWindowFunction(apply(windowFunction, e))
+          .addAllPartitionSpec(windowSpec.partitionColumns.map(apply(_, e)).asJava)
+          .addAllOrderSpec(windowSpec.sortColumns.map(convertSortOrder(_, e)).asJava)
         windowSpec.frame.foreach { frame =>
           b.getFrameSpecBuilder
             .setFrameType(frame.frameType match {
               case WindowFrame.Row => FrameType.FRAME_TYPE_ROW
               case WindowFrame.Range => FrameType.FRAME_TYPE_RANGE
             })
-            .setLower(convertFrameBoundary(frame.lower))
-            .setUpper(convertFrameBoundary(frame.upper))
+            .setLower(convertFrameBoundary(frame.lower, e))
+            .setUpper(convertFrameBoundary(frame.upper, e))
         }
 
       case UnresolvedExtractValue(child, extraction, _) =>
         builder.getUnresolvedExtractValueBuilder
-          .setChild(apply(child))
-          .setExtraction(apply(extraction))
+          .setChild(apply(child, e))
+          .setExtraction(apply(extraction, e))
 
       case UpdateFields(structExpression, fieldName, valueExpression, _) =>
         val b = builder.getUpdateFieldsBuilder
-          .setStructExpression(apply(structExpression))
+          .setStructExpression(apply(structExpression, e))
           .setFieldName(fieldName)
-        valueExpression.foreach(v => b.setValueExpression(apply(v)))
+        valueExpression.foreach(v => b.setValueExpression(apply(v, e)))
 
       case v: UnresolvedNamedLambdaVariable =>
         builder.setUnresolvedNamedLambdaVariable(convertNamedLambdaVariable(v))
 
       case LambdaFunction(function, arguments, _) =>
         builder.getLambdaFunctionBuilder
-          .setFunction(apply(function))
+          .setFunction(apply(function, e))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
-      case InvokeInlineUserDefinedFunction(a: Aggregator[_, _, _], _, false, _) =>
-        throw SparkException.internalError("NOT YET")
+      case InvokeInlineUserDefinedFunction(
+             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil, false, _) =>
+        // TODO we should probably 'just' detect this particular scenario
+        //  in the planner instead of wrapping it in a separate method.
+        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get))
+        builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
 
       case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
-        UdfToProtoUtils.toProto(udf, args.map(apply))
+        builder.setCommonInlineUserDefinedFunction(
+          UdfToProtoUtils.toProto(udf, args.map(apply(_, e))))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
         branches.foreach { case (condition, value) =>
-          b.addArguments(apply(condition))
-          b.addArguments(apply(value))
+          b.addArguments(apply(condition, e))
+          b.addArguments(apply(value, e))
         }
         otherwise.foreach { value =>
-          b.addArguments(apply(value))
+          b.addArguments(apply(value, e))
         }
 
       case ProtoColumnNode(e, _) =>
@@ -156,10 +170,10 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
     builder.build()
   }
 
-  private def convertSortOrder(s: SortOrder): proto.Expression.SortOrder = {
+  private def convertSortOrder(s: SortOrder, e: Option[Encoder[_]]): proto.Expression.SortOrder = {
     proto.Expression.SortOrder
       .newBuilder()
-      .setChild(apply(s.child))
+      .setChild(apply(s.child, e))
       .setDirection(s.sortDirection match {
         case SortOrder.Ascending => SORT_DIRECTION_ASCENDING
         case SortOrder.Descending => SORT_DIRECTION_DESCENDING
@@ -171,13 +185,15 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       .build()
   }
 
-  private def convertFrameBoundary(boundary: WindowFrame.FrameBoundary): FrameBoundary = {
+  private def convertFrameBoundary(
+      boundary: WindowFrame.FrameBoundary,
+      e: Option[Encoder[_]]): FrameBoundary = {
     val builder = FrameBoundary.newBuilder()
     boundary match {
       case WindowFrame.UnboundedPreceding => builder.setUnbounded(true)
       case WindowFrame.UnboundedFollowing => builder.setUnbounded(true)
       case WindowFrame.CurrentRow => builder.setCurrentRow(true)
-      case WindowFrame.Value(value) => builder.setValue(apply(value))
+      case WindowFrame.Value(value) => builder.setValue(apply(value, e))
     }
     builder.build()
   }

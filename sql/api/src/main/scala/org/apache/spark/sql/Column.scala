@@ -138,13 +138,15 @@ class TypedColumn[-T, U](
  */
 @Stable
 class Column(val node: ColumnNode) extends Logging {
-  def this(name: String) = this(withOrigin {
+  private[sql] def this(name: String, planId: Option[Long]) = this(withOrigin {
     name match {
-      case "*" => internal.UnresolvedStar(None)
-      case _ if name.endsWith(".*") => internal.UnresolvedStar(Option(name))
-      case _ => internal.UnresolvedAttribute(name)
+      case "*" => internal.UnresolvedStar(None, planId)
+      case _ if name.endsWith(".*") => internal.UnresolvedStar(Option(name), planId)
+      case _ => internal.UnresolvedAttribute(name, planId)
     }
   })
+
+  def this(name: String) = this(name, None)
 
   private def fn(name: String): Column = {
     Column.fn(name, this)

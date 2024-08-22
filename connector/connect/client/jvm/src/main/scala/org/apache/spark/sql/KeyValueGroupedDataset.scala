@@ -1012,7 +1012,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    // TODO bind input encoder to types column!
     // TODO(SPARK-43415): For each column, apply the valueMap func first
     // apply keyAs change
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => encoderFor(c.encoder)))
@@ -1021,7 +1020,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setInput(plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .addAllGroupingExpressions(groupingExprs)
-        .addAllAggregateExpressions(columns.map(_.expr).asJava)
+        .addAllAggregateExpressions(columns.map(_.typedExpr(vEncoder)).asJava)
     }
   }
 
