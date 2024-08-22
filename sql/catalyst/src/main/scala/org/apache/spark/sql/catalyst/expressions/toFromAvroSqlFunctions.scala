@@ -131,12 +131,14 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(child, jsonFormatSchema) - Converts a Catalyst binary input value into its corresponding
-      Avro format result.
+    _FUNC_(child[, jsonFormatSchema]) - Converts a Catalyst binary input value into its
+      corresponding Avro format result.
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP()) IS NULL FROM (SELECT NULL AS s);
+      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}') IS NULL FROM (SELECT NULL AS s);
+       [true]
+      > SELECT _FUNC_(s) IS NULL FROM (SELECT NULL AS s);
        [true]
   """,
   group = "misc_funcs",
