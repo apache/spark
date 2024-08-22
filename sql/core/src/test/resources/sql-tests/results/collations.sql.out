@@ -430,7 +430,7 @@ true
 
 
 -- !query
-create table t1 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -438,7 +438,7 @@ struct<>
 
 
 -- !query
-insert into t1 values('a:1,b:2,c:3', ',', ':')
+insert into t4 values('a:1,b:2,c:3', ',', ':')
 -- !query schema
 struct<>
 -- !query output
@@ -446,7 +446,7 @@ struct<>
 
 
 -- !query
-select str_to_map(text, pairDelim, keyValueDelim) from t1
+select str_to_map(text, pairDelim, keyValueDelim) from t4
 -- !query schema
 struct<>
 -- !query output
@@ -458,7 +458,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t1
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4
 -- !query schema
 struct<>
 -- !query output
@@ -473,7 +473,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t1
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4
 -- !query schema
 struct<str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), collate(keyValueDelim, utf8_binary)):map<string,string>>
 -- !query output
@@ -481,7 +481,7 @@ struct<str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), c
 
 
 -- !query
-drop table t1
+drop table t4
 -- !query schema
 struct<>
 -- !query output
