@@ -177,6 +177,47 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns null if `expr` is equal to zero, or `expr` otherwise.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       NULL
+      > SELECT _FUNC_(2);
+       2
+  """,
+  since = "4.0.0",
+  group = "conditional_funcs")
+case class NullIfZero(input: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(input: Expression) = this(input, If(EqualTo(input, Literal(0)), Literal(null), input))
+
+  override def parameters: Seq[Expression] = Seq(input)
+
+  override protected def withNewChildInternal(newInput: Expression): Expression =
+    copy(replacement = newInput)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns zero if `expr` is equal to null, or `expr` otherwise.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(NULL);
+       0
+      > SELECT _FUNC_(2);
+       2
+  """,
+  since = "4.0.0",
+  group = "conditional_funcs")
+case class ZeroIfNull(input: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(input: Expression) = this(input, new Nvl(input, Literal(0)))
+
+  override def parameters: Seq[Expression] = Seq(input)
+
+  override protected def withNewChildInternal(newInput: Expression): Expression =
+    copy(replacement = newInput)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
