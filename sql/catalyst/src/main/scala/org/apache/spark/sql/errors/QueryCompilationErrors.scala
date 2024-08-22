@@ -4115,6 +4115,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def protobufNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "PROTOBUF_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+      messageParameters = Map("functionName" -> functionName)
+    )
+  }
+
   def operationNotSupportClusteringError(operation: String): Throwable = {
     new AnalysisException(
       errorClass = "CLUSTERING_NOT_SUPPORTED",
