@@ -91,8 +91,20 @@ select 'Kypper' collate sv < 'Köpfe';
 select 'Kypper' collate de > 'Köpfe';
 select 'I' collate tr_ci = 'ı';
 
+-- create table for str_to_map
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet;
+
+insert into t4 values('a:1,b:2,c:3', ',', ':');
+
+select str_to_map(text, pairDelim, keyValueDelim) from t4;
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4;
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4;
+
+drop table t4;
+
 -- create table for split_part
 create table t5(str string collate utf8_binary, delimiter string collate utf8_lcase, partNum int) using parquet;
+
 insert into t5 values('11AB12AB13', 'AB', 2);
 
 select split_part(str, delimiter, partNum) from t5;

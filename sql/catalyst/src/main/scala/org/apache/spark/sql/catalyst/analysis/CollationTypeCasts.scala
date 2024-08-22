@@ -102,7 +102,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
       _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
       _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
-      _: ToNumber | _: TryToNumber) =>
+      _: ToNumber | _: TryToNumber | _: StringToMap) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
