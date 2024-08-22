@@ -80,7 +80,7 @@ class ParquetTypeWideningSuite
                 exception.getCause
                   .isInstanceOf[org.apache.parquet.io.ParquetDecodingException] ||
                 exception.getCause.getMessage.contains(
-                  "Unable to create Parquet converter for data type"))
+                  "Unable to create a Parquet converter for data type"))
             } else {
               checkAnswer(readParquetFiles(dir, toType), expected.select($"a".cast(toType)))
             }

@@ -3584,12 +3584,7 @@
     "message" : [
       "Unable to create a Parquet converter for the data type <dataType> whose Parquet type is <parquetType>."
     ],
-    "subClass": {
-      "WITHOUT_DECIMAL_METADATA" : {
-        "message" : [
-          "Please read this column/field as Spark BINARY type."
-        ]
-      },
+    "subClass" : {
       "DECIMAL" : {
         "message" : [
           "Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
@@ -3598,6 +3593,11 @@
       "UNSUPPORTED" : {
         "message" : [
           "Please modify the conversion making sure it is supported."
+        ]
+      },
+      "WITHOUT_DECIMAL_METADATA" : {
+        "message" : [
+          "Please read this column/field as Spark BINARY type."
         ]
       }
     },
