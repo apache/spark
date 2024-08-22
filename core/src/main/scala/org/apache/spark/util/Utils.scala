@@ -2581,6 +2581,19 @@ private[spark] object Utils
   }
 
   /**
+   * Utility function to enable or disable structured logging based on system properties.
+   * This is designed for a code path which we cannot use SparkConf yet, and should be used before
+   * the first invocation of `Logging.log()`. For example, this should be used before `initDaemon`.
+   */
+  def resetStructuredLogging(): Unit = {
+    if (System.getProperty(STRUCTURED_LOGGING_ENABLED.key, "false").equals("false")) {
+      Logging.disableStructuredLogging()
+    } else {
+      Logging.enableStructuredLogging()
+    }
+  }
+
+  /**
    * Return the jar files pointed by the "spark.jars" property. Spark internally will distribute
    * these jars through file server. In the YARN mode, it will return an empty list, since YARN
    * has its own mechanism to distribute jars.

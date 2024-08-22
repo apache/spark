@@ -229,6 +229,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Requires dynamic class loading not available in this test suite.
       "org.apache.spark.sql.catalyst.expressions.FromAvro",
       "org.apache.spark.sql.catalyst.expressions.ToAvro",
+      "org.apache.spark.sql.catalyst.expressions.FromProtobuf",
+      "org.apache.spark.sql.catalyst.expressions.ToProtobuf",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)
