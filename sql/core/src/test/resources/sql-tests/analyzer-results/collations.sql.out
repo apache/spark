@@ -441,3 +441,86 @@ drop table t4
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4
+
+
+-- !query
+create table t6 (utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase, threshold int) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t6`, false
+
+
+-- !query
+insert into t6 values('kitten', 'sitting', 2)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t6, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t6], Append, `spark_catalog`.`default`.`t6`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t6), [utf8_binary, utf8_lcase, threshold]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x, cast(col3#x as int) AS threshold#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t6
+-- !query analysis
+Project [levenshtein(collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_binary), None) AS levenshtein(collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t6
+   +- Relation spark_catalog.default.t6[utf8_binary#x,utf8_lcase#x,threshold#x] parquet
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase, threshold) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase, threshold) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary, threshold) from t6
+-- !query analysis
+Project [levenshtein(collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_binary), Some(threshold#x)) AS levenshtein(collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary), threshold)#x]
++- SubqueryAlias spark_catalog.default.t6
+   +- Relation spark_catalog.default.t6[utf8_binary#x,utf8_lcase#x,threshold#x] parquet
+
+
+-- !query
+drop table t6
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t6

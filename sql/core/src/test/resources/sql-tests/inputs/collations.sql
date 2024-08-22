@@ -101,3 +101,17 @@ select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyVal
 select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4;
 
 drop table t4;
+
+-- create table for levenshtein
+create table t6 (utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase, threshold int) using parquet;
+
+insert into t6 values('kitten', 'sitting', 2);
+
+select levenshtein(utf8_binary, utf8_lcase) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t6;
+select levenshtein(utf8_binary, utf8_lcase, threshold) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase, threshold) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary, threshold) from t6;
+
+drop table t6;

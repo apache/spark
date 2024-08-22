@@ -90,6 +90,15 @@ object CollationTypeCasts extends TypeCoercionRule {
       val newValues = collateToSingleType(mapCreate.values)
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
 
+    case levenshtein: Levenshtein =>
+      val Seq(left, right) = Seq(levenshtein.children.head, levenshtein.children(1))
+      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
+      if (levenshtein.children.size == 2) {
+        levenshtein.withNewChildren(Seq(newLeft, newRight))
+      } else {
+        levenshtein.withNewChildren(Seq(newLeft, newRight, levenshtein.children(2)))
+      }
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
