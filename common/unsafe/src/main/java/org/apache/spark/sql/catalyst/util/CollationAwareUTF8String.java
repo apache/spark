@@ -639,7 +639,7 @@ public class CollationAwareUTF8String {
     target = target.makeValid();
 
     // Building the title cased target with 'sb'.
-    StringBuilder sb = new StringBuilder();
+    UTF8StringBuilder sb = new UTF8StringBuilder();
 
     // 'newWord' is true if the current character is the beginning of a word, false otherwise.
     boolean newWord = true;
@@ -670,11 +670,11 @@ public class CollationAwareUTF8String {
       }
       offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
     }
-    return UTF8String.fromString(sb.toString());
+    return sb.build();
   }
 
   private static void appendTitleCasedCodepoint(
-      StringBuilder sb,
+      UTF8StringBuilder sb,
       int codepoint,
       boolean isAfterAsciiSpace,
       boolean precededByCasedLetter,
@@ -701,7 +701,7 @@ public class CollationAwareUTF8String {
   }
 
   private static void appendLowerCasedGreekCapitalSigma(
-      StringBuilder sb,
+      UTF8StringBuilder sb,
       boolean precededByCasedLetter,
       UTF8String target,
       int offset) {
@@ -739,7 +739,7 @@ public class CollationAwareUTF8String {
   /**
    * Appends titlecase of a single character to a 'StringBuilder' using the ICU root locale rules.
    */
-  private static void appendCodepointToTitleCase(StringBuilder sb, int codepoint) {
+  private static void appendCodepointToTitleCase(UTF8StringBuilder sb, int codepoint) {
     String toTitleCase = codepointOneToManyTitleCasePrecalculation.get(codepoint);
     if(toTitleCase == null) {
       sb.appendCodePoint(UCharacter.toTitleCase(codepoint));
