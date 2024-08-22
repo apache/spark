@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
@@ -1765,6 +1766,84 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         // load version 1 again - should succeed
         withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("load the same version of pending snapshot uploading") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      db.load(0)
+      db.put("foo", "bar")
+      db.commit()
+
+      db.load(1)
+      db.put("foo", "bar")
+      db.commit()
+      db.doMaintenance()
+
+      db.load(1)
+      db.put("foo", "bar")
+      db.commit()
+
+      db.load(2)
+      db.put("foo", "bar")
+      db.commit()
+
+      db.load(2)
+      db.put("foo", "bar")
+      db.commit()
+
+      db.doMaintenance()
+
+      db.load(2)
+      db.put("foo", "bar")
+      db.commit()
+    }
+  }
+
+  for (random_seed <- 1 to 16) {
+    testWithChangelogCheckpointingEnabled(s"randomized snapshotting $random_seed") {
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf) { db =>
+        val random = new Random(random_seed)
+        var curVer: Int = 0
+        for (i <- 1 to 100) {
+          db.load(curVer)
+          db.put("foo", "bar")
+          db.commit()
+          if (random.nextInt(5) == 0) {
+            db.doMaintenance()
+          }
+          if (random.nextInt(2) == 0) {
+            curVer = curVer + 1
+          }
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(s"simulate ForEachBatch") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      val random = new Random(seed = 66)
+      var curVer: Int = 0
+      for (i <- 1 to 100) {
+        db.load(curVer)
+        db.put("foo", "bar")
+        db.commit()
+        if (random.nextInt(5) == 0) {
+          db.doMaintenance()
+        }
+        if (i % 2 == 1) {
+          curVer = curVer + 1
         }
       }
     }
