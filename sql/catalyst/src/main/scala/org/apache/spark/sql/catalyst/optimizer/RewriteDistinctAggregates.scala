@@ -406,10 +406,14 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             // The same GROUP BY clauses can have different forms (different names for instance) in
             // the groupBy and aggregate expressions of an aggregate. This makes a map lookup
             // tricky. So we do a linear search for a semantically equal group by expression.
-            groupByMap
-              .find(ge => e.semanticEquals(ge._1))
-              .map(_._2)
-              .getOrElse(transformations.getOrElse(e, e))
+            if (e.foldable) {
+              e
+            } else {
+              groupByMap
+                .find(ge => e.semanticEquals(ge._1))
+                .map(_._2)
+                .getOrElse(transformations.getOrElse(e, e))
+            }
         }.asInstanceOf[NamedExpression]
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
