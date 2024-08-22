@@ -427,13 +427,14 @@ private[spark] object HealthTracker extends Logging {
   /**
    * Returns true if the excludeOnFailure is enabled on the application level,
    * based on checking the configuration in the following order:
-   * 1. Is it specifically enabled or disabled?
+   * 1. Is application level exclusion specifically enabled or disabled?
+   * 2. Is overall exclusion feature enabled or disabled?
    * 2. Is it enabled via the legacy timeout conf?
    * 3. Default is off
    */
   def isExcludeOnFailureEnabled(conf: SparkConf): Boolean = {
-    conf.get(config.EXCLUDE_ON_FAILURE_ENABLED)
-      .orElse(conf.get(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION)) match {
+    conf.get(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION)
+      .orElse(conf.get(config.EXCLUDE_ON_FAILURE_ENABLED)) match {
       case Some(enabled) =>
         enabled
       case None =>

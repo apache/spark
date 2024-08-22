@@ -920,13 +920,13 @@ package object config {
 
   private[spark] val EXCLUDE_ON_FAILURE_ENABLED_APPLICATION =
     ConfigBuilder("spark.excludeOnFailure.application.enabled")
-      .version("3.5.3")
+      .version("4.0.0")
       .booleanConf
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE =
     ConfigBuilder("spark.excludeOnFailure.taskAndStage.enabled")
-      .version("3.5.3")
+      .version("4.0.0")
       .booleanConf
       .createOptional
 

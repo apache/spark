@@ -146,6 +146,13 @@ private[spark] class TaskSetManager(
     if (TaskSetExcludelist.isExcludeOnFailureEnabled(conf)) {
       Some(new TaskSetExcludelist(sched.sc.listenerBus, conf, stageId,
         taskSet.stageAttemptId, clock))
+    } else if (healthTracker.isDefined) {
+      // If we enabled exclusion at application level but not at taskset level exclusion, we create
+      // TaskSetExcludelist in dry run mode.
+      // In this mode, TaskSetExcludeList would not exclude any executors but only store
+      // task failure information.
+      Some(new TaskSetExcludelist(sched.sc.listenerBus, conf, stageId,
+        taskSet.stageAttemptId, clock, isDryRun = true))
     } else {
       None
     }

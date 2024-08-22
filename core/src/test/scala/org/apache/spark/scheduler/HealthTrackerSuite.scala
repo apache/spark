@@ -446,12 +446,11 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
     conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
     assert(HealthTracker.isExcludeOnFailureEnabled(conf))
-    // Overall exclusion is enabled, and it takes over the application level switch.
-    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION, false)
+    // Turn off taskset level exclusion, application level healthtracker should still be enabled.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE, false)
     assert(HealthTracker.isExcludeOnFailureEnabled(conf))
-    // Turn off the overall exclusion and turn on task and stage level exclusion, health tracker
-    // should still be disabled.
-    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, false)
+    // Turn off the application level exclusion specifically, this overrides the global setting.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION, false)
     conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE, false)
     assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
     // Turn on application level exclusion, health tracker should be enabled.
