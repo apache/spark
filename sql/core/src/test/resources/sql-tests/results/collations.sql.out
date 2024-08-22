@@ -430,651 +430,35 @@ true
 
 
 -- !query
-SELECT concat_ws(collate(' ', 'UTF8_BINARY'), collate('Spark', 'UTF8_BINARY'), collate('SQL', 'UTF8_BINARY'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<concat_ws(collate( , UTF8_BINARY), collate(Spark, UTF8_BINARY), collate(SQL, UTF8_BINARY)):string>
+struct<>
 -- !query output
-Spark SQL
+
 
 
 -- !query
-SELECT concat_ws(collate(' ', 'UTF8_BINARY'), 'Spark', 'SQL')
+insert into t1 values ('Spark', 'SQL')
 -- !query schema
-struct<concat_ws(collate( , UTF8_BINARY), Spark, SQL):string>
+struct<>
 -- !query output
-Spark SQL
+
 
 
 -- !query
-SELECT concat_ws(' ', collate('Spark', 'UTF8_BINARY'), collate('SQL', 'UTF8_BINARY'))
--- !query schema
-struct<concat_ws( , collate(Spark, UTF8_BINARY), collate(SQL, UTF8_BINARY)):string>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(collate(' ', 'UTF8_LCASE'), collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UTF8_LCASE'))
--- !query schema
-struct<concat_ws(collate( , UTF8_LCASE), collate(Spark, UTF8_LCASE), collate(SQL, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(collate(' ', 'UTF8_LCASE'), 'Spark', 'SQL')
--- !query schema
-struct<concat_ws(collate( , UTF8_LCASE), Spark, SQL):string collate UTF8_LCASE>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(' ', collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UTF8_LCASE'))
--- !query schema
-struct<concat_ws( , collate(Spark, UTF8_LCASE), collate(SQL, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(collate(' ', 'UNICODE'), collate('Spark', 'UNICODE'), collate('SQL', 'UNICODE'))
--- !query schema
-struct<concat_ws(collate( , UNICODE), collate(Spark, UNICODE), collate(SQL, UNICODE)):string collate UNICODE>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(collate(' ', 'UNICODE'), 'Spark', 'SQL')
--- !query schema
-struct<concat_ws(collate( , UNICODE), Spark, SQL):string collate UNICODE>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(' ', collate('Spark', 'UNICODE'), collate('SQL', 'UNICODE'))
--- !query schema
-struct<concat_ws( , collate(Spark, UNICODE), collate(SQL, UNICODE)):string collate UNICODE>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(collate(' ', 'UNICODE_CI'), collate('Spark', 'UNICODE_CI'), collate('SQL', 'UNICODE_CI'))
--- !query schema
-struct<concat_ws(collate( , UNICODE_CI), collate(Spark, UNICODE_CI), collate(SQL, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(collate(' ', 'UNICODE_CI'), 'Spark', 'SQL')
--- !query schema
-struct<concat_ws(collate( , UNICODE_CI), Spark, SQL):string collate UNICODE_CI>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(' ', collate('Spark', 'UNICODE_CI'), collate('SQL', 'UNICODE_CI'))
--- !query schema
-struct<concat_ws( , collate(Spark, UNICODE_CI), collate(SQL, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-Spark SQL
-
-
--- !query
-SELECT concat_ws(' ', collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UNICODE'))
+select concat_ws(' ', utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE`"
-  }
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
 }
 
 
 -- !query
-SELECT elt(1, collate('Spark', 'UTF8_BINARY'), collate('SQL', 'UTF8_BINARY'))
--- !query schema
-struct<elt(1, collate(Spark, UTF8_BINARY), collate(SQL, UTF8_BINARY)):string>
--- !query output
-Spark
-
-
--- !query
-SELECT elt(1, collate('Spark', 'UTF8_BINARY'), 'SQL')
--- !query schema
-struct<elt(1, collate(Spark, UTF8_BINARY), SQL):string>
--- !query output
-Spark
-
-
--- !query
-SELECT elt(1, 'Spark', collate('SQL', 'UTF8_BINARY'))
--- !query schema
-struct<elt(1, Spark, collate(SQL, UTF8_BINARY)):string>
--- !query output
-Spark
-
-
--- !query
-SELECT elt(1, collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UTF8_LCASE'))
--- !query schema
-struct<elt(1, collate(Spark, UTF8_LCASE), collate(SQL, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-Spark
-
-
--- !query
-SELECT elt(1, collate('Spark', 'UTF8_LCASE'), 'SQL')
--- !query schema
-struct<elt(1, collate(Spark, UTF8_LCASE), SQL):string collate UTF8_LCASE>
--- !query output
-Spark
-
-
--- !query
-SELECT elt(1, 'Spark', collate('SQL', 'UTF8_LCASE'))
--- !query schema
-struct<elt(1, Spark, collate(SQL, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-Spark
-
-
--- !query
-SELECT elt(2, collate('Spark', 'UNICODE'), collate('SQL', 'UNICODE'))
--- !query schema
-struct<elt(2, collate(Spark, UNICODE), collate(SQL, UNICODE)):string collate UNICODE>
--- !query output
-SQL
-
-
--- !query
-SELECT elt(2, collate('Spark', 'UNICODE'), 'SQL')
--- !query schema
-struct<elt(2, collate(Spark, UNICODE), SQL):string collate UNICODE>
--- !query output
-SQL
-
-
--- !query
-SELECT elt(2, 'Spark', collate('SQL', 'UNICODE'))
--- !query schema
-struct<elt(2, Spark, collate(SQL, UNICODE)):string collate UNICODE>
--- !query output
-SQL
-
-
--- !query
-SELECT elt(2, collate('Spark', 'UNICODE_CI'), collate('SQL', 'UNICODE_CI'))
--- !query schema
-struct<elt(2, collate(Spark, UNICODE_CI), collate(SQL, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-SQL
-
-
--- !query
-SELECT elt(2, collate('Spark', 'UNICODE_CI'), 'SQL')
--- !query schema
-struct<elt(2, collate(Spark, UNICODE_CI), SQL):string collate UNICODE_CI>
--- !query output
-SQL
-
-
--- !query
-SELECT elt(2, 'Spark', collate('SQL', 'UNICODE_CI'))
--- !query schema
-struct<elt(2, Spark, collate(SQL, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-SQL
-
-
--- !query
-SELECT elt(0, collate('Spark', 'UTF8_LCASE'), collate('SQL', 'UNICODE'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE`"
-  }
-}
-
-
--- !query
-SELECT split_part(collate('1a2','UTF8_BINARY'),collate('a','UTF8_BINARY'),2)
--- !query schema
-struct<split_part(collate(1a2, UTF8_BINARY), collate(a, UTF8_BINARY), 2):string>
--- !query output
-2
-
-
--- !query
-SELECT split_part(collate('1a2','UNICODE'),collate('a','UNICODE'),2)
--- !query schema
-struct<split_part(collate(1a2, UNICODE), collate(a, UNICODE), 2):string collate UNICODE>
--- !query output
-2
-
-
--- !query
-SELECT split_part(collate('1a2','UTF8_LCASE'),collate('A','UTF8_LCASE'),2)
--- !query schema
-struct<split_part(collate(1a2, UTF8_LCASE), collate(A, UTF8_LCASE), 2):string collate UTF8_LCASE>
--- !query output
-2
-
-
--- !query
-SELECT split_part(collate('1a2','UNICODE_CI'),collate('A','UNICODE_CI'),2)
--- !query schema
-struct<split_part(collate(1a2, UNICODE_CI), collate(A, UNICODE_CI), 2):string collate UNICODE_CI>
--- !query output
-2
-
-
--- !query
-SELECT contains(collate('','UTF8_BINARY'),collate('','UTF8_BINARY'))
--- !query schema
-struct<contains(collate(, UTF8_BINARY), collate(, UTF8_BINARY)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT contains(collate('','UTF8_BINARY'),'')
--- !query schema
-struct<contains(collate(, UTF8_BINARY), ):boolean>
--- !query output
-true
-
-
--- !query
-SELECT contains('',collate('','UTF8_BINARY'))
--- !query schema
-struct<contains(, collate(, UTF8_BINARY)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT contains(collate('abcde','UNICODE'),collate('C','UNICODE'))
--- !query schema
-struct<contains(collate(abcde, UNICODE), collate(C, UNICODE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT contains(collate('abcde','UNICODE'),'C')
--- !query schema
-struct<contains(collate(abcde, UNICODE), C):boolean>
--- !query output
-false
-
-
--- !query
-SELECT contains('abcde',collate('C','UNICODE'))
--- !query schema
-struct<contains(abcde, collate(C, UNICODE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT contains(collate('abcde','UTF8_LCASE'),collate('FGH','UTF8_LCASE'))
--- !query schema
-struct<contains(collate(abcde, UTF8_LCASE), collate(FGH, UTF8_LCASE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT contains(collate('abcde','UTF8_LCASE'),'FGH')
--- !query schema
-struct<contains(collate(abcde, UTF8_LCASE), FGH):boolean>
--- !query output
-false
-
-
--- !query
-SELECT contains('abcde',collate('FGH','UTF8_LCASE'))
--- !query schema
-struct<contains(abcde, collate(FGH, UTF8_LCASE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT contains(collate('abcde','UNICODE_CI'),collate('BCD','UNICODE_CI'))
--- !query schema
-struct<contains(collate(abcde, UNICODE_CI), collate(BCD, UNICODE_CI)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT contains(collate('abcde','UNICODE_CI'),'BCD')
--- !query schema
-struct<contains(collate(abcde, UNICODE_CI), BCD):boolean>
--- !query output
-true
-
-
--- !query
-SELECT contains('abcde',collate('BCD','UNICODE_CI'))
--- !query schema
-struct<contains(abcde, collate(BCD, UNICODE_CI)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT contains(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
-  }
-}
-
-
--- !query
-SELECT substring_index(collate('wwwgapachegorg','UTF8_BINARY'),collate('g','UTF8_BINARY'),-3)
--- !query schema
-struct<substring_index(collate(wwwgapachegorg, UTF8_BINARY), collate(g, UTF8_BINARY), -3):string>
--- !query output
-apachegorg
-
-
--- !query
-SELECT substring_index(collate('wwwgapachegorg','UTF8_BINARY'),'g',-3)
--- !query schema
-struct<substring_index(collate(wwwgapachegorg, UTF8_BINARY), g, -3):string>
--- !query output
-apachegorg
-
-
--- !query
-SELECT substring_index('wwwgapachegorg',collate('g','UTF8_BINARY'),-3)
--- !query schema
-struct<substring_index(wwwgapachegorg, collate(g, UTF8_BINARY), -3):string>
--- !query output
-apachegorg
-
-
--- !query
-SELECT substring_index(collate('www||apache||org','UTF8_BINARY'),collate('||','UTF8_BINARY'),2)
--- !query schema
-struct<substring_index(collate(www||apache||org, UTF8_BINARY), collate(||, UTF8_BINARY), 2):string>
--- !query output
-www||apache
-
-
--- !query
-SELECT substring_index(collate('www||apache||org','UTF8_BINARY'),'||',2)
--- !query schema
-struct<substring_index(collate(www||apache||org, UTF8_BINARY), ||, 2):string>
--- !query output
-www||apache
-
-
--- !query
-SELECT substring_index('www||apache||org',collate('||','UTF8_BINARY'),2)
--- !query schema
-struct<substring_index(www||apache||org, collate(||, UTF8_BINARY), 2):string>
--- !query output
-www||apache
-
-
--- !query
-SELECT substring_index(collate('wwwXapacheXorg','UTF8_LCASE'),collate('x','UTF8_LCASE'),2)
--- !query schema
-struct<substring_index(collate(wwwXapacheXorg, UTF8_LCASE), collate(x, UTF8_LCASE), 2):string collate UTF8_LCASE>
--- !query output
-wwwXapache
-
-
--- !query
-SELECT substring_index(collate('wwwXapacheXorg','UTF8_LCASE'),'x',2)
--- !query schema
-struct<substring_index(collate(wwwXapacheXorg, UTF8_LCASE), x, 2):string collate UTF8_LCASE>
--- !query output
-wwwXapache
-
-
--- !query
-SELECT substring_index('wwwXapacheXorg',collate('x','UTF8_LCASE'),2)
--- !query schema
-struct<substring_index(wwwXapacheXorg, collate(x, UTF8_LCASE), 2):string collate UTF8_LCASE>
--- !query output
-wwwXapache
-
-
--- !query
-SELECT substring_index(collate('aaaaaaaaaa','UNICODE'),collate('aa','UNICODE'),2)
--- !query schema
-struct<substring_index(collate(aaaaaaaaaa, UNICODE), collate(aa, UNICODE), 2):string collate UNICODE>
--- !query output
-a
-
-
--- !query
-SELECT substring_index(collate('aaaaaaaaaa','UNICODE'),'aa',2)
--- !query schema
-struct<substring_index(collate(aaaaaaaaaa, UNICODE), aa, 2):string collate UNICODE>
--- !query output
-a
-
-
--- !query
-SELECT substring_index('aaaaaaaaaa',collate('aa','UNICODE'),2)
--- !query schema
-struct<substring_index(aaaaaaaaaa, collate(aa, UNICODE), 2):string collate UNICODE>
--- !query output
-a
-
-
--- !query
-SELECT substring_index(collate('wwwmapacheMorg','UNICODE_CI'),collate('M','UNICODE_CI'),-2)
--- !query schema
-struct<substring_index(collate(wwwmapacheMorg, UNICODE_CI), collate(M, UNICODE_CI), -2):string collate UNICODE_CI>
--- !query output
-apacheMorg
-
-
--- !query
-SELECT substring_index(collate('wwwmapacheMorg','UNICODE_CI'),'M',-2)
--- !query schema
-struct<substring_index(collate(wwwmapacheMorg, UNICODE_CI), M, -2):string collate UNICODE_CI>
--- !query output
-apacheMorg
-
-
--- !query
-SELECT substring_index('wwwmapacheMorg',collate('M','UNICODE_CI'),-2)
--- !query schema
-struct<substring_index(wwwmapacheMorg, collate(M, UNICODE_CI), -2):string collate UNICODE_CI>
--- !query output
-apacheMorg
-
-
--- !query
-SELECT substring_index(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'),1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
-  }
-}
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UTF8_BINARY'),collate('大千','UTF8_BINARY'))
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UTF8_BINARY), collate(大千, UTF8_BINARY)):int>
--- !query output
-5
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UTF8_BINARY'),'大千')
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UTF8_BINARY), 大千):int>
--- !query output
-5
-
-
--- !query
-SELECT instr('test大千世界X大千世界',collate('大千','UTF8_BINARY'))
--- !query schema
-struct<instr(test大千世界X大千世界, collate(大千, UTF8_BINARY)):int>
--- !query output
-5
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UTF8_LCASE'),collate('界x','UTF8_LCASE'))
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UTF8_LCASE), collate(界x, UTF8_LCASE)):int>
--- !query output
-8
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UTF8_LCASE'),'界x')
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UTF8_LCASE), 界x):int>
--- !query output
-8
-
-
--- !query
-SELECT instr('test大千世界X大千世界',collate('界x','UTF8_LCASE'))
--- !query schema
-struct<instr(test大千世界X大千世界, collate(界x, UTF8_LCASE)):int>
--- !query output
-8
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UNICODE'),collate('界x','UNICODE'))
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UNICODE), collate(界x, UNICODE)):int>
--- !query output
-0
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UNICODE'),'界x')
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UNICODE), 界x):int>
--- !query output
-0
-
-
--- !query
-SELECT instr('test大千世界X大千世界',collate('界x','UNICODE'))
--- !query schema
-struct<instr(test大千世界X大千世界, collate(界x, UNICODE)):int>
--- !query output
-0
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UNICODE_CI'),collate('界y','UNICODE_CI'))
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UNICODE_CI), collate(界y, UNICODE_CI)):int>
--- !query output
-0
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UNICODE_CI'),'界y')
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UNICODE_CI), 界y):int>
--- !query output
-0
-
-
--- !query
-SELECT instr('test大千世界X大千世界',collate('界y','UNICODE_CI'))
--- !query schema
-struct<instr(test大千世界X大千世界, collate(界y, UNICODE_CI)):int>
--- !query output
-0
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UNICODE_CI'),collate('界x','UNICODE_CI'))
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UNICODE_CI), collate(界x, UNICODE_CI)):int>
--- !query output
-8
-
-
--- !query
-SELECT instr(collate('test大千世界X大千世界','UNICODE_CI'),'界x')
--- !query schema
-struct<instr(collate(test大千世界X大千世界, UNICODE_CI), 界x):int>
--- !query output
-8
-
-
--- !query
-SELECT instr('test大千世界X大千世界',collate('界x','UNICODE_CI'))
--- !query schema
-struct<instr(test大千世界X大千世界, collate(界x, UNICODE_CI)):int>
--- !query output
-8
-
-
--- !query
-SELECT instr(collate('abİo12','UNICODE_CI'),collate('i̇o','UNICODE_CI'))
--- !query schema
-struct<instr(collate(abİo12, UNICODE_CI), collate(i̇o, UNICODE_CI)):int>
--- !query output
-3
-
-
--- !query
-SELECT instr(collate('abİo12','UNICODE_CI'),'i̇o')
--- !query schema
-struct<instr(collate(abİo12, UNICODE_CI), i̇o):int>
--- !query output
-3
-
-
--- !query
-SELECT instr('abİo12',collate('i̇o','UNICODE_CI'))
--- !query schema
-struct<instr(abİo12, collate(i̇o, UNICODE_CI)):int>
--- !query output
-3
-
-
--- !query
-SELECT instr(collate('aaads', 'UTF8_BINARY'), collate('Aa', 'UTF8_LCASE'))
+select concat_ws(' ' collate utf8_binary, utf8_binary, 'SQL' collate utf8_lcase) from t1
 -- !query schema
 struct<>
 -- !query output
@@ -1089,127 +473,459 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT find_in_set(collate('AB', 'UTF8_BINARY'),collate('abc,b,ab,c,def', 'UTF8_BINARY'))
+select concat_ws(',', utf8_lcase, 'word'), concat_ws(',', utf8_binary, 'word') from t1
 -- !query schema
-struct<find_in_set(collate(AB, UTF8_BINARY), collate(abc,b,ab,c,def, UTF8_BINARY)):int>
+struct<concat_ws(,, utf8_lcase, word):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
 -- !query output
-0
+SQL,word	Spark,word
 
 
 -- !query
-SELECT find_in_set(collate('AB', 'UTF8_BINARY'),'abc,b,ab,c,def')
+select concat_ws(',', utf8_lcase, 'word' collate utf8_binary), concat_ws(',', utf8_binary, 'word' collate utf8_lcase) from t1
 -- !query schema
-struct<find_in_set(collate(AB, UTF8_BINARY), abc,b,ab,c,def):int>
+struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(,, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
-0
+SQL,word	Spark,word
 
 
 -- !query
-SELECT find_in_set('AB',collate('abc,b,ab,c,def', 'UTF8_BINARY'))
+drop table t1
 -- !query schema
-struct<find_in_set(AB, collate(abc,b,ab,c,def, UTF8_BINARY)):int>
+struct<>
 -- !query output
-0
+
 
 
 -- !query
-SELECT find_in_set(collate('C', 'UTF8_LCASE'),collate('abc,b,ab,c,def', 'UTF8_LCASE'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<find_in_set(collate(C, UTF8_LCASE), collate(abc,b,ab,c,def, UTF8_LCASE)):int>
+struct<>
 -- !query output
-4
+
 
 
 -- !query
-SELECT find_in_set(collate('C', 'UTF8_LCASE'),'abc,b,ab,c,def')
+insert into t1 values ('Spark', 'SQL')
 -- !query schema
-struct<find_in_set(collate(C, UTF8_LCASE), abc,b,ab,c,def):int>
+struct<>
 -- !query output
-4
+
 
 
 -- !query
-SELECT find_in_set('C',collate('abc,b,ab,c,def', 'UTF8_LCASE'))
+select elt(2, utf8_binary, utf8_lcase) from t1
 -- !query schema
-struct<find_in_set(C, collate(abc,b,ab,c,def, UTF8_LCASE)):int>
+struct<>
 -- !query output
-4
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
 
 
 -- !query
-SELECT find_in_set(collate('d,ef', 'UNICODE'),collate('abc,b,ab,c,def', 'UNICODE'))
+select elt(1, utf8_binary collate utf8_lcase, utf8_lcase) from t1
 -- !query schema
-struct<find_in_set(collate(d,ef, UNICODE), collate(abc,b,ab,c,def, UNICODE)):int>
+struct<elt(1, collate(utf8_binary, utf8_lcase), utf8_lcase):string collate UTF8_LCASE>
 -- !query output
-0
+Spark
 
 
 -- !query
-SELECT find_in_set(collate('d,ef', 'UNICODE'),'abc,b,ab,c,def')
+select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t1
 -- !query schema
-struct<find_in_set(collate(d,ef, UNICODE), abc,b,ab,c,def):int>
+struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
 -- !query output
-0
+Spark	SQL
 
 
 -- !query
-SELECT find_in_set('d,ef',collate('abc,b,ab,c,def', 'UNICODE'))
+drop table t1
 -- !query schema
-struct<find_in_set(d,ef, collate(abc,b,ab,c,def, UNICODE)):int>
+struct<>
 -- !query output
-0
+
 
 
 -- !query
-SELECT find_in_set(collate('i̇o', 'UNICODE_CI'),collate('ab,İo,12', 'UNICODE_CI'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<find_in_set(collate(i̇o, UNICODE_CI), collate(ab,İo,12, UNICODE_CI)):int>
+struct<>
 -- !query output
-2
+
 
 
 -- !query
-SELECT find_in_set(collate('i̇o', 'UNICODE_CI'),'ab,İo,12')
+insert into t1 values ('aaAaAAaA', 'aaAaAAaA')
 -- !query schema
-struct<find_in_set(collate(i̇o, UNICODE_CI), ab,İo,12):int>
+struct<>
 -- !query output
-2
+
 
 
 -- !query
-SELECT find_in_set('i̇o',collate('ab,İo,12', 'UNICODE_CI'))
+select split_part(utf8_binary, utf8_lcase, 3) from t1
 -- !query schema
-struct<find_in_set(i̇o, collate(ab,İo,12, UNICODE_CI)):int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
 
 
 -- !query
-SELECT find_in_set(collate('İo', 'UNICODE_CI'),collate('ab,i̇o,12', 'UNICODE_CI'))
+select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t1
 -- !query schema
-struct<find_in_set(collate(İo, UNICODE_CI), collate(ab,i̇o,12, UNICODE_CI)):int>
+struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
 -- !query output
-2
+A
 
 
 -- !query
-SELECT find_in_set(collate('İo', 'UNICODE_CI'),'ab,i̇o,12')
+select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t1
 -- !query schema
-struct<find_in_set(collate(İo, UNICODE_CI), ab,i̇o,12):int>
+struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string collate UTF8_LCASE,split_part(utf8_lcase, collate(a, utf8_binary), 3):string>
 -- !query output
-2
+	A
 
 
 -- !query
-SELECT find_in_set('İo',collate('ab,i̇o,12', 'UNICODE_CI'))
+drop table t1
 -- !query schema
-struct<find_in_set(İo, collate(ab,i̇o,12, UNICODE_CI)):int>
+struct<>
 -- !query output
-2
+
 
 
 -- !query
-SELECT find_in_set(collate('AB', 'UTF8_BINARY'), collate('ab,xyz,fgh', 'UTF8_LCASE'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select contains(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select contains(utf8_binary collate utf8_lcase, utf8_lcase), contains(utf8_binary, utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<contains(collate(utf8_binary, utf8_lcase), utf8_lcase):boolean,contains(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean>
+-- !query output
+true	false
+
+
+-- !query
+select contains(utf8_binary, 'AAa'), contains(utf8_lcase, 'AaAA') from t1
+-- !query schema
+struct<contains(utf8_binary, AAa):boolean,contains(utf8_lcase, AaAA):boolean>
+-- !query output
+true	true
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select substring_index(utf8_binary, utf8_lcase, 1) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select substring_index(utf8_lcase, utf8_binary collate utf8_lcase, 3), substring_index(utf8_lcase collate utf8_binary, utf8_binary, -3) from t1
+-- !query schema
+struct<substring_index(utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,substring_index(collate(utf8_lcase, utf8_binary), utf8_binary, -3):string>
+-- !query output
+aa	aaAaaAaAaaAaaAaAaaAaaAaA
+aaAaaAaA	aaAaaAaA
+
+
+-- !query
+select substring_index(utf8_binary, 'AAa', 1), substring_index(utf8_lcase, 'AaAA', 3) from t1
+-- !query schema
+struct<substring_index(utf8_binary, AAa, 1):string,substring_index(utf8_lcase, AaAA, 3):string collate UTF8_LCASE>
+-- !query output
+aaAa	aa
+aaAa	aa
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select instr(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select instr(utf8_lcase, utf8_binary collate utf8_lcase), instr(utf8_lcase collate utf8_binary, utf8_binary) from t1
+-- !query schema
+struct<instr(utf8_lcase, collate(utf8_binary, utf8_lcase)):int,instr(collate(utf8_lcase, utf8_binary), utf8_binary):int>
+-- !query output
+1	0
+1	0
+
+
+-- !query
+select instr(utf8_binary, 'AAa'), instr(utf8_lcase, 'AaAA') from t1
+-- !query schema
+struct<instr(utf8_binary, AAa):int,instr(utf8_lcase, AaAA):int>
+-- !query output
+5	1
+5	1
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('İo', 'İo')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select find_in_set(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o') from t1
+-- !query schema
+struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaaAaA,i̇o):int>
+-- !query output
+0	1
+0	2
+
+
+-- !query
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o' collate utf8_lcase), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t1
+-- !query schema
+struct<find_in_set(utf8_binary, collate(aaAaaAaA,i̇o, utf8_lcase)):int,find_in_set(utf8_lcase, collate(aaAaaAaA,i̇o, utf8_binary)):int>
+-- !query output
+1	1
+2	0
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('İo', 'İo')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select startswith(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') from t1
+-- !query schema
+struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, aaAaaAaA):boolean>
+-- !query output
+false	false
+false	true
+
+
+-- !query
+select startswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t1
+-- !query schema
+struct<startswith(utf8_binary, collate(aaAaaAaA, utf8_lcase)):boolean,startswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
+-- !query output
+false	false
+true	true
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('İo', 'İo')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select translate(utf8_binary, utf8_lcase collate utf8_lcase, 'abc' collate utf8_binary) from t1
 -- !query schema
 struct<>
 -- !query output
@@ -1218,109 +934,63 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "explicitTypes" : "`string collate UTF8_LCASE`, `string`"
   }
 }
 
 
 -- !query
-SELECT startswith(collate('','UTF8_BINARY'),collate('','UTF8_BINARY'))
+select translate(utf8_binary, 'aaAaaAaA', '12345'), translate(utf8_lcase, 'aaAaaAaA', '12345') from t1
 -- !query schema
-struct<startswith(collate(, UTF8_BINARY), collate(, UTF8_BINARY)):boolean>
+struct<translate(utf8_binary, aaAaaAaA, 12345):string,translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE>
 -- !query output
-true
+11313313	11111111
+İo	İo
 
 
 -- !query
-SELECT startswith(collate('', 'UTF8_BINARY'),'')
+select translate(utf8_binary, 'aaAaaAaA' collate utf8_lcase, '12345'), translate(utf8_lcase, 'aaAaaAaA' collate utf8_binary, '12345') from t1
 -- !query schema
-struct<startswith(collate(, UTF8_BINARY), ):boolean>
+struct<translate(utf8_binary, collate(aaAaaAaA, utf8_lcase), 12345):string collate UTF8_LCASE,translate(utf8_lcase, collate(aaAaaAaA, utf8_binary), 12345):string>
 -- !query output
-true
+11111111	11311313
+İo	İo
 
 
 -- !query
-SELECT startswith('', collate('', 'UTF8_BINARY'))
+drop table t1
 -- !query schema
-struct<startswith(, collate(, UTF8_BINARY)):boolean>
+struct<>
 -- !query output
-true
+
 
 
 -- !query
-SELECT startswith(collate('abcde','UNICODE'),collate('A','UNICODE'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<startswith(collate(abcde, UNICODE), collate(A, UNICODE)):boolean>
+struct<>
 -- !query output
-false
+
 
 
 -- !query
-SELECT startswith(collate('abcde', 'UNICODE'),'A')
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
 -- !query schema
-struct<startswith(collate(abcde, UNICODE), A):boolean>
+struct<>
 -- !query output
-false
+
 
 
 -- !query
-SELECT startswith('abcde', collate('A', 'UNICODE'))
+insert into t1 values ('İo', 'İo')
 -- !query schema
-struct<startswith(abcde, collate(A, UNICODE)):boolean>
+struct<>
 -- !query output
-false
+
 
 
 -- !query
-SELECT startswith(collate('abcde','UTF8_LCASE'),collate('FGH','UTF8_LCASE'))
--- !query schema
-struct<startswith(collate(abcde, UTF8_LCASE), collate(FGH, UTF8_LCASE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT startswith(collate('abcde', 'UTF8_LCASE'),'FGH')
--- !query schema
-struct<startswith(collate(abcde, UTF8_LCASE), FGH):boolean>
--- !query output
-false
-
-
--- !query
-SELECT startswith('abcde', collate('FGH', 'UTF8_LCASE'))
--- !query schema
-struct<startswith(abcde, collate(FGH, UTF8_LCASE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT startswith(collate('abcde','UNICODE_CI'),collate('ABC','UNICODE_CI'))
--- !query schema
-struct<startswith(collate(abcde, UNICODE_CI), collate(ABC, UNICODE_CI)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT startswith(collate('abcde', 'UNICODE_CI'),'ABC')
--- !query schema
-struct<startswith(collate(abcde, UNICODE_CI), ABC):boolean>
--- !query output
-true
-
-
--- !query
-SELECT startswith('abcde', collate('ABC', 'UNICODE_CI'))
--- !query schema
-struct<startswith(abcde, collate(ABC, UNICODE_CI)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT startswith(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))
+select replace(utf8_binary, utf8_lcase collate utf8_lcase, 'abc' collate utf8_binary) from t1
 -- !query schema
 struct<>
 -- !query output
@@ -1329,2371 +999,1529 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
+    "explicitTypes" : "`string collate UTF8_LCASE`, `string`"
   }
 }
 
 
 -- !query
-SELECT translate(collate('Translate', 'UTF8_BINARY'),collate('Rnlt', 'UTF8_BINARY'),collate('12', 'UTF8_BINARY'))
+select replace(utf8_binary, 'aaAaaAaA', '12345'), replace(utf8_lcase, 'aaAaaAaA', '12345') from t1
 -- !query schema
-struct<translate(collate(Translate, UTF8_BINARY), collate(Rnlt, UTF8_BINARY), collate(12, UTF8_BINARY)):string>
+struct<replace(utf8_binary, aaAaaAaA, 12345):string,replace(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE>
 -- !query output
-Tra2sae
+aaAaAAaA	12345
+İo	İo
 
 
 -- !query
-SELECT translate(collate('Translate', 'UTF8_BINARY'),'Rnlt', '12')
+select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, '12345'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, '12345') from t1
 -- !query schema
-struct<translate(collate(Translate, UTF8_BINARY), Rnlt, 12):string>
+struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), 12345):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), 12345):string>
 -- !query output
-Tra2sae
+12345	12345
+İo	İo
 
 
 -- !query
-SELECT translate('Translate', collate('Rnlt','UTF8_BINARY'), '12')
+drop table t1
 -- !query schema
-struct<translate(Translate, collate(Rnlt, UTF8_BINARY), 12):string>
+struct<>
 -- !query output
-Tra2sae
+
 
 
 -- !query
-SELECT translate('Translate', 'Rnlt',collate('12', 'UTF8_BINARY'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<translate(Translate, Rnlt, collate(12, UTF8_BINARY)):string>
+struct<>
 -- !query output
-Tra2sae
+
 
 
 -- !query
-SELECT translate(collate('Translate', 'UTF8_LCASE'),collate('Rnlt', 'UTF8_LCASE'),collate('1234', 'UTF8_LCASE'))
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
 -- !query schema
-struct<translate(collate(Translate, UTF8_LCASE), collate(Rnlt, UTF8_LCASE), collate(1234, UTF8_LCASE)):string collate UTF8_LCASE>
+struct<>
 -- !query output
-41a2s3a4e
+
 
 
 -- !query
-SELECT translate(collate('Translate', 'UTF8_LCASE'),'Rnlt', '1234')
+insert into t1 values ('İo', 'i̇o')
 -- !query schema
-struct<translate(collate(Translate, UTF8_LCASE), Rnlt, 1234):string collate UTF8_LCASE>
+struct<>
 -- !query output
-41a2s3a4e
+
 
 
 -- !query
-SELECT translate('Translate', collate('Rnlt','UTF8_LCASE'), '1234')
--- !query schema
-struct<translate(Translate, collate(Rnlt, UTF8_LCASE), 1234):string collate UTF8_LCASE>
--- !query output
-41a2s3a4e
-
-
--- !query
-SELECT translate('Translate', 'Rnlt',collate('1234', 'UTF8_LCASE'))
--- !query schema
-struct<translate(Translate, Rnlt, collate(1234, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-41a2s3a4e
-
-
--- !query
-SELECT translate(collate('Translate', 'UNICODE'),collate('Rn', 'UNICODE'),collate('  ', 'UNICODE'))
--- !query schema
-struct<translate(collate(Translate, UNICODE), collate(Rn, UNICODE), collate(  , UNICODE)):string collate UNICODE>
--- !query output
-Traslate
-
-
--- !query
-SELECT translate(collate('Translate', 'UNICODE'),'Rn', '  ')
--- !query schema
-struct<translate(collate(Translate, UNICODE), Rn,   ):string collate UNICODE>
--- !query output
-Traslate
-
-
--- !query
-SELECT translate('Translate', collate('Rn','UNICODE'), '  ')
--- !query schema
-struct<translate(Translate, collate(Rn, UNICODE),   ):string collate UNICODE>
--- !query output
-Traslate
-
-
--- !query
-SELECT translate('Translate', 'Rn',collate('  ', 'UNICODE'))
--- !query schema
-struct<translate(Translate, Rn, collate(  , UNICODE)):string collate UNICODE>
--- !query output
-Traslate
-
-
--- !query
-SELECT translate(collate('Translate', 'UNICODE_CI'),collate('Rn', 'UNICODE_CI'),collate('1234', 'UNICODE_CI'))
--- !query schema
-struct<translate(collate(Translate, UNICODE_CI), collate(Rn, UNICODE_CI), collate(1234, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-T1a2slate
-
-
--- !query
-SELECT translate(collate('Translate', 'UNICODE_CI'),'Rn', '1234')
--- !query schema
-struct<translate(collate(Translate, UNICODE_CI), Rn, 1234):string collate UNICODE_CI>
--- !query output
-T1a2slate
-
-
--- !query
-SELECT translate('Translate', collate('Rn','UNICODE_CI'), '1234')
--- !query schema
-struct<translate(Translate, collate(Rn, UNICODE_CI), 1234):string collate UNICODE_CI>
--- !query output
-T1a2slate
-
-
--- !query
-SELECT translate('Translate', 'Rn',collate('1234', 'UNICODE_CI'))
--- !query schema
-struct<translate(Translate, Rn, collate(1234, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-T1a2slate
-
-
--- !query
-SELECT translate(collate('Translate', 'UTF8_LCASE'), collate('Rnlt', 'UNICODE'), '1234')
+select endswith(utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE`"
-  }
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
 }
 
 
 -- !query
-SELECT replace(collate('r世eplace','UTF8_BINARY'),collate('pl','UTF8_BINARY'),collate('123','UTF8_BINARY'))
+select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from t1
 -- !query schema
-struct<replace(collate(r世eplace, UTF8_BINARY), collate(pl, UTF8_BINARY), collate(123, UTF8_BINARY)):string>
+struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, aaAaaAaA):boolean>
 -- !query output
-r世e123ace
+false	false
+false	true
 
 
 -- !query
-SELECT replace(collate('r世eplace','UTF8_BINARY'),'pl','123')
+select endswith(utf8_binary, utf8_lcase collate utf8_binary), endswith(utf8_lcase, utf8_binary collate utf8_lcase) from t1
 -- !query schema
-struct<replace(collate(r世eplace, UTF8_BINARY), pl, 123):string>
+struct<endswith(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean,endswith(utf8_lcase, collate(utf8_binary, utf8_lcase)):boolean>
 -- !query output
-r世e123ace
+false	true
+false	true
 
 
 -- !query
-SELECT replace('r世eplace',collate('pl','UTF8_BINARY'),'123')
+drop table t1
 -- !query schema
-struct<replace(r世eplace, collate(pl, UTF8_BINARY), 123):string>
+struct<>
 -- !query output
-r世e123ace
+
 
 
 -- !query
-SELECT replace('r世eplace','pl',collate('123','UTF8_BINARY'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<replace(r世eplace, pl, collate(123, UTF8_BINARY)):string>
+struct<>
 -- !query output
-r世e123ace
+
 
 
 -- !query
-SELECT replace(collate('repl世ace','UTF8_LCASE'),collate('PL','UTF8_LCASE'),collate('AB','UTF8_LCASE'))
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
 -- !query schema
-struct<replace(collate(repl世ace, UTF8_LCASE), collate(PL, UTF8_LCASE), collate(AB, UTF8_LCASE)):string collate UTF8_LCASE>
+struct<>
 -- !query output
-reAB世ace
+
 
 
 -- !query
-SELECT replace(collate('repl世ace','UTF8_LCASE'),'PL','AB')
+insert into t1 values ('İo', 'i̇o')
 -- !query schema
-struct<replace(collate(repl世ace, UTF8_LCASE), PL, AB):string collate UTF8_LCASE>
+struct<>
 -- !query output
-reAB世ace
+
 
 
 -- !query
-SELECT replace('repl世ace',collate('PL','UTF8_LCASE'),'AB')
+select repeat(utf8_binary, 3), repeat(utf8_lcase, 2) from t1
 -- !query schema
-struct<replace(repl世ace, collate(PL, UTF8_LCASE), AB):string collate UTF8_LCASE>
+struct<repeat(utf8_binary, 3):string,repeat(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
-reAB世ace
+aaAaAAaAaaAaAAaAaaAaAAaA	aaAaaAaAaaAaaAaA
+İoİoİo	i̇oi̇o
 
 
 -- !query
-SELECT replace('repl世ace','PL',collate('AB','UTF8_LCASE'))
+select repeat(utf8_binary collate utf8_lcase, 3), repeat(utf8_lcase collate utf8_binary, 2) from t1
 -- !query schema
-struct<replace(repl世ace, PL, collate(AB, UTF8_LCASE)):string collate UTF8_LCASE>
+struct<repeat(collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,repeat(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
-reAB世ace
+aaAaAAaAaaAaAAaAaaAaAAaA	aaAaaAaAaaAaaAaA
+İoİoİo	i̇oi̇o
 
 
 -- !query
-SELECT replace(collate('abcdabcd','UNICODE'),collate('bc','UNICODE'),collate('','UNICODE'))
+drop table t1
 -- !query schema
-struct<replace(collate(abcdabcd, UNICODE), collate(bc, UNICODE), collate(, UNICODE)):string collate UNICODE>
+struct<>
 -- !query output
-adad
+
 
 
 -- !query
-SELECT replace(collate('abcdabcd','UNICODE'),'bc','')
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<replace(collate(abcdabcd, UNICODE), bc, ):string collate UNICODE>
+struct<>
 -- !query output
-adad
+
 
 
 -- !query
-SELECT replace('abcdabcd',collate('bc','UNICODE'),'')
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
 -- !query schema
-struct<replace(abcdabcd, collate(bc, UNICODE), ):string collate UNICODE>
+struct<>
 -- !query output
-adad
+
 
 
 -- !query
-SELECT replace('abcdabcd','bc',collate('','UNICODE'))
+insert into t1 values ('efd2', 'efd2')
 -- !query schema
-struct<replace(abcdabcd, bc, collate(, UNICODE)):string collate UNICODE>
+struct<>
 -- !query output
-adad
+
 
 
 -- !query
-SELECT replace(collate('aBc世abc','UNICODE_CI'),collate('b','UNICODE_CI'),collate('12','UNICODE_CI'))
+select ascii(utf8_binary), ascii(utf8_lcase) from t1
 -- !query schema
-struct<replace(collate(aBc世abc, UNICODE_CI), collate(b, UNICODE_CI), collate(12, UNICODE_CI)):string collate UNICODE_CI>
+struct<ascii(utf8_binary):int,ascii(utf8_lcase):int>
 -- !query output
-a12c世a12c
+101	101
+97	97
 
 
 -- !query
-SELECT replace(collate('aBc世abc','UNICODE_CI'),'b','12')
+select ascii(utf8_binary collate utf8_lcase), ascii(utf8_lcase collate utf8_binary) from t1
 -- !query schema
-struct<replace(collate(aBc世abc, UNICODE_CI), b, 12):string collate UNICODE_CI>
+struct<ascii(collate(utf8_binary, utf8_lcase)):int,ascii(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
-a12c世a12c
+101	101
+97	97
 
 
 -- !query
-SELECT replace('aBc世abc',collate('b','UNICODE_CI'),'12')
+select unbase64(utf8_binary), unbase64(utf8_lcase) from t1
 -- !query schema
-struct<replace(aBc世abc, collate(b, UNICODE_CI), 12):string collate UNICODE_CI>
+struct<unbase64(utf8_binary):binary,unbase64(utf8_lcase):binary>
 -- !query output
-a12c世a12c
+i� �	i�h�
+y�v	y�v
 
 
 -- !query
-SELECT replace('aBc世abc','b',collate('12','UNICODE_CI'))
+select unbase64(utf8_binary collate utf8_lcase), unbase64(utf8_lcase collate utf8_binary) from t1
 -- !query schema
-struct<replace(aBc世abc, b, collate(12, UNICODE_CI)):string collate UNICODE_CI>
+struct<unbase64(collate(utf8_binary, utf8_lcase)):binary,unbase64(collate(utf8_lcase, utf8_binary)):binary>
 -- !query output
-a12c世a12c
+i� �	i�h�
+y�v	y�v
 
 
 -- !query
-SELECT replace(collate('abi̇o12i̇o','UNICODE_CI'),collate('İo','UNICODE_CI'),collate('yy','UNICODE_CI'))
+drop table t1
 -- !query schema
-struct<replace(collate(abi̇o12i̇o, UNICODE_CI), collate(İo, UNICODE_CI), collate(yy, UNICODE_CI)):string collate UNICODE_CI>
+struct<>
 -- !query output
-abyy12yy
+
 
 
 -- !query
-SELECT replace(collate('abi̇o12i̇o','UNICODE_CI'),'İo','yy')
+create table t1(ascii long) using parquet
 -- !query schema
-struct<replace(collate(abi̇o12i̇o, UNICODE_CI), İo, yy):string collate UNICODE_CI>
+struct<>
 -- !query output
-abyy12yy
+
 
 
 -- !query
-SELECT replace('abi̇o12i̇o',collate('İo','UNICODE_CI'),'yy')
+insert into t1 values (97)
 -- !query schema
-struct<replace(abi̇o12i̇o, collate(İo, UNICODE_CI), yy):string collate UNICODE_CI>
+struct<>
 -- !query output
-abyy12yy
+
 
 
 -- !query
-SELECT replace('abi̇o12i̇o','İo',collate('yy','UNICODE_CI'))
+insert into t1 values (66)
 -- !query schema
-struct<replace(abi̇o12i̇o, İo, collate(yy, UNICODE_CI)):string collate UNICODE_CI>
+struct<>
 -- !query output
-abyy12yy
+
 
 
 -- !query
-SELECT replace(collate('abİo12i̇o','UNICODE_CI'),collate('i̇o','UNICODE_CI'),collate('xx','UNICODE_CI'))
+select chr(ascii) from t1
 -- !query schema
-struct<replace(collate(abİo12i̇o, UNICODE_CI), collate(i̇o, UNICODE_CI), collate(xx, UNICODE_CI)):string collate UNICODE_CI>
+struct<chr(ascii):string>
 -- !query output
-abxx12xx
+B
+a
 
 
 -- !query
-SELECT replace(collate('abİo12i̇o','UNICODE_CI'),'i̇o','xx')
+drop table t1
 -- !query schema
-struct<replace(collate(abİo12i̇o, UNICODE_CI), i̇o, xx):string collate UNICODE_CI>
+struct<>
 -- !query output
-abxx12xx
+
 
 
 -- !query
-SELECT replace('abİo12i̇o',collate('i̇o','UNICODE_CI'),'xx')
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<replace(abİo12i̇o, collate(i̇o, UNICODE_CI), xx):string collate UNICODE_CI>
+struct<>
 -- !query output
-abxx12xx
+
 
 
 -- !query
-SELECT replace('abİo12i̇o','i̇o',collate('xx','UNICODE_CI'))
+insert into t1 values ('efd2', 'efd2')
 -- !query schema
-struct<replace(abİo12i̇o, i̇o, collate(xx, UNICODE_CI)):string collate UNICODE_CI>
+struct<>
 -- !query output
-abxx12xx
+
 
 
 -- !query
-SELECT startswith(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))
+select base64(utf8_binary), base64(utf8_lcase) from t1
+-- !query schema
+struct<base64(utf8_binary):string,base64(utf8_lcase):string>
+-- !query output
+ZWZkMg==	ZWZkMg==
+
+
+-- !query
+select base64(utf8_binary collate utf8_lcase), base64(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<base64(collate(utf8_binary, utf8_lcase)):string,base64(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+ZWZkMg==	ZWZkMg==
+
+
+-- !query
+select decode(encode(utf8_binary, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase, 'utf-8'), 'utf-8') from t1
+-- !query schema
+struct<decode(encode(utf8_binary, utf-8), utf-8):string,decode(encode(utf8_lcase, utf-8), utf-8):string>
+-- !query output
+efd2	efd2
+
+
+-- !query
+select decode(encode(utf8_binary collate utf8_lcase, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase collate utf8_binary, 'utf-8'), 'utf-8') from t1
+-- !query schema
+struct<decode(encode(collate(utf8_binary, utf8_lcase), utf-8), utf-8):string,decode(encode(collate(utf8_lcase, utf8_binary), utf-8), utf-8):string>
+-- !query output
+efd2	efd2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(ascii double) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values (97.52143)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values (66.421)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select format_number(ascii, '###.###') from t1
+-- !query schema
+struct<format_number(ascii, ###.###):string>
+-- !query output
+66.421
+97.521
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select encode(utf8_binary, 'utf-8'), encode(utf8_lcase, 'utf-8') from t1
+-- !query schema
+struct<encode(utf8_binary, utf-8):binary,encode(utf8_lcase, utf-8):binary>
+-- !query output
+efd2	efd2
+
+
+-- !query
+select encode(utf8_binary collate utf8_lcase, 'utf-8'), encode(utf8_lcase collate utf8_binary, 'utf-8') from t1
+-- !query schema
+struct<encode(collate(utf8_binary, utf8_lcase), utf-8):binary,encode(collate(utf8_lcase, utf8_binary), utf-8):binary>
+-- !query output
+efd2	efd2
+
+
+-- !query
+select to_binary(utf8_binary, 'utf-8'), to_binary(utf8_lcase, 'utf-8') from t1
+-- !query schema
+struct<to_binary(utf8_binary, utf-8):binary,to_binary(utf8_lcase, utf-8):binary>
+-- !query output
+efd2	efd2
+
+
+-- !query
+select to_binary(utf8_binary collate utf8_lcase, 'utf-8'), to_binary(utf8_lcase collate utf8_binary, 'utf-8') from t1
+-- !query schema
+struct<to_binary(collate(utf8_binary, utf8_lcase), utf-8):binary,to_binary(collate(utf8_lcase, utf8_binary), utf-8):binary>
+-- !query output
+efd2	efd2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select sentences(utf8_binary), sentences(utf8_lcase) from t1
+-- !query schema
+struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , ):array<array<string collate UTF8_LCASE>>>
+-- !query output
+[["Hello","world"],["Nice","day"]]	[["Hello","world"],["Nice","day"]]
+[["Something","else"],["Nothing","here"]]	[["Something","else"],["Nothing","here"]]
+
+
+-- !query
+select sentences(utf8_binary collate utf8_lcase), sentences(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collate UTF8_LCASE>>,sentences(collate(utf8_lcase, utf8_binary), , ):array<array<string>>>
+-- !query output
+[["Hello","world"],["Nice","day"]]	[["Hello","world"],["Nice","day"]]
+[["Something","else"],["Nothing","here"]]	[["Something","else"],["Nothing","here"]]
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select upper(utf8_binary), upper(utf8_lcase) from t1
+-- !query schema
+struct<upper(utf8_binary):string,upper(utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+HELLO, WORLD! NICE DAY.	HELLO, WORLD! NICE DAY.
+SOMETHING ELSE. NOTHING HERE.	SOMETHING ELSE. NOTHING HERE.
+
+
+-- !query
+select upper(utf8_binary collate utf8_lcase), upper(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<upper(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,upper(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+HELLO, WORLD! NICE DAY.	HELLO, WORLD! NICE DAY.
+SOMETHING ELSE. NOTHING HERE.	SOMETHING ELSE. NOTHING HERE.
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select lower(utf8_binary), lower(utf8_lcase) from t1
+-- !query schema
+struct<lower(utf8_binary):string,lower(utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+hello, world! nice day.	hello, world! nice day.
+something else. nothing here.	something else. nothing here.
+
+
+-- !query
+select lower(utf8_binary collate utf8_lcase), lower(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<lower(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lower(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+hello, world! nice day.	hello, world! nice day.
+something else. nothing here.	something else. nothing here.
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select initcap(utf8_binary), initcap(utf8_lcase) from t1
+-- !query schema
+struct<initcap(utf8_binary):string,initcap(utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, World! Nice Day.	Hello, World! Nice Day.
+Something Else. Nothing Here.	Something Else. Nothing Here.
+
+
+-- !query
+select initcap(utf8_binary collate utf8_lcase), initcap(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<initcap(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,initcap(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, World! Nice Day.	Hello, World! Nice Day.
+Something Else. Nothing Here.	Something Else. Nothing Here.
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select overlay(utf8_binary, utf8_lcase, 3) from t1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
-  }
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
 }
 
 
 -- !query
-SELECT endswith(collate('', 'UTF8_BINARY'), collate('', 'UTF8_BINARY'))
+select overlay(utf8_lcase, utf8_binary collate utf8_lcase, 3), overlay(utf8_lcase collate utf8_binary, utf8_binary, 3) from t1
 -- !query schema
-struct<endswith(collate(, UTF8_BINARY), collate(, UTF8_BINARY)):boolean>
+struct<overlay(utf8_lcase, collate(utf8_binary, utf8_lcase), 3, -1):string collate UTF8_LCASE,overlay(collate(utf8_lcase, utf8_binary), utf8_binary, 3, -1):string>
 -- !query output
-true
+aaaaAaAAaA	aaaaAaAAaA
+aaaaAaAAaAAaaAaAaaAaaAaA	aaaaAaAAaAAaaAaAaaAaaAaA
 
 
 -- !query
-SELECT endswith(collate('', 'UTF8_BINARY'),'')
+select overlay(utf8_binary, 'AAa', 3), overlay(utf8_lcase, 'AaAA', 3) from t1
 -- !query schema
-struct<endswith(collate(, UTF8_BINARY), ):boolean>
+struct<overlay(utf8_binary, AAa, 3, -1):string,overlay(utf8_lcase, AaAA, 3, -1):string collate UTF8_LCASE>
 -- !query output
-true
+aaAAaAaA	aaAaAAaA
+aaAAaAaA	aaAaAAaAaaAaaAaAaaAaaAaA
 
 
 -- !query
-SELECT endswith('', collate('', 'UTF8_BINARY'))
+drop table t1
 -- !query schema
-struct<endswith(, collate(, UTF8_BINARY)):boolean>
+struct<>
 -- !query output
-true
+
 
 
 -- !query
-SELECT endswith(collate('abcde', 'UNICODE'), collate('E', 'UNICODE'))
+create table t1(format string collate utf8_binary, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<endswith(collate(abcde, UNICODE), collate(E, UNICODE)):boolean>
+struct<>
 -- !query output
+
+
+
+-- !query
+insert into t1 values ('%s%s', 'abCdE', 'abCdE')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select format_string(format, utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<format_string(format, utf8_binary, utf8_lcase):string>
+-- !query output
+abCdEabCdE
+
+
+-- !query
+select format_string(format collate utf8_lcase, utf8_lcase, utf8_binary collate utf8_lcase, 3), format_string(format, utf8_lcase collate utf8_binary, utf8_binary) from t1
+-- !query schema
+struct<format_string(collate(format, utf8_lcase), utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,format_string(format, collate(utf8_lcase, utf8_binary), utf8_binary):string>
+-- !query output
+abCdEabCdE	abCdEabCdE
+
+
+-- !query
+select format_string(format, utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<format_string(format, utf8_binary, utf8_lcase):string>
+-- !query output
+abCdEabCdE
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select soundex(utf8_binary), soundex(utf8_lcase) from t1
+-- !query schema
+struct<soundex(utf8_binary):string,soundex(utf8_lcase):string>
+-- !query output
+E130	E130
+
+
+-- !query
+select soundex(utf8_binary collate utf8_lcase), soundex(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<soundex(collate(utf8_binary, utf8_lcase)):string,soundex(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+E130	E130
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select length(utf8_binary), length(utf8_lcase) from t1
+-- !query schema
+struct<length(utf8_binary):int,length(utf8_lcase):int>
+-- !query output
+4	4
+
+
+-- !query
+select length(utf8_binary collate utf8_lcase), length(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<length(collate(utf8_binary, utf8_lcase)):int,length(collate(utf8_lcase, utf8_binary)):int>
+-- !query output
+4	4
+
+
+-- !query
+select bit_length(utf8_binary), bit_length(utf8_lcase) from t1
+-- !query schema
+struct<bit_length(utf8_binary):int,bit_length(utf8_lcase):int>
+-- !query output
+32	32
+
+
+-- !query
+select bit_length(utf8_binary collate utf8_lcase), bit_length(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<bit_length(collate(utf8_binary, utf8_lcase)):int,bit_length(collate(utf8_lcase, utf8_binary)):int>
+-- !query output
+32	32
+
+
+-- !query
+select octet_length(utf8_binary), octet_length(utf8_lcase) from t1
+-- !query schema
+struct<octet_length(utf8_binary):int,octet_length(utf8_lcase):int>
+-- !query output
+4	4
+
+
+-- !query
+select octet_length(utf8_binary collate utf8_lcase), octet_length(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(utf8_lcase, utf8_binary)):int>
+-- !query output
+4	4
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(num long) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values (97)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values (66)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select luhn_check(num) from t1
+-- !query schema
+struct<luhn_check(num):boolean>
+-- !query output
+false
 false
 
 
 -- !query
-SELECT endswith(collate('abcde', 'UNICODE'),'E')
+drop table t1
 -- !query schema
-struct<endswith(collate(abcde, UNICODE), E):boolean>
+struct<>
 -- !query output
-false
+
 
 
 -- !query
-SELECT endswith('abcde', collate('E', 'UNICODE'))
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<endswith(abcde, collate(E, UNICODE)):boolean>
+struct<>
 -- !query output
-false
+
 
 
 -- !query
-SELECT endswith(collate('abcde', 'UTF8_LCASE'), collate('FGH', 'UTF8_LCASE'))
+insert into t1 values ('kitten', 'sitTing')
 -- !query schema
-struct<endswith(collate(abcde, UTF8_LCASE), collate(FGH, UTF8_LCASE)):boolean>
+struct<>
 -- !query output
-false
+
 
 
 -- !query
-SELECT endswith(collate('abcde', 'UTF8_LCASE'),'FGH')
--- !query schema
-struct<endswith(collate(abcde, UTF8_LCASE), FGH):boolean>
--- !query output
-false
-
-
--- !query
-SELECT endswith('abcde', collate('FGH', 'UTF8_LCASE'))
--- !query schema
-struct<endswith(abcde, collate(FGH, UTF8_LCASE)):boolean>
--- !query output
-false
-
-
--- !query
-SELECT endswith(collate('abcde', 'UNICODE_CI'), collate('CDE', 'UNICODE_CI'))
--- !query schema
-struct<endswith(collate(abcde, UNICODE_CI), collate(CDE, UNICODE_CI)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT endswith(collate('abcde', 'UNICODE_CI'),'CDE')
--- !query schema
-struct<endswith(collate(abcde, UNICODE_CI), CDE):boolean>
--- !query output
-true
-
-
--- !query
-SELECT endswith('abcde', collate('CDE', 'UNICODE_CI'))
--- !query schema
-struct<endswith(abcde, collate(CDE, UNICODE_CI)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT endswith(collate('abcde', 'UTF8_LCASE'), collate('C', 'UNICODE_CI'))
+select levenshtein(utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
-  }
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
 }
 
 
 -- !query
-SELECT repeat(collate('', 'UTF8_BINARY'), 1)
+select levenshtein(utf8_binary, 'aaAaaAaA'), levenshtein(utf8_lcase, 'aaAaaAaA') from t1
 -- !query schema
-struct<repeat(collate(, UTF8_BINARY), 1):string>
+struct<levenshtein(utf8_binary, aaAaaAaA):int,levenshtein(utf8_lcase, aaAaaAaA):int>
+-- !query output
+8	8
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase collate utf8_binary), levenshtein(utf8_lcase, utf8_binary collate utf8_lcase) from t1
+-- !query schema
+struct<levenshtein(utf8_binary, collate(utf8_lcase, utf8_binary)):int,levenshtein(utf8_lcase, collate(utf8_binary, utf8_lcase)):int>
+-- !query output
+4	4
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
 -- !query output
 
 
 
 -- !query
-SELECT repeat(collate('a', 'UNICODE'), 0)
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<repeat(collate(a, UNICODE), 0):string collate UNICODE>
+struct<>
 -- !query output
 
 
 
 -- !query
-SELECT repeat(collate('XY', 'UTF8_LCASE'), 3)
+insert into t1 values ('efd2', 'efd2')
 -- !query schema
-struct<repeat(collate(XY, UTF8_LCASE), 3):string collate UTF8_LCASE>
+struct<>
 -- !query output
-XYXYXY
+
 
 
 -- !query
-SELECT repeat(collate('123', 'UNICODE_CI'), 2)
+insert into t1 values ('abc', 'abc')
 -- !query schema
-struct<repeat(collate(123, UNICODE_CI), 2):string collate UNICODE_CI>
+struct<>
 -- !query output
-123123
+
 
 
 -- !query
-select ascii('a' collate utf8_binary)
+select is_valid_utf8(utf8_binary), is_valid_utf8(utf8_lcase) from t1
 -- !query schema
-struct<ascii(collate(a, utf8_binary)):int>
+struct<is_valid_utf8(utf8_binary):boolean,is_valid_utf8(utf8_lcase):boolean>
 -- !query output
-97
+true	true
+true	true
 
 
 -- !query
-select ascii('B' collate utf8_lcase)
+select is_valid_utf8(utf8_binary collate utf8_lcase), is_valid_utf8(utf8_lcase collate utf8_binary) from t1
 -- !query schema
-struct<ascii(collate(B, utf8_lcase)):int>
+struct<is_valid_utf8(collate(utf8_binary, utf8_lcase)):boolean,is_valid_utf8(collate(utf8_lcase, utf8_binary)):boolean>
 -- !query output
-66
+true	true
+true	true
 
 
 -- !query
-select ascii('#' collate unicode)
+drop table t1
 -- !query schema
-struct<ascii(collate(#, unicode)):int>
+struct<>
 -- !query output
-35
+
 
 
 -- !query
-select ascii('!' collate unicode_ci)
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
-struct<ascii(collate(!, unicode_ci)):int>
+struct<>
 -- !query output
-33
+
 
 
 -- !query
-select unbase64('QUJD' collate utf8_binary)
+insert into t1 values ('efd2', 'efd2')
 -- !query schema
-struct<unbase64(collate(QUJD, utf8_binary)):binary>
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t1
+-- !query schema
+struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+abc	abc
+efd2	efd2
+
+
+-- !query
+select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+abc	abc
+efd2	efd2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select validate_utf8(utf8_binary), validate_utf8(utf8_lcase) from t1
+-- !query schema
+struct<validate_utf8(utf8_binary):string,validate_utf8(utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+abc	abc
+efd2	efd2
+
+
+-- !query
+select validate_utf8(utf8_binary collate utf8_lcase), validate_utf8(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+abc	abc
+efd2	efd2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t1
+-- !query schema
+struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+abc	abc
+efd2	efd2
+
+
+-- !query
+select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t1
+-- !query schema
+struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+abc	abc
+efd2	efd2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select substr(utf8_binary, 2, 2), substr(utf8_lcase, 2, 2) from t1
+-- !query schema
+struct<substr(utf8_binary, 2, 2):string,substr(utf8_lcase, 2, 2):string collate UTF8_LCASE>
+-- !query output
+bc	bc
+fd	fd
+
+
+-- !query
+select substr(utf8_binary collate utf8_lcase, 2, 2), substr(utf8_lcase collate utf8_binary, 2, 2) from t1
+-- !query schema
+struct<substr(collate(utf8_binary, utf8_lcase), 2, 2):string collate UTF8_LCASE,substr(collate(utf8_lcase, utf8_binary), 2, 2):string>
+-- !query output
+bc	bc
+fd	fd
+
+
+-- !query
+select right(utf8_binary, 2), right(utf8_lcase, 2) from t1
+-- !query schema
+struct<right(utf8_binary, 2):string,right(utf8_lcase, 2):string collate UTF8_LCASE>
+-- !query output
+bc	bc
+d2	d2
+
+
+-- !query
+select right(utf8_binary collate utf8_lcase, 2), right(utf8_lcase collate utf8_binary, 2) from t1
+-- !query schema
+struct<right(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,right(collate(utf8_lcase, utf8_binary), 2):string>
+-- !query output
+bc	bc
+d2	d2
+
+
+-- !query
+select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t1
+-- !query schema
+struct<left(utf8_binary, collate(2, utf8_lcase)):string,left(utf8_lcase, 2):string collate UTF8_LCASE>
+-- !query output
+ab	ab
+ef	ef
+
+
+-- !query
+select left(utf8_binary collate utf8_lcase, 2), left(utf8_lcase collate utf8_binary, 2) from t1
+-- !query schema
+struct<left(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,left(collate(utf8_lcase, utf8_binary), 2):string>
+-- !query output
+ab	ab
+ef	ef
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select rpad(utf8_binary, 8, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select rpad(utf8_lcase, 8, utf8_binary collate utf8_lcase), rpad(utf8_lcase collate utf8_binary, 8, utf8_binary) from t1
+-- !query schema
+struct<rpad(utf8_lcase, 8, collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,rpad(collate(utf8_lcase, utf8_binary), 8, utf8_binary):string>
+-- !query output
+abcabcab	abcabcab
+efd2efd2	efd2efd2
+
+
+-- !query
+select rpad(utf8_binary, 8, 'AAa'), rpad(utf8_lcase, 8, 'AaAA') from t1
+-- !query schema
+struct<rpad(utf8_binary, 8, AAa):string,rpad(utf8_lcase, 8, AaAA):string collate UTF8_LCASE>
+-- !query output
+abcAAaAA	abcAaAAA
+efd2AAaA	efd2AaAA
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select lpad(utf8_binary, 8, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select lpad(utf8_lcase, 8, utf8_binary collate utf8_lcase), lpad(utf8_lcase collate utf8_binary, 8, utf8_binary) from t1
+-- !query schema
+struct<lpad(utf8_lcase, 8, collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lpad(collate(utf8_lcase, utf8_binary), 8, utf8_binary):string>
+-- !query output
+abcababc	abcababc
+efd2efd2	efd2efd2
+
+
+-- !query
+select lpad(utf8_binary, 8, 'AAa'), lpad(utf8_lcase, 8, 'AaAA') from t1
+-- !query schema
+struct<lpad(utf8_binary, 8, AAa):string,lpad(utf8_lcase, 8, AaAA):string collate UTF8_LCASE>
+-- !query output
+AAaAAabc	AaAAAabc
+AAaAefd2	AaAAefd2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efD2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'aBc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select locate(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select locate(utf8_lcase, utf8_binary collate utf8_lcase), locate(utf8_lcase collate utf8_binary, utf8_binary) from t1
+-- !query schema
+struct<locate(utf8_lcase, collate(utf8_binary, utf8_lcase), 1):int,locate(collate(utf8_lcase, utf8_binary), utf8_binary, 1):int>
+-- !query output
+1	0
+1	0
+
+
+-- !query
+select locate('B', utf8_binary), locate('B', utf8_lcase) from t1
+-- !query schema
+struct<locate(B, utf8_binary, 1):int,locate(B, utf8_lcase, 1):int>
+-- !query output
+0	0
+0	2
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abcdcba', 'aBcDCbA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select TRIM(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select TRIM(utf8_lcase, utf8_binary collate utf8_lcase), TRIM(utf8_lcase collate utf8_binary, utf8_binary) from t1
+-- !query schema
+struct<TRIM(BOTH utf8_lcase FROM collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,TRIM(BOTH collate(utf8_lcase, utf8_binary) FROM utf8_binary):string>
+-- !query output
+	d
+
+
+-- !query
+select TRIM('ABC', utf8_binary), TRIM('ABC', utf8_lcase) from t1
+-- !query schema
+struct<TRIM(BOTH ABC FROM utf8_binary):string,TRIM(BOTH ABC FROM utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+abcdcba	D
+
+
+-- !query
+select BTRIM(utf8_binary, utf8_lcase) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select BTRIM(utf8_lcase, utf8_binary collate utf8_lcase), BTRIM(utf8_lcase collate utf8_binary, utf8_binary) from t1
+-- !query schema
+struct<btrim(utf8_lcase, collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,btrim(collate(utf8_lcase, utf8_binary), utf8_binary):string>
+-- !query output
+	BcDCbA
+
+
+-- !query
+select BTRIM('ABC', utf8_binary), BTRIM('ABC', utf8_lcase) from t1
+-- !query schema
+struct<btrim(ABC, utf8_binary):string,btrim(ABC, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 ABC
 
 
 -- !query
-select unbase64('eHl6' collate utf8_lcase)
--- !query schema
-struct<unbase64(collate(eHl6, utf8_lcase)):binary>
--- !query output
-xyz
-
-
--- !query
-select unbase64('IyMj' collate utf8_binary)
--- !query schema
-struct<unbase64(collate(IyMj, utf8_binary)):binary>
--- !query output
-###
-
-
--- !query
-select unbase64('IQ==' collate utf8_lcase)
--- !query schema
-struct<unbase64(collate(IQ==, utf8_lcase)):binary>
--- !query output
-!
-
-
--- !query
-select chr(97)
--- !query schema
-struct<chr(97):string>
--- !query output
-a
-
-
--- !query
-select chr(66)
--- !query schema
-struct<chr(66):string>
--- !query output
-B
-
-
--- !query
-select base64('xyz')
--- !query schema
-struct<base64(xyz):string>
--- !query output
-eHl6
-
-
--- !query
-select base64('!')
--- !query schema
-struct<base64(!):string>
--- !query output
-IQ==
-
-
--- !query
-select decode(encode('$', 'utf-8'), 'utf-8')
--- !query schema
-struct<decode(encode($, utf-8), utf-8):string>
--- !query output
-$
-
-
--- !query
-select decode(encode('X', 'utf-8'), 'utf-8')
--- !query schema
-struct<decode(encode(X, utf-8), utf-8):string>
--- !query output
-X
-
-
--- !query
-select format_number(123.123, '###.###')
--- !query schema
-struct<format_number(123.123, ###.###):string>
--- !query output
-123.123
-
-
--- !query
-select format_number(99.99, '##.##')
--- !query schema
-struct<format_number(99.99, ##.##):string>
--- !query output
-99.99
-
-
--- !query
-select encode('a' collate utf8_binary, 'utf-8')
--- !query schema
-struct<encode(collate(a, utf8_binary), utf-8):binary>
--- !query output
-a
-
-
--- !query
-select encode('$' collate utf8_lcase, 'utf-8')
--- !query schema
-struct<encode(collate($, utf8_lcase), utf-8):binary>
--- !query output
-$
-
-
--- !query
-select to_binary('B' collate unicode, 'utf-8')
--- !query schema
-struct<to_binary(collate(B, unicode), utf-8):binary>
--- !query output
-B
-
-
--- !query
-select to_binary('#' collate unicode_ci, 'utf-8')
--- !query schema
-struct<to_binary(collate(#, unicode_ci), utf-8):binary>
--- !query output
-#
-
-
--- !query
-select sentences('Hello, world! Nice day.' collate utf8_binary)
--- !query schema
-struct<sentences(collate(Hello, world! Nice day., utf8_binary), , ):array<array<string>>>
--- !query output
-[["Hello","world"],["Nice","day"]]
-
-
--- !query
-select sentences('Something else. Nothing here.' collate utf8_lcase)
--- !query schema
-struct<sentences(collate(Something else. Nothing here., utf8_lcase), , ):array<array<string collate UTF8_LCASE>>>
--- !query output
-[["Something","else"],["Nothing","here"]]
-
-
--- !query
-SELECT upper(collate('aBc', 'UTF8_BINARY'))
--- !query schema
-struct<upper(collate(aBc, UTF8_BINARY)):string>
--- !query output
-ABC
-
-
--- !query
-SELECT upper(collate('aBc', 'UTF8_LCASE'))
--- !query schema
-struct<upper(collate(aBc, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-ABC
-
-
--- !query
-SELECT upper(collate('aBc', 'UNICODE'))
--- !query schema
-struct<upper(collate(aBc, UNICODE)):string collate UNICODE>
--- !query output
-ABC
-
-
--- !query
-SELECT upper(collate('aBc', 'UNICODE_CI'))
--- !query schema
-struct<upper(collate(aBc, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-ABC
-
-
--- !query
-SELECT lower(collate('aBc', 'UTF8_BINARY'))
--- !query schema
-struct<lower(collate(aBc, UTF8_BINARY)):string>
--- !query output
-abc
-
-
--- !query
-SELECT lower(collate('aBc', 'UTF8_LCASE'))
--- !query schema
-struct<lower(collate(aBc, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-abc
-
-
--- !query
-SELECT lower(collate('aBc', 'UNICODE'))
--- !query schema
-struct<lower(collate(aBc, UNICODE)):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT lower(collate('aBc', 'UNICODE_CI'))
--- !query schema
-struct<lower(collate(aBc, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-abc
-
-
--- !query
-SELECT initcap(collate('aBc ABc', 'UTF8_BINARY'))
--- !query schema
-struct<initcap(collate(aBc ABc, UTF8_BINARY)):string>
--- !query output
-Abc Abc
-
-
--- !query
-SELECT initcap(collate('aBc ABc', 'UTF8_LCASE'))
--- !query schema
-struct<initcap(collate(aBc ABc, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-Abc Abc
-
-
--- !query
-SELECT initcap(collate('aBc ABc', 'UNICODE'))
--- !query schema
-struct<initcap(collate(aBc ABc, UNICODE)):string collate UNICODE>
--- !query output
-Abc Abc
-
-
--- !query
-SELECT initcap(collate('aBc ABc', 'UNICODE_CI'))
--- !query schema
-struct<initcap(collate(aBc ABc, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-Abc Abc
-
-
--- !query
-select overlay(collate('hello', 'UTF8_BINARY') placing collate(' world', 'UTF8_BINARY') from 6)
--- !query schema
-struct<overlay(collate(hello, UTF8_BINARY), collate( world, UTF8_BINARY), 6, -1):string>
--- !query output
-hello world
-
-
--- !query
-select overlay(collate('hello', 'UTF8_BINARY') placing ' world' from 6)
--- !query schema
-struct<overlay(collate(hello, UTF8_BINARY),  world, 6, -1):string>
--- !query output
-hello world
-
-
--- !query
-select overlay('hello' placing collate(' world', 'UTF8_BINARY') from 6)
--- !query schema
-struct<overlay(hello, collate( world, UTF8_BINARY), 6, -1):string>
--- !query output
-hello world
-
-
--- !query
-select overlay(collate('hello', 'UTF8_BINARY') placing ' world' from collate('6', 'UTF8_BINARY'))
--- !query schema
-struct<overlay(collate(hello, UTF8_BINARY),  world, collate(6, UTF8_BINARY), -1):string>
--- !query output
-hello world
-
-
--- !query
-select overlay(collate('nice', 'UTF8_LCASE') placing collate(' day', 'UTF8_LCASE') from 5)
--- !query schema
-struct<overlay(collate(nice, UTF8_LCASE), collate( day, UTF8_LCASE), 5, -1):string collate UTF8_LCASE>
--- !query output
-nice day
-
-
--- !query
-select overlay(collate('nice', 'UTF8_LCASE') placing ' day' from 5)
--- !query schema
-struct<overlay(collate(nice, UTF8_LCASE),  day, 5, -1):string collate UTF8_LCASE>
--- !query output
-nice day
-
-
--- !query
-select overlay('nice' placing collate(' day', 'UTF8_LCASE') from 5)
--- !query schema
-struct<overlay(nice, collate( day, UTF8_LCASE), 5, -1):string collate UTF8_LCASE>
--- !query output
-nice day
-
-
--- !query
-select overlay(collate('nice', 'UTF8_LCASE') placing ' day' from collate('5', 'UTF8_LCASE'))
--- !query schema
-struct<overlay(collate(nice, UTF8_LCASE),  day, collate(5, UTF8_LCASE), -1):string collate UTF8_LCASE>
--- !query output
-nice day
-
-
--- !query
-select overlay(collate('A', 'UNICODE') placing collate('B', 'UNICODE') from 1)
--- !query schema
-struct<overlay(collate(A, UNICODE), collate(B, UNICODE), 1, -1):string collate UNICODE>
--- !query output
-B
-
-
--- !query
-select overlay(collate('A', 'UNICODE') placing 'B' from 1)
--- !query schema
-struct<overlay(collate(A, UNICODE), B, 1, -1):string collate UNICODE>
--- !query output
-B
-
-
--- !query
-select overlay('A' placing collate('B', 'UNICODE') from 1)
--- !query schema
-struct<overlay(A, collate(B, UNICODE), 1, -1):string collate UNICODE>
--- !query output
-B
-
-
--- !query
-select overlay(collate('A', 'UNICODE') placing 'B' from collate('1', 'UNICODE'))
--- !query schema
-struct<overlay(collate(A, UNICODE), B, collate(1, UNICODE), -1):string collate UNICODE>
--- !query output
-B
-
-
--- !query
-select overlay(collate('!', 'UNICODE_CI') placing collate('!!!', 'UNICODE_CI') from 1)
--- !query schema
-struct<overlay(collate(!, UNICODE_CI), collate(!!!, UNICODE_CI), 1, -1):string collate UNICODE_CI>
--- !query output
-!!!
-
-
--- !query
-select overlay(collate('!', 'UNICODE_CI') placing '!!!' from 1)
--- !query schema
-struct<overlay(collate(!, UNICODE_CI), !!!, 1, -1):string collate UNICODE_CI>
--- !query output
-!!!
-
-
--- !query
-select overlay('!' placing collate('!!!', 'UNICODE_CI') from 1)
--- !query schema
-struct<overlay(!, collate(!!!, UNICODE_CI), 1, -1):string collate UNICODE_CI>
--- !query output
-!!!
-
-
--- !query
-select overlay(collate('!', 'UNICODE_CI') placing '!!!' from collate('1', 'UNICODE_CI'))
--- !query schema
-struct<overlay(collate(!, UNICODE_CI), !!!, collate(1, UNICODE_CI), -1):string collate UNICODE_CI>
--- !query output
-!!!
-
-
--- !query
-SELECT overlay('a' collate UNICODE PLACING 'b' collate UNICODE_CI FROM 1)
+select LTRIM(utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UNICODE`, `string collate UNICODE_CI`"
-  }
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
 }
 
 
 -- !query
-select format_string(collate('%s%s', 'UTF8_BINARY'), 'a', 'b')
+select LTRIM(utf8_lcase, utf8_binary collate utf8_lcase), LTRIM(utf8_lcase collate utf8_binary, utf8_binary) from t1
 -- !query schema
-struct<format_string(collate(%s%s, UTF8_BINARY), a, b):string>
+struct<TRIM(LEADING utf8_lcase FROM collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,TRIM(LEADING collate(utf8_lcase, utf8_binary) FROM utf8_binary):string>
 -- !query output
-ab
+	dcba
 
 
 -- !query
-select format_string(collate('%d', 'UTF8_LCASE'), 123)
+select LTRIM('ABC', utf8_binary), LTRIM('ABC', utf8_lcase) from t1
 -- !query schema
-struct<format_string(collate(%d, UTF8_LCASE), 123):string collate UTF8_LCASE>
+struct<TRIM(LEADING ABC FROM utf8_binary):string,TRIM(LEADING ABC FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
-123
+abcdcba	DCbA
 
 
 -- !query
-select format_string(collate('%s%d', 'UNICODE'), 'A', 0)
--- !query schema
-struct<format_string(collate(%s%d, UNICODE), A, 0):string collate UNICODE>
--- !query output
-A0
-
-
--- !query
-select format_string(collate('%s%s', 'UNICODE_CI'), 'Hello', '!!!')
--- !query schema
-struct<format_string(collate(%s%s, UNICODE_CI), Hello, !!!):string collate UNICODE_CI>
--- !query output
-Hello!!!
-
-
--- !query
-select soundex('A' collate utf8_binary)
--- !query schema
-struct<soundex(collate(A, utf8_binary)):string>
--- !query output
-A000
-
-
--- !query
-select soundex('!' collate utf8_lcase)
--- !query schema
-struct<soundex(collate(!, utf8_lcase)):string>
--- !query output
-!
-
-
--- !query
-select soundex('$' collate unicode)
--- !query schema
-struct<soundex(collate($, unicode)):string>
--- !query output
-$
-
-
--- !query
-select soundex('X' collate unicode_ci)
--- !query schema
-struct<soundex(collate(X, unicode_ci)):string>
--- !query output
-X000
-
-
--- !query
-select length('hello' collate utf8_binary)
--- !query schema
-struct<length(collate(hello, utf8_binary)):int>
--- !query output
-5
-
-
--- !query
-select length('world' collate utf8_lcase)
--- !query schema
-struct<length(collate(world, utf8_lcase)):int>
--- !query output
-5
-
-
--- !query
-select length('ﬀ' collate unicode)
--- !query schema
-struct<length(collate(ﬀ, unicode)):int>
--- !query output
-1
-
-
--- !query
-select bit_length('hello' collate unicode_ci)
--- !query schema
-struct<bit_length(collate(hello, unicode_ci)):int>
--- !query output
-40
-
-
--- !query
-select bit_length('world' collate utf8_binary)
--- !query schema
-struct<bit_length(collate(world, utf8_binary)):int>
--- !query output
-40
-
-
--- !query
-select bit_length('ﬀ' collate utf8_lcase)
--- !query schema
-struct<bit_length(collate(ﬀ, utf8_lcase)):int>
--- !query output
-24
-
-
--- !query
-select octet_length('hello' collate unicode)
--- !query schema
-struct<octet_length(collate(hello, unicode)):int>
--- !query output
-5
-
-
--- !query
-select octet_length('world' collate unicode_ci)
--- !query schema
-struct<octet_length(collate(world, unicode_ci)):int>
--- !query output
-5
-
-
--- !query
-select octet_length('ﬀ' collate utf8_binary)
--- !query schema
-struct<octet_length(collate(ﬀ, utf8_binary)):int>
--- !query output
-3
-
-
--- !query
-select luhn_check(123)
--- !query schema
-struct<luhn_check(123):boolean>
--- !query output
-false
-
-
--- !query
-select luhn_check(000)
--- !query schema
-struct<luhn_check(0):boolean>
--- !query output
-true
-
-
--- !query
-select luhn_check(111)
--- !query schema
-struct<luhn_check(111):boolean>
--- !query output
-false
-
-
--- !query
-select luhn_check(222)
--- !query schema
-struct<luhn_check(222):boolean>
--- !query output
-false
-
-
--- !query
-select levenshtein('kitten' collate UTF8_BINARY, 'sitTing')
--- !query schema
-struct<levenshtein(collate(kitten, UTF8_BINARY), sitTing):int>
--- !query output
-4
-
-
--- !query
-select levenshtein('kitten' collate UTF8_LCASE, 'sitTing')
--- !query schema
-struct<levenshtein(collate(kitten, UTF8_LCASE), sitTing):int>
--- !query output
-4
-
-
--- !query
-select levenshtein('kitten' collate UNICODE, 'sitTing', 3)
--- !query schema
-struct<levenshtein(collate(kitten, UNICODE), sitTing, 3):int>
--- !query output
--1
-
-
--- !query
-select levenshtein('kitten' collate UNICODE_CI, 'sitTing', 3)
--- !query schema
-struct<levenshtein(collate(kitten, UNICODE_CI), sitTing, 3):int>
--- !query output
--1
-
-
--- !query
-SELECT is_valid_utf8(null collate UTF8_BINARY)
--- !query schema
-struct<is_valid_utf8(collate(NULL, UTF8_BINARY)):boolean>
--- !query output
-NULL
-
-
--- !query
-SELECT is_valid_utf8('' collate UTF8_LCASE)
--- !query schema
-struct<is_valid_utf8(collate(, UTF8_LCASE)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT is_valid_utf8('abc' collate UNICODE)
--- !query schema
-struct<is_valid_utf8(collate(abc, UNICODE)):boolean>
--- !query output
-true
-
-
--- !query
-SELECT is_valid_utf8(x'FF' collate UNICODE_CI)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"X'FF'\"",
-    "inputType" : "\"BINARY\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"collate(X'FF', UNICODE_CI)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 45,
-    "fragment" : "x'FF' collate UNICODE_CI"
-  } ]
-}
-
-
--- !query
-SELECT make_valid_utf8(null collate UTF8_BINARY)
--- !query schema
-struct<make_valid_utf8(collate(NULL, UTF8_BINARY)):string>
--- !query output
-NULL
-
-
--- !query
-SELECT make_valid_utf8('' collate UTF8_LCASE)
--- !query schema
-struct<make_valid_utf8(collate(, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-
-
-
--- !query
-SELECT make_valid_utf8('abc' collate UNICODE)
--- !query schema
-struct<make_valid_utf8(collate(abc, UNICODE)):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT make_valid_utf8(x'FF' collate UNICODE_CI)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"X'FF'\"",
-    "inputType" : "\"BINARY\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"collate(X'FF', UNICODE_CI)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 47,
-    "fragment" : "x'FF' collate UNICODE_CI"
-  } ]
-}
-
-
--- !query
-SELECT validate_utf8(null collate UTF8_BINARY)
--- !query schema
-struct<validate_utf8(collate(NULL, UTF8_BINARY)):string>
--- !query output
-NULL
-
-
--- !query
-SELECT validate_utf8('' collate UTF8_LCASE)
--- !query schema
-struct<validate_utf8(collate(, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-
-
-
--- !query
-SELECT validate_utf8('abc' collate UNICODE)
--- !query schema
-struct<validate_utf8(collate(abc, UNICODE)):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT validate_utf8(x'FF' collate UNICODE_CI)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"X'FF'\"",
-    "inputType" : "\"BINARY\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"collate(X'FF', UNICODE_CI)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 45,
-    "fragment" : "x'FF' collate UNICODE_CI"
-  } ]
-}
-
-
--- !query
-SELECT try_validate_utf8(null collate UTF8_BINARY)
--- !query schema
-struct<try_validate_utf8(collate(NULL, UTF8_BINARY)):string>
--- !query output
-NULL
-
-
--- !query
-SELECT try_validate_utf8('' collate UTF8_LCASE)
--- !query schema
-struct<try_validate_utf8(collate(, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-
-
-
--- !query
-SELECT try_validate_utf8('abc' collate UNICODE)
--- !query schema
-struct<try_validate_utf8(collate(abc, UNICODE)):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT try_validate_utf8(x'FF' collate UNICODE_CI)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"X'FF'\"",
-    "inputType" : "\"BINARY\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"collate(X'FF', UNICODE_CI)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 26,
-    "stopIndex" : 49,
-    "fragment" : "x'FF' collate UNICODE_CI"
-  } ]
-}
-
-
--- !query
-SELECT substr(collate('example', 'utf8_lcase'), 1, '100')
--- !query schema
-struct<substr(collate(example, utf8_lcase), 1, 100):string collate UTF8_LCASE>
--- !query output
-example
-
-
--- !query
-SELECT substr(collate('example', 'utf8_binary'), 2, '2')
--- !query schema
-struct<substr(collate(example, utf8_binary), 2, 2):string>
--- !query output
-xa
-
-
--- !query
-SELECT right(collate('', 'utf8_lcase'), 1)
--- !query schema
-struct<right(collate(, utf8_lcase), 1):string collate UTF8_LCASE>
--- !query output
-
-
-
--- !query
-SELECT substr(collate('example', 'unicode'), 0, '0')
--- !query schema
-struct<substr(collate(example, unicode), 0, 0):string collate UNICODE>
--- !query output
-
-
-
--- !query
-SELECT substr(collate('example', 'unicode_ci'), -3, '2')
--- !query schema
-struct<substr(collate(example, unicode_ci), -3, 2):string collate UNICODE_CI>
--- !query output
-pl
-
-
--- !query
-SELECT substr(collate(' a世a ', 'utf8_lcase'), 2, '3')
--- !query schema
-struct<substr(collate( a世a , utf8_lcase), 2, 3):string collate UTF8_LCASE>
--- !query output
-a世a
-
-
--- !query
-SELECT left(collate(' a世a ', 'utf8_binary'), 3)
--- !query schema
-struct<left(collate( a世a , utf8_binary), 3):string>
--- !query output
- a世
-
-
--- !query
-SELECT right(collate(' a世a ', 'unicode'), 3)
--- !query schema
-struct<right(collate( a世a , unicode), 3):string collate UNICODE>
--- !query output
-世a
-
-
--- !query
-SELECT left(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'unicode_ci'), 3)
--- !query schema
-struct<left(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, unicode_ci), 3):string collate UNICODE_CI>
--- !query output
-ÀÃÂ
-
-
--- !query
-SELECT right(collate('ÀÃÂĀĂȦÄäâãȻȻȻȻȻǢǼÆ', 'utf8_lcase'), 3)
--- !query schema
-struct<right(collate(ÀÃÂĀĂȦÄäâãȻȻȻȻȻǢǼÆ, utf8_lcase), 3):string collate UTF8_LCASE>
--- !query output
-ǢǼÆ
-
-
--- !query
-SELECT substr(collate('', 'utf8_lcase'), 1, '1')
--- !query schema
-struct<substr(collate(, utf8_lcase), 1, 1):string collate UTF8_LCASE>
--- !query output
-
-
-
--- !query
-SELECT substr(collate('', 'unicode'), 1, '1')
--- !query schema
-struct<substr(collate(, unicode), 1, 1):string collate UNICODE>
--- !query output
-
-
-
--- !query
-SELECT left(collate('', 'utf8_binary'), 1)
--- !query schema
-struct<left(collate(, utf8_binary), 1):string>
--- !query output
-
-
-
--- !query
-SELECT left(collate(null, 'utf8_lcase'), 1)
--- !query schema
-struct<left(collate(NULL, utf8_lcase), 1):string collate UTF8_LCASE>
--- !query output
-NULL
-
-
--- !query
-SELECT right(collate(null, 'unicode'), 1)
--- !query schema
-struct<right(collate(NULL, unicode), 1):string collate UNICODE>
--- !query output
-NULL
-
-
--- !query
-SELECT substr(collate(null, 'utf8_binary'), 1)
--- !query schema
-struct<substr(collate(NULL, utf8_binary), 1, 2147483647):string>
--- !query output
-NULL
-
-
--- !query
-SELECT substr(collate(null, 'unicode_ci'), 1, '1')
--- !query schema
-struct<substr(collate(NULL, unicode_ci), 1, 1):string collate UNICODE_CI>
--- !query output
-NULL
-
-
--- !query
-SELECT left(collate(null, 'utf8_lcase'), null)
--- !query schema
-struct<left(collate(NULL, utf8_lcase), NULL):string collate UTF8_LCASE>
--- !query output
-NULL
-
-
--- !query
-SELECT right(collate(null, 'unicode'), null)
--- !query schema
-struct<right(collate(NULL, unicode), NULL):string collate UNICODE>
--- !query output
-NULL
-
-
--- !query
-SELECT substr(collate(null, 'utf8_binary'), null, 'null')
--- !query schema
-struct<substr(collate(NULL, utf8_binary), NULL, null):string>
--- !query output
-NULL
-
-
--- !query
-SELECT substr(collate(null, 'unicode_ci'), null)
--- !query schema
-struct<substr(collate(NULL, unicode_ci), NULL, 2147483647):string collate UNICODE_CI>
--- !query output
-NULL
-
-
--- !query
-SELECT left(collate('ÀÃÂȦÄäåäáâãȻȻȻǢǼÆ', 'utf8_lcase'), null)
--- !query schema
-struct<left(collate(ÀÃÂȦÄäåäáâãȻȻȻǢǼÆ, utf8_lcase), NULL):string collate UTF8_LCASE>
--- !query output
-NULL
-
-
--- !query
-SELECT right(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'unicode'), null)
--- !query schema
-struct<right(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, unicode), NULL):string collate UNICODE>
--- !query output
-NULL
-
-
--- !query
-SELECT substr(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'utf8_binary'), null)
--- !query schema
-struct<substr(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, utf8_binary), NULL, 2147483647):string>
--- !query output
-NULL
-
-
--- !query
-SELECT substr(collate('', 'unicode_ci'), null)
--- !query schema
-struct<substr(collate(, unicode_ci), NULL, 2147483647):string collate UNICODE_CI>
--- !query output
-NULL
-
-
--- !query
-SELECT rpad(collate('', 'UTF8_BINARY'), 5, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<rpad(collate(, UTF8_BINARY), 5, collate( , UTF8_BINARY)):string>
--- !query output
-
-
-
--- !query
-SELECT rpad(collate('', 'UTF8_BINARY'), 5, ' ')
--- !query schema
-struct<rpad(collate(, UTF8_BINARY), 5,  ):string>
--- !query output
-
-
-
--- !query
-SELECT rpad('', 5, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<rpad(, 5, collate( , UTF8_BINARY)):string>
--- !query output
-
-
-
--- !query
-SELECT rpad(collate('abc', 'UNICODE'), 5, collate(' ', 'UNICODE'))
--- !query schema
-struct<rpad(collate(abc, UNICODE), 5, collate( , UNICODE)):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT rpad(collate('abc', 'UNICODE'), 5, ' ')
--- !query schema
-struct<rpad(collate(abc, UNICODE), 5,  ):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT rpad('abc', 5, collate(' ', 'UNICODE'))
--- !query schema
-struct<rpad(abc, 5, collate( , UNICODE)):string collate UNICODE>
--- !query output
-abc
-
-
--- !query
-SELECT rpad(collate('Hello', 'UTF8_LCASE'), 7, collate('Wörld', 'UTF8_LCASE'))
--- !query schema
-struct<rpad(collate(Hello, UTF8_LCASE), 7, collate(Wörld, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-HelloWö
-
-
--- !query
-SELECT rpad(collate('Hello', 'UTF8_LCASE'), 7, 'Wörld')
--- !query schema
-struct<rpad(collate(Hello, UTF8_LCASE), 7, Wörld):string collate UTF8_LCASE>
--- !query output
-HelloWö
-
-
--- !query
-SELECT rpad('Hello', 7, collate('Wörld', 'UTF8_LCASE'))
--- !query schema
-struct<rpad(Hello, 7, collate(Wörld, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-HelloWö
-
-
--- !query
-SELECT rpad(collate('1234567890', 'UNICODE_CI'), 5, collate('aaaAAa', 'UNICODE_CI'))
--- !query schema
-struct<rpad(collate(1234567890, UNICODE_CI), 5, collate(aaaAAa, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-12345
-
-
--- !query
-SELECT rpad(collate('1234567890', 'UNICODE_CI'), 5, 'aaaAAa')
--- !query schema
-struct<rpad(collate(1234567890, UNICODE_CI), 5, aaaAAa):string collate UNICODE_CI>
--- !query output
-12345
-
-
--- !query
-SELECT rpad('1234567890', 5, collate('aaaAAa', 'UNICODE_CI'))
--- !query schema
-struct<rpad(1234567890, 5, collate(aaaAAa, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-12345
-
-
--- !query
-SELECT rpad(collate('aaAA', 'UTF8_BINARY'), 2, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<rpad(collate(aaAA, UTF8_BINARY), 2, collate( , UTF8_BINARY)):string>
--- !query output
-aa
-
-
--- !query
-SELECT rpad(collate('aaAA', 'UTF8_BINARY'), 2, ' ')
--- !query schema
-struct<rpad(collate(aaAA, UTF8_BINARY), 2,  ):string>
--- !query output
-aa
-
-
--- !query
-SELECT rpad('aaAA', 2, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<rpad(aaAA, 2, collate( , UTF8_BINARY)):string>
--- !query output
-aa
-
-
--- !query
-SELECT rpad(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃', 'UTF8_LCASE'), 2, collate('1', 'UTF8_LCASE'))
--- !query schema
-struct<rpad(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃, UTF8_LCASE), 2, collate(1, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-ÀÃ
-
-
--- !query
-SELECT rpad(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃', 'UTF8_LCASE'), 2, '1')
--- !query schema
-struct<rpad(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃, UTF8_LCASE), 2, 1):string collate UTF8_LCASE>
--- !query output
-ÀÃ
-
-
--- !query
-SELECT rpad('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃', 2, collate('1', 'UTF8_LCASE'))
--- !query schema
-struct<rpad(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃, 2, collate(1, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-ÀÃ
-
-
--- !query
-SELECT rpad(collate('ĂȦÄäåäá', 'UNICODE'), 20, collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'UNICODE'))
--- !query schema
-struct<rpad(collate(ĂȦÄäåäá, UNICODE), 20, collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, UNICODE)):string collate UNICODE>
--- !query output
-ĂȦÄäåäáÀÃÂĀĂȦÄäåäáâã
-
-
--- !query
-SELECT rpad(collate('ĂȦÄäåäá', 'UNICODE'), 20, 'ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ')
--- !query schema
-struct<rpad(collate(ĂȦÄäåäá, UNICODE), 20, ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ):string collate UNICODE>
--- !query output
-ĂȦÄäåäáÀÃÂĀĂȦÄäåäáâã
-
-
--- !query
-SELECT rpad('ĂȦÄäåäá', 20, collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'UNICODE'))
--- !query schema
-struct<rpad(ĂȦÄäåäá, 20, collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, UNICODE)):string collate UNICODE>
--- !query output
-ĂȦÄäåäáÀÃÂĀĂȦÄäåäáâã
-
-
--- !query
-SELECT rpad(collate('aȦÄä', 'UNICODE_CI'), 8, collate('a1', 'UNICODE_CI'))
--- !query schema
-struct<rpad(collate(aȦÄä, UNICODE_CI), 8, collate(a1, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-aȦÄäa1a1
-
-
--- !query
-SELECT rpad(collate('aȦÄä', 'UNICODE_CI'), 8, 'a1')
--- !query schema
-struct<rpad(collate(aȦÄä, UNICODE_CI), 8, a1):string collate UNICODE_CI>
--- !query output
-aȦÄäa1a1
-
-
--- !query
-SELECT rpad('aȦÄä', 8, collate('a1', 'UNICODE_CI'))
--- !query schema
-struct<rpad(aȦÄä, 8, collate(a1, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-aȦÄäa1a1
-
-
--- !query
-SELECT rpad(collate('abcde', 'UNICODE_CI'), 1, collate('C', 'UTF8_LCASE'))
+select RTRIM(utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UNICODE_CI`, `string collate UTF8_LCASE`"
-  }
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
 }
 
 
 -- !query
-SELECT lpad(collate('', 'UTF8_BINARY'), 5, collate(' ', 'UTF8_BINARY'))
+select RTRIM(utf8_lcase, utf8_binary collate utf8_lcase), RTRIM(utf8_lcase collate utf8_binary, utf8_binary) from t1
 -- !query schema
-struct<lpad(collate(, UTF8_BINARY), 5, collate( , UTF8_BINARY)):string>
+struct<TRIM(TRAILING utf8_lcase FROM collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,TRIM(TRAILING collate(utf8_lcase, utf8_binary) FROM utf8_binary):string>
 -- !query output
-
+	abcd
 
 
 -- !query
-SELECT lpad(collate('', 'UTF8_BINARY'), 5, ' ')
+select RTRIM('ABC', utf8_binary), RTRIM('ABC', utf8_lcase) from t1
 -- !query schema
-struct<lpad(collate(, UTF8_BINARY), 5,  ):string>
+struct<TRIM(TRAILING ABC FROM utf8_binary):string,TRIM(TRAILING ABC FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
-
+abcdcba	aBcD
 
 
 -- !query
-SELECT lpad('', 5, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<lpad(, 5, collate( , UTF8_BINARY)):string>
--- !query output
-
-
-
--- !query
-SELECT lpad(collate('abc', 'UNICODE'), 5, collate(' ', 'UNICODE'))
--- !query schema
-struct<lpad(collate(abc, UNICODE), 5, collate( , UNICODE)):string collate UNICODE>
--- !query output
-  abc
-
-
--- !query
-SELECT lpad(collate('abc', 'UNICODE'), 5, ' ')
--- !query schema
-struct<lpad(collate(abc, UNICODE), 5,  ):string collate UNICODE>
--- !query output
-  abc
-
-
--- !query
-SELECT lpad('abc', 5, collate(' ', 'UNICODE'))
--- !query schema
-struct<lpad(abc, 5, collate( , UNICODE)):string collate UNICODE>
--- !query output
-  abc
-
-
--- !query
-SELECT lpad(collate('Hello', 'UTF8_LCASE'), 7, collate('Wörld', 'UTF8_LCASE'))
--- !query schema
-struct<lpad(collate(Hello, UTF8_LCASE), 7, collate(Wörld, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-WöHello
-
-
--- !query
-SELECT lpad(collate('Hello', 'UTF8_LCASE'), 7, 'Wörld')
--- !query schema
-struct<lpad(collate(Hello, UTF8_LCASE), 7, Wörld):string collate UTF8_LCASE>
--- !query output
-WöHello
-
-
--- !query
-SELECT lpad('Hello', 7, collate('Wörld', 'UTF8_LCASE'))
--- !query schema
-struct<lpad(Hello, 7, collate(Wörld, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-WöHello
-
-
--- !query
-SELECT lpad(collate('1234567890', 'UNICODE_CI'), 5, collate('aaaAAa', 'UNICODE_CI'))
--- !query schema
-struct<lpad(collate(1234567890, UNICODE_CI), 5, collate(aaaAAa, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-12345
-
-
--- !query
-SELECT lpad(collate('1234567890', 'UNICODE_CI'), 5, 'aaaAAa')
--- !query schema
-struct<lpad(collate(1234567890, UNICODE_CI), 5, aaaAAa):string collate UNICODE_CI>
--- !query output
-12345
-
-
--- !query
-SELECT lpad('1234567890', 5, collate('aaaAAa', 'UNICODE_CI'))
--- !query schema
-struct<lpad(1234567890, 5, collate(aaaAAa, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-12345
-
-
--- !query
-SELECT lpad(collate('aaAA', 'UTF8_BINARY'), 2, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<lpad(collate(aaAA, UTF8_BINARY), 2, collate( , UTF8_BINARY)):string>
--- !query output
-aa
-
-
--- !query
-SELECT lpad(collate('aaAA', 'UTF8_BINARY'), 2, ' ')
--- !query schema
-struct<lpad(collate(aaAA, UTF8_BINARY), 2,  ):string>
--- !query output
-aa
-
-
--- !query
-SELECT lpad('aaAA', 2, collate(' ', 'UTF8_BINARY'))
--- !query schema
-struct<lpad(aaAA, 2, collate( , UTF8_BINARY)):string>
--- !query output
-aa
-
-
--- !query
-SELECT lpad(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃', 'UTF8_LCASE'), 2, collate('1', 'UTF8_LCASE'))
--- !query schema
-struct<lpad(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃, UTF8_LCASE), 2, collate(1, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-ÀÃ
-
-
--- !query
-SELECT lpad(collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃', 'UTF8_LCASE'), 2, '1')
--- !query schema
-struct<lpad(collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃, UTF8_LCASE), 2, 1):string collate UTF8_LCASE>
--- !query output
-ÀÃ
-
-
--- !query
-SELECT lpad('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃', 2, collate('1', 'UTF8_LCASE'))
--- !query schema
-struct<lpad(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃, 2, collate(1, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-ÀÃ
-
-
--- !query
-SELECT lpad(collate('ĂȦÄäåäá', 'UNICODE'), 20, collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'UNICODE'))
--- !query schema
-struct<lpad(collate(ĂȦÄäåäá, UNICODE), 20, collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, UNICODE)):string collate UNICODE>
--- !query output
-ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá
-
-
--- !query
-SELECT lpad(collate('ĂȦÄäåäá', 'UNICODE'), 20, 'ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ')
--- !query schema
-struct<lpad(collate(ĂȦÄäåäá, UNICODE), 20, ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ):string collate UNICODE>
--- !query output
-ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá
-
-
--- !query
-SELECT lpad('ĂȦÄäåäá', 20, collate('ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ', 'UNICODE'))
--- !query schema
-struct<lpad(ĂȦÄäåäá, 20, collate(ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ, UNICODE)):string collate UNICODE>
--- !query output
-ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá
-
-
--- !query
-SELECT lpad(collate('aȦÄä', 'UNICODE_CI'), 8, collate('a1', 'UNICODE_CI'))
--- !query schema
-struct<lpad(collate(aȦÄä, UNICODE_CI), 8, collate(a1, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-a1a1aȦÄä
-
-
--- !query
-SELECT lpad(collate('aȦÄä', 'UNICODE_CI'), 8, 'a1')
--- !query schema
-struct<lpad(collate(aȦÄä, UNICODE_CI), 8, a1):string collate UNICODE_CI>
--- !query output
-a1a1aȦÄä
-
-
--- !query
-SELECT lpad('aȦÄä', 8, collate('a1', 'UNICODE_CI'))
--- !query schema
-struct<lpad(aȦÄä, 8, collate(a1, UNICODE_CI)):string collate UNICODE_CI>
--- !query output
-a1a1aȦÄä
-
-
--- !query
-SELECT lpad(collate('abcde', 'UNICODE_CI'), 1, collate('C', 'UTF8_LCASE'))
+drop table t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string collate UNICODE_CI`, `string collate UTF8_LCASE`"
-  }
-}
 
-
--- !query
-SELECT lpad('abc', collate('5', 'unicode_ci'), ' ')
--- !query schema
-struct<lpad(abc, collate(5, unicode_ci),  ):string>
--- !query output
-  abc
-
-
--- !query
-SELECT locate(collate('aa','UTF8_BINARY'),collate('aaads','UTF8_BINARY'),0)
--- !query schema
-struct<locate(collate(aa, UTF8_BINARY), collate(aaads, UTF8_BINARY), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('aa','UTF8_BINARY'),'aaads',0)
--- !query schema
-struct<locate(collate(aa, UTF8_BINARY), aaads, 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate('aa',collate('aaads','UTF8_BINARY'),0)
--- !query schema
-struct<locate(aa, collate(aaads, UTF8_BINARY), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('aa','UTF8_LCASE'),collate('Aaads','UTF8_LCASE'),0)
--- !query schema
-struct<locate(collate(aa, UTF8_LCASE), collate(Aaads, UTF8_LCASE), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('aa','UTF8_LCASE'),'Aaads',0)
--- !query schema
-struct<locate(collate(aa, UTF8_LCASE), Aaads, 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate('aa',collate('Aaads','UTF8_LCASE'),0)
--- !query schema
-struct<locate(aa, collate(Aaads, UTF8_LCASE), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('界x','UTF8_LCASE'),collate('test大千世界X大千世界','UTF8_LCASE'),1)
--- !query schema
-struct<locate(collate(界x, UTF8_LCASE), collate(test大千世界X大千世界, UTF8_LCASE), 1):int>
--- !query output
-8
-
-
--- !query
-SELECT locate(collate('界x','UTF8_LCASE'),'test大千世界X大千世界',1)
--- !query schema
-struct<locate(collate(界x, UTF8_LCASE), test大千世界X大千世界, 1):int>
--- !query output
-8
-
-
--- !query
-SELECT locate('界x',collate('test大千世界X大千世界','UTF8_LCASE'),1)
--- !query schema
-struct<locate(界x, collate(test大千世界X大千世界, UTF8_LCASE), 1):int>
--- !query output
-8
-
-
--- !query
-SELECT locate(collate('aBc','UTF8_LCASE'),collate('abcabc','UTF8_LCASE'),4)
--- !query schema
-struct<locate(collate(aBc, UTF8_LCASE), collate(abcabc, UTF8_LCASE), 4):int>
--- !query output
-4
-
-
--- !query
-SELECT locate(collate('aBc','UTF8_LCASE'),'abcabc',4)
--- !query schema
-struct<locate(collate(aBc, UTF8_LCASE), abcabc, 4):int>
--- !query output
-4
-
-
--- !query
-SELECT locate('aBc',collate('abcabc','UTF8_LCASE'),4)
--- !query schema
-struct<locate(aBc, collate(abcabc, UTF8_LCASE), 4):int>
--- !query output
-4
-
-
--- !query
-SELECT locate(collate('aa','UNICODE'),collate('Aaads','UNICODE'),0)
--- !query schema
-struct<locate(collate(aa, UNICODE), collate(Aaads, UNICODE), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('aa','UNICODE'),'Aaads',0)
--- !query schema
-struct<locate(collate(aa, UNICODE), Aaads, 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate('aa',collate('Aaads','UNICODE'),0)
--- !query schema
-struct<locate(aa, collate(Aaads, UNICODE), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('abC','UNICODE'),collate('abCabC','UNICODE'),2)
--- !query schema
-struct<locate(collate(abC, UNICODE), collate(abCabC, UNICODE), 2):int>
--- !query output
-4
-
-
--- !query
-SELECT locate(collate('abC','UNICODE'),'abCabC',2)
--- !query schema
-struct<locate(collate(abC, UNICODE), abCabC, 2):int>
--- !query output
-4
-
-
--- !query
-SELECT locate('abC',collate('abCabC','UNICODE'),2)
--- !query schema
-struct<locate(abC, collate(abCabC, UNICODE), 2):int>
--- !query output
-4
-
-
--- !query
-SELECT locate(collate('aa','UNICODE_CI'),collate('Aaads','UNICODE_CI'),0)
--- !query schema
-struct<locate(collate(aa, UNICODE_CI), collate(Aaads, UNICODE_CI), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('aa','UNICODE_CI'),'Aaads',0)
--- !query schema
-struct<locate(collate(aa, UNICODE_CI), Aaads, 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate('aa',collate('Aaads','UNICODE_CI'),0)
--- !query schema
-struct<locate(aa, collate(Aaads, UNICODE_CI), 0):int>
--- !query output
-0
-
-
--- !query
-SELECT locate(collate('界x','UNICODE_CI'),collate('test大千世界X大千世界','UNICODE_CI'),1)
--- !query schema
-struct<locate(collate(界x, UNICODE_CI), collate(test大千世界X大千世界, UNICODE_CI), 1):int>
--- !query output
-8
-
-
--- !query
-SELECT locate(collate('界x','UNICODE_CI'),'test大千世界X大千世界',1)
--- !query schema
-struct<locate(collate(界x, UNICODE_CI), test大千世界X大千世界, 1):int>
--- !query output
-8
-
-
--- !query
-SELECT locate('界x',collate('test大千世界X大千世界','UNICODE_CI'),1)
--- !query schema
-struct<locate(界x, collate(test大千世界X大千世界, UNICODE_CI), 1):int>
--- !query output
-8
-
-
--- !query
-SELECT locate(collate('aBc', 'UTF8_BINARY'), collate('abcabc', 'UTF8_LCASE'), 4)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
-  }
-}
-
-
--- !query
-SELECT TRIM(COLLATE('  asd  ', 'UTF8_BINARY'))
--- !query schema
-struct<trim(collate(  asd  , UTF8_BINARY)):string>
--- !query output
-asd
-
-
--- !query
-SELECT BTRIM(COLLATE('  asd  ', 'UTF8_BINARY'), null)
--- !query schema
-struct<btrim(collate(  asd  , UTF8_BINARY), NULL):string>
--- !query output
-NULL
-
-
--- !query
-SELECT LTRIM('x', COLLATE('xxasdxx', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(LEADING x FROM collate(xxasdxx, UTF8_BINARY)):string>
--- !query output
-asdxx
-
-
--- !query
-SELECT RTRIM('x', COLLATE('xxasdxx', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(TRAILING x FROM collate(xxasdxx, UTF8_BINARY)):string>
--- !query output
-xxasd
-
-
--- !query
-SELECT TRIM(null, COLLATE('  asd  ', 'UTF8_LCASE'))
--- !query schema
-struct<TRIM(BOTH NULL FROM collate(  asd  , UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-NULL
-
-
--- !query
-SELECT BTRIM(COLLATE('xxasdxx', 'UTF8_LCASE'), 'x')
--- !query schema
-struct<btrim(collate(xxasdxx, UTF8_LCASE), x):string collate UTF8_LCASE>
--- !query output
-asd
-
-
--- !query
-SELECT LTRIM('x', COLLATE('xxasdxx', 'UTF8_LCASE'))
--- !query schema
-struct<TRIM(LEADING x FROM collate(xxasdxx, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-asdxx
-
-
--- !query
-SELECT RTRIM(COLLATE('  asd  ', 'UTF8_LCASE'))
--- !query schema
-struct<rtrim(collate(  asd  , UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-  asd
-
-
--- !query
-SELECT TRIM('x', COLLATE('xxasdxx', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(BOTH x FROM collate(xxasdxx, UTF8_BINARY)):string>
--- !query output
-asd
-
-
--- !query
-SELECT BTRIM(COLLATE('xxasdxx', 'UTF8_BINARY'), 'x')
--- !query schema
-struct<btrim(collate(xxasdxx, UTF8_BINARY), x):string>
--- !query output
-asd
-
-
--- !query
-SELECT LTRIM(COLLATE('  asd  ', 'UTF8_BINARY'))
--- !query schema
-struct<ltrim(collate(  asd  , UTF8_BINARY)):string>
--- !query output
-asd
-
-
--- !query
-SELECT RTRIM(null, COLLATE('  asd  ', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(TRAILING NULL FROM collate(  asd  , UTF8_BINARY)):string>
--- !query output
-NULL
-
-
--- !query
-SELECT TRIM(COLLATE('x', 'UTF8_BINARY'), COLLATE('xax', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(BOTH collate(x, UTF8_BINARY) FROM collate(xax, UTF8_BINARY)):string>
--- !query output
-a
-
-
--- !query
-SELECT BTRIM(COLLATE('xax', 'UTF8_LCASE'), COLLATE('x', 'UTF8_LCASE'))
--- !query schema
-struct<btrim(collate(xax, UTF8_LCASE), collate(x, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-a
-
-
--- !query
-SELECT LTRIM(COLLATE('x', 'UTF8_BINARY'), COLLATE('xax', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(LEADING collate(x, UTF8_BINARY) FROM collate(xax, UTF8_BINARY)):string>
--- !query output
-ax
-
-
--- !query
-SELECT RTRIM('x', COLLATE('xax', 'UTF8_BINARY'))
--- !query schema
-struct<TRIM(TRAILING x FROM collate(xax, UTF8_BINARY)):string>
--- !query output
-xa
-
-
--- !query
-SELECT TRIM('x', COLLATE('xax', 'UTF8_LCASE'))
--- !query schema
-struct<TRIM(BOTH x FROM collate(xax, UTF8_LCASE)):string collate UTF8_LCASE>
--- !query output
-a
-
-
--- !query
-SELECT BTRIM('xax', COLLATE('x', 'UTF8_BINARY'))
--- !query schema
-struct<btrim(xax, collate(x, UTF8_BINARY)):string>
--- !query output
-a
-
-
--- !query
-SELECT LTRIM(COLLATE('x', 'UTF8_BINARY'), 'xax')
--- !query schema
-struct<TRIM(LEADING collate(x, UTF8_BINARY) FROM xax):string>
--- !query output
-ax
-
-
--- !query
-SELECT RTRIM(COLLATE('x', 'UTF8_LCASE'), 'xax')
--- !query schema
-struct<TRIM(TRAILING collate(x, UTF8_LCASE) FROM xax):string collate UTF8_LCASE>
--- !query output
-xa
-
-
--- !query
-SELECT TRIM(COLLATE('x', 'UTF8_BINARY'), 'xax')
--- !query schema
-struct<TRIM(BOTH collate(x, UTF8_BINARY) FROM xax):string>
--- !query output
-a
-
-
--- !query
-SELECT TRIM(COLLATE('x', 'UTF8_LCASE'), COLLATE('xxaaaxx', 'UTF8_BINARY'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
-  }
-}
-
-
--- !query
-SELECT LTRIM(COLLATE('x', 'UTF8_LCASE'), COLLATE('xxaaaxx', 'UTF8_BINARY'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
-  }
-}
-
-
--- !query
-SELECT RTRIM(COLLATE('x', 'UTF8_LCASE'), COLLATE('xxaaaxx', 'UTF8_BINARY'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
-  }
-}
-
-
--- !query
-SELECT BTRIM(COLLATE('xxaaaxx', 'UTF8_BINARY'), COLLATE('x', 'UTF8_LCASE'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
-  }
-}
