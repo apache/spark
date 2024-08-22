@@ -32,7 +32,7 @@ import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAg
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
 
 /**
- * Utility for converting a [[UserDefinedFunction]] into a Connect Protobuf message.
+ * Utility for converting a `UserDefinedFunction` into a Connect Protobuf message.
  */
 private[sql] object UdfToProtoUtils {
   private val LAMBDA_DESERIALIZATION_ERR_MSG: String =
