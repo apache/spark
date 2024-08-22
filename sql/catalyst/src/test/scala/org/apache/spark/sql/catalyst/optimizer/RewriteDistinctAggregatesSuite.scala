@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, Round}
 import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -107,6 +107,22 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       case Aggregate(_, _, Aggregate(_, _, e: Expand)) =>
         assert(e.projections.size == 3)
       case _ => fail(s"Plan is not rewritten:\n$rewrite")
+    }
+  }
+
+  test("plunk") {
+    val relation = testRelation2
+      .select(Literal(6).as("gb"), $"a", $"b", $"c", $"d")
+    val input = relation
+      .groupBy($"a", $"gb")(
+        countDistinct($"b").as("agg1"),
+        countDistinct($"d").as("agg2"),
+        Round(sum($"c").as("sum1"), 6)).analyze
+    val rewriteFold = FoldablePropagation(input)
+    // without the fix, the below produces an unresolved plan
+    val rewrite = RewriteDistinctAggregates(rewriteFold)
+    if (!rewrite.resolved) {
+      fail(s"Plan is not as expected:\n$rewrite")
     }
   }
 }
