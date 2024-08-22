@@ -4597,6 +4597,8 @@ class DataFrame:
         subset : list of column names, optional
             List of columns to use for duplicate comparison (default All columns).
 
+        subset_varargs : optional arguments used for supporting variable-length argument.
+
         Returns
         -------
         :class:`DataFrame`
@@ -4624,6 +4626,15 @@ class DataFrame:
         Deduplicate values on 'name' and 'height' columns.
 
         >>> df.dropDuplicates('name', 'height').show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        +-----+---+------+
+
+        Deduplicate values on 'name' and 'height' columns.
+
+        >>> df.dropDuplicates(subset=['name', 'height']).show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4660,6 +4671,8 @@ class DataFrame:
          subset : List of column names, optional
              List of columns to use for duplicate comparison (default All columns).
 
+         subset_varargs : optional arguments used for supporting variable-length argument.
+
          Returns
          -------
          :class:`DataFrame`
@@ -4685,6 +4698,10 @@ class DataFrame:
          Deduplicate values on 'value' columns.
 
          >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
+
+         Deduplicate values on 'value' columns.
+
+         >>> df.dropDuplicatesWithinWatermark(subset=['value'])  # doctest: +SKIP
         """
         ...
 

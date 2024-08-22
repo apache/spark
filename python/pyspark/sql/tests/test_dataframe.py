@@ -309,6 +309,78 @@ class DataFrameTestsMixin:
             messageParameters={"arg_name": "subset", "arg_type": "int"},
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(subset=["1", 1]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates("1", 1).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(1, "1").show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates("1", None).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(None, "1").show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(subset=[None, "1"]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(subset=[None, 1]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(1, None).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_drop_duplicates_with_ambiguous_reference(self):
         df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         df2 = self.spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
