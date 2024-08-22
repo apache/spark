@@ -57,7 +57,10 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         convertUnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn)
 
       case UnresolvedStar(unparsedTarget, None, _) =>
-        analysis.UnresolvedStar(unparsedTarget.map(analysis.UnresolvedAttribute.parseAttributeName))
+        val target = unparsedTarget.map { t =>
+          analysis.UnresolvedAttribute.parseAttributeName(t.stripSuffix(".*"))
+        }
+        analysis.UnresolvedStar(target)
 
       case UnresolvedStar(None, Some(planId), _) =>
         analysis.UnresolvedDataFrameStar(planId)

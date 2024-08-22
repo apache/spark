@@ -269,7 +269,7 @@ class CollectedMetrics:
 
 
 class ExecutionInfo:
-    """The query execution class allows users to inspect the query execution of this particular
+    """The ExecutionInfo class allows users to inspect the query execution of this particular
     data frame. This value is only set in the data frame if it was executed."""
 
     def __init__(

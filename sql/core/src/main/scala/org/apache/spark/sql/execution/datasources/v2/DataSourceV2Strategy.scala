@@ -677,10 +677,6 @@ private[sql] object DataSourceV2Strategy extends Logging {
 /**
  * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
  */
-object PushablePredicate {
-  def unapply(e: Expression): Option[Predicate] =
-    new V2ExpressionBuilder(e, true).build().map { v =>
-      assert(v.isInstanceOf[Predicate])
-      v.asInstanceOf[Predicate]
-    }
+object PushablePredicate extends Logging {
+  def unapply(e: Expression): Option[Predicate] = new V2ExpressionBuilder(e, true).buildPredicate()
 }

@@ -91,6 +91,17 @@ select 'Kypper' collate sv < 'Köpfe';
 select 'Kypper' collate de > 'Köpfe';
 select 'I' collate tr_ci = 'ı';
 
+-- create table for str_to_map
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet;
+
+insert into t4 values('a:1,b:2,c:3', ',', ':');
+
+select str_to_map(text, pairDelim, keyValueDelim) from t4;
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4;
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4;
+
+drop table t4;
+
 -- ConcatWs
 create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet;
 insert into t1 values ('Spark', 'SQL');
