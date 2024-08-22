@@ -340,7 +340,7 @@ class SimpleStatefulProcessor(StatefulProcessor):
 class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueStateWithTTL(
+        self.num_violations_state = handle.getValueState(
             "numViolations", state_schema, 30000
         )
 
@@ -348,7 +348,7 @@ class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
 class TTLStatefulProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.ttl_count_state = handle.getValueStateWithTTL("ttl-state", state_schema, 10000)
+        self.ttl_count_state = handle.getValueState("ttl-state", state_schema, 10000)
         self.count_state = handle.getValueState("state", state_schema)
 
     def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
