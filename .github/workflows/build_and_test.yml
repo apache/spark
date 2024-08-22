@@ -1116,7 +1116,7 @@ jobs:
         uses: medyagh/setup-minikube@v0.0.18
         with:
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
-          cpu: 2
+          cpus: 2
           memory: 6144m
       - name: Print K8S pods and nodes info
         run: |
