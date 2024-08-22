@@ -634,18 +634,41 @@
       <dependencies>
         <dependency>
           <groupId>io.opentelemetry</groupId>
-          <artifactId>opentelemetry-sdk</artifactId>
-          <version>1.41.0</version>
-        </dependency>
-        <dependency>
-          <groupId>io.opentelemetry</groupId>
-          <artifactId>opentelemetry-api</artifactId>
-          <version>1.41.0</version>
-        </dependency>
-        <dependency>
-          <groupId>io.opentelemetry</groupId>
           <artifactId>opentelemetry-exporter-otlp</artifactId>
           <version>1.41.0</version>
+          <exclusions>
+            <exclusion>
+              <groupId>io.opentelemetry</groupId>
+              <artifactId>opentelemetry-sdk-trace</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>io.opentelemetry</groupId>
+              <artifactId>opentelemetry-sdk-logs</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>io.opentelemetry</groupId>
+              <artifactId>opentelemetry-sdk-extension-autoconfigure-spi</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>io.opentelemetry</groupId>
+              <artifactId>opentelemetry-api-incubator</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>io.opentelemetry</groupId>
+          <artifactId>opentelemetry-sdk</artifactId>
+          <version>1.41.0</version>
+          <exclusions>
+            <exclusion>
+              <groupId>io.opentelemetry</groupId>
+              <artifactId>opentelemetry-sdk-trace</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>io.opentelemetry</groupId>
+              <artifactId>opentelemetry-sdk-logs</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
       </dependencies>
     </profile>
