@@ -22,7 +22,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
+import org.apache.spark.sql.internal.ColumnNodeToProtoConverter
 
 /**
  * The basic testsuite the client tests should extend from.

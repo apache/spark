@@ -20,7 +20,7 @@ package org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.connect.ProtoColumnNode
+import org.apache.spark.sql.internal.ProtoColumnNode
 
 package object sql {
   type DataFrame = Dataset[Row]

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect
+package org.apache.spark.sql.internal
 
 import scala.jdk.CollectionConverters._
 
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
 import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal._
 
 /**
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.

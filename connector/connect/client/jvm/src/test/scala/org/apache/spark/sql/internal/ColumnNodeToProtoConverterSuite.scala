@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect
+package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEnco
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
-import org.apache.spark.sql.internal._
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, LongType, MetadataBuilder, ShortType, StringType, StructType}
 
@@ -429,7 +428,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
   }
 }
 
-private[connect] case class Nope(override val origin: Origin = CurrentOrigin.get)
+private[internal] case class Nope(override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = "nope"
 }
