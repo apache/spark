@@ -413,8 +413,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
-      val func = LambdaFunction(res.head, Seq(param))
-      Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      if (res.head == param) {
+        // If the element type is the same, we can reuse the input array directly.
+        Some(Alias(nullCheckedInput, expected.name)())
+      } else {
+        val func = LambdaFunction(res.head, Seq(param))
+        Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      }
     } else {
       None
     }
