@@ -1834,44 +1834,6 @@
     },
     "sqlState" : "XXKUC"
   },
-  "INTERVAL_ERROR" : {
-    "message" : [
-      "Interval error."
-    ],
-    "subClass" : {
-      "DAY_TIME_PARSING" : {
-        "message" : [
-          "Error parsing interval day-time string: <msg>."
-        ]
-      },
-      "INTERVAL_PARSING" : {
-        "message" : [
-          "Error parsing interval <interval> string: <msg>."
-        ]
-      },
-      "ILLEGAL_DAY_OF_WEEK" : {
-        "message" : [
-          "Illegal input for day of week: <string>."
-        ]
-      },
-      "SECOND_NANO_FORMAT" : {
-        "message" : [
-          "Interval string does not match second-nano format of ss.nnnnnnnnn."
-        ]
-      },
-      "UNMATCHED_FORMAT_STRING" : {
-        "message" : [
-          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
-        ]
-      },
-      "UNSUPPORTED_FROM_TO_EXPRESSION" : {
-        "message" : [
-          "Cannot support (interval '<input>' <from> to <to>) expression."
-        ]
-      }
-    },
-    "sqlState" : "22009"
-  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -1969,6 +1931,44 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
+  },
+  "INTERVAL_ERROR" : {
+    "message" : [
+      "Interval error."
+    ],
+    "subClass" : {
+      "DAY_TIME_PARSING" : {
+        "message" : [
+          "Error parsing interval day-time string: <msg>."
+        ]
+      },
+      "ILLEGAL_DAY_OF_WEEK" : {
+        "message" : [
+          "Illegal input for day of week: <string>."
+        ]
+      },
+      "INTERVAL_PARSING" : {
+        "message" : [
+          "Error parsing interval <interval> string: <msg>."
+        ]
+      },
+      "SECOND_NANO_FORMAT" : {
+        "message" : [
+          "Interval string does not match second-nano format of ss.nnnnnnnnn."
+        ]
+      },
+      "UNMATCHED_FORMAT_STRING" : {
+        "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
+        ]
+      },
+      "UNSUPPORTED_FROM_TO_EXPRESSION" : {
+        "message" : [
+          "Cannot support (interval '<input>' <from> to <to>) expression."
+        ]
+      }
+    },
+    "sqlState" : "22009"
   },
   "INVALID_AGGREGATE_FILTER" : {
     "message" : [

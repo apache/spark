@@ -402,8 +402,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Invalid interval term should throw AnalysisException") {
     val sql1 = "select interval '42-32' year to month"
-    val value1 = "Error parsing interval year-month string: " +
-      "requirement failed: month 32 outside range [0, 11]"
+    val value1 = "[INTERVAL_ERROR.INTERVAL_PARSING] Interval error. " +
+      "Error parsing interval year-month string: " +
+      "requirement failed: month 32 outside range [0, 11]. " +
+      "SQLSTATE: 22009"
     val fragment1 = "'42-32' year to month"
     checkError(
       exception = parseException(sql1),
