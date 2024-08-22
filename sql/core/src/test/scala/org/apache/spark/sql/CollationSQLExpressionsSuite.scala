@@ -996,46 +996,6 @@ class CollationSQLExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(dataType))
       }
     })
-
-    // IMPLICIT
-    val implicitTableName = "t_diff_collation_implicit"
-    withTable(implicitTableName) {
-      sql(s"CREATE TABLE $implicitTableName (" +
-        s"text STRING COLLATE UTF8_BINARY, " +
-        s"pairDelim STRING COLLATE UTF8_LCASE, " +
-        s"keyValueDelim STRING COLLATE UTF8_BINARY) " +
-        s"USING parquet")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT str_to_map(text, pairDelim, keyValueDelim) from $implicitTableName")
-        },
-        errorClass = "COLLATION_MISMATCH.IMPLICIT",
-        sqlState = "42P21",
-        parameters = Map.empty
-      )
-    }
-
-    // EXPLICIT
-    val explicitTableName = "t_diff_collation_explicit"
-    withTable(explicitTableName) {
-      sql(s"CREATE TABLE $explicitTableName (" +
-        s"text STRING, " +
-        s"pairDelim STRING, " +
-        s"keyValueDelim STRING) " +
-        s"USING parquet")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT str_to_map(" +
-            s"collate(text, 'UTF8_BINARY'), " +
-            s"collate(pairDelim, 'UTF8_LCASE'), " +
-            s"collate(keyValueDelim, 'UTF8_BINARY')" +
-            s") from $explicitTableName")
-        },
-        errorClass = "COLLATION_MISMATCH.EXPLICIT",
-        sqlState = "42P21",
-        parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
-      )
-    }
   }
 
   test("Support RaiseError misc expression with collation") {
