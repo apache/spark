@@ -708,7 +708,6 @@ private[spark] class TaskSetManager(
   private[scheduler] def getCompletelyExcludedTaskIfAny(
       hostToExecutors: HashMap[String, HashSet[String]]): Option[Int] = {
     taskSetExcludelistHelperOpt.flatMap { taskSetExcludelist =>
-      val appHealthTracker = healthTracker.get
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
       // task sets will be (unnecessarily) aborted in cases when no executors have registered yet.
       if (hostToExecutors.nonEmpty) {
