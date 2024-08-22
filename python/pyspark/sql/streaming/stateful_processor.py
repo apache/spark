@@ -89,7 +89,7 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client = stateful_processor_api_client
 
     def getValueState(
-            self, state_name: str, schema: Union[StructType, str], ttlDurationMs: Optional[int] = None
+        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: Optional[int] = None
     ) -> ValueState:
         """
         Function to create new or return existing single value state variable of given type.

@@ -340,9 +340,7 @@ class SimpleStatefulProcessor(StatefulProcessor):
 class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState(
-            "numViolations", state_schema, 30000
-        )
+        self.num_violations_state = handle.getValueState("numViolations", state_schema, 30000)
 
 
 class TTLStatefulProcessor(StatefulProcessor):
