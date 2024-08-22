@@ -146,6 +146,9 @@ private[deploy] class HadoopFSDelegationTokenProvider
         val tokenKind = token.getKind.toString
         val interval = newExpiration - getIssueDate(tokenKind, identifier)
         logInfo(s"Renewal interval is $interval for token $tokenKind")
+        // The token here is only used to obtain renewal intervals. We should cancel it in
+        // a timely manner to avoid causing additional pressure on the server.
+        token.cancel(hadoopConf)
         interval
       }.toOption
     }
