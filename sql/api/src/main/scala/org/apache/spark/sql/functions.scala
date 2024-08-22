@@ -3753,7 +3753,7 @@ object functions {
 
   /**
    * Computes the first argument into a string from a binary using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
    * If either argument is null, the result will also be null.
    *
    * @group string_funcs
@@ -3764,7 +3764,7 @@ object functions {
 
   /**
    * Computes the first argument into a binary from a string using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
    * If either argument is null, the result will also be null.
    *
    * @group string_funcs
