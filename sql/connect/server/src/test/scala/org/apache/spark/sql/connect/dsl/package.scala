@@ -1115,6 +1115,29 @@ package object dsl {
           .build()
       }
 
+      def transpose(indexColumn: Expression): Relation = {
+        Relation
+          .newBuilder()
+          .setTranspose(
+            Transpose
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setIndexColumn(indexColumn)
+          )
+          .build()
+      }
+
+      def transpose(): Relation = {
+        Relation
+          .newBuilder()
+          .setTranspose(
+            Transpose
+              .newBuilder()
+              .setInput(logicalPlan)
+          )
+          .build()
+      }
+
       def melt(
           ids: Seq[Expression],
           values: Seq[Expression],

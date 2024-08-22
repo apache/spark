@@ -1002,6 +1002,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan1, sparkPlan1)
   }
 
+  test("Test Transpose") {
+    // Test transpose with an index column
+    val connectPlan0 =
+      connectTestRelation.transpose("name".protoAttr)
+    val sparkPlan0 =
+      sparkTestRelation.transpose(Column("name"))
+    comparePlans(connectPlan0, sparkPlan0)
+
+    // Test transpose without specifying an index column
+    val connectPlan1 =
+      connectTestRelation.transpose()
+    val sparkPlan1 =
+      sparkTestRelation.transpose()
+    comparePlans(connectPlan1, sparkPlan1)
+  }
+
   test("Test Melt") {
     val connectPlan0 =
       connectTestRelation.melt(Seq("id".protoAttr), Seq("name".protoAttr), "variable", "value")
