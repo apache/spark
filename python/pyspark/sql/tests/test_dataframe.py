@@ -283,6 +283,15 @@ class DataFrameTestsMixin:
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates(None).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates([1]).show()
 
         self.check_error(

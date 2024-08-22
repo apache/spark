@@ -431,10 +431,10 @@ class DataFrame(ParentDataFrame):
         return res
 
     def dropDuplicates(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> ParentDataFrame:
         # No parameter passed in (e.g. dropDuplicates())
-        if not subset:
+        if subset is _NoValue:
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
@@ -477,10 +477,10 @@ class DataFrame(ParentDataFrame):
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> ParentDataFrame:
         # No parameter passed in (e.g. dropDuplicatesWithinWatermark())
-        if not subset:
+        if subset is _NoValue:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
                 session=self._session,

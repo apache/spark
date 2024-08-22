@@ -1223,10 +1223,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
     def dropDuplicates(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> ParentDataFrame:
         # No parameter passed in (e.g. dropDuplicates())
-        if not subset:
+        if subset is _NoValue:
             jdf = self._jdf.dropDuplicates()
         # Parameters passed in as varargs
         # (e.g. dropDuplicates("col"), dropDuplicates("col1", "col2"), ...)
@@ -1259,10 +1259,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> ParentDataFrame:
         # No parameter passed in (e.g. dropDuplicatesWithinWatermark())
-        if not subset:
+        if subset is _NoValue:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
         # Parameters passed in as varargs
         # (e.g. dropDuplicatesWithinWatermark("col"),

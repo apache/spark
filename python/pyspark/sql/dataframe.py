@@ -4571,7 +4571,7 @@ class DataFrame:
 
     @dispatch_df_method
     def dropDuplicates(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
@@ -4634,7 +4634,7 @@ class DataFrame:
 
     @dispatch_df_method
     def dropDuplicatesWithinWatermark(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
@@ -5942,7 +5942,7 @@ class DataFrame:
 
     @dispatch_df_method
     def drop_duplicates(
-        self, subset: Optional[Union[str, List[str]]] = None, *subset_varargs: str
+        self, subset: Optional[Union[str, List[str], _NoValueType]] = _NoValue, *subset_varargs: str
     ) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
