@@ -362,10 +362,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
 
   test("udf") {
     val fn = (i: Int) => i + 1
-    val udf = SparkUserDefinedFunction(
-      fn,
-      PrimitiveIntEncoder :: Nil,
-      PrimitiveIntEncoder)
+    val udf = SparkUserDefinedFunction(fn, PrimitiveIntEncoder :: Nil, PrimitiveIntEncoder)
     val named = udf.withName("boo").asNondeterministic()
     testConversion(
       InvokeInlineUserDefinedFunction(named, Seq(UnresolvedAttribute(("a")))),
@@ -375,10 +372,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setDeterministic(false)
           .addArguments(attribute("a"))
           .getScalarScalaUdfBuilder
-          .setPayload(UdfToProtoUtils.toUdfPacketBytes(
-            fn,
-            PrimitiveIntEncoder :: Nil,
-            PrimitiveIntEncoder))
+          .setPayload(
+            UdfToProtoUtils.toUdfPacketBytes(fn, PrimitiveIntEncoder :: Nil, PrimitiveIntEncoder))
           .addInputTypes(ProtoDataTypes.IntegerType)
           .setOutputType(ProtoDataTypes.IntegerType)
           .setNullable(false)
@@ -403,10 +398,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setDeterministic(true)
           .addArguments(attribute("a"))
           .getScalarScalaUdfBuilder
-          .setPayload(UdfToProtoUtils.toUdfPacketBytes(
-            aggregator,
-            PrimitiveLongEncoder :: Nil,
-            PrimitiveLongEncoder))
+          .setPayload(UdfToProtoUtils
+            .toUdfPacketBytes(aggregator, PrimitiveLongEncoder :: Nil, PrimitiveLongEncoder))
           .addInputTypes(ProtoDataTypes.LongType)
           .setOutputType(ProtoDataTypes.LongType)
           .setNullable(false)
@@ -415,16 +408,14 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
     val result = ColumnNodeToProtoConverter.toTypedExpr(
       Column(InvokeInlineUserDefinedFunction(aggregator, Nil)),
       PrimitiveLongEncoder)
-    val expected = expr(_.getTypedAggregateExpressionBuilder
-      .getScalarScalaUdfBuilder
-      .setPayload(UdfToProtoUtils.toUdfPacketBytes(
-        aggregator,
-        PrimitiveLongEncoder :: Nil,
-        PrimitiveLongEncoder))
-      .addInputTypes(ProtoDataTypes.LongType)
-      .setOutputType(ProtoDataTypes.LongType)
-      .setNullable(true)
-      .setAggregate(true))
+    val expected = expr(
+      _.getTypedAggregateExpressionBuilder.getScalarScalaUdfBuilder
+        .setPayload(UdfToProtoUtils
+          .toUdfPacketBytes(aggregator, PrimitiveLongEncoder :: Nil, PrimitiveLongEncoder))
+        .addInputTypes(ProtoDataTypes.LongType)
+        .setOutputType(ProtoDataTypes.LongType)
+        .setNullable(true)
+        .setAggregate(true))
     assert(result == expected)
   }
 

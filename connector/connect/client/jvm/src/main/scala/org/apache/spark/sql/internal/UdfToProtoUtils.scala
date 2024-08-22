@@ -70,14 +70,16 @@ private[sql] object UdfToProtoUtils {
   private[sql] def toProto(
       udf: UserDefinedFunction,
       arguments: Seq[proto.Expression] = Nil): proto.CommonInlineUserDefinedFunction = {
-    val invokeUdf = proto.CommonInlineUserDefinedFunction.newBuilder()
+    val invokeUdf = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
       .setDeterministic(udf.deterministic)
       .addAllArguments(arguments.asJava)
     val protoUdf = invokeUdf.getScalarScalaUdfBuilder
       .setNullable(udf.nullable)
     udf match {
       case f: SparkUserDefinedFunction =>
-        val outputEncoder = f.outputEncoder.map(e => encoderFor(e))
+        val outputEncoder = f.outputEncoder
+          .map(e => encoderFor(e))
           .getOrElse(RowEncoder.encoderForDataType(f.dataType, lenient = false))
         val inputEncoders = if (f.inputEncoders.forall(_.isEmpty)) {
           Nil // Java UDFs have no bindings for their inputs.

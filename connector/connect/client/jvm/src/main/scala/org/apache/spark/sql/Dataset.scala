@@ -135,7 +135,8 @@ class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
-    extends api.Dataset[T] with Serializable {
+    extends api.Dataset[T]
+    with Serializable {
   override type DS[_] = Dataset[_]
 
   import sparkSession.RichColumn

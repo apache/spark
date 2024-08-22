@@ -41,7 +41,8 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     new File(s"src/test/resources/udf$scalaVersion.jar").toURI.toURL
 
   private def registerUdf(session: SparkSession): Unit = {
-    val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
+    val builder = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
       .setDeterministic(true)
       .setFunctionName("dummyUdf")
     builder.getScalarScalaUdfBuilder

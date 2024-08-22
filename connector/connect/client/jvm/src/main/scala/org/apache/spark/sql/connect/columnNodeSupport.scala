@@ -140,7 +140,10 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
       case InvokeInlineUserDefinedFunction(
-             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil, false, _) =>
+            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+            Nil,
+            false,
+            _) =>
         // TODO we should probably 'just' detect this particular scenario
         //  in the planner instead of wrapping it in a separate method.
         val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get))
@@ -170,7 +173,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
     builder.build()
   }
 
-  private def convertSortOrder(s: SortOrder, e: Option[Encoder[_]]): proto.Expression.SortOrder = {
+  private def convertSortOrder(
+      s: SortOrder,
+      e: Option[Encoder[_]]): proto.Expression.SortOrder = {
     proto.Expression.SortOrder
       .newBuilder()
       .setChild(apply(s.child, e))

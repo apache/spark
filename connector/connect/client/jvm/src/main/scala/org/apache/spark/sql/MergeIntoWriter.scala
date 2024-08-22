@@ -280,8 +280,9 @@ case class WhenMatched[T] private[sql] (
    *   The MergeIntoWriter instance with the update all action configured.
    */
   def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedActions(mergeIntoWriter
-      .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR, condition))
+    mergeIntoWriter.withNewMatchedActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR, condition))
   }
 
   /**
@@ -294,8 +295,9 @@ case class WhenMatched[T] private[sql] (
    *   The MergeIntoWriter instance with the update action configured.
    */
   def update(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedActions(mergeIntoWriter.
-      buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE, condition, Some(map)))
+    mergeIntoWriter.withNewMatchedActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE, condition, Some(map)))
   }
 
   /**
@@ -305,8 +307,8 @@ case class WhenMatched[T] private[sql] (
    *   The MergeIntoWriter instance with the delete action configured.
    */
   def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedActions(mergeIntoWriter.
-      buildMergeAction(MergeAction.ActionType.ACTION_TYPE_DELETE, condition))
+    mergeIntoWriter.withNewMatchedActions(
+      mergeIntoWriter.buildMergeAction(MergeAction.ActionType.ACTION_TYPE_DELETE, condition))
   }
 }
 
@@ -334,8 +336,9 @@ case class WhenNotMatched[T] private[sql] (
    *   The MergeIntoWriter instance with the insert all action configured.
    */
   def insertAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedActions(mergeIntoWriter
-      .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_INSERT_STAR, condition))
+    mergeIntoWriter.withNewNotMatchedActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_INSERT_STAR, condition))
   }
 
   /**
@@ -348,8 +351,9 @@ case class WhenNotMatched[T] private[sql] (
    *   The MergeIntoWriter instance with the insert action configured.
    */
   def insert(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedActions(mergeIntoWriter
-      .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_INSERT, condition, Some(map)))
+    mergeIntoWriter.withNewNotMatchedActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_INSERT, condition, Some(map)))
   }
 }
 
@@ -376,8 +380,9 @@ case class WhenNotMatchedBySource[T] private[sql] (
    *   The MergeIntoWriter instance with the update all action configured.
    */
   def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceActions(mergeIntoWriter
-      .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR, condition))
+    mergeIntoWriter.withNewNotMatchedBySourceActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR, condition))
   }
 
   /**
@@ -390,8 +395,9 @@ case class WhenNotMatchedBySource[T] private[sql] (
    *   The MergeIntoWriter instance with the update action configured.
    */
   def update(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceActions(mergeIntoWriter
-      .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE, condition, Some(map)))
+    mergeIntoWriter.withNewNotMatchedBySourceActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE, condition, Some(map)))
   }
 
   /**
@@ -402,7 +408,8 @@ case class WhenNotMatchedBySource[T] private[sql] (
    *   The MergeIntoWriter instance with the delete action configured.
    */
   def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceActions(mergeIntoWriter
-      .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_DELETE, condition))
+    mergeIntoWriter.withNewNotMatchedBySourceActions(
+      mergeIntoWriter
+        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_DELETE, condition))
   }
 }
