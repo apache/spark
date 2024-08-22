@@ -969,6 +969,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED =
+    buildConf("spark.sql.parser.eagerEvalOfUnresolvedInlineTable")
+      .internal()
+      .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
+        "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -1478,6 +1486,13 @@ object SQLConf {
     .version("1.4.0")
     .intConf
     .createWithDefault(200)
+
+  val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
+    buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
+      .internal()
+      .doc("Enable skipping assert when expression in not translated to predicate.")
+      .booleanConf
+      .createWithDefault(!Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -4391,8 +4406,8 @@ object SQLConf {
 
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
-      .internal()
-      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser.")
+      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +
+        "can be overwritten by the JSON option `useUnsafeRow`.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

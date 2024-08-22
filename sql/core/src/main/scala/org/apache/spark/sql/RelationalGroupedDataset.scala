@@ -35,6 +35,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
+import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -56,6 +58,7 @@ class RelationalGroupedDataset protected[sql](
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
   import RelationalGroupedDataset._
+  import df.sparkSession._
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     @scala.annotation.nowarn("cat=deprecation")
@@ -250,7 +253,7 @@ class RelationalGroupedDataset protected[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map {
       case typed: TypedColumn[_, _] =>
-        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
+        withInputType(typed.expr, df.exprEnc, df.logicalPlan.output)
       case c => c.expr
     })
   }
@@ -508,7 +511,7 @@ class RelationalGroupedDataset protected[sql](
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
       val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(Column(_))
+      val groupingCols = groupingNamedExpressions.map(column)
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
       Dataset.ofRows(
@@ -538,7 +541,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInPandas(column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       "Must pass a grouped map pandas udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -570,7 +574,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInArrow(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
       "Must pass a grouped map arrow udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -602,7 +607,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapCoGroupsInPandas(
       r: RelationalGroupedDataset,
-      expr: PythonUDF): DataFrame = {
+      column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       "Must pass a cogrouped map pandas udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
@@ -648,7 +654,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapCoGroupsInArrow(
       r: RelationalGroupedDataset,
-      expr: PythonUDF): DataFrame = {
+      column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
       "Must pass a cogrouped map arrow udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
@@ -697,7 +704,7 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def applyInPandasWithState(
-      func: PythonUDF,
+      func: Column,
       outputStructType: StructType,
       stateStructType: StructType,
       outputModeStr: String,
@@ -715,13 +722,49 @@ class RelationalGroupedDataset protected[sql](
     val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
     val outputAttrs = toAttributes(outputStructType)
     val plan = FlatMapGroupsInPandasWithState(
-      func,
+      func.expr,
       groupingAttrs,
       outputAttrs,
       stateStructType,
       outputMode,
       timeoutConf,
       child = df.logicalPlan)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
+   * Applies a grouped vectorized python user-defined function to each group of data.
+   * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
+   * iterator of `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as an iterator of `pandas.DataFrame`
+   * along with corresponding state, and the results for all groups are combined into a new
+   * [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def transformWithStateInPandas(
+      func: Column,
+      outputStructType: StructType,
+      outputModeStr: String,
+      timeModeStr: String): DataFrame = {
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = toAttributes(outputStructType)
+    val outputMode = InternalOutputModes(outputModeStr)
+    val timeMode = TimeModes(timeModeStr)
+
+    val plan = TransformWithStateInPandas(
+      func.expr,
+      groupingAttrs,
+      outputAttrs,
+      outputMode,
+      timeMode,
+      child = df.logicalPlan
+    )
     Dataset.ofRows(df.sparkSession, plan)
   }
 
@@ -772,7 +815,7 @@ private[sql] object RelationalGroupedDataset {
 
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
-    case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
+    case a: AggregateExpression => UnresolvedAlias(a, Some(generateAlias))
     case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }

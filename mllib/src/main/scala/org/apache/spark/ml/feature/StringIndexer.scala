@@ -27,7 +27,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -188,13 +188,12 @@ class StringIndexer @Since("1.4.0") (
   private def getSelectedCols(dataset: Dataset[_], inputCols: Seq[String]): Seq[Column] = {
     inputCols.map { colName =>
       val col = dataset.col(colName)
-      if (col.expr.dataType == StringType) {
-        col
-      } else {
-        // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
-        // we replace NaNs with null in advance.
-        when(!col.isNaN, col.cast(StringType)).otherwise(lit(null))
-      }
+      // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
+      // we replace NaNs with null in advance.
+      val fpTypes = Seq(DoubleType, FloatType).map(_.catalogString)
+      when(typeof(col).isin(fpTypes: _*) && isnan(col), lit(null))
+        .otherwise(col)
+        .cast(StringType)
     }
   }
 

@@ -87,17 +87,17 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Schema transformation.
     val schema = dataset.schema
 
-    val vectorCols = $(inputCols).filter { c =>
-      dataset.col(c).expr.dataType match {
-        case _: VectorUDT => true
-        case _ => false
-      }
+    val inputColsWithField = $(inputCols).map { c =>
+      c -> SchemaUtils.getSchemaField(schema, c)
+    }
+
+    val vectorCols = inputColsWithField.collect {
+      case (c, field) if field.dataType.isInstanceOf[VectorUDT] => c
     }
     val vectorColsLengths = VectorAssembler.getLengths(
       dataset, vectorCols.toImmutableArraySeq, $(handleInvalid))
 
-    val featureAttributesMap = $(inputCols).map { c =>
-      val field = SchemaUtils.getSchemaField(schema, c)
+    val featureAttributesMap = inputColsWithField.map { case (c, field) =>
       field.dataType match {
         case DoubleType =>
           val attribute = Attribute.fromStructField(field)
@@ -144,8 +144,8 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
-    val args = $(inputCols).map { c =>
-      dataset(c).expr.dataType match {
+    val args = inputColsWithField.map { case (c, field) =>
+      field.dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")

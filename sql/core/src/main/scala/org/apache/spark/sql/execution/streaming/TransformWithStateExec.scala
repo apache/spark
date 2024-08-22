@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, StructType}
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -190,6 +190,44 @@ case class TransformWithStateExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
+  // Wrapper to ensure that the implicit key is set when the methods on the iterator
+  // are called. We process all the values for a particular key at a time, so we
+  // only have to set the implicit key when the first call to the iterator is made, and
+  // we have to remove it when the iterator is closed.
+  //
+  // Note: if we ever start to interleave the processing of the iterators we get back
+  // from handleInputRows (i.e. we don't process each iterator all at once), then this
+  // iterator will need to set/unset the implicit key every time hasNext/next is called,
+  // not just at the first and last calls to hasNext.
+  private def iteratorWithImplicitKeySet(
+      key: Any,
+      iter: Iterator[InternalRow],
+      onClose: () => Unit = () => {}
+  ): Iterator[InternalRow] = {
+    new NextIterator[InternalRow] {
+      var hasStarted = false
+
+      override protected def getNext(): InternalRow = {
+        if (!hasStarted) {
+          hasStarted = true
+          ImplicitGroupingKeyTracker.setImplicitKey(key)
+        }
+
+        if (!iter.hasNext) {
+          finished = true
+          null
+        } else {
+          iter.next()
+        }
+      }
+
+      override protected def close(): Unit = {
+        onClose()
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+    }
+  }
+
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
     val getKeyObj =
@@ -201,8 +239,14 @@ case class TransformWithStateExec(
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     val keyObj = getKeyObj(keyRow)  // convert key to objects
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
+
+    // The statefulProcessor's handleInputRows method may create an eager iterator,
+    // and in that case, the implicit key needs to be set now. However, it could return
+    // a lazy iterator, in which case the implicit key should be set when the actual
+    // methods on the iterator are invoked. This is done with the wrapper class
+    // at the end of this method.
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val mappedIterator = statefulProcessor.handleInputRows(
       keyObj,
       valueObjIter,
@@ -211,7 +255,8 @@ case class TransformWithStateExec(
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    iteratorWithImplicitKeySet(keyObj, mappedIterator)
   }
 
   private def processInitialStateRows(
@@ -263,9 +308,11 @@ case class TransformWithStateExec(
       new ExpiredTimerInfoImpl(isValid = true, Some(expiryTimestampMs))).map { obj =>
       getOutputRow(obj)
     }
-    processorHandle.deleteTimer(expiryTimestampMs)
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
+      processorHandle.deleteTimer(expiryTimestampMs)
+    })
   }
 
   private def processTimers(

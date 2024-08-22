@@ -16,19 +16,25 @@
  */
 package org.apache.spark.sql.internal
 
+import scala.language.implicitConversions
+
+import UserDefinedFunctionUtils.toScalaUDF
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ScalaUDF}
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
+import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
  * Convert a [[ColumnNode]] into an [[Expression]].
@@ -51,7 +57,10 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         convertUnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn)
 
       case UnresolvedStar(unparsedTarget, None, _) =>
-        analysis.UnresolvedStar(unparsedTarget.map(analysis.UnresolvedAttribute.parseAttributeName))
+        val target = unparsedTarget.map { t =>
+          analysis.UnresolvedAttribute.parseAttributeName(t.stripSuffix(".*"))
+        }
+        analysis.UnresolvedStar(target)
 
       case UnresolvedStar(None, Some(planId), _) =>
         analysis.UnresolvedDataFrameStar(planId)
@@ -162,32 +171,23 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       case InvokeInlineUserDefinedFunction(
           a: UserDefinedAggregator[Any @unchecked, Any @unchecked, Any @unchecked],
           arguments, isDistinct, _) =>
-        ScalaAggregator(
-          agg = a.aggregator,
-          children = arguments.map(apply),
-          inputEncoder = encoderFor(a.inputEncoder),
-          bufferEncoder = encoderFor(a.aggregator.bufferEncoder),
-          aggregatorName = a.givenName,
-          nullable = a.nullable,
-          isDeterministic = a.deterministic).toAggregateExpression(isDistinct)
+        ScalaAggregator(a, arguments.map(apply)).toAggregateExpression(isDistinct)
 
       case InvokeInlineUserDefinedFunction(
           a: UserDefinedAggregateFunction, arguments, isDistinct, _) =>
         ScalaUDAF(udaf = a, children = arguments.map(apply)).toAggregateExpression(isDistinct)
 
       case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
-        ScalaUDF(
-          function = udf.f,
-          dataType = udf.dataType,
-          children = arguments.map(apply),
-          inputEncoders = udf.inputEncoders,
-          outputEncoder = udf.outputEncoder,
-          udfName = udf.givenName,
-          nullable = udf.deterministic,
-          udfDeterministic = udf.deterministic)
+        toScalaUDF(udf, arguments.map(apply))
 
-      case Wrapper(expression, _) =>
-        expression
+      case ExpressionColumnNode(expression, _) =>
+        val transformed = expression.transformDown {
+          case ColumnNodeExpression(node) => apply(node)
+        }
+        transformed match {
+          case f: AggregateFunction => f.toAggregateExpression()
+          case _ => transformed
+        }
 
       case node =>
         throw SparkException.internalError("Unsupported ColumnNode: " + node)
@@ -248,10 +248,10 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class Wrapper(
+private[sql] case class ExpressionColumnNode private(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
-  override def normalize(): Wrapper = {
+  override def normalize(): ExpressionColumnNode = {
     val updated = expression.transform {
       case a: AttributeReference =>
         DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
@@ -260,4 +260,68 @@ private[sql] case class Wrapper(
   }
 
   override def sql: String = expression.sql
+}
+
+private[sql] object ExpressionColumnNode {
+  def apply(e: Expression): ColumnNode = e match {
+    case ColumnNodeExpression(node) => node
+    case _ => new ExpressionColumnNode(e)
+  }
+}
+
+private[internal] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
+  override def nullable: Boolean = true
+  override def dataType: DataType = NullType
+  override def children: Seq[Expression] = Nil
+  override protected def withNewChildrenInternal(c: IndexedSeq[Expression]): Expression = this
+}
+
+private[sql] object ColumnNodeExpression {
+  def apply(node: ColumnNode): Expression = node match {
+    case ExpressionColumnNode(e, _) => e
+    case _ => new ColumnNodeExpression(node)
+  }
+}
+
+private[spark] object ExpressionUtils {
+  /**
+   * Create an Expression backed Column.
+   */
+  implicit def column(e: Expression): Column = Column(ExpressionColumnNode(e))
+
+  /**
+   * Create an ColumnNode backed Expression. Please not that this has to be converted to an actual
+   * Expression before it is used.
+   */
+  implicit def expression(c: Column): Expression = ColumnNodeExpression(c.node)
+
+  /**
+   * Returns the expression either with an existing or auto assigned name.
+   */
+  def toNamed(expr: Expression): NamedExpression = expr match {
+    case expr: NamedExpression => expr
+
+    // Leave an unaliased generator with an empty list of names since the analyzer will generate
+    // the correct defaults after the nested expression's type has been resolved.
+    case g: Generator => MultiAlias(g, Nil)
+
+    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
+    // NamedExpression under this Cast.
+    case c: expressions.Cast =>
+      c.transformUp {
+        case c @ expressions.Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
+      } match {
+        case ne: NamedExpression => ne
+        case _ => UnresolvedAlias(expr, Some(generateAlias))
+      }
+
+    case expr: Expression => UnresolvedAlias(expr, Some(generateAlias))
+  }
+
+  def generateAlias(e: Expression): String = {
+    e match {
+      case AggregateExpression(f: TypedAggregateExpression, _, _, _, _) => f.toString
+      case expr => toPrettySQL(expr)
+    }
+  }
 }

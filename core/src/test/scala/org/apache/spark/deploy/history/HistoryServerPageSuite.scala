@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.net.URL
+import java.net.URI
 
 import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
@@ -72,7 +72,7 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
       ApplicationStatus.COMPLETED.toString.toLowerCase()
     }
     val (code, jsonOpt, errOpt) = HistoryServerSuite.getContentAndCode(
-      new URL(s"http://$localhost:$port/api/v1/applications?status=$param")
+      new URI(s"http://$localhost:$port/api/v1/applications?status=$param").toURL
     )
     assert(code == HttpServletResponse.SC_OK)
     assert(jsonOpt.isDefined)
@@ -107,7 +107,7 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
       startHistoryServer(logDirs.head, title)
       val page = new HistoryPage(server.get)
       val (code, htmlOpt, errOpt) = HistoryServerSuite.getContentAndCode(
-        new URL(s"http://$localhost:$port/")
+        new URI(s"http://$localhost:$port/").toURL
       )
       assert(code == HttpServletResponse.SC_OK)
       val expected = title.getOrElse("History Server")

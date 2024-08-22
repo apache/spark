@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXPR
@@ -89,8 +91,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
-    tableSpec.withNewLocation(tableSpec.location.map(loc => CatalogUtils.makeQualifiedPath(
-      CatalogUtils.stringToURI(loc), hadoopConf).toString))
+    val newLoc = tableSpec.location.map { loc =>
+      val locationUri = CatalogUtils.stringToURI(loc)
+      val qualified = if (locationUri.isAbsolute) {
+        locationUri
+      } else if (new Path(locationUri).isAbsolute) {
+        CatalogUtils.makeQualifiedPath(locationUri, hadoopConf)
+      } else {
+        // Leave it to the catalog implementation to qualify relative paths.
+        locationUri
+      }
+      CatalogUtils.URIToString(qualified)
+    }
+    tableSpec.withNewLocation(newLoc)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -664,10 +677,6 @@ private[sql] object DataSourceV2Strategy extends Logging {
 /**
  * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
  */
-object PushablePredicate {
-  def unapply(e: Expression): Option[Predicate] =
-    new V2ExpressionBuilder(e, true).build().map { v =>
-      assert(v.isInstanceOf[Predicate])
-      v.asInstanceOf[Predicate]
-    }
+object PushablePredicate extends Logging {
+  def unapply(e: Expression): Option[Predicate] = new V2ExpressionBuilder(e, true).buildPredicate()
 }

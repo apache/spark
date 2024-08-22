@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import scala.annotation.nowarn
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -40,7 +40,16 @@ class PlanParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
+    // We don't care the write privileges in this suite.
+    val parsed = parsePlan(sqlCommand).transform {
+      case u: UnresolvedRelation => u.clearWritePrivileges
+      case i: InsertIntoStatement =>
+        i.table match {
+          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
+          case _ => i
+        }
+    }
+    comparePlans(parsed, plan, checkAnalysis = false)
   }
 
   private def parseException(sqlText: String): SparkThrowable = {
@@ -1000,14 +1009,28 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("inline table") {
-    assertEqual("values 1, 2, 3, 4",
-      UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
+    for (optimizeValues <- Seq(true, false)) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+          optimizeValues.toString) {
+        val unresolvedTable1 =
+          UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x))))
+        val table1 = if (optimizeValues) {
+          EvaluateUnresolvedInlineTable.evaluate(unresolvedTable1)
+        } else {
+          unresolvedTable1
+        }
+        assertEqual("values 1, 2, 3, 4", table1)
 
-    assertEqual(
-      "values (1, 'a'), (2, 'b') as tbl(a, b)",
-      UnresolvedInlineTable(
-        Seq("a", "b"),
-        Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil).as("tbl"))
+        val unresolvedTable2 = UnresolvedInlineTable(
+          Seq("a", "b"), Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil)
+        val table2 = if (optimizeValues) {
+          EvaluateUnresolvedInlineTable.evaluate(unresolvedTable2)
+        } else {
+          unresolvedTable2
+        }
+        assertEqual("values (1, 'a'), (2, 'b') as tbl(a, b)", table2.as("tbl"))
+      }
+    }
   }
 
   test("simple select query with !> and !<") {
@@ -1034,57 +1057,56 @@ class PlanParserSuite extends AnalysisTest {
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'b'", "hint" -> ""))
 
-    comparePlans(
-      parsePlan("SELECT /*+ HINT */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ HINT */ * FROM t",
       UnresolvedHint("HINT", Seq.empty, table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ BROADCASTJOIN(u) */ * FROM t",
       UnresolvedHint("BROADCASTJOIN", Seq($"u"), table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ MAPJOIN(u) */ * FROM t",
       UnresolvedHint("MAPJOIN", Seq($"u"), table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t",
       UnresolvedHint("STREAMTABLE", Seq($"a", $"b", $"c"), table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t",
       UnresolvedHint("INDEX", Seq($"t", $"emp_job_ix"), table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
+    assertEqual(
+      "SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`",
       UnresolvedHint("MAPJOIN", Seq(UnresolvedAttribute.quoted("default.t")),
         table("default.t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
+    assertEqual(
+      "SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a",
       UnresolvedHint("MAPJOIN", Seq($"t"),
         table("t").where(Literal(true)).groupBy($"a")($"a")).orderBy($"a".asc))
 
-    comparePlans(
-      parsePlan("SELECT /*+ COALESCE(10) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ COALESCE(10) */ * FROM t",
       UnresolvedHint("COALESCE", Seq(Literal(10)),
         table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION(100) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION(100) */ * FROM t",
       UnresolvedHint("REPARTITION", Seq(Literal(100)),
         table("t").select(star())))
 
-    comparePlans(
-      parsePlan(
-        "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
+    assertEqual(
+      "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t",
       InsertIntoStatement(table("s"), Map.empty, Nil,
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),
               table("t").select(star())))), overwrite = false, ifPartitionNotExists = false))
 
-    comparePlans(
-      parsePlan("SELECT /*+ BROADCASTJOIN(u), REPARTITION(100) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ BROADCASTJOIN(u), REPARTITION(100) */ * FROM t",
       UnresolvedHint("BROADCASTJOIN", Seq($"u"),
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           table("t").select(star()))))
@@ -1095,49 +1117,48 @@ class PlanParserSuite extends AnalysisTest {
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'+'", "hint" -> ""))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION(c) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION(c) */ * FROM t",
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("c")),
         table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION(100, c) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION(100, c) */ * FROM t",
       UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
         table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION(100, c), COALESCE(50) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION(100, c), COALESCE(50) */ * FROM t",
       UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
         UnresolvedHint("COALESCE", Seq(Literal(50)),
           table("t").select(star()))))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50) */ * FROM t",
       UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
         UnresolvedHint("BROADCASTJOIN", Seq($"u"),
           UnresolvedHint("COALESCE", Seq(Literal(50)),
             table("t").select(star())))))
 
-    comparePlans(
-      parsePlan(
-        """
-          |SELECT
-          |/*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50), REPARTITION(300, c) */
-          |* FROM t
-        """.stripMargin),
+    assertEqual(
+      """
+        |SELECT
+        |/*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50), REPARTITION(300, c) */
+        |* FROM t
+      """.stripMargin,
       UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
         UnresolvedHint("BROADCASTJOIN", Seq($"u"),
           UnresolvedHint("COALESCE", Seq(Literal(50)),
             UnresolvedHint("REPARTITION", Seq(Literal(300), UnresolvedAttribute("c")),
               table("t").select(star()))))))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t",
       UnresolvedHint("REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("c")),
         table("t").select(star())))
 
-    comparePlans(
-      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(100, c) */ * FROM t"),
+    assertEqual(
+      "SELECT /*+ REPARTITION_BY_RANGE(100, c) */ * FROM t",
       UnresolvedHint("REPARTITION_BY_RANGE", Seq(Literal(100), UnresolvedAttribute("c")),
         table("t").select(star())))
   }
@@ -1907,12 +1928,22 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("SPARK-42553: NonReserved keyword 'interval' can be column name") {
-    comparePlans(
-      parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
-      UnresolvedInlineTable(
-        Seq("interval"),
-        Seq(Literal("abc")) :: Nil).as("tbl").select($"interval")
-    )
+    for (optimizeValues <- Seq(true, false)) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+          optimizeValues.toString) {
+        val unresolvedTable =
+          UnresolvedInlineTable(Seq("interval"), Seq(Literal("abc")) :: Nil)
+        val table = if (optimizeValues) {
+          EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
+        } else {
+          unresolvedTable
+        }
+        comparePlans(
+          parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
+          table.as("tbl").select($"interval")
+        )
+      }
+    }
   }
 
   test("SPARK-44066: parsing of positional parameters") {

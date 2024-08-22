@@ -17,9 +17,9 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.{analysis, expressions, InternalRow}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, AgnosticEncoders}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -95,7 +95,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   test("star") {
     testConversion(UnresolvedStar(None), analysis.UnresolvedStar(None))
     testConversion(
-      UnresolvedStar(Option("x.y.z")),
+      UnresolvedStar(Option("x.y.z.*")),
       analysis.UnresolvedStar(Option(Seq("x", "y", "z"))))
     testConversion(
       UnresolvedStar(None, Option(10L)),
@@ -282,6 +282,11 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         Seq(catX)))
   }
 
+  test("sql") {
+    // Direct comparison because Origin is a bit messed up.
+    assert(Converter(SqlExpression("1 + 1")) == Converter.parser.parseExpression("1 + 1"))
+  }
+
   test("caseWhen") {
     testConversion(
       CaseWhenOtherwise(
@@ -350,7 +355,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
       InvokeInlineUserDefinedFunction(
         UserDefinedAggregator(
           aggregator = int2LongSum,
-          inputEncoder = AgnosticEncoders.PrimitiveIntEncoder,
+          inputEncoder = PrimitiveIntEncoder,
           nullable = false,
           givenName = Option("int2LongSum")),
         UnresolvedAttribute("i_col") :: Nil),
@@ -368,8 +373,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
       InvokeInlineUserDefinedFunction(
         SparkUserDefinedFunction(
           f = concat,
-          inputEncoders = None :: Option(encoderFor(StringEncoder)) :: Nil,
-          outputEncoder = Option(encoderFor(StringEncoder)),
+          inputEncoders = None :: Option(toAny(StringEncoder)) :: Nil,
+          outputEncoder = Option(toAny(StringEncoder)),
           dataType = StringType,
           nullable = false,
           deterministic = false),
@@ -378,8 +383,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         function = concat,
         dataType = StringType,
         children = Seq(analysis.UnresolvedAttribute("a"), analysis.UnresolvedAttribute("b")),
-        inputEncoders = Seq(None, Option(encoderFor(Encoders.STRING))),
-        outputEncoder = Option(encoderFor(Encoders.STRING)),
+        inputEncoders = Seq(None, Option(encoderFor(StringEncoder))),
+        outputEncoder = Option(encoderFor(StringEncoder)),
         udfName = None,
         nullable = false,
         udfDeterministic = false))
@@ -387,7 +392,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
 
   test("extension") {
     testConversion(
-      Wrapper(analysis.UnresolvedAttribute("bar")),
+      ExpressionColumnNode(analysis.UnresolvedAttribute("bar")),
       analysis.UnresolvedAttribute("bar"))
   }
 

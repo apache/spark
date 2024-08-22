@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.expressions
 
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.execution.aggregate.ScalaAggregator
-import org.apache.spark.sql.internal.UserDefinedFunctionLike
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -63,7 +64,9 @@ sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def apply(exprs: Column*): Column
+  def apply(exprs: Column*): Column = {
+    Column(InvokeInlineUserDefinedFunction(this, exprs.map(_.node)))
+  }
 
   /**
    * Updates UserDefinedFunction with a given name.
@@ -90,28 +93,11 @@ sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
 private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
-    inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
-    outputEncoder: Option[ExpressionEncoder[_]] = None,
+    inputEncoders: Seq[Option[Encoder[_]]] = Nil,
+    outputEncoder: Option[Encoder[_]] = None,
     givenName: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
-
-  @scala.annotation.varargs
-  override def apply(exprs: Column*): Column = {
-    Column(createScalaUDF(exprs.map(_.expr)))
-  }
-
-  private[sql] def createScalaUDF(exprs: Seq[Expression]): ScalaUDF = {
-    ScalaUDF(
-      f,
-      dataType,
-      exprs,
-      inputEncoders,
-      outputEncoder,
-      udfName = givenName,
-      nullable = nullable,
-      udfDeterministic = deterministic)
-  }
 
   override def withName(name: String): SparkUserDefinedFunction = {
     copy(givenName = Option(name))
@@ -136,25 +122,41 @@ private[spark] case class SparkUserDefinedFunction(
   override def name: String = givenName.getOrElse("UDF")
 }
 
+object SparkUserDefinedFunction {
+  private[sql] def apply(
+      function: AnyRef,
+      returnTypeTag: TypeTag[_],
+      inputTypeTags: TypeTag[_]*): SparkUserDefinedFunction = {
+    val outputEncoder = ScalaReflection.encoderFor(returnTypeTag)
+    val inputEncoders = inputTypeTags.map { tag =>
+      Try(ScalaReflection.encoderFor(tag)).toOption
+    }
+    SparkUserDefinedFunction(
+      f = function,
+      inputEncoders = inputEncoders,
+      dataType = outputEncoder.dataType,
+      outputEncoder = Option(outputEncoder),
+      nullable = outputEncoder.nullable)
+  }
+
+  private[sql] def apply(
+      function: AnyRef,
+      returnType: DataType,
+      cardinality: Int): SparkUserDefinedFunction = {
+    SparkUserDefinedFunction(
+      function,
+      returnType,
+      inputEncoders = Seq.fill(cardinality)(None),
+      None)
+  }
+}
+
 private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
     inputEncoder: Encoder[IN],
     givenName: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
-
-  @scala.annotation.varargs
-  def apply(exprs: Column*): Column = {
-    Column(scalaAggregator(exprs.map(_.expr)).toAggregateExpression())
-  }
-
-  // This is also used by udf.register(...) when it detects a UserDefinedAggregator
-  def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
-    val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]]
-    val bEncoder = aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
-    ScalaAggregator(
-      exprs, aggregator, iEncoder, bEncoder, nullable, deterministic, aggregatorName = givenName)
-  }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
     copy(givenName = Option(name))
