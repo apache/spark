@@ -90,3 +90,13 @@ select 'a' collate en_ci_ai = 'Å';
 select 'Kypper' collate sv < 'Köpfe';
 select 'Kypper' collate de > 'Köpfe';
 select 'I' collate tr_ci = 'ı';
+
+-- create table for split_part
+create table t5(str string collate utf8_binary, delimiter string collate utf8_lcase, partNum int) using parquet;
+insert into t5 values('11AB12AB13', 'AB', 2);
+
+select split_part(str, delimiter, partNum) from t5;
+select split_part(str collate utf8_binary, delimiter collate utf8_lcase, partNum) from t5;
+select split_part(str collate utf8_binary, delimiter collate utf8_binary, partNum) from t5;
+
+drop table t5;
