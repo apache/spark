@@ -337,7 +337,12 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           10,
           12 * MICROS_PER_MINUTE + millisToMicros(888)))
       assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
+      val dayTimeParsingException = intercept[SparkIllegalArgumentException] {
+        fromDayTimeString("5 30:12:20")
+      }
 
+      assert(dayTimeParsingException.getErrorClass == "INTERVAL_ERROR.DAY_TIME_PARSING")
+      assert(dayTimeParsingException.getSqlState == "22009")
       failFuncWithInvalidInput("5 30:12:20", "hour 30 outside range", fromDayTimeString)
       failFuncWithInvalidInput("5 30-12", "must match day-time format", fromDayTimeString)
     }
@@ -377,6 +382,15 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   test("negate") {
     assert(negateExact(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
     assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
+  }
+
+  test("parsing second_nano string") {
+    val parsingException = intercept[SparkIllegalArgumentException] {
+      toDTInterval("12", "33.33.33", 1)
+    }
+
+    assert(parsingException.getErrorClass == "INTERVAL_ERROR.SECOND_NANO_FORMAT")
+    assert(parsingException.getSqlState == "22009")
   }
 
   test("subtract one interval by another") {

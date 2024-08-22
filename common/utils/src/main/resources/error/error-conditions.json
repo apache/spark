@@ -1839,6 +1839,16 @@
       "Interval error."
     ],
     "subClass" : {
+      "DAY_TIME_PARSING" : {
+        "message" : [
+          "Error parsing interval day-time string: <msg>."
+        ]
+      },
+      "INTERVAL_PARSING" : {
+        "message" : [
+          "Error parsing interval <interval> string: <msg>."
+        ]
+      },
       "ILLEGAL_DAY_OF_WEEK" : {
         "message" : [
           "Illegal input for day of week: <string>."
@@ -1849,28 +1859,18 @@
           "Interval string does not match second-nano format of ss.nnnnnnnnn."
         ]
       },
-      "DAY_TIME_PARSING" : {
+      "UNMATCHED_FORMAT_STRING" : {
         "message" : [
-          "Error parsing interval day-time string: <msg>."
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
         ]
       },
       "UNSUPPORTED_FROM_TO_EXPRESSION" : {
         "message" : [
           "Cannot support (interval '<input>' <from> to <to>) expression."
         ]
-      },
-      "INTERVAL_PARSING" : {
-        "message" : [
-          "Error parsing interval <interval> string: <msg>."
-        ]
-      },
-      "UNMATCHED_FORMAT_STRING" : {
-        "message" : [
-          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
-        ]
       }
     },
-    "sqlState" : "22015"
+    "sqlState" : "22009"
   },
   "INTERNAL_ERROR" : {
     "message" : [
