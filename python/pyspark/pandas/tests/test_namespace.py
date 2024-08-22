@@ -28,6 +28,7 @@ from pyspark.pandas.utils import spark_column_equals
 from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.testing import assert_frame_equal
 
 
 class NamespaceTestsMixin:
@@ -606,6 +607,61 @@ class NamespaceTestsMixin:
             lambda: ps.to_numeric(psser, errors="ignore"),
         )
 
+    def test_json_normalize(self):
+        # Basic test case with a simple JSON structure
+        data = [
+            {"id": 1, "name": "Alice", "address": {"city": "NYC", "zipcode": "10001"}},
+            {"id": 2, "name": "Bob", "address": {"city": "SF", "zipcode": "94105"}},
+        ]
+        assert_frame_equal(pd.json_normalize(data), ps.json_normalize(data))
+
+        # Test case with nested JSON structure
+        data = [
+            {"id": 1, "name": "Alice", "address": {"city": {"name": "NYC"}, "zipcode": "10001"}},
+            {"id": 2, "name": "Bob", "address": {"city": {"name": "SF"}, "zipcode": "94105"}},
+        ]
+        assert_frame_equal(pd.json_normalize(data), ps.json_normalize(data))
+
+        # Test case with lists included in the JSON structure
+        data = [
+            {
+                "id": 1,
+                "name": "Alice",
+                "hobbies": ["reading", "swimming"],
+                "address": {"city": "NYC", "zipcode": "10001"},
+            },
+            {
+                "id": 2,
+                "name": "Bob",
+                "hobbies": ["biking"],
+                "address": {"city": "SF", "zipcode": "94105"},
+            },
+        ]
+        assert_frame_equal(pd.json_normalize(data), ps.json_normalize(data))
+
+        # Test case with various data types (integers, booleans, etc.)
+        data = [
+            {
+                "id": 1,
+                "name": "Alice",
+                "age": 25,
+                "is_student": True,
+                "address": {"city": "NYC", "zipcode": "10001"},
+            },
+            {
+                "id": 2,
+                "name": "Bob",
+                "age": 30,
+                "is_student": False,
+                "address": {"city": "SF", "zipcode": "94105"},
+            },
+        ]
+        assert_frame_equal(pd.json_normalize(data), ps.json_normalize(data))
+
+        # Test case handling empty input data
+        data = []
+        self.assert_eq(pd.json_normalize(data), ps.json_normalize(data))
+
     def test_missing(self):
         missing_functions = inspect.getmembers(
             MissingPandasLikeGeneralFunctions, inspect.isfunction
@@ -622,6 +678,9 @@ class NamespaceTestsMixin:
 
 
 class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    def test_json_normalize(self):
+        super().test_json_normalize()
+
     pass
 
 

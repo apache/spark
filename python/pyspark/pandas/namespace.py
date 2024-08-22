@@ -125,6 +125,7 @@ __all__ = [
     "to_numeric",
     "broadcast",
     "read_orc",
+    "json_normalize",
 ]
 
 
@@ -3685,6 +3686,77 @@ def read_orc(
         psdf = psdf[new_columns]
 
     return psdf
+
+
+def json_normalize(
+    data: Union[Dict, List[Dict]],
+    sep: str = ".",
+) -> DataFrame:
+    """
+    Normalize semi-structured JSON data into a flat table.
+
+    Parameters
+    ----------
+    data : dict or list of dicts
+        Unserialized JSON objects.
+    sep : str, default '.'
+        Nested records will generate names separated by sep.
+
+    Returns
+    -------
+    DataFrame
+
+    See Also
+    --------
+    DataFrame.to_json : Convert the pandas-on-Spark DataFrame to a JSON string.
+
+    Examples
+    --------
+    >>> data = [
+    ...     {"id": 1, "name": "Alice", "address": {"city": "NYC", "zipcode": "10001"}},
+    ...     {"id": 2, "name": "Bob", "address": {"city": "SF", "zipcode": "94105"}},
+    ... ]
+    >>> ps.json_normalize(data)
+       id   name address.city address.zipcode
+    0   1  Alice          NYC           10001
+    1   2    Bob           SF           94105
+    """
+    # Convert the input JSON data to a PySpark DataFrame.
+    psdf: DataFrame = ps.DataFrame(data)
+    sdf = psdf._internal.spark_frame
+
+    index_spark_column_names = psdf._internal.index_spark_column_names
+
+    def flatten_schema(schema: StructType, prefix: str = "") -> Tuple[List[str], List[str]]:
+        """
+        Recursively flattens a nested schema and returns a list of columns and aliases.
+        """
+        fields = []
+        aliases = []
+        for field in schema.fields:
+            field_name = field.name
+            if field_name not in index_spark_column_names:
+                name = f"{prefix}.{field_name}" if prefix else field_name
+                alias = f"{prefix}{sep}{field_name}" if prefix else field_name
+                if isinstance(field.dataType, StructType):
+                    subfields, subaliases = flatten_schema(field.dataType, prefix=name)
+                    fields += subfields
+                    aliases += subaliases
+                else:
+                    fields.append(name)
+                    aliases.append(alias)
+        return fields, aliases
+
+    fields, aliases = flatten_schema(sdf.schema)
+
+    # Create columns using fields and aliases
+    selected_columns = [F.col(field).alias(alias) for field, alias in zip(fields, aliases)]
+
+    # Select the flattened columns
+    flat_sdf = sdf.select(*selected_columns)
+
+    # Convert back to Pandas-on-Spark DataFrame
+    return ps.DataFrame(flat_sdf)
 
 
 def _get_index_map(
