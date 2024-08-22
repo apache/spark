@@ -10989,7 +10989,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
 def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
-    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
 
     .. versionadded:: 1.5.0
 
@@ -11027,7 +11027,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
 def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a binary from a string using the provided character set
-    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
 
     .. versionadded:: 1.5.0
 
