@@ -365,7 +365,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
     val udf = SparkUserDefinedFunction(fn, PrimitiveIntEncoder :: Nil, PrimitiveIntEncoder)
     val named = udf.withName("boo").asNondeterministic()
     testConversion(
-      InvokeInlineUserDefinedFunction(named, Seq(UnresolvedAttribute(("a")))),
+      InvokeInlineUserDefinedFunction(named, Seq(UnresolvedAttribute("a"))),
       expr(
         _.getCommonInlineUserDefinedFunctionBuilder
           .setFunctionName("boo")
