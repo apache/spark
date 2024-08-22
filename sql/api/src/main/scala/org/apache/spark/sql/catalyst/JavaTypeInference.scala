@@ -140,7 +140,7 @@ object JavaTypeInference {
       // if the properties is empty and this is not a top level enclosing class, then we should
       // not consider class as bean, as otherwise it will be treated as empty schema and loose
       // the data on deser.
-      if (considerClassAsBean && properties.nonEmpty) {
+      if (considerClassAsBean && (properties.nonEmpty || seenTypeSet.isEmpty)) {
 
         // add type variables from inheritance hierarchy of the class
         try {
