@@ -49,14 +49,6 @@ object CollationTypeCasts extends TypeCoercionRule {
       stringLocate.withNewChildren(collateToSingleType(
         Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
 
-    case splitPart: SplitPart =>
-      splitPart.withNewChildren(collateToSingleType(
-        Seq(splitPart.str, splitPart.delimiter)) :+ splitPart.partNum)
-
-    case levenshtein: Levenshtein =>
-      levenshtein.withNewChildren(collateToSingleType(
-        Seq(levenshtein.left, levenshtein.right)))
-
     case substringIndex: SubstringIndex =>
       substringIndex.withNewChildren(
         collateToSingleType(

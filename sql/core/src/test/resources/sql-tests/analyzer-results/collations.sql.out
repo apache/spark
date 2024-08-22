@@ -567,17 +567,15 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 select split_part(utf8_binary, utf8_lcase, 3) from t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
-}
+Project [split_part(utf8_binary#x, utf8_lcase#x, 3) AS split_part(utf8_binary, utf8_lcase, 3)#x]
++- SubqueryAlias spark_catalog.default.t1
+   +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_lcase#x] parquet
 
 
 -- !query
 select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t1
 -- !query analysis
-Project [split_part(utf8_binary#x, a, 3) AS split_part(utf8_binary, a, 3)#x, split_part(utf8_lcase#x, cast(a as string collate UTF8_LCASE), 3) AS split_part(utf8_lcase, a, 3)#x]
+Project [split_part(utf8_binary#x, a, 3) AS split_part(utf8_binary, a, 3)#x, split_part(utf8_lcase#x, a, 3) AS split_part(utf8_lcase, a, 3)#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_lcase#x] parquet
 
@@ -585,7 +583,7 @@ Project [split_part(utf8_binary#x, a, 3) AS split_part(utf8_binary, a, 3)#x, spl
 -- !query
 select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t1
 -- !query analysis
-Project [split_part(cast(utf8_binary#x as string collate UTF8_LCASE), collate(a, utf8_lcase), 3) AS split_part(utf8_binary, collate(a, utf8_lcase), 3)#x, split_part(cast(utf8_lcase#x as string), collate(a, utf8_binary), 3) AS split_part(utf8_lcase, collate(a, utf8_binary), 3)#x]
+Project [split_part(utf8_binary#x, collate(a, utf8_lcase), 3) AS split_part(utf8_binary, collate(a, utf8_lcase), 3)#x, split_part(utf8_lcase#x, collate(a, utf8_binary), 3) AS split_part(utf8_lcase, collate(a, utf8_binary), 3)#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_lcase#x] parquet
 
@@ -1761,17 +1759,15 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 select levenshtein(utf8_binary, utf8_lcase) from t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
-}
+Project [levenshtein(utf8_binary#x, utf8_lcase#x, None) AS levenshtein(utf8_binary, utf8_lcase)#x]
++- SubqueryAlias spark_catalog.default.t1
+   +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_lcase#x] parquet
 
 
 -- !query
 select levenshtein(utf8_binary, 'aaAaaAaA'), levenshtein(utf8_lcase, 'aaAaaAaA') from t1
 -- !query analysis
-Project [levenshtein(utf8_binary#x, aaAaaAaA, None) AS levenshtein(utf8_binary, aaAaaAaA)#x, levenshtein(utf8_lcase#x, cast(aaAaaAaA as string collate UTF8_LCASE), None) AS levenshtein(utf8_lcase, aaAaaAaA)#x]
+Project [levenshtein(utf8_binary#x, aaAaaAaA, None) AS levenshtein(utf8_binary, aaAaaAaA)#x, levenshtein(utf8_lcase#x, aaAaaAaA, None) AS levenshtein(utf8_lcase, aaAaaAaA)#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_lcase#x] parquet
 
