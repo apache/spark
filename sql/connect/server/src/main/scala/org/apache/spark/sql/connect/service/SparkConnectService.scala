@@ -231,8 +231,8 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     }
   }
 
-  private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[Message, Message])
-      : MethodDescriptor[Message, Message] = {
+  private def methodWithCustomMarshallers(
+      methodDesc: MethodDescriptor[Message, Message]): MethodDescriptor[Message, Message] = {
     val recursionLimit =
       SparkEnv.get.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
     val requestMarshaller =
