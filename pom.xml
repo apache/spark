@@ -325,7 +325,7 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.0.0</mysql.connector.version>
-    <postgresql.version>42.7.3</postgresql.version>
+    <postgresql.version>42.7.4</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.0.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
