@@ -104,9 +104,10 @@ class StatefulProcessorHandle:
             The schema of the state variable. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         ttlDurationMs: int
-            Time to live duration of the state in milliseconds. State values will not be returned past ttlDuration,
-            and will be eventually removed from the state store. Any state update resets the expiration time to
-            current processing time plus ttlDuration. If ttl is not specified the state will never expire.
+            Time to live duration of the state in milliseconds. State values will not be returned
+            past ttlDuration and will be eventually removed from the state store. Any state update
+            resets the expiration time to current processing time plus ttlDuration.
+            If ttl is not specified the state will never expire.
         """
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttlDurationMs)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
