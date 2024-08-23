@@ -331,6 +331,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(nullif(lit(5), lit(5))), Seq(Row(null)))
   }
 
+  test("nullifzero function") {
+    val df = Seq((0)).toDF("a")
+    checkAnswer(df.selectExpr("nullifzero(0)"), Seq(Row(null)))
+    checkAnswer(df.select(nullifzero(lit(0))), Seq(Row(null)))
+
+    checkAnswer(df.selectExpr("nullifzero(a)"), Seq(Row(null)))
+    checkAnswer(df.select(nullifzero(lit(5))), Seq(Row(5)))
+  }
+
   test("nvl") {
     val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
     checkAnswer(df.selectExpr("nvl(a, b)"), Seq(Row(8)))
@@ -347,6 +356,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("nvl2(b, a, c)"), Seq(Row(null)))
     checkAnswer(df.select(nvl2(col("b"), col("a"), col("c"))), Seq(Row(null)))
+  }
+
+  test("zeroifnull function") {
+    val df = Seq[(Integer)]((null)).toDF("a")
+    checkAnswer(df.selectExpr("zeroifnull(null)"), Seq(Row(0)))
+    checkAnswer(df.select(nullifzero(lit(null))), Seq(Row(0)))
+
+    checkAnswer(df.selectExpr("zeroifnull(a)"), Seq(Row(0)))
+    checkAnswer(df.select(zeroifnull(lit(5))), Seq(Row(5)))
   }
 
   test("misc md5 function") {

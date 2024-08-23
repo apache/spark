@@ -20682,6 +20682,26 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def nullifzero(col: "ColumnOrName") -> Column:
+    """
+    Returns null if `col` is equal to zero, or `col` otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
+    >>> df.select(nullifzero(df.a).alias('r')).collect()
+    [Row(r=None), Row(r=1)]
+    """
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+@_try_remote_functions
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Returns `col2` if `col1` is null, or `col1` otherwise.
@@ -20722,6 +20742,26 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     [Row(r=6), Row(r=9)]
     """
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
+
+
+@_try_remote_functions
+def zeroifnull(col: "ColumnOrName") -> Column:
+    """
+    Returns zero if `col` is null, or `col` otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,)], ["a"])
+    >>> df.select(zeroifnull(df.a).alias('r')).collect()
+    [Row(r=0), Row(r=1)]
+    """
+    return _invoke_function_over_columns("zeroifnull", col)
 
 
 @_try_remote_functions
