@@ -2084,6 +2084,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         Seq(Row(Row(1L, "test_string", 32, 64L, 123.456, 789.01F, true, "sample_bytes".getBytes)))
       )
 
+      val fileNameLength = testFileDescFile.length
       // Negative tests for to_protobuf.
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2101,7 +2102,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         queryContext = Array(ExpectedContext(
           fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())",
           start = 10,
-          stop = 153))
+          stop = 9 + 33 + fileNameLength + 9))
       )
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2140,7 +2141,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           fragment =
             s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
           start = 10,
-          stop = 172))
+          stop = 9 + 55 + fileNameLength + 6))
       )
 
       // Negative tests for from_protobuf.
@@ -2159,7 +2160,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         queryContext = Array(ExpectedContext(
           fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())",
           start = 8,
-          stop = 152))
+          stop = 7 + 34 + fileNameLength + 9))
       )
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2197,7 +2198,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           fragment =
             s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
           start = 10,
-          stop = 173))
+          stop = 9 + 56 + fileNameLength + 6))
       )
     }
   }
