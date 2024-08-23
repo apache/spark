@@ -574,12 +574,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           logDebug(s"Fail to resolve $u with $p due to $e")
           None
       }
-      (r.map((_, currentDepth)).toSeq, true)
+      (r.toSeq.map(r1 => (r1, currentDepth)), true)
     } else {
-      p.children.map { child =>
-        resolveDataFrameColumnRecursively(u, id, isMetadataAccess, child, currentDepth + 1)
-      }.foldLeft((Seq.empty[(NamedExpression, Int)], false)) {
-        case ((r1, m1), (r2, m2)) => (r1 ++ r2, m1 || m2)
+      p.children.foldLeft((Seq.empty[(NamedExpression, Int)], false)) {
+        case ((r1, m1), c) =>
+          val (r2, m2) = resolveDataFrameColumnRecursively(u, id, isMetadataAccess, c, currentDepth)
+          (r1 ++ r2, m1 || m2)
       }
     }
 
