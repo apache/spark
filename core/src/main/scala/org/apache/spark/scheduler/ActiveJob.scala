@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.JobArtifactSet
+import org.apache.spark.{JobArtifactSet, SparkContext}
 import org.apache.spark.util.CallSite
 
 /**
@@ -63,4 +63,7 @@ private[spark] class ActiveJob(
   val finished = Array.fill[Boolean](numPartitions)(false)
 
   var numFinished = 0
+
+  def getSparkSessionUUID: Option[String] =
+    Option(properties.getProperty(SparkContext.SPARK_SESSION_UUID))
 }
