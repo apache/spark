@@ -361,7 +361,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("zeroifnull function") {
     val df = Seq[(Integer)]((null)).toDF("a")
     checkAnswer(df.selectExpr("zeroifnull(null)"), Seq(Row(0)))
-    checkAnswer(df.select(nullifzero(lit(null))), Seq(Row(0)))
+    checkAnswer(df.select(zeroifnull(lit(null))), Seq(Row(0)))
 
     checkAnswer(df.selectExpr("zeroifnull(a)"), Seq(Row(0)))
     checkAnswer(df.select(zeroifnull(lit(5))), Seq(Row(5)))
