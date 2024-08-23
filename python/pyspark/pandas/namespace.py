@@ -3695,6 +3695,7 @@ def json_normalize(
 ) -> DataFrame:
     """
     Normalize semi-structured JSON data into a flat table.
+
     .. versionadded:: 4.0.0
 
     Parameters
