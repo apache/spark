@@ -26,6 +26,7 @@ from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import DoubleType
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -427,6 +428,15 @@ class BoxPlotBase:
         # Here we normalize the values by subtracting the minimum value from
         # each, and use absolute values.
         order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
+
+        print()
+        print()
+        print()
+        print(f"min_val = {min_val.item()}")
+        print()
+        print()
+        print()
+
         fliers = (
             fliers_df.select(F.col("`{}`".format(colname)))
             .orderBy(order_col)
@@ -434,6 +444,68 @@ class BoxPlotBase:
             .toPandas()[colname]
             .values
         )
+
+        print()
+        print()
+        print()
+        print(fliers)
+        print()
+        print()
+        print()
+
+        return fliers
+
+    @staticmethod
+    def get_multicol_fliers(colnames, multicol_outliers, multicol_whiskers):
+        print()
+        print()
+        print(f"multicol_whiskers = {multicol_whiskers}")
+        print()
+        print()
+
+        scols = []
+        extract_colnames = []
+        for i, colname in enumerate(colnames):
+            formated_colname = "`{}`".format(colname)
+            outlier_colname = "__{}_outlier".format(colname)
+            min_val = multicol_whiskers[colname]["min"]
+            print(f"min_val = {min_val}")
+            pair_col = F.struct(
+                F.abs(F.col(formated_colname) - min_val).alias("ord"),
+                F.col(formated_colname).alias("val"),
+            )
+            scols.append(
+                SF.collect_top_k(
+                    F.when(F.col(outlier_colname), pair_col)
+                    .otherwise(F.lit(None))
+                    .alias(f"pair_{i}"),
+                    1001,
+                    False,
+                ).alias(f"top_{i}")
+            )
+            extract_colnames.append(f"top_{i}.val")
+
+        results = multicol_outliers.select(scols).select(extract_colnames).first()
+
+        print()
+        print()
+        print()
+        print(results)
+        print()
+        print()
+        print()
+
+        fliers = {}
+        for i, colname in enumerate(colnames):
+            fliers[colname] = results[i]
+
+        print()
+        print()
+        print()
+        print(fliers)
+        print()
+        print()
+        print()
 
         return fliers
 
