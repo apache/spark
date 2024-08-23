@@ -335,8 +335,8 @@ class SimpleStatefulProcessor(StatefulProcessor):
         pass
 
 
-# A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use ttl state
-# with a large timeout.
+# A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use
+# ttl state with a large timeout.
 class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
