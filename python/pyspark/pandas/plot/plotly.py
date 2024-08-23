@@ -239,22 +239,28 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     ind = KdePlotBase.get_ind(sdf.select(*data_columns), kwargs.pop("ind", None))
     bw_method = kwargs.pop("bw_method", None)
 
-    pdfs = []
-    for label in psdf._internal.column_labels:
-        pdfs.append(
+    kde_cols = [
+        KdePlotBase.compute_kde_col(
+            input_col=psdf._internal.spark_column_for(label),
+            ind=ind,
+            bw_method=bw_method,
+        )
+        for label in psdf._internal.column_labels
+    ]
+    kde_results = sdf.select(*kde_cols).first()
+
+    pdf = pd.concat(
+        [
             pd.DataFrame(
                 {
-                    "Density": KdePlotBase.compute_kde(
-                        sdf.select(psdf._internal.spark_column_for(label)),
-                        ind=ind,
-                        bw_method=bw_method,
-                    ),
+                    "Density": kde_result,
                     "names": name_like_string(label),
                     "index": ind,
                 }
             )
-        )
-    pdf = pd.concat(pdfs)
+            for label, kde_result in zip(psdf._internal.column_labels, list(kde_results))
+        ]
+    )
 
     fig = express.line(pdf, x="index", y="Density", **kwargs)
     fig["layout"]["xaxis"]["title"] = None

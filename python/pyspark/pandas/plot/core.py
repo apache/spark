@@ -481,7 +481,7 @@ class KdePlotBase(NumericPlotBase):
         return ind
 
     @staticmethod
-    def compute_kde(sdf, bw_method=None, ind=None):
+    def compute_kde_col(input_col, bw_method=None, ind=None):
         # refers to org.apache.spark.mllib.stat.KernelDensity
         assert bw_method is not None and isinstance(
             bw_method, (int, float)
@@ -504,21 +504,25 @@ class KdePlotBase(NumericPlotBase):
             log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
             return F.exp(log_density)
 
-        dataCol = F.col(sdf.columns[0]).cast("double")
-
-        estimated = [
-            F.avg(
-                norm_pdf(
-                    dataCol,
-                    F.lit(bandwidth),
-                    F.lit(log_std_plus_half_log2_pi),
-                    F.lit(point),
+        return F.array(
+            [
+                F.avg(
+                    norm_pdf(
+                        input_col.cast("double"),
+                        F.lit(bandwidth),
+                        F.lit(log_std_plus_half_log2_pi),
+                        F.lit(point),
+                    )
                 )
-            )
-            for point in points
-        ]
+                for point in points
+            ]
+        )
 
-        row = sdf.select(F.array(estimated)).first()
+    @staticmethod
+    def compute_kde(sdf, bw_method=None, ind=None):
+        input_col = F.col(sdf.columns[0])
+        kde_col = KdePlotBase.compute_kde_col(input_col, bw_method, ind)
+        row = sdf.select(kde_col).first()
         return row[0]
 
 
