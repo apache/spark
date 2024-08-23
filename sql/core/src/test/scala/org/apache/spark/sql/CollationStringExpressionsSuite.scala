@@ -139,7 +139,7 @@ class CollationStringExpressionsSuite
         val expr = StringSplitSQL(
           Cast(Literal.create("1a2"), StringType("UTF8_BINARY")),
           Cast(Literal.create("a"), StringType("UTF8_LCASE")))
-        CollationTypeCasts.transform.apply(expr)
+        CollationTypeCasts.transform(expr)
       },
       errorClass = "COLLATION_MISMATCH.IMPLICIT",
       sqlState = "42P21",
@@ -150,7 +150,7 @@ class CollationStringExpressionsSuite
         val expr = StringSplitSQL(
           Collate(Literal.create("1a2"), "UTF8_BINARY"),
           Collate(Literal.create("a"), "UTF8_LCASE"))
-        CollationTypeCasts.transform.apply(expr)
+        CollationTypeCasts.transform(expr)
       },
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",
