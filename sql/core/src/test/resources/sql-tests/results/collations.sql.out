@@ -427,3 +427,62 @@ select 'I' collate tr_ci = 'ı'
 struct<(collate(I, tr_ci) = ı):boolean>
 -- !query output
 true
+
+
+-- !query
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t4 values('a:1,b:2,c:3', ',', ':')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select str_to_map(text, pairDelim, keyValueDelim) from t4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4
+-- !query schema
+struct<str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), collate(keyValueDelim, utf8_binary)):map<string,string>>
+-- !query output
+{"a":"1","b":"2","c":"3"}
+
+
+-- !query
+drop table t4
+-- !query schema
+struct<>
+-- !query output
+
