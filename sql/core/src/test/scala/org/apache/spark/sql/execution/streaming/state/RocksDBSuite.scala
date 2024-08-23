@@ -638,6 +638,40 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithColumnFamilies("RocksDB close tests - close before doMaintenance",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 1, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf,
+      useColumnFamilies = colFamiliesEnabled) { db =>
+      db.load(0)
+      db.put("foo", "bar")
+      db.commit()
+      // call close first and maintenance can be still be invoked in the context of the
+      // maintenance task's thread pool
+      db.close()
+      db.doMaintenance()
+    }
+  }
+
+  testWithColumnFamilies("RocksDB close tests - close after doMaintenance",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 1, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf,
+      useColumnFamilies = colFamiliesEnabled) { db =>
+      db.load(0)
+      db.put("foo", "bar")
+      db.commit()
+      // maintenance can be invoked in the context of the maintenance task's thread pool
+      // and close is invoked after that
+      db.doMaintenance()
+      db.close()
+    }
+  }
+
   testWithChangelogCheckpointingEnabled("RocksDB: Unsupported Operations" +
     " with Changelog Checkpointing") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
