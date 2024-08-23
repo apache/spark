@@ -417,7 +417,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         // If the element type is the same, we can reuse the input array directly.
         Some(
           Alias(nullCheckedInput, expected.name)(
-            nonInheritableMetadataKeys = Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
+            nonInheritableMetadataKeys =
+              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
       } else {
         val func = LambdaFunction(res.head, Seq(param))
         Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
