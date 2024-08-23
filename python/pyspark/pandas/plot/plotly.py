@@ -210,7 +210,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
             col_fliers = None
             if fliers is not None and len(fliers[colname]) > 0:
-                col_fliers = fliers[colname]
+                col_fliers = [fliers[colname]]
 
             fig.add_trace(
                 go.Box(
@@ -222,7 +222,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     mean=[col_stats["mean"]],
                     lowerfence=[col_whiskers["min"]],
                     upperfence=[col_whiskers["max"]],
-                    y=None,
+                    y=col_fliers,
                     boxpoints=boxpoints,
                     notched=notched,
                     **kwargs,
