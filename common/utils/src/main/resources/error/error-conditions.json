@@ -5012,36 +5012,36 @@
   },
   "UNSUPPORTED_SHOW_CREATE_TABLE" : {
     "message" : [
-      "Unsupported show create table command."
+      "Unsupported a SHOW CREATE TABLE command."
     ],
     "subClass" : {
       "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
         "message" : [
-          "<table> is a Spark data source table. Please use `SHOW CREATE TABLE` without `AS SERDE` instead."
+          "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
         ]
       },
       "ON_TEMPORARY_VIEW" : {
         "message" : [
-          "`SHOW CREATE TABLE` is not supported on a temporary view <table>."
+          "The command is not supported on a temporary view <tableName>."
         ]
       },
       "ON_TRANSACTIONAL_HIVE_TABLE" : {
         "message" : [
-          "Failed to execute `SHOW CREATE TABLE` against transactional Hive table <table>.",
-          "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+          "Failed to execute the command against transactional Hive table <tableName>.",
+          "Please use SHOW CREATE TABLE <tableName> AS SERDE to show Hive DDL instead."
         ]
       },
       "WITH_UNSUPPORTED_FEATURE" : {
         "message" : [
-          "Failed to execute `SHOW CREATE TABLE` against table/view <table>, which is created by Hive and uses the following unsupported features",
+          "Failed to execute the command against table/view <tableName> which is created by Hive and uses the following unsupported features",
           "<unsupportedFeatures>"
         ]
       },
       "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
         "message" : [
-          "Failed to execute `SHOW CREATE TABLE` against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+          "Failed to execute the command against the table <tableName> which is created by Hive and uses the following unsupported serde configuration",
           "<configs>",
-          "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+          "Please use SHOW CREATE TABLE <tableName> AS SERDE to show Hive DDL instead."
         ]
       }
     },

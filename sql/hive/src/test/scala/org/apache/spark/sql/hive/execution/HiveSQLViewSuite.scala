@@ -216,7 +216,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
           sqlState = "0A000",
           parameters = Map(
-            "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
             "unsupportedFeatures" -> " - partitioned view"
           )
         )
@@ -227,7 +227,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
           sqlState = "0A000",
           parameters = Map(
-            "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
             "unsupportedFeatures" -> " - partitioned view"
           )
         )
