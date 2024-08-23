@@ -34,6 +34,7 @@ import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.SparkSession.applyAndLoadExtensions
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
@@ -106,9 +107,7 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None,
-      SparkSession.loadExtensions(SparkSession.applyExtensions(sc, new SparkSessionExtensions)),
-      initialSessionOptions.asScala.toMap)
+    this(sc, None, None, applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -1397,6 +1396,18 @@ object SparkSession extends Logging {
   }
 
   /**
+   * Create new session extensions, initialize with the confs set in [[StaticSQLConf]],
+   * and optionally apply the [[SparkSessionExtensionsProvider]] present on the classpath.
+   */
+  private[sql] def applyAndLoadExtensions(sparkContext: SparkContext): SparkSessionExtensions = {
+    val extensions = applyExtensions(sparkContext, new SparkSessionExtensions)
+    if (sparkContext.conf.get(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH)) {
+      loadExtensions(extensions)
+    }
+    extensions
+  }
+
+  /**
    * Initialize extensions specified in [[StaticSQLConf]]. The classes will be applied to the
    * extensions passed into this function.
    */
@@ -1426,7 +1437,7 @@ object SparkSession extends Logging {
   /**
    * Load extensions from [[ServiceLoader]] and use them
    */
-  private def loadExtensions(extensions: SparkSessionExtensions): SparkSessionExtensions = {
+  private def loadExtensions(extensions: SparkSessionExtensions): Unit = {
     val loader = ServiceLoader.load(classOf[SparkSessionExtensionsProvider],
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
@@ -1439,6 +1450,5 @@ object SparkSession extends Logging {
         case e: Throwable => logWarning("Failed to load session extension", e)
       }
     }
-    extensions
   }
 }
