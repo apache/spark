@@ -209,7 +209,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             col_whiskers = whiskers[colname]
 
             col_fliers = None
-            if fliers is not None and len(fliers[colname]) > 0:
+            if fliers is not None and colname in fliers and len(fliers[colname]) > 0:
                 col_fliers = [fliers[colname]]
 
             fig.add_trace(
