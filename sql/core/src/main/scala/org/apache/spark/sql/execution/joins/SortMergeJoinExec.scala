@@ -233,7 +233,7 @@ case class SortMergeJoinExec(
 
     // Inline mutable state since not many join operations in a task
     val matches = ctx.addMutableState(clsName, "matches",
-      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold, ${spillSizeThreshold}L));",
+      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold, ${spillSizeThreshold}L);",
       forceInline = true)
     // Copy the streamed keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, streamedKeyVars)
