@@ -26,15 +26,15 @@ DESCRIPTOR: _descriptor.FileDescriptor
 INITIALIZED: HandleState
 
 class Clear(_message.Message):
-    __slots__ = []
+    __slots__ = ()
     def __init__(self) -> None: ...
 
 class Exists(_message.Message):
-    __slots__ = []
+    __slots__ = ()
     def __init__(self) -> None: ...
 
 class Get(_message.Message):
-    __slots__ = []
+    __slots__ = ()
     def __init__(self) -> None: ...
 
 class ImplicitGroupingKeyRequest(_message.Message):
@@ -50,7 +50,7 @@ class ImplicitGroupingKeyRequest(_message.Message):
     ) -> None: ...
 
 class RemoveImplicitKey(_message.Message):
-    __slots__ = []
+    __slots__ = ()
     def __init__(self) -> None: ...
 
 class SetHandleState(_message.Message):
@@ -176,4 +176,4 @@ class ValueStateUpdate(_message.Message):
     def __init__(self, value: Optional[bytes] = ...) -> None: ...
 
 class HandleState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__ = ()

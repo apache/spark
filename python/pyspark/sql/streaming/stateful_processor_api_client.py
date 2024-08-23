@@ -17,7 +17,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, Union, cast, Tuple
+from typing import Any, Union, Optional, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
@@ -102,7 +102,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
 
     def get_value_state(
-        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: int
+        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: Optional[int]
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
