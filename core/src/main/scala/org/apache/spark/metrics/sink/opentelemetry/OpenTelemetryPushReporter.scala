@@ -99,8 +99,7 @@ private[spark] class OpenTelemetryPushReporter(
     .getDefault()
     .merge(Resource.create(arrtributesBuilder.build()));
 
-  val metricReader =
-    PeriodicMetricReader
+  val metricReader = PeriodicMetricReader
       .builder(otlpGrpcMetricExporterBuilder.build())
       .setInterval(pollInterval, pollUnit)
       .build()
@@ -112,8 +111,7 @@ private[spark] class OpenTelemetryPushReporter(
     .build()
 
   val openTelemetryCounters = collection.mutable.Map[String, LongCounter]()
-  val openTelemetryHistograms =
-    collection.mutable.Map[String, DoubleHistogram]()
+  val openTelemetryHistograms = collection.mutable.Map[String, DoubleHistogram]()
   val openTelemetryGauges = collection.mutable.Map[String, DoubleGauge]()
   val codahaleCounters = collection.mutable.Map[String, Counter]()
   val openTelemetry = OpenTelemetrySdk

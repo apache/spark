@@ -627,7 +627,7 @@
       </properties>
     </profile>
     <profile>
-      <id>opentelemetry-reporter</id>
+      <id>opentelemetry</id>
       <properties>
         <opentelemetry.exclude></opentelemetry.exclude>
       </properties>
