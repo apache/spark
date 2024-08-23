@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCom
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -158,6 +158,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("testcat")
     newCatalog
   }
@@ -175,6 +177,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
   }
@@ -1333,18 +1337,11 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql3)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "j",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
+              "objectName" -> "`j`",
+              "proposal" -> "`i`, `s`, `point`"),
             context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
@@ -1357,6 +1354,15 @@ class PlanResolutionSuite extends AnalysisTest {
             sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))
+
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(s"ALTER TABLE $tblName ALTER COLUMN i SET NOT NULL")
+            },
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN ... SET NOT NULL"))
         } else {
           parsed1 match {
             case AlterColumn(
@@ -1417,18 +1423,11 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "I",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
+              "objectName" -> "`I`",
+              "proposal" -> "`i`, `s`, `point`"),
             context = ExpectedContext(fragment = sql, start = 0, stop = 55))
         } else {
           val actual = parseAndResolve(sql)

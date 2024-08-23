@@ -969,11 +969,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val OPTIMIZE_INSERT_INTO_VALUES_PARSER =
-    buildConf("spark.sql.parser.optimizeInsertIntoValuesParser")
+  val EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED =
+    buildConf("spark.sql.parser.eagerEvalOfUnresolvedInlineTable")
       .internal()
       .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
-        "`insert into ... values` DML statements.")
+        "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1486,6 +1486,13 @@ object SQLConf {
     .version("1.4.0")
     .intConf
     .createWithDefault(200)
+
+  val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
+    buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
+      .internal()
+      .doc("Enable skipping assert when expression in not translated to predicate.")
+      .booleanConf
+      .createWithDefault(!Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -4399,8 +4406,8 @@ object SQLConf {
 
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
-      .internal()
-      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser.")
+      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +
+        "can be overwritten by the JSON option `useUnsafeRow`.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5083,7 +5090,8 @@ object SQLConf {
     .internal()
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
       "encoding or decoding string values. If it is false, such functions support only one of " +
-      "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+      "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', " +
+      "'UTF-32'.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)

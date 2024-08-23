@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -56,6 +56,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
   val INVALID_FORMAT_ERROR = TreeNodeTag[Unit]("invalidFormatError")
+
+  // Error that is not supposed to throw immediately on triggering, e.g. certain internal errors.
+  // The error will be thrown at the end of the whole check analysis process, if no other error
+  // occurs.
+  val preemptedError = new PreemptedError()
 
   /**
    * Fails the analysis at the point where a specific tree node was parsed using a provided
@@ -114,10 +119,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkNotContainingLCA(exprs: Seq[Expression], plan: LogicalPlan): Unit = {
     exprs.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
       case lcaRef: LateralColumnAliasReference =>
-        throw SparkException.internalError("Resolved plan should not contain any " +
-          s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
-          context = lcaRef.origin.getQueryContext,
-          summary = lcaRef.origin.context.summary)
+        // this should be a low priority internal error to be preempted
+        preemptedError.set(
+          SparkException.internalError(
+            "Resolved plan should not contain any " +
+            s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
+            context = lcaRef.origin.getQueryContext,
+            summary = lcaRef.origin.context.summary)
+        )
+        lcaRef
     })
   }
 
@@ -174,11 +184,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, plan)
     }
+    preemptedError.clear()
     try {
       checkAnalysis0(inlinedPlan)
+      preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, inlinedPlan)
+    } finally {
+      preemptedError.clear()
     }
     plan.setAnalyzed()
   }
@@ -305,6 +319,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
 
+          // Should be before `e.checkInputDataTypes()` to produce the correct error for unknown
+          // window expressions nested inside other expressions
+          case UnresolvedWindowExpression(_, WindowSpecReference(windowName)) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case checkRes: TypeCheckResult.DataTypeMismatch =>
@@ -400,6 +419,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+
+        // Check for unresolved TABLE arguments after the main check above to allow other analysis
+        // errors to apply first, providing better error messages.
+        getAllExpressions(operator).foreach(_.foreachUp {
+          case expr: FunctionTableSubqueryArgumentExpression =>
+            expr.failAnalysis(
+              errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+              messageParameters = Map("treeNode" -> planToString(plan)))
+          case _ =>
+        })
+
         if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
@@ -1078,9 +1108,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case _: FunctionTableSubqueryArgumentExpression =>
-        expr.failAnalysis(
-          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-          messageParameters = Map("treeNode" -> planToString(plan)))
+        // Do nothing here, since we will check for this pattern later.
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -1531,4 +1559,32 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _ =>
     }
   }
+}
+
+// a heap of the preempted error that only keeps the top priority element, representing the sole
+// error to be thrown at the end of the whole check analysis process, if no other error occurs.
+class PreemptedError() {
+  case class ErrorWithPriority(error: Exception with SparkThrowable, priority: Int) {}
+
+  private var errorOpt: Option[ErrorWithPriority] = None
+
+  // Set/overwrite the given error as the preempted error, if no other errors are preempted, or it
+  // has a higher priority than the existing one.
+  // If the priority is not provided, it will be calculated based on error class. Currently internal
+  // errors have the lowest priority.
+  def set(error: Exception with SparkThrowable, priority: Option[Int] = None): Unit = {
+    val calculatedPriority = priority.getOrElse {
+      error.getErrorClass match {
+        case c if c.startsWith("INTERNAL_ERROR") => 1
+        case _ => 2
+      }
+    }
+    if (errorOpt.isEmpty || calculatedPriority > errorOpt.get.priority) {
+      errorOpt = Some(ErrorWithPriority(error, calculatedPriority))
+    }
+  }
+
+  def getErrorOpt(): Option[Exception with SparkThrowable] = errorOpt.map(_.error)
+
+  def clear(): Unit = errorOpt = None
 }

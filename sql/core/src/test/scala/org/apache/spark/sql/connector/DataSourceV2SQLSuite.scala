@@ -27,9 +27,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, ColumnStat, CommandResult, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -42,6 +43,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -432,6 +434,25 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49152: CreateTable should store location as qualified") {
+    val tbl = "testcat.table_name"
+
+    def testWithLocation(location: String, qualified: String): Unit = {
+      withTable(tbl) {
+        sql(s"CREATE TABLE $tbl USING foo LOCATION '$location'")
+        val loc = catalog("testcat").asTableCatalog
+          .loadTable(Identifier.of(Array.empty, "table_name"))
+          .properties().get(TableCatalog.PROP_LOCATION)
+        assert(loc === qualified)
+      }
+    }
+
+    testWithLocation("/absolute/path", "file:/absolute/path")
+    testWithLocation("s3://host/full/path", "s3://host/full/path")
+    testWithLocation("relative/path", "relative/path")
+    testWithLocation("/path/special+ char", "file:/path/special+ char")
+  }
+
   test("SPARK-37545: CreateTableAsSelect should store location as qualified") {
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
@@ -442,7 +463,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:///tmp/foo")
+        assert(location === "file:/tmp/foo")
       }
     }
   }
@@ -459,7 +480,7 @@ class DataSourceV2SQLSuiteV1Filter
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head().getString(0)
-        assert(location === "file:///tmp/foo")
+        assert(location === "file:/tmp/foo")
       }
     }
   }
@@ -1353,8 +1374,7 @@ class DataSourceV2SQLSuiteV1Filter
             val identifier = Identifier.of(Array(), "reservedTest")
             val location = tableCatalog.loadTable(identifier).properties()
               .get(TableCatalog.PROP_LOCATION)
-            assert(location.startsWith("file:") && location.endsWith("foo"),
-              "path as a table property should not have side effects")
+            assert(location == "foo", "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
               "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("Path") == "noop",
@@ -2841,19 +2861,12 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(sql1)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "non_exist",
-          "table" -> "testcat.tbl",
-          "schema" ->
-            """root
-              | |-- id: long (nullable = true)
-              | |-- data: string (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(
-          fragment = sql1,
-          start = 0,
-          stop = 40))
+          "objectName" -> "`non_exist`",
+          "proposal" -> "`id`, `data`"),
+        context = ExpectedContext(fragment = sql1, start = 0, stop = 40))
 
       val sql2 = s"CREATE index i1 ON $t(id)"
       checkError(
@@ -3286,7 +3299,7 @@ class DataSourceV2SQLSuiteV1Filter
       val properties = table.properties
       assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
       assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
-      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:///tmp")
+      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
       assert(properties.containsKey(TableCatalog.PROP_OWNER))
       assert(properties.get(TableCatalog.PROP_EXTERNAL) == "true")
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}from") == "0")
@@ -3627,6 +3640,149 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49211: V2 Catalog can support built-in data sources") {
+    def checkParquet(tableName: String, path: String): Unit = {
+      withTable(tableName) {
+        sql("CREATE TABLE " + tableName +
+          " (name STRING) USING PARQUET LOCATION '" + path + "'")
+        sql("INSERT INTO " + tableName + " VALUES('Bob')")
+        val df = sql("SELECT * FROM " + tableName)
+        assert(df.queryExecution.analyzed.exists {
+          case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+          case _ => false
+        })
+        checkAnswer(df, Row("Bob"))
+      }
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    spark.sessionState.catalogManager.reset()
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+        classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkParquet(table1.toString, path.getAbsolutePath)
+      }
+    }
+    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkParquet(table2.toString, path.getAbsolutePath)
+      }
+    }
+  }
+
+  test("SPARK-49211: V2 Catalog support CTAS") {
+    def checkCTAS(tableName: String, path: String): Unit = {
+      sql("CREATE TABLE " + tableName + " USING PARQUET LOCATION '" + path +
+        "' AS SELECT 1, 2, 3")
+      checkAnswer(sql("SELECT * FROM " + tableName), Row(1, 2, 3))
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+        classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkCTAS(table1.toString, path.getAbsolutePath)
+      }
+    }
+
+    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    withSQLConf(
+      "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
+      withTempPath { path =>
+        checkCTAS(table2.toString, path.getAbsolutePath)
+      }
+    }
+  }
+
+  test("SPARK-49246: read-only catalog") {
+    def assertPrivilegeError(f: => Unit, privilege: String): Unit = {
+      val e = intercept[RuntimeException](f)
+      assert(e.getMessage.contains(privilege))
+    }
+
+    def checkWriteOperations(catalog: String): Unit = {
+      withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
+        val input = sql("SELECT 1")
+        val tbl = s"$catalog.default.t"
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (i INT)")
+          val df = sql(s"SELECT * FROM $tbl")
+          assert(df.collect().isEmpty)
+          assert(df.schema == new StructType().add("i", "int"))
+
+          assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT 1"), "INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT 1"), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"INSERT OVERWRITE $tbl SELECT 1"), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"DELETE FROM $tbl WHERE i = 0"), "DELETE")
+          assertPrivilegeError(sql(s"UPDATE $tbl SET i = 0"), "UPDATE")
+          assertPrivilegeError(
+            sql(s"""
+               |MERGE INTO $tbl USING (SELECT 1 i) AS source
+               |ON source.i = $tbl.i
+               |WHEN MATCHED THEN UPDATE SET *
+               |WHEN NOT MATCHED THEN INSERT *
+               |WHEN NOT MATCHED BY SOURCE THEN DELETE
+               |""".stripMargin),
+            "DELETE,INSERT,UPDATE"
+          )
+
+          assertPrivilegeError(input.write.insertInto(tbl), "INSERT")
+          assertPrivilegeError(input.write.mode("overwrite").insertInto(tbl), "DELETE,INSERT")
+          assertPrivilegeError(input.write.mode("append").saveAsTable(tbl), "INSERT")
+          assertPrivilegeError(input.write.mode("overwrite").saveAsTable(tbl), "DELETE,INSERT")
+          assertPrivilegeError(input.writeTo(tbl).append(), "INSERT")
+          assertPrivilegeError(input.writeTo(tbl).overwrite(df.col("i") === 1), "DELETE,INSERT")
+          assertPrivilegeError(input.writeTo(tbl).overwritePartitions(), "DELETE,INSERT")
+        }
+
+        // Test CTAS
+        withTable(tbl) {
+          assertPrivilegeError(sql(s"CREATE TABLE $tbl AS SELECT 1 i"), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(input.write.saveAsTable(tbl), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(input.writeTo(tbl).create(), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(input.writeTo(tbl).createOrReplace(), "INSERT")
+        }
+      }
+    }
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    checkWriteOperations(SESSION_CATALOG_NAME)
+    checkWriteOperations("read_only_cat")
+  }
+
+  test("StagingTableCatalog without atomic support") {
+    withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
+      withTable("fakeStagedCat.t") {
+        sql("CREATE TABLE fakeStagedCat.t AS SELECT 1 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1))
+        sql("REPLACE TABLE fakeStagedCat.t AS SELECT 2 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(2))
+        sql("CREATE OR REPLACE TABLE fakeStagedCat.t AS SELECT 1 c1, 2 c2")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1, 2))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3660,5 +3816,114 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
     newProps.put(TableCatalog.PROP_LOCATION, "/tmp/test_path")
     newProps.put(TableCatalog.PROP_IS_MANAGED_LOCATION, "true")
     super.createTable(ident, columns, partitions, newProps)
+  }
+}
+
+
+class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def loadTable(ident: Identifier): Table = {
+    val superTable = super.loadTable(ident)
+    val tableIdent = {
+      TableIdentifier(ident.name(), Some(ident.namespace().head), Some(name))
+    }
+    val uri = CatalogUtils.stringToURI(superTable.properties().get(TableCatalog.PROP_LOCATION))
+    val sparkTable = CatalogTable(
+      tableIdent,
+      tableType = CatalogTableType.EXTERNAL,
+      storage = CatalogStorageFormat.empty.copy(
+        locationUri = Some(uri),
+        properties = superTable.properties().asScala.toMap
+      ),
+      schema = superTable.schema(),
+      provider = Some(superTable.properties().get(TableCatalog.PROP_PROVIDER)),
+      tracksPartitionsInCatalog = false
+    )
+    V1Table(sparkTable)
+  }
+}
+
+class ReadOnlyCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    throw new RuntimeException("cannot write with " +
+      writePrivileges.asScala.toSeq.map(_.toString).sorted.mkString(","))
+  }
+}
+
+class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
+  override def stageCreate(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    throw new RuntimeException("shouldn't be called")
+  }
+
+  override def stageCreate(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    throw new RuntimeException("shouldn't be called")
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.dropTable(ident)
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    throw new RuntimeException("shouldn't be called")
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    try {
+      super.dropTable(ident)
+    } catch {
+      case _: Throwable =>
+    }
+    super.createTable(ident, columns, partitions, properties)
+    null
   }
 }

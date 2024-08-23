@@ -300,6 +300,18 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.UDFRegistration.register"),
 
+      // Typed Column
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.TypedColumn.*"),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "org.apache.spark.sql.TypedColumn.expr"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.TypedColumn$"),
+
+      // ColumnNode conversions
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.Converter"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$Converter$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$RichColumn"),
+
       // Datasource V2 partition transforms
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform$"),
@@ -426,6 +438,9 @@ object CheckConnectJvmClientCompatibility {
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
+
+      // Column API
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Column.expr"),
 
       // Steaming API
       ProblemFilters.exclude[MissingTypesProblem](

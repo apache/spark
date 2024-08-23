@@ -62,6 +62,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, String) =>
         CoarseGrainedExecutorBackend): Unit = {
 
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>

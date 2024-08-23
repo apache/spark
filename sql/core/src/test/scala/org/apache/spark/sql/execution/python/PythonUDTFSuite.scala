@@ -317,19 +317,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case other =>
         failure(other)
     }
-    withTable("t") {
-      sql("create table t(col array<int>) using parquet")
-      val query = "select * from explode(table(t))"
-      checkErrorMatchPVals(
-        exception = intercept[AnalysisException](sql(query)),
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-        sqlState = None,
-        parameters = Map("treeNode" -> "(?s).*"),
-        context = ExpectedContext(
-          fragment = "table(t)",
-          start = 22,
-          stop = 29))
-    }
 
     spark.udtf.registerPython(UDTFCountSumLast.name, pythonUDTFCountSumLast)
     var plan = sql(

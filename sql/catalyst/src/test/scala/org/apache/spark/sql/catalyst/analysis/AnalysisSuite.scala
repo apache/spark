@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1752,9 +1753,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
     }
     withClue("IDENTIFIER as table") {
-      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      val ident = new PlanWithUnresolvedIdentifier(name, _ => testRelation)
       checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
-      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      val ident2 = new PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
       checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
   }
@@ -1806,5 +1807,27 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       inputEncoders = Seq(Some(ExpressionEncoder[Int]().resolveAndBind())))
     val plan = testRelation.select(udf.as("u")).select($"u").analyze
     assert(plan.output.head.nullable)
+  }
+
+  test("test methods of PreemptedError") {
+    val preemptedError = new PreemptedError()
+    assert(preemptedError.getErrorOpt().isEmpty)
+
+    val internalError = SparkException.internalError("some internal error to be preempted")
+    preemptedError.set(internalError)
+    assert(preemptedError.getErrorOpt().contains(internalError))
+
+    // set error with higher priority will overwrite
+    val regularError = QueryCompilationErrors.unresolvedColumnError("name", Seq("a"))
+      .asInstanceOf[AnalysisException]
+    preemptedError.set(regularError)
+    assert(preemptedError.getErrorOpt().contains(regularError))
+
+    // set error with lower priority is noop
+    preemptedError.set(internalError)
+    assert(preemptedError.getErrorOpt().contains(regularError))
+
+    preemptedError.clear()
+    assert(preemptedError.getErrorOpt().isEmpty)
   }
 }

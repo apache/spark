@@ -499,4 +499,9 @@ This file is divided into 3 sections:
       and URIs to and from String. If possible, please use SparkPath.
     ]]></customMessage>
   </check>
+
+  <check customId="URLConstructor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new URL\(</parameter></parameters>
+    <customMessage>Use URI.toURL or URL.of instead of URL constructors.</customMessage>
+  </check>
 </scalastyle>

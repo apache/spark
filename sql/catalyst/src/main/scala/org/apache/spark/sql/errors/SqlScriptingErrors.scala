@@ -74,4 +74,14 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
+
+  def booleanStatementWithEmptyRow(
+      origin: Origin,
+      stmt: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+      cause = null,
+      messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
+  }
 }
