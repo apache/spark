@@ -107,7 +107,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       for (_ <- 0L until iterations) {
         val array = new ExternalAppendOnlyUnsafeRowArray(
           ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer,
-          numSpillThreshold)
+          numSpillThreshold,
+          Long.MaxValue)
 
         rows.foreach(x => array.add(x))
 
@@ -146,6 +147,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
           1024,
           SparkEnv.get.memoryManager.pageSizeBytes,
           numSpillThreshold,
+          Long.MaxValue,
           false)
 
         rows.foreach(x =>
@@ -170,7 +172,9 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold, numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold,
+          numSpillThreshold,
+          Long.MaxValue)
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()
