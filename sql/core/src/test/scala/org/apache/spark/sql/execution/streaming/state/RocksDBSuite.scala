@@ -1772,6 +1772,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithChangelogCheckpointingEnabled("load the same version of pending snapshot uploading") {
+    // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
@@ -1807,6 +1808,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   for (random_seed <- 1 to 16) {
     testWithChangelogCheckpointingEnabled(s"randomized snapshotting $random_seed") {
+      // The unit test simulates the case where batches can be reloaded and maintenance tasks
+      // can be delayed. After each batch, we randomly decide whether we would move onto the
+      // next batch, and whetehr maintenance task is executed.
+      // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
       val remoteDir = Utils.createTempDir().toString
       val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
       new File(remoteDir).delete() // to make sure that the directory gets created
@@ -1817,10 +1822,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           db.load(curVer)
           db.put("foo", "bar")
           db.commit()
+	  // For a one in five chance, maintenance task is executed. The chance is created to
+	  // simulate the case where snapshot isn't immediatelly uploaded, and even delayed
+	  // so that the next snapshot is ready. We create a snapshot in every 3 batches, so
+	  // with 1/5 chance, it is more likely to create longer maintenance delay.
           if (random.nextInt(5) == 0) {
             db.doMaintenance()
           }
-          if (random.nextInt(2) == 0) {
+	  // For half the chance, we move to the next version, and half the chance we keep the
+	  // same version
+	  if (random.nextInt(2) == 0) {
             curVer = curVer + 1
           }
         }
@@ -1829,6 +1840,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithChangelogCheckpointingEnabled(s"simulate ForEachBatch") {
+    // In ForEachBatch, often batches are executed twice. We simulate this case.
+    // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
