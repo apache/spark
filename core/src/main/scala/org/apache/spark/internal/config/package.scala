@@ -1583,20 +1583,10 @@ package object config {
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
 
-  private[spark] val SHUFFLE_SPILL_MAP_MAX_SIZE_FORCE_SPILL_THRESHOLD =
-    ConfigBuilder("spark.shuffle.spill.map.maxRecordsSizeForSpillThreshold")
+  private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
       .internal()
-      .doc("The maximum size in memory before forcing the map-side shuffle sorter to spill. " +
-        "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
-        "until we reach some limitations, like the max page size limitation for the pointer " +
-        "array in the sorter.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(Long.MaxValue)
-
-  private[spark] val SHUFFLE_SPILL_REDUCE_MAX_SIZE_FORCE_SPILL_THRESHOLD =
-    ConfigBuilder("spark.shuffle.spill.reduce.maxRecordsSizeForSpillThreshold")
-      .internal()
-      .doc("The maximum size in memory before forcing the reduce-side to spill. " +
+      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
         "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
