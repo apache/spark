@@ -107,7 +107,7 @@ abstract class LogicalPlan
   lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
   override protected def statePrefix = {
-    val prefix = if (!resolved) {
+    if (!resolved) {
       "'"
     } else {
       val prefixFromSuper = super.statePrefix
@@ -119,9 +119,6 @@ abstract class LogicalPlan
         prefixFromSuper
       }
     }
-
-    this.getTagValue(LogicalPlan.PLAN_ID_TAG)
-      .map(id => s"$prefix[id=$id]").getOrElse(prefix)
   }
 
   /**

@@ -33,7 +33,6 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
-// scalastyle:off println
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   def conf: SQLConf
@@ -450,11 +449,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       plan: LogicalPlan,
       throws: Boolean = false,
       includeLastResort: Boolean = false): Expression = {
-    println(s"resolveExpressionByPlanOutput: e = $expr")
-    println(s"resolveExpressionByPlanOutput: q = \n$plan")
-    println()
-    println()
-    println()
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
@@ -477,11 +471,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       e: Expression,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Expression = {
-    println(s"resolveExpressionByPlanChildren: e = $e")
-    println(s"resolveExpressionByPlanChildren: q = \n$q")
-    println()
-    println()
-    println()
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
@@ -539,15 +528,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     if (planIdOpt.isEmpty) return None
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
-    println()
-    println()
-    println(s"Extract plan_id $planId from $u")
-    println()
-    println()
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
 
-    val resolved = q.map(resolveDataFrameColumnRecursively(u, planId, isMetadataAccess, _, 0))
+    val resolved = q.map { p =>
+      resolveDataFrameColumnRecursively(u, planId, isMetadataAccess, p, 0)
+    }
     val matched = resolved.exists(_._2)
     if (!matched) {
       // Can not find the target plan node with plan id, e.g.
