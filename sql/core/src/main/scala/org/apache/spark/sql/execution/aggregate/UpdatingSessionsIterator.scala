@@ -43,7 +43,8 @@ class UpdatingSessionsIterator(
     sessionExpression: NamedExpression,
     inputSchema: Seq[Attribute],
     inMemoryThreshold: Int,
-    spillThreshold: Int) extends Iterator[InternalRow] {
+    spillThreshold: Int,
+    spillSizeThreshold: Long) extends Iterator[InternalRow] {
 
   private val groupingWithoutSession: Seq[NamedExpression] =
     groupingExpressions.diff(Seq(sessionExpression))
@@ -150,7 +151,8 @@ class UpdatingSessionsIterator(
     currentKeys = groupingKey.copy()
     currentSession = sessionStruct.copy()
 
-    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold,
+      spillSizeThreshold)
     rowsForCurrentSession.add(currentRow.asInstanceOf[UnsafeRow])
   }
 
