@@ -505,6 +505,206 @@ struct<>
 
 
 -- !query
+insert into t1 values ('aaAaAAaA', 'aaAaAAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('İo', 'İo')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('İo', 'i̇o')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('kitten', 'sitTing')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abc', 'abc')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t1 values ('abcdcba', 'aBcDCbA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t2(ascii long) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t2 values (97)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t2 values (66)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t3(ascii double) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t3 values (97.52143)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t3 values (66.421)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t4(format string collate utf8_binary, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t4 values ('%s%s', 'abCdE', 'abCdE')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t5(num long) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t5 values (97)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t5 values (66)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t6(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t6 values ('aaAaAAaA', 'aaAaaAaA')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t6 values ('efd2', 'efd2')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 select concat_ws(' ', utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>
@@ -536,7 +736,18 @@ select concat_ws(',', utf8_lcase, 'word'), concat_ws(',', utf8_binary, 'word') f
 -- !query schema
 struct<concat_ws(,, utf8_lcase, word):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
 -- !query output
+Hello, world! Nice day.,word	Hello, world! Nice day.,word
 SQL,word	Spark,word
+Something else. Nothing here.,word	Something else. Nothing here.,word
+aBcDCbA,word	abcdcba,word
+aaAaAAaA,word	aaAaAAaA,word
+aaAaaAaA,word	aaAaAAaA,word
+aaAaaAaAaaAaaAaAaaAaaAaA,word	aaAaAAaA,word
+abc,word	abc,word
+efd2,word	efd2,word
+i̇o,word	İo,word
+sitTing,word	kitten,word
+İo,word	İo,word
 
 
 -- !query
@@ -544,31 +755,18 @@ select concat_ws(',', utf8_lcase, 'word' collate utf8_binary), concat_ws(',', ut
 -- !query schema
 struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(,, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.,word	Hello, world! Nice day.,word
 SQL,word	Spark,word
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Spark', 'SQL')
--- !query schema
-struct<>
--- !query output
-
+Something else. Nothing here.,word	Something else. Nothing here.,word
+aBcDCbA,word	abcdcba,word
+aaAaAAaA,word	aaAaAAaA,word
+aaAaaAaA,word	aaAaAAaA,word
+aaAaaAaAaaAaaAaAaaAaaAaA,word	aaAaAAaA,word
+abc,word	abc,word
+efd2,word	efd2,word
+i̇o,word	İo,word
+sitTing,word	kitten,word
+İo,word	İo,word
 
 
 -- !query
@@ -588,7 +786,18 @@ select elt(1, utf8_binary collate utf8_lcase, utf8_lcase) from t1
 -- !query schema
 struct<elt(1, collate(utf8_binary, utf8_lcase), utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.
+Something else. Nothing here.
 Spark
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+abc
+abcdcba
+efd2
+kitten
+İo
+İo
 
 
 -- !query
@@ -596,31 +805,18 @@ select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t1
 -- !query schema
 struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
 Spark	SQL
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaAAaA')
--- !query schema
-struct<>
--- !query output
-
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -636,6 +832,17 @@ select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t1
 -- !query schema
 struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A	
+A	
 A
 
 
@@ -644,31 +851,18 @@ select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase
 -- !query schema
 struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string,split_part(utf8_lcase, collate(a, utf8_binary), 3):string collate UTF8_LCASE>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A	
+A	
 A
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -688,7 +882,18 @@ select contains(utf8_binary collate utf8_lcase, utf8_lcase), contains(utf8_binar
 -- !query schema
 struct<contains(collate(utf8_binary, utf8_lcase), utf8_lcase):boolean,contains(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean>
 -- !query output
+false	false
+false	false
+false	false
 true	false
+true	false
+true	false
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
 
 
 -- !query
@@ -696,39 +901,18 @@ select contains(utf8_binary, 'AAa'), contains(utf8_lcase, 'AaAA') from t1
 -- !query schema
 struct<contains(utf8_binary, AAa):boolean,contains(utf8_lcase, AaAA):boolean>
 -- !query output
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
 true	true
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
+true	true
+true	true
 
 
 -- !query
@@ -748,8 +932,18 @@ select substring_index(utf8_lcase, utf8_binary collate utf8_lcase, 3), substring
 -- !query schema
 struct<substring_index(utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,substring_index(collate(utf8_lcase, utf8_binary), utf8_binary, -3):string>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+SQL	SQL
+Something else. Nothing here.	Something else. Nothing here.
+aBcDCbA	aBcDCbA
 aa	aaAaaAaAaaAaaAaAaaAaaAaA
+aaAaAAaA	aaAaAAaA
 aaAaaAaA	aaAaaAaA
+abc	abc
+efd2	efd2
+i̇o	i̇o
+sitTing	sitTing
+İo	İo
 
 
 -- !query
@@ -757,40 +951,18 @@ select substring_index(utf8_binary, 'AAa', 1), substring_index(utf8_lcase, 'AaAA
 -- !query schema
 struct<substring_index(utf8_binary, AAa, 1):string,substring_index(utf8_lcase, AaAA, 3):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
 aaAa	aa
 aaAa	aa
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
+aaAa	aa
+abc	abc
+abcdcba	aBcDCbA
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -810,8 +982,18 @@ select instr(utf8_lcase, utf8_binary collate utf8_lcase), instr(utf8_lcase colla
 -- !query schema
 struct<instr(utf8_lcase, collate(utf8_binary, utf8_lcase)):int,instr(collate(utf8_lcase, utf8_binary), utf8_binary):int>
 -- !query output
+0	0
+0	0
 1	0
 1	0
+1	0
+1	0
+1	1
+1	1
+1	1
+1	1
+1	1
+1	1
 
 
 -- !query
@@ -819,40 +1001,18 @@ select instr(utf8_binary, 'AAa'), instr(utf8_lcase, 'AaAA') from t1
 -- !query schema
 struct<instr(utf8_binary, AAa):int,instr(utf8_lcase, AaAA):int>
 -- !query output
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
 5	1
 5	1
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('İo', 'İo')
--- !query schema
-struct<>
--- !query output
-
+5	1
 
 
 -- !query
@@ -872,7 +1032,17 @@ select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaa
 -- !query schema
 struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaaAaA,i̇o):int>
 -- !query output
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
 0	1
+0	1
+0	2
 0	2
 
 
@@ -881,40 +1051,18 @@ select find_in_set(utf8_binary, 'aaAaaAaA,i̇o' collate utf8_lcase), find_in_set
 -- !query schema
 struct<find_in_set(utf8_binary, collate(aaAaaAaA,i̇o, utf8_lcase)):int,find_in_set(utf8_lcase, collate(aaAaaAaA,i̇o, utf8_binary)):int>
 -- !query output
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+1	0
+1	0
 1	1
 2	0
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('İo', 'İo')
--- !query schema
-struct<>
--- !query output
-
+2	2
 
 
 -- !query
@@ -935,6 +1083,16 @@ select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') f
 struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, aaAaaAaA):boolean>
 -- !query output
 false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	true
+false	true
 false	true
 
 
@@ -944,39 +1102,17 @@ select startswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), startswith(utf8_l
 struct<startswith(utf8_binary, collate(aaAaaAaA, utf8_lcase)):boolean,startswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
 -- !query output
 false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+true	false
 true	true
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('İo', 'İo')
--- !query schema
-struct<>
--- !query output
-
+true	true
 
 
 -- !query
@@ -1000,6 +1136,16 @@ select translate(utf8_binary, 'aaAaaAaA', '12345'), translate(utf8_lcase, 'aaAaa
 struct<translate(utf8_binary, aaAaaAaA, 12345):string,translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE>
 -- !query output
 11313313	11111111
+11313313	11111111
+11313313	111111111111111111111111
+1bc	1bc
+1bcdcb1	1BcDCb1
+Hello, world! Nice d1y.	Hello, world! Nice d1y.
+Something else. Nothing here.	Something else. Nothing here.
+Sp1rk	SQL
+efd2	efd2
+kitten	sitTing
+İo	i̇o
 İo	İo
 
 
@@ -1009,39 +1155,17 @@ select translate(utf8_binary, 'aaAaaAaA' collate utf8_lcase, '12345'), translate
 struct<translate(utf8_binary, collate(aaAaaAaA, utf8_lcase), 12345):string collate UTF8_LCASE,translate(utf8_lcase, collate(aaAaaAaA, utf8_binary), 12345):string>
 -- !query output
 11111111	11311313
+11111111	113113131131131311311313
+11111111	11313313
+1bc	1bc
+1bcdcb1	1BcDCb3
+Hello, world! Nice d1y.	Hello, world! Nice d1y.
+Something else. Nothing here.	Something else. Nothing here.
+Sp1rk	SQL
+efd2	efd2
+kitten	sitTing
+İo	i̇o
 İo	İo
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('İo', 'İo')
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1064,7 +1188,17 @@ select replace(utf8_binary, 'aaAaaAaA', '12345'), replace(utf8_lcase, 'aaAaaAaA'
 -- !query schema
 struct<replace(utf8_binary, aaAaaAaA, 12345):string,replace(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
 aaAaAAaA	12345
+aaAaAAaA	12345
+aaAaAAaA	123451234512345
+abc	abc
+abcdcba	aBcDCbA
+efd2	efd2
+kitten	sitTing
+İo	i̇o
 İo	İo
 
 
@@ -1074,39 +1208,17 @@ select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, '12345'), replace(utf
 struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), 12345):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), 12345):string>
 -- !query output
 12345	12345
+12345	123451234512345
+12345	aaAaAAaA
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+abc	abc
+abcdcba	aBcDCbA
+efd2	efd2
+kitten	sitTing
+İo	i̇o
 İo	İo
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('İo', 'i̇o')
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1127,6 +1239,16 @@ select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from 
 struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, aaAaaAaA):boolean>
 -- !query output
 false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	true
+false	true
 false	true
 
 
@@ -1135,40 +1257,18 @@ select endswith(utf8_binary, utf8_lcase collate utf8_binary), endswith(utf8_lcas
 -- !query schema
 struct<endswith(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean,endswith(utf8_lcase, collate(utf8_binary, utf8_lcase)):boolean>
 -- !query output
+false	false
+false	false
 false	true
 false	true
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('İo', 'i̇o')
--- !query schema
-struct<>
--- !query output
-
+false	true
+false	true
+true	false
+true	true
+true	true
+true	true
+true	true
+true	true
 
 
 -- !query
@@ -1176,8 +1276,18 @@ select repeat(utf8_binary, 3), repeat(utf8_lcase, 2) from t1
 -- !query schema
 struct<repeat(utf8_binary, 3):string,repeat(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.Hello, world! Nice day.Hello, world! Nice day.	Hello, world! Nice day.Hello, world! Nice day.
+Something else. Nothing here.Something else. Nothing here.Something else. Nothing here.	Something else. Nothing here.Something else. Nothing here.
+SparkSparkSpark	SQLSQL
+aaAaAAaAaaAaAAaAaaAaAAaA	aaAaAAaAaaAaAAaA
 aaAaAAaAaaAaAAaAaaAaAAaA	aaAaaAaAaaAaaAaA
+aaAaAAaAaaAaAAaAaaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaAaaAaaAaAaaAaaAaAaaAaaAaA
+abcabcabc	abcabc
+abcdcbaabcdcbaabcdcba	aBcDCbAaBcDCbA
+efd2efd2efd2	efd2efd2
+kittenkittenkitten	sitTingsitTing
 İoİoİo	i̇oi̇o
+İoİoİo	İoİo
 
 
 -- !query
@@ -1185,40 +1295,18 @@ select repeat(utf8_binary collate utf8_lcase, 3), repeat(utf8_lcase collate utf8
 -- !query schema
 struct<repeat(collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,repeat(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
+Hello, world! Nice day.Hello, world! Nice day.Hello, world! Nice day.	Hello, world! Nice day.Hello, world! Nice day.
+Something else. Nothing here.Something else. Nothing here.Something else. Nothing here.	Something else. Nothing here.Something else. Nothing here.
+SparkSparkSpark	SQLSQL
+aaAaAAaAaaAaAAaAaaAaAAaA	aaAaAAaAaaAaAAaA
 aaAaAAaAaaAaAAaAaaAaAAaA	aaAaaAaAaaAaaAaA
+aaAaAAaAaaAaAAaAaaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaAaaAaaAaAaaAaaAaAaaAaaAaA
+abcabcabc	abcabc
+abcdcbaabcdcbaabcdcba	aBcDCbAaBcDCbA
+efd2efd2efd2	efd2efd2
+kittenkittenkitten	sitTingsitTing
 İoİoİo	i̇oi̇o
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
+İoİoİo	İoİo
 
 
 -- !query
@@ -1227,6 +1315,16 @@ select ascii(utf8_binary), ascii(utf8_lcase) from t1
 struct<ascii(utf8_binary):int,ascii(utf8_lcase):int>
 -- !query output
 101	101
+107	115
+304	105
+304	304
+72	72
+83	83
+83	83
+97	97
+97	97
+97	97
+97	97
 97	97
 
 
@@ -1236,11 +1334,21 @@ select ascii(utf8_binary collate utf8_lcase), ascii(utf8_lcase collate utf8_bina
 struct<ascii(collate(utf8_binary, utf8_lcase)):int,ascii(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
 101	101
+107	115
+304	105
+304	304
+72	72
+83	83
+83	83
+97	97
+97	97
+97	97
+97	97
 97	97
 
 
 -- !query
-select unbase64(utf8_binary), unbase64(utf8_lcase) from t1
+select unbase64(utf8_binary), unbase64(utf8_lcase) from t6
 -- !query schema
 struct<unbase64(utf8_binary):binary,unbase64(utf8_lcase):binary>
 -- !query output
@@ -1249,7 +1357,7 @@ y�v	y�v
 
 
 -- !query
-select unbase64(utf8_binary collate utf8_lcase), unbase64(utf8_lcase collate utf8_binary) from t1
+select unbase64(utf8_binary collate utf8_lcase), unbase64(utf8_lcase collate utf8_binary) from t6
 -- !query schema
 struct<unbase64(collate(utf8_binary, utf8_lcase)):binary,unbase64(collate(utf8_lcase, utf8_binary)):binary>
 -- !query output
@@ -1258,39 +1366,7 @@ y�v	y�v
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(ascii long) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values (97)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values (66)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select chr(ascii) from t1
+select chr(ascii) from t2
 -- !query schema
 struct<chr(ascii):string>
 -- !query output
@@ -1299,35 +1375,22 @@ a
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 select base64(utf8_binary), base64(utf8_lcase) from t1
 -- !query schema
 struct<base64(utf8_binary):string,base64(utf8_lcase):string>
 -- !query output
+SGVsbG8sIHdvcmxkISBOaWNlIGRheS4=	SGVsbG8sIHdvcmxkISBOaWNlIGRheS4=
+U29tZXRoaW5nIGVsc2UuIE5vdGhpbmcgaGVyZS4=	U29tZXRoaW5nIGVsc2UuIE5vdGhpbmcgaGVyZS4=
+U3Bhcms=	U1FM
+YWFBYUFBYUE=	YWFBYUFBYUE=
+YWFBYUFBYUE=	YWFBYWFBYUE=
+YWFBYUFBYUE=	YWFBYWFBYUFhYUFhYUFhQWFhQWFhQWFB
+YWJj	YWJj
+YWJjZGNiYQ==	YUJjRENiQQ==
 ZWZkMg==	ZWZkMg==
+a2l0dGVu	c2l0VGluZw==
+xLBv	acyHbw==
+xLBv	xLBv
 
 
 -- !query
@@ -1335,7 +1398,18 @@ select base64(utf8_binary collate utf8_lcase), base64(utf8_lcase collate utf8_bi
 -- !query schema
 struct<base64(collate(utf8_binary, utf8_lcase)):string,base64(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+SGVsbG8sIHdvcmxkISBOaWNlIGRheS4=	SGVsbG8sIHdvcmxkISBOaWNlIGRheS4=
+U29tZXRoaW5nIGVsc2UuIE5vdGhpbmcgaGVyZS4=	U29tZXRoaW5nIGVsc2UuIE5vdGhpbmcgaGVyZS4=
+U3Bhcms=	U1FM
+YWFBYUFBYUE=	YWFBYUFBYUE=
+YWFBYUFBYUE=	YWFBYWFBYUE=
+YWFBYUFBYUE=	YWFBYWFBYUFhYUFhYUFhQWFhQWFhQWFB
+YWJj	YWJj
+YWJjZGNiYQ==	YUJjRENiQQ==
 ZWZkMg==	ZWZkMg==
+a2l0dGVu	c2l0VGluZw==
+xLBv	acyHbw==
+xLBv	xLBv
 
 
 -- !query
@@ -1343,7 +1417,18 @@ select decode(encode(utf8_binary, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase, 
 -- !query schema
 struct<decode(encode(utf8_binary, utf-8), utf-8):string,decode(encode(utf8_lcase, utf-8), utf-8):string>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -1351,43 +1436,22 @@ select decode(encode(utf8_binary collate utf8_lcase, 'utf-8'), 'utf-8'), decode(
 -- !query schema
 struct<decode(encode(collate(utf8_binary, utf8_lcase), utf-8), utf-8):string,decode(encode(collate(utf8_lcase, utf8_binary), utf-8), utf-8):string>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(ascii double) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values (97.52143)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values (66.421)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select format_number(ascii, '###.###') from t1
+select format_number(ascii, '###.###') from t3
 -- !query schema
 struct<format_number(ascii, ###.###):string>
 -- !query output
@@ -1396,35 +1460,22 @@ struct<format_number(ascii, ###.###):string>
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 select encode(utf8_binary, 'utf-8'), encode(utf8_lcase, 'utf-8') from t1
 -- !query schema
 struct<encode(utf8_binary, utf-8):binary,encode(utf8_lcase, utf-8):binary>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -1432,7 +1483,18 @@ select encode(utf8_binary collate utf8_lcase, 'utf-8'), encode(utf8_lcase collat
 -- !query schema
 struct<encode(collate(utf8_binary, utf8_lcase), utf-8):binary,encode(collate(utf8_lcase, utf8_binary), utf-8):binary>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -1440,7 +1502,18 @@ select to_binary(utf8_binary, 'utf-8'), to_binary(utf8_lcase, 'utf-8') from t1
 -- !query schema
 struct<to_binary(utf8_binary, utf-8):binary,to_binary(utf8_lcase, utf-8):binary>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -1448,39 +1521,18 @@ select to_binary(utf8_binary collate utf8_lcase, 'utf-8'), to_binary(utf8_lcase 
 -- !query schema
 struct<to_binary(collate(utf8_binary, utf8_lcase), utf-8):binary,to_binary(collate(utf8_lcase, utf8_binary), utf-8):binary>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
--- !query schema
-struct<>
--- !query output
-
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -1490,6 +1542,16 @@ struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , )
 -- !query output
 [["Hello","world"],["Nice","day"]]	[["Hello","world"],["Nice","day"]]
 [["Something","else"],["Nothing","here"]]	[["Something","else"],["Nothing","here"]]
+[["Spark"]]	[["SQL"]]
+[["aaAaAAaA"]]	[["aaAaAAaA"]]
+[["aaAaAAaA"]]	[["aaAaaAaA"]]
+[["aaAaAAaA"]]	[["aaAaaAaAaaAaaAaAaaAaaAaA"]]
+[["abc"]]	[["abc"]]
+[["abcdcba"]]	[["aBcDCbA"]]
+[["efd2"]]	[["efd2"]]
+[["kitten"]]	[["sitTing"]]
+[["İo"]]	[["i̇o"]]
+[["İo"]]	[["İo"]]
 
 
 -- !query
@@ -1499,38 +1561,16 @@ struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collat
 -- !query output
 [["Hello","world"],["Nice","day"]]	[["Hello","world"],["Nice","day"]]
 [["Something","else"],["Nothing","here"]]	[["Something","else"],["Nothing","here"]]
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
--- !query schema
-struct<>
--- !query output
-
+[["Spark"]]	[["SQL"]]
+[["aaAaAAaA"]]	[["aaAaAAaA"]]
+[["aaAaAAaA"]]	[["aaAaaAaA"]]
+[["aaAaAAaA"]]	[["aaAaaAaAaaAaaAaAaaAaaAaA"]]
+[["abc"]]	[["abc"]]
+[["abcdcba"]]	[["aBcDCbA"]]
+[["efd2"]]	[["efd2"]]
+[["kitten"]]	[["sitTing"]]
+[["İo"]]	[["i̇o"]]
+[["İo"]]	[["İo"]]
 
 
 -- !query
@@ -1538,8 +1578,18 @@ select upper(utf8_binary), upper(utf8_lcase) from t1
 -- !query schema
 struct<upper(utf8_binary):string,upper(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+AAAAAAAA	AAAAAAAA
+AAAAAAAA	AAAAAAAA
+AAAAAAAA	AAAAAAAAAAAAAAAAAAAAAAAA
+ABC	ABC
+ABCDCBA	ABCDCBA
+EFD2	EFD2
 HELLO, WORLD! NICE DAY.	HELLO, WORLD! NICE DAY.
+KITTEN	SITTING
 SOMETHING ELSE. NOTHING HERE.	SOMETHING ELSE. NOTHING HERE.
+SPARK	SQL
+İO	İO
+İO	İO
 
 
 -- !query
@@ -1547,40 +1597,18 @@ select upper(utf8_binary collate utf8_lcase), upper(utf8_lcase collate utf8_bina
 -- !query schema
 struct<upper(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,upper(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+AAAAAAAA	AAAAAAAA
+AAAAAAAA	AAAAAAAA
+AAAAAAAA	AAAAAAAAAAAAAAAAAAAAAAAA
+ABC	ABC
+ABCDCBA	ABCDCBA
+EFD2	EFD2
 HELLO, WORLD! NICE DAY.	HELLO, WORLD! NICE DAY.
+KITTEN	SITTING
 SOMETHING ELSE. NOTHING HERE.	SOMETHING ELSE. NOTHING HERE.
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
--- !query schema
-struct<>
--- !query output
-
+SPARK	SQL
+İO	İO
+İO	İO
 
 
 -- !query
@@ -1588,8 +1616,18 @@ select lower(utf8_binary), lower(utf8_lcase) from t1
 -- !query schema
 struct<lower(utf8_binary):string,lower(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+aaaaaaaa	aaaaaaaa
+aaaaaaaa	aaaaaaaa
+aaaaaaaa	aaaaaaaaaaaaaaaaaaaaaaaa
+abc	abc
+abcdcba	abcdcba
+efd2	efd2
 hello, world! nice day.	hello, world! nice day.
+i̇o	i̇o
+i̇o	i̇o
+kitten	sitting
 something else. nothing here.	something else. nothing here.
+spark	sql
 
 
 -- !query
@@ -1597,40 +1635,18 @@ select lower(utf8_binary collate utf8_lcase), lower(utf8_lcase collate utf8_bina
 -- !query schema
 struct<lower(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lower(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+aaaaaaaa	aaaaaaaa
+aaaaaaaa	aaaaaaaa
+aaaaaaaa	aaaaaaaaaaaaaaaaaaaaaaaa
+abc	abc
+abcdcba	abcdcba
+efd2	efd2
 hello, world! nice day.	hello, world! nice day.
+i̇o	i̇o
+i̇o	i̇o
+kitten	sitting
 something else. nothing here.	something else. nothing here.
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.')
--- !query schema
-struct<>
--- !query output
-
+spark	sql
 
 
 -- !query
@@ -1638,8 +1654,18 @@ select initcap(utf8_binary), initcap(utf8_lcase) from t1
 -- !query schema
 struct<initcap(utf8_binary):string,initcap(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Aaaaaaaa	Aaaaaaaa
+Aaaaaaaa	Aaaaaaaa
+Aaaaaaaa	Aaaaaaaaaaaaaaaaaaaaaaaa
+Abc	Abc
+Abcdcba	Abcdcba
+Efd2	Efd2
 Hello, World! Nice Day.	Hello, World! Nice Day.
+İo	İo
+İo	İo
+Kitten	Sitting
 Something Else. Nothing Here.	Something Else. Nothing Here.
+Spark	Sql
 
 
 -- !query
@@ -1647,40 +1673,18 @@ select initcap(utf8_binary collate utf8_lcase), initcap(utf8_lcase collate utf8_
 -- !query schema
 struct<initcap(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,initcap(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+Aaaaaaaa	Aaaaaaaa
+Aaaaaaaa	Aaaaaaaa
+Aaaaaaaa	Aaaaaaaaaaaaaaaaaaaaaaaa
+Abc	Abc
+Abcdcba	Abcdcba
+Efd2	Efd2
 Hello, World! Nice Day.	Hello, World! Nice Day.
+Kitten	Sitting
 Something Else. Nothing Here.	Something Else. Nothing Here.
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
--- !query schema
-struct<>
--- !query output
-
+Spark	Sql
+İo	İo
+İo	İo
 
 
 -- !query
@@ -1700,8 +1704,18 @@ select overlay(utf8_lcase, utf8_binary collate utf8_lcase, 3), overlay(utf8_lcas
 -- !query schema
 struct<overlay(utf8_lcase, collate(utf8_binary, utf8_lcase), 3, -1):string collate UTF8_LCASE,overlay(collate(utf8_lcase, utf8_binary), utf8_binary, 3, -1):string>
 -- !query output
+HeHello, world! Nice day.	HeHello, world! Nice day.
+SQSpark	SQSpark
+SoSomething else. Nothing here.	SoSomething else. Nothing here.
+aBabcdcba	aBabcdcba
+aaaaAaAAaA	aaaaAaAAaA
 aaaaAaAAaA	aaaaAaAAaA
 aaaaAaAAaAAaaAaAaaAaaAaA	aaaaAaAAaAAaaAaAaaAaaAaA
+ababc	ababc
+efefd2	efefd2
+i̇İo	i̇İo
+sikitten	sikitten
+İoİo	İoİo
 
 
 -- !query
@@ -1709,36 +1723,22 @@ select overlay(utf8_binary, 'AAa', 3), overlay(utf8_lcase, 'AaAA', 3) from t1
 -- !query schema
 struct<overlay(utf8_binary, AAa, 3, -1):string,overlay(utf8_lcase, AaAA, 3, -1):string collate UTF8_LCASE>
 -- !query output
+HeAAa, world! Nice day.	HeAaAA world! Nice day.
+SoAAahing else. Nothing here.	SoAaAAing else. Nothing here.
+SpAAa	SQAaAA
+aaAAaAaA	aaAaAAaA
 aaAAaAaA	aaAaAAaA
 aaAAaAaA	aaAaAAaAaaAaaAaAaaAaaAaA
+abAAa	abAaAA
+abAAaba	aBAaAAA
+efAAa	efAaAA
+kiAAan	siAaAAg
+İoAAa	i̇AaAA
+İoAAa	İoAaAA
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(format string collate utf8_binary, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('%s%s', 'abCdE', 'abCdE')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select format_string(format, utf8_binary, utf8_lcase) from t1
+select format_string(format, utf8_binary, utf8_lcase) from t4
 -- !query schema
 struct<format_string(format, utf8_binary, utf8_lcase):string>
 -- !query output
@@ -1746,7 +1746,7 @@ abCdEabCdE
 
 
 -- !query
-select format_string(format collate utf8_lcase, utf8_lcase, utf8_binary collate utf8_lcase, 3), format_string(format, utf8_lcase collate utf8_binary, utf8_binary) from t1
+select format_string(format collate utf8_lcase, utf8_lcase, utf8_binary collate utf8_lcase, 3), format_string(format, utf8_lcase collate utf8_binary, utf8_binary) from t4
 -- !query schema
 struct<format_string(collate(format, utf8_lcase), utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,format_string(format, collate(utf8_lcase, utf8_binary), utf8_binary):string>
 -- !query output
@@ -1754,7 +1754,7 @@ abCdEabCdE	abCdEabCdE
 
 
 -- !query
-select format_string(format, utf8_binary, utf8_lcase) from t1
+select format_string(format, utf8_binary, utf8_lcase) from t4
 -- !query schema
 struct<format_string(format, utf8_binary, utf8_lcase):string>
 -- !query output
@@ -1762,35 +1762,22 @@ abCdEabCdE
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 select soundex(utf8_binary), soundex(utf8_lcase) from t1
 -- !query schema
 struct<soundex(utf8_binary):string,soundex(utf8_lcase):string>
 -- !query output
+A000	A000
+A000	A000
+A000	A000
+A120	A120
+A123	A123
 E130	E130
+H464	H464
+K350	S352
+S162	S400
+S535	S535
+İo	I000
+İo	İo
 
 
 -- !query
@@ -1798,31 +1785,18 @@ select soundex(utf8_binary collate utf8_lcase), soundex(utf8_lcase collate utf8_
 -- !query schema
 struct<soundex(collate(utf8_binary, utf8_lcase)):string,soundex(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+A000	A000
+A000	A000
+A000	A000
+A120	A120
+A123	A123
 E130	E130
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
+H464	H464
+K350	S352
+S162	S400
+S535	S535
+İo	I000
+İo	İo
 
 
 -- !query
@@ -1830,7 +1804,18 @@ select length(utf8_binary), length(utf8_lcase) from t1
 -- !query schema
 struct<length(utf8_binary):int,length(utf8_lcase):int>
 -- !query output
+2	2
+2	3
+23	23
+29	29
+3	3
 4	4
+5	3
+6	7
+7	7
+8	24
+8	8
+8	8
 
 
 -- !query
@@ -1838,7 +1823,18 @@ select length(utf8_binary collate utf8_lcase), length(utf8_lcase collate utf8_bi
 -- !query schema
 struct<length(collate(utf8_binary, utf8_lcase)):int,length(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
+2	2
+2	3
+23	23
+29	29
+3	3
 4	4
+5	3
+6	7
+7	7
+8	24
+8	8
+8	8
 
 
 -- !query
@@ -1846,7 +1842,18 @@ select bit_length(utf8_binary), bit_length(utf8_lcase) from t1
 -- !query schema
 struct<bit_length(utf8_binary):int,bit_length(utf8_lcase):int>
 -- !query output
+184	184
+232	232
+24	24
+24	24
+24	32
 32	32
+40	24
+48	56
+56	56
+64	192
+64	64
+64	64
 
 
 -- !query
@@ -1854,7 +1861,18 @@ select bit_length(utf8_binary collate utf8_lcase), bit_length(utf8_lcase collate
 -- !query schema
 struct<bit_length(collate(utf8_binary, utf8_lcase)):int,bit_length(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
+184	184
+232	232
+24	24
+24	24
+24	32
 32	32
+40	24
+48	56
+56	56
+64	192
+64	64
+64	64
 
 
 -- !query
@@ -1862,7 +1880,18 @@ select octet_length(utf8_binary), octet_length(utf8_lcase) from t1
 -- !query schema
 struct<octet_length(utf8_binary):int,octet_length(utf8_lcase):int>
 -- !query output
+23	23
+29	29
+3	3
+3	3
+3	4
 4	4
+5	3
+6	7
+7	7
+8	24
+8	8
+8	8
 
 
 -- !query
@@ -1870,43 +1899,22 @@ select octet_length(utf8_binary collate utf8_lcase), octet_length(utf8_lcase col
 -- !query schema
 struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
+23	23
+29	29
+3	3
+3	3
+3	4
 4	4
+5	3
+6	7
+7	7
+8	24
+8	8
+8	8
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(num long) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values (97)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values (66)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select luhn_check(num) from t1
+select luhn_check(num) from t5
 -- !query schema
 struct<luhn_check(num):boolean>
 -- !query output
@@ -1915,34 +1923,21 @@ false
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('kitten', 'sitTing')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 select levenshtein(utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<levenshtein(utf8_binary, utf8_lcase):int>
 -- !query output
+0
+0
+0
+0
+0
+0
+1
+16
+2
+4
+4
 4
 
 
@@ -1951,6 +1946,17 @@ select levenshtein(utf8_binary, 'aaAaaAaA'), levenshtein(utf8_lcase, 'aaAaaAaA')
 -- !query schema
 struct<levenshtein(utf8_binary, aaAaaAaA):int,levenshtein(utf8_lcase, aaAaaAaA):int>
 -- !query output
+1	0
+1	1
+1	16
+22	22
+29	29
+6	6
+7	7
+7	8
+8	8
+8	8
+8	8
 8	8
 
 
@@ -1959,39 +1965,18 @@ select levenshtein(utf8_binary, utf8_lcase collate utf8_binary), levenshtein(utf
 -- !query schema
 struct<levenshtein(utf8_binary, collate(utf8_lcase, utf8_binary)):int,levenshtein(utf8_lcase, collate(utf8_binary, utf8_lcase)):int>
 -- !query output
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+1	1
+16	16
+2	2
 4	4
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+4	4
+4	4
 
 
 -- !query
@@ -1999,6 +1984,16 @@ select is_valid_utf8(utf8_binary), is_valid_utf8(utf8_lcase) from t1
 -- !query schema
 struct<is_valid_utf8(utf8_binary):boolean,is_valid_utf8(utf8_lcase):boolean>
 -- !query output
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
 true	true
 true	true
 
@@ -2010,38 +2005,16 @@ struct<is_valid_utf8(collate(utf8_binary, utf8_lcase)):boolean,is_valid_utf8(col
 -- !query output
 true	true
 true	true
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
 
 
 -- !query
@@ -2049,8 +2022,18 @@ select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t1
 -- !query schema
 struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
 abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2058,40 +2041,18 @@ select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lca
 -- !query schema
 struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
 abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2099,8 +2060,18 @@ select validate_utf8(utf8_binary), validate_utf8(utf8_lcase) from t1
 -- !query schema
 struct<validate_utf8(utf8_binary):string,validate_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
 abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2108,40 +2079,18 @@ select validate_utf8(utf8_binary collate utf8_lcase), validate_utf8(utf8_lcase c
 -- !query schema
 struct<validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,validate_utf8(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
 abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2149,8 +2098,18 @@ select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t1
 -- !query schema
 struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
 abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2158,40 +2117,18 @@ select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8
 -- !query schema
 struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
 abc	abc
+abcdcba	aBcDCbA
 efd2	efd2
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2199,8 +2136,18 @@ select substr(utf8_binary, 2, 2), substr(utf8_lcase, 2, 2) from t1
 -- !query schema
 struct<substr(utf8_binary, 2, 2):string,substr(utf8_lcase, 2, 2):string collate UTF8_LCASE>
 -- !query output
+aA	aA
+aA	aA
+aA	aA
+bc	Bc
 bc	bc
+el	el
 fd	fd
+it	it
+o	o
+o	̇o
+om	om
+pa	QL
 
 
 -- !query
@@ -2208,8 +2155,18 @@ select substr(utf8_binary collate utf8_lcase, 2, 2), substr(utf8_lcase collate u
 -- !query schema
 struct<substr(collate(utf8_binary, utf8_lcase), 2, 2):string collate UTF8_LCASE,substr(collate(utf8_lcase, utf8_binary), 2, 2):string>
 -- !query output
+aA	aA
+aA	aA
+aA	aA
+bc	Bc
 bc	bc
+el	el
 fd	fd
+it	it
+o	o
+o	̇o
+om	om
+pa	QL
 
 
 -- !query
@@ -2217,8 +2174,18 @@ select right(utf8_binary, 2), right(utf8_lcase, 2) from t1
 -- !query schema
 struct<right(utf8_binary, 2):string,right(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
+aA	aA
+aA	aA
+aA	aA
+ba	bA
 bc	bc
 d2	d2
+e.	e.
+en	ng
+rk	QL
+y.	y.
+İo	İo
+İo	̇o
 
 
 -- !query
@@ -2226,8 +2193,18 @@ select right(utf8_binary collate utf8_lcase, 2), right(utf8_lcase collate utf8_b
 -- !query schema
 struct<right(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,right(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
+aA	aA
+aA	aA
+aA	aA
+ba	bA
 bc	bc
 d2	d2
+e.	e.
+en	ng
+rk	QL
+y.	y.
+İo	İo
+İo	̇o
 
 
 -- !query
@@ -2235,8 +2212,18 @@ select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t1
 -- !query schema
 struct<left(utf8_binary, collate(2, utf8_lcase)):string,left(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
+He	He
+So	So
+Sp	SQ
+aa	aa
+aa	aa
+aa	aa
+ab	aB
 ab	ab
 ef	ef
+ki	si
+İo	i̇
+İo	İo
 
 
 -- !query
@@ -2244,40 +2231,18 @@ select left(utf8_binary collate utf8_lcase, 2), left(utf8_lcase collate utf8_bin
 -- !query schema
 struct<left(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,left(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
+He	He
+So	So
+Sp	SQ
+aa	aa
+aa	aa
+aa	aa
+ab	aB
 ab	ab
 ef	ef
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+ki	si
+İo	i̇
+İo	İo
 
 
 -- !query
@@ -2297,8 +2262,18 @@ select rpad(utf8_lcase, 8, utf8_binary collate utf8_lcase), rpad(utf8_lcase coll
 -- !query schema
 struct<rpad(utf8_lcase, 8, collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,rpad(collate(utf8_lcase, utf8_binary), 8, utf8_binary):string>
 -- !query output
+Hello, w	Hello, w
+SQLSpark	SQLSpark
+Somethin	Somethin
+aBcDCbAa	aBcDCbAa
+aaAaAAaA	aaAaAAaA
+aaAaaAaA	aaAaaAaA
+aaAaaAaA	aaAaaAaA
 abcabcab	abcabcab
 efd2efd2	efd2efd2
+i̇oİoİoİ	i̇oİoİoİ
+sitTingk	sitTingk
+İoİoİoİo	İoİoİoİo
 
 
 -- !query
@@ -2306,40 +2281,18 @@ select rpad(utf8_binary, 8, 'AAa'), rpad(utf8_lcase, 8, 'AaAA') from t1
 -- !query schema
 struct<rpad(utf8_binary, 8, AAa):string,rpad(utf8_lcase, 8, AaAA):string collate UTF8_LCASE>
 -- !query output
+Hello, w	Hello, w
+Somethin	Somethin
+SparkAAa	SQLAaAAA
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaA
 abcAAaAA	abcAaAAA
+abcdcbaA	aBcDCbAA
 efd2AAaA	efd2AaAA
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efd2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'abc')
--- !query schema
-struct<>
--- !query output
-
+kittenAA	sitTingA
+İoAAaAAa	i̇oAaAAA
+İoAAaAAa	İoAaAAAa
 
 
 -- !query
@@ -2359,8 +2312,18 @@ select lpad(utf8_lcase, 8, utf8_binary collate utf8_lcase), lpad(utf8_lcase coll
 -- !query schema
 struct<lpad(utf8_lcase, 8, collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lpad(collate(utf8_lcase, utf8_binary), 8, utf8_binary):string>
 -- !query output
+Hello, w	Hello, w
+Somethin	Somethin
+SparkSQL	SparkSQL
+aaAaAAaA	aaAaAAaA
+aaAaaAaA	aaAaaAaA
+aaAaaAaA	aaAaaAaA
+aaBcDCbA	aaBcDCbA
 abcababc	abcababc
 efd2efd2	efd2efd2
+ksitTing	ksitTing
+İoİoİi̇o	İoİoİi̇o
+İoİoİoİo	İoİoİoİo
 
 
 -- !query
@@ -2369,39 +2332,17 @@ select lpad(utf8_binary, 8, 'AAa'), lpad(utf8_lcase, 8, 'AaAA') from t1
 struct<lpad(utf8_binary, 8, AAa):string,lpad(utf8_lcase, 8, AaAA):string collate UTF8_LCASE>
 -- !query output
 AAaAAabc	AaAAAabc
+AAaAAaİo	AaAAAaİo
+AAaAAaİo	AaAAAi̇o
 AAaAefd2	AaAAefd2
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('efd2', 'efD2')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abc', 'aBc')
--- !query schema
-struct<>
--- !query output
-
+AAaSpark	AaAAASQL
+AAkitten	AsitTing
+Aabcdcba	AaBcDCbA
+Hello, w	Hello, w
+Somethin	Somethin
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaA
 
 
 -- !query
@@ -2421,8 +2362,18 @@ select locate(utf8_lcase, utf8_binary collate utf8_lcase), locate(utf8_lcase col
 -- !query schema
 struct<locate(utf8_lcase, collate(utf8_binary, utf8_lcase), 1):int,locate(collate(utf8_lcase, utf8_binary), utf8_binary, 1):int>
 -- !query output
+0	0
+0	0
+0	0
 1	0
 1	0
+1	0
+1	1
+1	1
+1	1
+1	1
+1	1
+1	1
 
 
 -- !query
@@ -2431,31 +2382,17 @@ select locate('B', utf8_binary), locate('B', utf8_lcase) from t1
 struct<locate(B, utf8_binary, 1):int,locate(B, utf8_lcase, 1):int>
 -- !query output
 0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
 0	2
-
-
--- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into t1 values ('abcdcba', 'aBcDCbA')
--- !query schema
-struct<>
--- !query output
-
+0	2
 
 
 -- !query
@@ -2475,7 +2412,18 @@ select TRIM(utf8_lcase, utf8_binary collate utf8_lcase), TRIM(utf8_lcase collate
 -- !query schema
 struct<TRIM(BOTH utf8_lcase FROM collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,TRIM(BOTH collate(utf8_lcase, utf8_binary) FROM utf8_binary):string>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
 	d
+kitte	kitte
+park	park
+İ	İ
 
 
 -- !query
@@ -2483,7 +2431,18 @@ select TRIM('ABC', utf8_binary), TRIM('ABC', utf8_lcase) from t1
 -- !query schema
 struct<TRIM(BOTH ABC FROM utf8_binary):string,TRIM(BOTH ABC FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAa	
+aaAaAAa	
+aaAaAAa	
+abc	
 abcdcba	D
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2503,7 +2462,18 @@ select BTRIM(utf8_lcase, utf8_binary collate utf8_lcase), BTRIM(utf8_lcase colla
 -- !query schema
 struct<btrim(utf8_lcase, collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,btrim(collate(utf8_lcase, utf8_binary), utf8_binary):string>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
 	BcDCbA
+	i̇
+QL	QL
+sitTing	sitTing
 
 
 -- !query
@@ -2511,7 +2481,18 @@ select BTRIM('ABC', utf8_binary), BTRIM('ABC', utf8_lcase) from t1
 -- !query schema
 struct<btrim(ABC, utf8_binary):string,btrim(ABC, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
-ABC
+ABC	
+ABC	
+ABC	ABC
+ABC	ABC
+ABC	ABC
+ABC	ABC
+ABC	ABC
+ABC	ABC
+ABC	B
+BC	BC
+BC	BC
+BC	BC
 
 
 -- !query
@@ -2531,7 +2512,18 @@ select LTRIM(utf8_lcase, utf8_binary collate utf8_lcase), LTRIM(utf8_lcase colla
 -- !query schema
 struct<TRIM(LEADING utf8_lcase FROM collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,TRIM(LEADING collate(utf8_lcase, utf8_binary) FROM utf8_binary):string>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
 	dcba
+kitten	kitten
+park	park
+İo	İo
 
 
 -- !query
@@ -2539,7 +2531,18 @@ select LTRIM('ABC', utf8_binary), LTRIM('ABC', utf8_lcase) from t1
 -- !query schema
 struct<TRIM(LEADING ABC FROM utf8_binary):string,TRIM(LEADING ABC FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	
+aaAaAAaA	
+aaAaAAaA	
+abc	
 abcdcba	DCbA
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
@@ -2559,7 +2562,18 @@ select RTRIM(utf8_lcase, utf8_binary collate utf8_lcase), RTRIM(utf8_lcase colla
 -- !query schema
 struct<TRIM(TRAILING utf8_lcase FROM collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,TRIM(TRAILING collate(utf8_lcase, utf8_binary) FROM utf8_binary):string>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
 	abcd
+Spark	Spark
+kitte	kitte
+İ	İ
 
 
 -- !query
@@ -2567,11 +2581,62 @@ select RTRIM('ABC', utf8_binary), RTRIM('ABC', utf8_lcase) from t1
 -- !query schema
 struct<TRIM(TRAILING ABC FROM utf8_binary):string,TRIM(TRAILING ABC FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAa	
+aaAaAAa	
+aaAaAAa	
+abc	
 abcdcba	aBcD
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
 
 
 -- !query
 drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t6
 -- !query schema
 struct<>
 -- !query output
