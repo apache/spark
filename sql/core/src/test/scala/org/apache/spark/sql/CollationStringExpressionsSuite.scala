@@ -114,16 +114,16 @@ class CollationStringExpressionsSuite
   }
 
   test("Support `StringSplitSQL` string expression with collation") {
-    case class SplitPartTestCase[R](
+    case class StringSplitSQLTestCase[R](
         str: String,
         delimiter: String,
         collation: String,
         result: R)
     val testCases = Seq(
-      SplitPartTestCase("1a2", "a", "UTF8_BINARY", Array("1", "2")),
-      SplitPartTestCase("1a2", "a", "UNICODE", Array("1", "2")),
-      SplitPartTestCase("1a2", "A", "UTF8_LCASE", Array("1", "2")),
-      SplitPartTestCase("1a2", "A", "UNICODE_CI", Array("1", "2"))
+      StringSplitSQLTestCase("1a2", "a", "UTF8_BINARY", Array("1", "2")),
+      StringSplitSQLTestCase("1a2", "a", "UNICODE", Array("1", "2")),
+      StringSplitSQLTestCase("1a2", "A", "UTF8_LCASE", Array("1", "2")),
+      StringSplitSQLTestCase("1a2", "A", "UNICODE_CI", Array("1", "2"))
     )
     testCases.foreach(t => {
       // Unit test.
@@ -132,7 +132,7 @@ class CollationStringExpressionsSuite
       checkEvaluation(StringSplitSQL(str, delimiter), t.result)
     })
 
-    // Because `StringSplitSQL` is an internal expression, E2E SQL test cannot be performed.
+    // Because `StringSplitSQL` is an internal expression, E2E SQL test cannot be performed in `collations.sql`.
     checkError(
       exception = intercept[AnalysisException] {
         val expr = StringSplitSQL(
