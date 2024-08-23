@@ -32,8 +32,7 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader
 import io.opentelemetry.sdk.resources.Resource
 
-
-private[spark] class OpenTelemetryPushReporter (
+private[spark] class OpenTelemetryPushReporter(
     registry: MetricRegistry,
     pollInterval: Int = 10,
     pollUnit: TimeUnit = TimeUnit.SECONDS,
@@ -43,14 +42,13 @@ private[spark] class OpenTelemetryPushReporter (
     attributesMap: Map[String, String] = Map(),
     trustedCertificatesPath: String,
     privateKeyPemPath: String,
-    certificatePemPath: String
-) extends ScheduledReporter (
+    certificatePemPath: String)
+    extends ScheduledReporter(
       registry,
       "opentelemetry-push-reporter",
       MetricFilter.ALL,
       TimeUnit.SECONDS,
-      TimeUnit.MILLISECONDS
-    )
+      TimeUnit.MILLISECONDS)
     with MetricRegistryListener {
 
   val FIFTEEN_MINUTE_RATE = "_fifteen_minute_rate"
@@ -79,17 +77,14 @@ private[spark] class OpenTelemetryPushReporter (
 
   if (trustedCertificatesPath != null) {
     otlpGrpcMetricExporterBuilder
-      .setTrustedCertificates(
-        Files.readAllBytes(Paths.get(trustedCertificatesPath))
-      )
+      .setTrustedCertificates(Files.readAllBytes(Paths.get(trustedCertificatesPath)))
   }
 
   if (privateKeyPemPath != null && certificatePemPath != null) {
     otlpGrpcMetricExporterBuilder
       .setClientTls(
         Files.readAllBytes(Paths.get(privateKeyPemPath)),
-        Files.readAllBytes(Paths.get(certificatePemPath))
-      )
+        Files.readAllBytes(Paths.get(certificatePemPath)))
   }
 
   val grpcEndpoint = host + ":" + port
@@ -124,9 +119,7 @@ private[spark] class OpenTelemetryPushReporter (
   val openTelemetry = OpenTelemetrySdk
     .builder()
     .setMeterProvider(sdkMeterProvider)
-    .setPropagators(
-      ContextPropagators.create(W3CTraceContextPropagator.getInstance())
-    )
+    .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
     .buildAndRegisterGlobal();
   val openTelemetryMeter = openTelemetry.getMeter("apache-spark")
 
@@ -135,8 +128,7 @@ private[spark] class OpenTelemetryPushReporter (
       counters: SortedMap[String, Counter],
       histograms: SortedMap[String, Histogram],
       meters: SortedMap[String, Meter],
-      timers: SortedMap[String, Timer]
-  ): Unit = {
+      timers: SortedMap[String, Timer]): Unit = {
     counters.forEach(this.reportCounter)
     gauges.forEach(this.reportGauges)
     histograms.forEach(this.reportHistograms)
@@ -238,9 +230,7 @@ private[spark] class OpenTelemetryPushReporter (
     generateHistogram(metricName + NINE_HUNDRED_NINETY_NINTH_PERCENTILE)
   }
 
-  private def generateAdditionalHistogramGroupForTimers(
-      metricName: String
-  ): Unit = {
+  private def generateAdditionalHistogramGroupForTimers(metricName: String): Unit = {
     generateHistogram(metricName + FIFTEEN_MINUTE_RATE)
     generateHistogram(metricName + FIVE_MINUTE_RATE)
     generateHistogram(metricName + ONE_MINUTE_RATE)
@@ -258,9 +248,7 @@ private[spark] class OpenTelemetryPushReporter (
     openTelemetryHistograms.remove(metricName + NINETY_FIFTH_PERCENTILE)
     openTelemetryHistograms.remove(metricName + NINETY_EIGHTH_PERCENTILE)
     openTelemetryHistograms.remove(metricName + NINETY_NINTH_PERCENTILE)
-    openTelemetryHistograms.remove(
-      metricName + NINE_HUNDRED_NINETY_NINTH_PERCENTILE
-    )
+    openTelemetryHistograms.remove(metricName + NINE_HUNDRED_NINETY_NINTH_PERCENTILE)
   }
 
   private def cleanAdditionalHistogramGroupTimers(metricName: String): Unit = {
@@ -307,17 +295,12 @@ private[spark] class OpenTelemetryPushReporter (
     val metricName = normalizeMetricName(name) + METER
     val openTelemetryGaugeCount = openTelemetryGauges(metricName + COUNT)
     openTelemetryGaugeCount.set(meter.getCount.toDouble)
-    val openTelemetryGauge0neMinuteRate = openTelemetryGauges(
-      metricName + ONE_MINUTE_RATE
-    )
+    val openTelemetryGauge0neMinuteRate = openTelemetryGauges(metricName + ONE_MINUTE_RATE)
     openTelemetryGauge0neMinuteRate.set(meter.getOneMinuteRate)
-    val openTelemetryGaugeFiveMinuteRate = openTelemetryGauges(
-      metricName + FIVE_MINUTE_RATE
-    )
+    val openTelemetryGaugeFiveMinuteRate = openTelemetryGauges(metricName + FIVE_MINUTE_RATE)
     openTelemetryGaugeFiveMinuteRate.set(meter.getFiveMinuteRate)
     val openTelemetryGaugeFifteenMinuteRate = openTelemetryGauges(
-      metricName + FIFTEEN_MINUTE_RATE
-    )
+      metricName + FIFTEEN_MINUTE_RATE)
     openTelemetryGaugeFifteenMinuteRate.set(meter.getFifteenMinuteRate)
     val openTelemetryGaugeMeanRate = openTelemetryGauges(metricName + MEAN_RATE)
     openTelemetryGaugeMeanRate.set(meter.getMeanRate)
@@ -328,74 +311,52 @@ private[spark] class OpenTelemetryPushReporter (
     val openTelemetryHistogramMax = openTelemetryHistograms(metricName + MAX)
     openTelemetryHistogramMax.record(timer.getCount.toDouble)
     val openTelemetryHistogram0neMinuteRate = openTelemetryHistograms(
-      metricName + ONE_MINUTE_RATE
-    )
+      metricName + ONE_MINUTE_RATE)
     openTelemetryHistogram0neMinuteRate.record(timer.getOneMinuteRate)
     val openTelemetryHistogramFiveMinuteRate = openTelemetryHistograms(
-      metricName + FIVE_MINUTE_RATE
-    )
+      metricName + FIVE_MINUTE_RATE)
     openTelemetryHistogramFiveMinuteRate.record(timer.getFiveMinuteRate)
     val openTelemetryHistogramFifteenMinuteRate = openTelemetryHistograms(
-      metricName + FIFTEEN_MINUTE_RATE
-    )
+      metricName + FIFTEEN_MINUTE_RATE)
     openTelemetryHistogramFifteenMinuteRate.record(timer.getFifteenMinuteRate)
-    val openTelemetryHistogramMeanRate = openTelemetryHistograms(
-      metricName + MEAN_RATE
-    )
+    val openTelemetryHistogramMeanRate = openTelemetryHistograms(metricName + MEAN_RATE)
     openTelemetryHistogramMeanRate.record(timer.getMeanRate)
     val snapshot = timer.getSnapshot
     reportHistogramGroup(metricName, snapshot)
   }
 
-  private def reportHistogramGroup(
-      metricName: String,
-      histogram: Histogram
-  ): Unit = {
-    val openTelemetryHistogramCount = openTelemetryHistograms(
-      metricName + COUNT
-    )
+  private def reportHistogramGroup(metricName: String, histogram: Histogram): Unit = {
+    val openTelemetryHistogramCount = openTelemetryHistograms(metricName + COUNT)
     openTelemetryHistogramCount.record(histogram.getCount.toDouble)
     val snapshot = histogram.getSnapshot
     reportHistogramGroup(metricName, snapshot)
   }
 
-  private def reportHistogramGroup(
-      metricName: String,
-      snapshot: Snapshot
-  ): Unit = {
+  private def reportHistogramGroup(metricName: String, snapshot: Snapshot): Unit = {
     val openTelemetryHistogramMax = openTelemetryHistograms(metricName + MAX)
     openTelemetryHistogramMax.record(snapshot.getMax.toDouble)
     val openTelemetryHistogramMin = openTelemetryHistograms(metricName + MIN)
     openTelemetryHistogramMin.record(snapshot.getMin.toDouble)
     val openTelemetryHistogramMean = openTelemetryHistograms(metricName + MEAN)
     openTelemetryHistogramMean.record(snapshot.getMean)
-    val openTelemetryHistogramMedian = openTelemetryHistograms(
-      metricName + MEDIAN
-    )
+    val openTelemetryHistogramMedian = openTelemetryHistograms(metricName + MEDIAN)
     openTelemetryHistogramMedian.record(snapshot.getMedian)
-    val openTelemetryHistogramStdDev = openTelemetryHistograms(
-      metricName + STD_DEV
-    )
+    val openTelemetryHistogramStdDev = openTelemetryHistograms(metricName + STD_DEV)
     openTelemetryHistogramStdDev.record(snapshot.getStdDev)
     val openTelemetryHistogram75Percentile = openTelemetryHistograms(
-      metricName + SEVENTY_FIFTH_PERCENTILE
-    )
+      metricName + SEVENTY_FIFTH_PERCENTILE)
     openTelemetryHistogram75Percentile.record(snapshot.get75thPercentile)
     val openTelemetryHistogram95Percentile = openTelemetryHistograms(
-      metricName + NINETY_FIFTH_PERCENTILE
-    )
+      metricName + NINETY_FIFTH_PERCENTILE)
     openTelemetryHistogram95Percentile.record(snapshot.get95thPercentile)
     val openTelemetryHistogram98Percentile = openTelemetryHistograms(
-      metricName + NINETY_EIGHTH_PERCENTILE
-    )
+      metricName + NINETY_EIGHTH_PERCENTILE)
     openTelemetryHistogram98Percentile.record(snapshot.get98thPercentile)
     val openTelemetryHistogram99Percentile = openTelemetryHistograms(
-      metricName + NINETY_NINTH_PERCENTILE
-    )
+      metricName + NINETY_NINTH_PERCENTILE)
     openTelemetryHistogram99Percentile.record(snapshot.get99thPercentile)
     val openTelemetryHistogram999Percentile = openTelemetryHistograms(
-      metricName + NINE_HUNDRED_NINETY_NINTH_PERCENTILE
-    )
+      metricName + NINE_HUNDRED_NINETY_NINTH_PERCENTILE)
     openTelemetryHistogram999Percentile.record(snapshot.get999thPercentile)
   }
 }

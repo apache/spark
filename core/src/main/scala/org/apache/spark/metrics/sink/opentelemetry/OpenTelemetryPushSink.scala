@@ -26,12 +26,10 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.Sink
 
-
 private[spark] object OpenTelemetryPushSink {
   private def fetchMapFromProperties(
-                                      properties: Properties,
-                                      keyPrefix: String
-                                    ): Map[String, String] = {
+      properties: Properties,
+      keyPrefix: String): Map[String, String] = {
     val propertiesMap = scala.collection.mutable.Map[String, String]()
     val valueEnumeration = properties.propertyNames
     val dotCount = keyPrefix.count(_ == '.')
@@ -47,10 +45,9 @@ private[spark] object OpenTelemetryPushSink {
   }
 }
 
-private[spark] class OpenTelemetryPushSink(
-    val property: Properties,
-    val registry: MetricRegistry
-) extends Sink with Logging {
+private[spark] class OpenTelemetryPushSink(val property: Properties, val registry: MetricRegistry)
+    extends Sink
+    with Logging {
 
   val OPEN_TELEMETRY_KEY_PERIOD = "period"
   val OPEN_TELEMETRY_KEY_UNIT = "unit"
@@ -71,8 +68,7 @@ private[spark] class OpenTelemetryPushSink(
   val pollUnit = TimeUnit.valueOf(
     property
       .getProperty(OPEN_TELEMETRY_KEY_UNIT, OPEN_TELEMETRY_DEFAULT_UNIT)
-      .toUpperCase(Locale.ROOT)
-  )
+      .toUpperCase(Locale.ROOT))
 
   val host = property.getProperty(OPEN_TELEMETRY_KEY_HOST)
   val port = property.getProperty(OPEN_TELEMETRY_KEY_PORT)
@@ -99,8 +95,7 @@ private[spark] class OpenTelemetryPushSink(
     attributesMap,
     trustedCertificatesPath,
     privateKeyPemPath,
-    certificatePemPath
-  )
+    certificatePemPath)
 
   registry.addListener(reporter)
 

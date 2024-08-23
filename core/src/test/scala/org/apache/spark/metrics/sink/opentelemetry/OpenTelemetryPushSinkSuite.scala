@@ -23,10 +23,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 
-
-class OpenTelemetryPushSinkSuite
-    extends SparkFunSuite
-    with PrivateMethodTester {
+class OpenTelemetryPushSinkSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("fetch properties map") {
     val properties = new Properties
@@ -34,9 +31,7 @@ class OpenTelemetryPushSinkSuite
     properties.put("foo1.foo2.foo3.foo4.header.key2", "value2")
     val keyPrefix = "foo1.foo2.foo3.foo4.header"
     val propertiesMap: Map[String, String] = OpenTelemetryPushSink invokePrivate
-      PrivateMethod[Map[String, String]](
-        Symbol("fetchMapFromProperties")
-      )(properties, keyPrefix)
+      PrivateMethod[Map[String, String]](Symbol("fetchMapFromProperties"))(properties, keyPrefix)
 
     assert("value1".equals(propertiesMap("key1.key2.key3")))
     assert("value2".equals(propertiesMap("key2")))

@@ -433,7 +433,7 @@ object SparkBuild extends PomBuild {
     enable(SparkR.settings)(core)
   }
 
-  if (!profiles.contains("opentelemetry-reporter")) {
+  if (!profiles.contains("opentelemetry")) {
     enable(OpenTelemetry.settings)(core)
   }
 
@@ -1334,7 +1334,7 @@ object Volcano {
 }
 
 object OpenTelemetry {
-  // Exclude all OpenTelemetry file for Compile and Test
+  // Exclude all OpenTelemetry files for Compile and Test
   lazy val settings = Seq(
     unmanagedSources / excludeFilter := HiddenFileFilter || "OpenTelemetry*.scala"
   )

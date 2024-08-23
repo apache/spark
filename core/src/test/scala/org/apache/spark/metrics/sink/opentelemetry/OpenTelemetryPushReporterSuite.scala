@@ -22,24 +22,19 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 
-class OpenTelemetryPushReporterSuite
-    extends SparkFunSuite
-    with PrivateMethodTester {
+class OpenTelemetryPushReporterSuite extends SparkFunSuite with PrivateMethodTester {
   test("normalize metric name key") {
     val reporter = new OpenTelemetryPushReporter(
       registry = new MetricRegistry(),
       trustedCertificatesPath = null,
       privateKeyPemPath = null,
-      certificatePemPath = null
-    )
+      certificatePemPath = null)
     val name = "local-1592132938718.driver.LiveListenerBus." +
       "listenerProcessingTime.org.apache.spark.HeartbeatReceiver"
-    val metricsName = reporter invokePrivate PrivateMethod[String](
-      Symbol("normalizeMetricName")
-    )(name)
+    val metricsName =
+      reporter invokePrivate PrivateMethod[String](Symbol("normalizeMetricName"))(name)
     assert(
       metricsName == "local_1592132938718_driver_livelistenerbus_" +
-        "listenerprocessingtime_org_apache_spark_heartbeatreceiver"
-    )
+        "listenerprocessingtime_org_apache_spark_heartbeatreceiver")
   }
 }
