@@ -132,7 +132,8 @@ class CollationStringExpressionsSuite
       checkEvaluation(StringSplitSQL(str, delimiter), t.result)
     })
 
-    // Because `StringSplitSQL` is an internal expression, E2E SQL test cannot be performed in `collations.sql`.
+    // Because `StringSplitSQL` is an internal expression,
+    // E2E SQL test cannot be performed in `collations.sql`.
     checkError(
       exception = intercept[AnalysisException] {
         val expr = StringSplitSQL(
