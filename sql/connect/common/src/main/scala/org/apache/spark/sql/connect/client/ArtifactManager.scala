@@ -214,7 +214,9 @@ class ArtifactManager(
     try {
       stream.forEach { path =>
         if (Files.isRegularFile(path) && path.toString.endsWith(".class")) {
-          builder += Artifact.newClassArtifact(base.relativize(path), new Artifact.LocalFile(path))
+          builder += Artifact.newClassArtifact(
+            base.relativize(path),
+            new Artifact.LocalFile(path))
         }
       }
     } finally {
