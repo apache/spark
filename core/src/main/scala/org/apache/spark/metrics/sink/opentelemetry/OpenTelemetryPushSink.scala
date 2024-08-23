@@ -46,8 +46,7 @@ private[spark] object OpenTelemetryPushSink {
 }
 
 private[spark] class OpenTelemetryPushSink(val property: Properties, val registry: MetricRegistry)
-    extends Sink
-    with Logging {
+  extends Sink with Logging {
 
   val OPEN_TELEMETRY_KEY_PERIOD = "period"
   val OPEN_TELEMETRY_KEY_UNIT = "unit"

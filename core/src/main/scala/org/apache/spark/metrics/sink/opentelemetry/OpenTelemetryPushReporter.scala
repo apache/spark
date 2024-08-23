@@ -43,13 +43,13 @@ private[spark] class OpenTelemetryPushReporter(
     trustedCertificatesPath: String,
     privateKeyPemPath: String,
     certificatePemPath: String)
-    extends ScheduledReporter(
+  extends ScheduledReporter (
       registry,
       "opentelemetry-push-reporter",
       MetricFilter.ALL,
       TimeUnit.SECONDS,
       TimeUnit.MILLISECONDS)
-    with MetricRegistryListener {
+  with MetricRegistryListener {
 
   val FIFTEEN_MINUTE_RATE = "_fifteen_minute_rate"
   val FIVE_MINUTE_RATE = "_five_minute_rate"
@@ -100,9 +100,9 @@ private[spark] class OpenTelemetryPushReporter(
     .merge(Resource.create(arrtributesBuilder.build()));
 
   val metricReader = PeriodicMetricReader
-      .builder(otlpGrpcMetricExporterBuilder.build())
-      .setInterval(pollInterval, pollUnit)
-      .build()
+    .builder(otlpGrpcMetricExporterBuilder.build())
+    .setInterval(pollInterval, pollUnit)
+    .build()
 
   val sdkMeterProvider: SdkMeterProvider = SdkMeterProvider
     .builder()
