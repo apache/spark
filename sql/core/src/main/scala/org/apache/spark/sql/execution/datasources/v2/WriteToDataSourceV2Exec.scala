@@ -116,9 +116,10 @@ case class AtomicCreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val stagedTable = catalog.stageCreate(
+    val stagedTable = Option(catalog.stageCreate(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
+    ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
     writeToTable(catalog, stagedTable, writeOptions, ident, query)
   }
 }
@@ -215,7 +216,9 @@ case class AtomicReplaceTableAsSelectExec(
     } else {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    writeToTable(catalog, staged, writeOptions, ident, query)
+    val table = Option(staged).getOrElse(
+      catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
 
