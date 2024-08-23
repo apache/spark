@@ -2102,6 +2102,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         queryContext = Array(ExpectedContext(
           fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())",
           start = 10,
+          // The subsequent test scenarios also follow the following rules to define `stop`:
           // stop = (start - 1) + prefixLength + fileNameLength + suffixLength
           stop = 9 + 33 + fileNameLength + 9))
       )
