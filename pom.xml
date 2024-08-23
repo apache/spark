@@ -331,7 +331,6 @@
     <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
-    <opentelemetry.exclude>**/OpenTelemetry*.scala</opentelemetry.exclude>
   </properties>
   <repositories>
     <repository>
@@ -3066,9 +3065,6 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
             </javacArgs>
-            <excludes>
-              <exclude>${opentelemetry.exclude}</exclude>
-            </excludes>
           </configuration>
         </plugin>
         <plugin>
