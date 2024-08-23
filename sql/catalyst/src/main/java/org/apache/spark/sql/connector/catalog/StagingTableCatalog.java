@@ -80,7 +80,8 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param columns the column of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if the catalog does not support atomic
+   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
@@ -128,7 +129,8 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param columns the columns of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if the catalog does not support atomic
+   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
@@ -176,7 +178,8 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param columns the columns of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if the catalog does not support atomic
+   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
