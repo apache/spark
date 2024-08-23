@@ -521,7 +521,7 @@ class KdePlotBase(NumericPlotBase):
     @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
         input_col = F.col(sdf.columns[0])
-        kde_col = KdePlotBase.compute_kde_col(input_col, bw_method, ind)
+        kde_col = KdePlotBase.compute_kde_col(input_col, bw_method, ind).alias("kde")
         row = sdf.select(kde_col).first()
         return row[0]
 

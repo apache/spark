@@ -244,8 +244,8 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             input_col=psdf._internal.spark_column_for(label),
             ind=ind,
             bw_method=bw_method,
-        )
-        for label in psdf._internal.column_labels
+        ).alias(f"kde_{i}")
+        for i, label in enumerate(psdf._internal.column_labels)
     ]
     kde_results = sdf.select(*kde_cols).first()
 
