@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
   enable(SparkUnidoc.settings)(spark)
 
   /* Enable unidoc only for the root spark connect client project */
-  enable(SparkConnectClientUnidoc.settings)(connectClient)
+  // enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
