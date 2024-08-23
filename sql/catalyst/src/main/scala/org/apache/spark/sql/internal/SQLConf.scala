@@ -3362,7 +3362,7 @@ object SQLConf {
       .doc("Threshold for size of rows to be spilled by window operator")
       .version("4.0.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_REDUCE_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val WINDOW_GROUP_LIMIT_THRESHOLD =
     buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
@@ -3392,7 +3392,7 @@ object SQLConf {
         "the buffer is used only for the query Spark cannot apply aggregations on determining " +
         "session window.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_REDUCE_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
@@ -3443,7 +3443,7 @@ object SQLConf {
       .doc("Threshold for size of rows to be spilled by sort merge join operator")
       .version("4.0.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_MAP_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
@@ -3468,7 +3468,7 @@ object SQLConf {
       .doc("Threshold for size of rows to be spilled by cartesian product operator")
       .version("4.0.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_MAP_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
