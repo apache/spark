@@ -23,6 +23,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 import org.apache.spark.sql.types.DataType
 
@@ -136,6 +137,18 @@ object SparkUserDefinedFunction {
       inputEncoders = inputEncoders,
       dataType = outputEncoder.dataType,
       outputEncoder = Option(outputEncoder),
+      nullable = outputEncoder.nullable)
+  }
+
+  private[sql] def apply(
+      function: AnyRef,
+      inputEncoders: Seq[AgnosticEncoder[_]],
+      outputEncoder: AgnosticEncoder[_]): SparkUserDefinedFunction = {
+    SparkUserDefinedFunction(
+      f = function,
+      inputEncoders = inputEncoders.map(Option.apply),
+      outputEncoder = Option(outputEncoder),
+      dataType = outputEncoder.dataType,
       nullable = outputEncoder.nullable)
   }
 

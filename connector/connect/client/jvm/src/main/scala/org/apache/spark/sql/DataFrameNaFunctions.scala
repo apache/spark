@@ -32,6 +32,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @since 3.4.0
  */
 final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root: Relation) {
+  import sparkSession.RichColumn
 
   /**
    * Returns a new `DataFrame` that drops rows containing any null or NaN values.
