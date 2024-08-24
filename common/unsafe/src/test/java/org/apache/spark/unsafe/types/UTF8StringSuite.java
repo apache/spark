@@ -1365,11 +1365,20 @@ public class UTF8StringSuite {
       UTF8String.toBinaryString(Long.MAX_VALUE));
   }
 
+  /**
+   * This tests whether appending a codepoint to a 'UTF8StringBuilder' correctly appends every
+   * single codepoint. We test it against an already existing 'StringBuilder.appendCodePoint' and
+   * 'UTF8String.fromString'. We skip testing the surrogate codepoints because at some point while
+   * converting the surrogate codepoint to 'UTF8String' (via 'StringBuilder' and 'UTF8String') we
+   * get an ill-formated byte sequence (probably because 'String' is in UTF-16 format, and a single
+   * surrogate codepoint is handled differently in UTF-16 than in UTF-8, so somewhere during those
+   * conversions some different behaviour happens).
+   */
   @Test
   public void testAppendCodepointToUTF8StringBuilder() {
     int surrogateRangeLowerBound = 0xD800;
     int surrogateRangeUpperBound = 0xDFFF;
-    for(int i = Character.MIN_CODE_POINT;i <= Character.MAX_CODE_POINT;i++) {
+    for (int i = Character.MIN_CODE_POINT; i <= Character.MAX_CODE_POINT; ++i) {
       if(surrogateRangeLowerBound <= i && i <= surrogateRangeUpperBound) continue;
       UTF8StringBuilder usb = new UTF8StringBuilder();
       usb.appendCodePoint(i);

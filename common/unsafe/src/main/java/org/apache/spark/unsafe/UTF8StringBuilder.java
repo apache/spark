@@ -93,36 +93,34 @@ public class UTF8StringBuilder {
     cursor += length;
   }
 
-  public void appendByte(byte singleByte) {
-    grow(1);
-    buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = singleByte;
-    cursor++;
-  }
-
   public UTF8String build() {
     return UTF8String.fromBytes(buffer, 0, totalSize());
   }
 
   public void appendCodePoint(int codePoint) {
     if (codePoint <= 0x7F) {
-      appendByte((byte) codePoint);
-    }
-    else if (codePoint <= 0x7FF) {
-      appendByte((byte) (0xC0 | (codePoint >> 6)));
-      appendByte((byte) (0x80 | (codePoint & 0x3F)));
-    }
-    else if (codePoint <= 0xFFFF) {
-      appendByte((byte) (0xE0 | (codePoint >> 12)));
-      appendByte((byte) (0x80 | ((codePoint >> 6) & 0x3F)));
-      appendByte((byte) (0x80 | (codePoint & 0x3F)));
-    }
-    else if (codePoint <= 0x10FFFF) {
-      appendByte((byte) (0xF0 | (codePoint >> 18)));
-      appendByte((byte) (0x80 | ((codePoint >> 12) & 0x3F)));
-      appendByte((byte) (0x80 | ((codePoint >> 6) & 0x3F)));
-      appendByte((byte) (0x80 | (codePoint & 0x3F)));
-    }
-    else {
+      grow(1);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) codePoint;
+      ++cursor;
+    } else if (codePoint <= 0x7FF) {
+      grow(2);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) (0xC0 | (codePoint >> 6));
+      buffer[cursor + 1 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | (codePoint & 0x3F));
+      cursor += 2;
+    } else if (codePoint <= 0xFFFF) {
+      grow(3);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) (0xE0 | (codePoint >> 12));
+      buffer[cursor + 1 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | ((codePoint >> 6) & 0x3F));
+      buffer[cursor + 2 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | (codePoint & 0x3F));
+      cursor += 3;
+    } else if (codePoint <= 0x10FFFF) {
+      grow(4);
+      buffer[cursor - Platform.BYTE_ARRAY_OFFSET] = (byte) (0xF0 | (codePoint >> 18));
+      buffer[cursor + 1 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | ((codePoint >> 12) & 0x3F));
+      buffer[cursor + 2 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | ((codePoint >> 6) & 0x3F));
+      buffer[cursor + 3 - Platform.BYTE_ARRAY_OFFSET] = (byte) (0x80 | (codePoint & 0x3F));
+      cursor += 4;
+    } else {
       throw new IllegalArgumentException("Invalid Unicode codePoint: " + codePoint);
     }
   }
