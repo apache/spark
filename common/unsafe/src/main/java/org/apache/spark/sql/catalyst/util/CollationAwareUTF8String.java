@@ -540,15 +540,15 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * This 'HashMap' is introduced as a performance speedup. Since title-casing a codepoint can result
-   * in more than a single codepoint, for correctness, we would use 'UCharacter.toTitleCase(String)'
-   * which returns a 'String'. If we use 'UCharacter.toTitleCase(int)' (the version of the same
-   * function which converts a single codepoint to its title-case codepoint), it would be faster
-   * than the previously mentioned version, but the problem here is that we don't handle when
-   * title-casing a codepoint yields more than 1 codepoint. Since there are only 48 codepoints that
-   * are mapped to more than 1 codepoint when title-cased, they are precalculated here, so that the
-   * faster function for title-casing could be used in combination with this 'HashMap' in the method
-   * 'appendCodepointToTitleCase'.
+   * This 'HashMap' is introduced as a performance speedup. Since title-casing a codepoint can
+   * result in more than a single codepoint, for correctness, we would use
+   * 'UCharacter.toTitleCase(String)' which returns a 'String'. If we use
+   * 'UCharacter.toTitleCase(int)' (the version of the same function which converts a single
+   * codepoint to its title-case codepoint), it would be faster than the previously mentioned
+   * version, but the problem here is that we don't handle when title-casing a codepoint yields more
+   * than 1 codepoint. Since there are only 48 codepoints that are mapped to more than 1 codepoint
+   * when title-cased, they are precalculated here, so that the faster function for title-casing
+   * could be used in combination with this 'HashMap' in the method 'appendCodepointToTitleCase'.
    */
   private static final HashMap<Integer, String> codepointOneToManyTitleCaseLookupTable =
     new HashMap<>(){{
@@ -973,8 +973,8 @@ public class CollationAwareUTF8String {
       }
       // Special handling for letter i (U+0069) followed by a combining dot (U+0307). By ensuring
       // that `CODE_POINT_LOWERCASE_I` is buffered, we guarantee finding a max-length match.
-      if (lowercaseDict.containsKey(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT) &&
-          codePoint == SpecialCodePointConstants.ASCII_SMALL_I && inputIter.hasNext()) {
+      if (lowercaseDict.containsKey(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT)
+          && codePoint == SpecialCodePointConstants.ASCII_SMALL_I && inputIter.hasNext()) {
         int nextCodePoint = inputIter.next();
         if (nextCodePoint == SpecialCodePointConstants.COMBINING_DOT) {
           codePoint = SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT;
