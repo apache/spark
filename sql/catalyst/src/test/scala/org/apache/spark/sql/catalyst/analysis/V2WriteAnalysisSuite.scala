@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, Cast, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -236,6 +236,36 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
   def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
+
+  test("SPARK-49352: Avoid redundant array transform for identical expression") {
+    def assertArrayField(fromType: ArrayType, toType: ArrayType, hasTransform: Boolean): Unit = {
+      val table = TestRelation(Seq($"a".int, $"arr".array(toType)))
+      val query = TestRelation(Seq($"arr".array(fromType), $"a".int))
+
+      val writePlan = byName(table, query).analyze
+
+      assertResolved(writePlan)
+      checkAnalysis(writePlan, writePlan)
+
+      val transform = writePlan.children.head.expressions.exists { e =>
+        e.find {
+          case _: ArrayTransform => true
+          case _ => false
+        }.isDefined
+      }
+      if (hasTransform) {
+        assert(transform)
+      } else {
+        assert(!transform)
+      }
+    }
+
+    assertArrayField(ArrayType(LongType), ArrayType(LongType), hasTransform = false)
+    assertArrayField(
+      ArrayType(new StructType().add("x", "int").add("y", "int")),
+      ArrayType(new StructType().add("y", "int").add("x", "byte")),
+      hasTransform = true)
+  }
 
   test("SPARK-33136: output resolved on complex types for V2 write commands") {
     def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {

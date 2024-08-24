@@ -182,8 +182,16 @@ object TableOutputResolver {
       val fakeAttr = AttributeReference("x", expectedType.elementType, expectedType.containsNull)()
       val res = reorderColumnsByName(Seq(param), Seq(fakeAttr), conf, addError, colPath)
       if (res.length == 1) {
-        val func = LambdaFunction(res.head, Seq(param))
-        Some(Alias(ArrayTransform(input, func), expectedName)())
+        if (res.head == param) {
+          // If the element type is the same, we can reuse the input array directly.
+          Some(
+            Alias(input, expectedName)(
+              nonInheritableMetadataKeys =
+                Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
+        } else {
+          val func = LambdaFunction(res.head, Seq(param))
+          Some(Alias(ArrayTransform(input, func), expectedName)())
+        }
       } else {
         None
       }
