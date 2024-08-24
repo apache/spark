@@ -371,8 +371,16 @@ object TableOutputResolver {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
-      val func = LambdaFunction(res.head, Seq(param))
-      Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      if (res.head == param) {
+        // If the element type is the same, we can reuse the input array directly.
+        Some(
+          Alias(nullCheckedInput, expected.name)(
+            nonInheritableMetadataKeys =
+              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
+      } else {
+        val func = LambdaFunction(res.head, Seq(param))
+        Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      }
     } else {
       None
     }
