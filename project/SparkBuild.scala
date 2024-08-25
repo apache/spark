@@ -276,7 +276,7 @@ object SparkBuild extends PomBuild {
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
-      "parquet-release-candidate" at "https://repository.apache.org/content/repositories/orgapacheparquet-1058"
+      "parquet-release-candidate" at "https://repository.apache.org/content/repositories/orgapacheparquet-1059"
     ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
