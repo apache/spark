@@ -39,7 +39,8 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -927,6 +928,24 @@ class SparkSession private(
 
   private[sql] def leafNodeDefaultParallelism: Int = {
     conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
+  }
+
+  private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
+    override protected def parser: ParserInterface = sessionState.sqlParser
+    override protected def conf: SQLConf = sessionState.conf
+  }
+
+  private[sql] def expression(e: Column): Expression = Converter(e.node)
+
+  private[sql] implicit class RichColumn(val column: Column) {
+    /**
+     * Returns the expression for this column.
+     */
+    def expr: Expression = Converter(column.node)
+    /**
+     * Returns the expression for this column either with an existing or auto assigned name.
+     */
+    def named: NamedExpression = ExpressionUtils.toNamed(expr)
   }
 }
 

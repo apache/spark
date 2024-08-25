@@ -316,6 +316,10 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
         spark.sql(s"select from_avro(result, '$jsonFormatSchema', map()).u from ($toAvroSql)"),
         Seq(Row(Row(1, null)),
           Row(Row(null, "a"))))
+      // The 'jsonFormatSchema' argument of the 'to_avro' function is optional.
+      checkAnswer(
+        spark.sql(s"select length(to_avro(s)) > 0 from t"),
+        Seq(Row(true), Row(true)))
 
       // Negative tests.
       checkError(

@@ -131,12 +131,14 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(child, jsonFormatSchema) - Converts a Catalyst binary input value into its corresponding
-      Avro format result.
+    _FUNC_(child[, jsonFormatSchema]) - Converts a Catalyst binary input value into its
+      corresponding Avro format result.
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP()) IS NULL FROM (SELECT NULL AS s);
+      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}') IS NULL FROM (SELECT NULL AS s);
+       [true]
+      > SELECT _FUNC_(s) IS NULL FROM (SELECT NULL AS s);
        [true]
   """,
   group = "misc_funcs",
@@ -145,6 +147,9 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
 // scalastyle:on line.size.limit
 case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   extends BinaryExpression with RuntimeReplaceable {
+
+  def this(child: Expression) = this(child, Literal(null))
+
   override def left: Expression = child
 
   override def right: Expression = jsonFormatSchema
@@ -156,6 +161,9 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     jsonFormatSchema.dataType match {
       case _: StringType if jsonFormatSchema.foldable =>
+        TypeCheckResult.TypeCheckSuccess
+      case _: NullType =>
+        // The 'jsonFormatSchema' argument is optional.
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(

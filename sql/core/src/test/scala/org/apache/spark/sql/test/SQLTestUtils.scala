@@ -241,6 +241,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected object testImplicits extends SQLImplicits {
     protected override def session: SparkSession = self.spark
+    implicit def toRichColumn(c: Column): SparkSession#RichColumn = session.RichColumn(c)
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {

@@ -25,7 +25,7 @@
                 "functionName": "contains",
                 "arguments": [{
                   "unresolvedNamedLambdaVariable": {
-                    "nameParts": ["x"]
+                    "nameParts": ["x_1"]
                   }
                 }, {
                   "literal": {
@@ -35,9 +35,9 @@
               }
             },
             "arguments": [{
-              "nameParts": ["x"]
+              "nameParts": ["x_1"]
             }, {
-              "nameParts": ["y"]
+              "nameParts": ["y_2"]
             }]
           }
         }]

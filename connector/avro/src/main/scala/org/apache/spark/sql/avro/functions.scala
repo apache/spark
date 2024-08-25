@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 
 
 // scalastyle:off: object.name
@@ -41,7 +42,7 @@ object functions {
   def from_avro(
       data: Column,
       jsonFormatSchema: String): Column = {
-    Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, Map.empty))
+    AvroDataToCatalyst(data, jsonFormatSchema, Map.empty)
   }
 
   /**
@@ -62,7 +63,7 @@ object functions {
       data: Column,
       jsonFormatSchema: String,
       options: java.util.Map[String, String]): Column = {
-    Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
+    AvroDataToCatalyst(data, jsonFormatSchema, options.asScala.toMap)
   }
 
   /**
@@ -74,7 +75,7 @@ object functions {
    */
   @Experimental
   def to_avro(data: Column): Column = {
-    Column(CatalystDataToAvro(data.expr, None))
+    CatalystDataToAvro(data, None)
   }
 
   /**
@@ -87,6 +88,6 @@ object functions {
    */
   @Experimental
   def to_avro(data: Column, jsonFormatSchema: String): Column = {
-    Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema)))
+    CatalystDataToAvro(data, Some(jsonFormatSchema))
   }
 }
