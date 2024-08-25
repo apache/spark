@@ -60,6 +60,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   private var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
 
+  private var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
+
   private def runStateVarChecks(
       sourceOptions: StateSourceOptions,
       stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
@@ -139,7 +141,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     }
 
     new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
-      transformWithStateVariableInfoOpt)
+      transformWithStateVariableInfoOpt, stateStoreColFamilySchemaOpt)
   }
 
   private def getKeyStateEncoderSpec(colFamilySchema: StateStoreColFamilySchema):
@@ -184,7 +186,6 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
-      var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
@@ -235,7 +236,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
-      StateSchemaUtils.getSourceSchema(sourceOptions, keySchema,
+      SchemaUtil.getSourceSchema(sourceOptions, keySchema,
         valueSchema, transformWithStateVariableInfoOpt, stateStoreColFamilySchemaOpt)
     } catch {
       case NonFatal(e) =>

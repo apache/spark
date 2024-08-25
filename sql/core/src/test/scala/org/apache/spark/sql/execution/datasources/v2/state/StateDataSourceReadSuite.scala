@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, Offset
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessorWithSingleValueVar, TimeMode, TransformWithStateSuiteUtils}
+import org.apache.spark.sql.streaming.{OutputMode, TimeMode, TransformWithStateSuiteUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
