@@ -302,7 +302,7 @@ case class StateSourceOptions(
   }
 }
 
-object StateSourceOptions extends DataSourceOptions with Logging {
+object StateSourceOptions extends DataSourceOptions {
   val PATH = newOption("path")
   val BATCH_ID = newOption("batchId")
   val OPERATOR_ID = newOption("operatorId")
@@ -331,7 +331,6 @@ object StateSourceOptions extends DataSourceOptions with Logging {
       sparkSession: SparkSession,
       hadoopConf: Configuration,
       options: CaseInsensitiveStringMap): StateSourceOptions = {
-
     val checkpointLocation = Option(options.get(PATH)).orElse {
       throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
     }.get

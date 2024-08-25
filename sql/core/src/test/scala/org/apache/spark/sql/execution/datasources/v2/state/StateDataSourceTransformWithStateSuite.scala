@@ -120,7 +120,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a"),
           AddData(inputData, "b"),
           Execute { _ =>
-            // wait for the batch to run
+            // wait for the batch to run since we are using processing time
             Thread.sleep(5000)
           },
           StopStream
@@ -135,9 +135,14 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         val resultDf = stateReaderDf.selectExpr(
           "key.value", "value.value", "expiration_timestamp", "partition_id")
 
+        var count = 0L
         resultDf.collect().foreach { row =>
+          count = count + 1
           assert(row.getLong(2) > 0)
         }
+
+        // verify that 2 state rows are present
+        assert(count === 2)
 
         val answerDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
