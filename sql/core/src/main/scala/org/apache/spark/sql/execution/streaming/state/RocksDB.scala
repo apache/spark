@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, MapHasAsJava}
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -76,7 +78,9 @@ class RocksDB(
       checkpointDir: File,
       version: Long,
       numKeys: Long,
-      capturedFileMappings: RocksDBFileMappings) {
+      capturedFileMappings: RocksDBFileMappings,
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
@@ -166,6 +170,87 @@ class RocksDB(
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
+  // This is accessed and updated only between load and commit
+  // which means it is implicitly guarded by acquireLock
+  @GuardedBy("acquireLock")
+  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+
+  @GuardedBy("acquireLock")
+  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
+
+  @GuardedBy("acquireLock")
+  private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
+
+  /**
+   * Check whether the column family name is for internal column families.
+   *
+   * @param cfName - column family name
+   * @return - true if the column family is for internal use, false otherwise
+   */
+  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
+
+  // Methods to fetch column family mapping for this State Store version
+  def getColumnFamilyMapping: Map[String, Short] = {
+    colFamilyNameToIdMap.asScala
+  }
+
+  def getColumnFamilyId(cfName: String): Short = {
+    colFamilyNameToIdMap.get(cfName)
+  }
+
+  /**
+   * Create RocksDB column family, if not created already
+   */
+  def createColFamilyIfAbsent(colFamilyName: String): Short = {
+    if (!checkColFamilyExists(colFamilyName)) {
+      val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
+      colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
+      shouldForceSnapshot.set(true)
+      newColumnFamilyId
+    } else {
+      colFamilyNameToIdMap.get(colFamilyName)
+    }
+  }
+
+  /**
+   * Remove RocksDB column family, if exists
+   */
+  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+    if (checkColFamilyExists(colFamilyName)) {
+      colFamilyNameToIdMap.remove(colFamilyName)
+      shouldForceSnapshot.set(true)
+      true
+    } else {
+      false
+    }
+  }
+
+  /**
+   * Function to check if the column family exists in the state store instance.
+   *
+   * @param colFamilyName - name of the column family
+   * @return - true if the column family exists, false otherwise
+   */
+  def checkColFamilyExists(colFamilyName: String): Boolean = {
+    colFamilyNameToIdMap.containsKey(colFamilyName)
+  }
+
+  // This method sets the internal column family metadata to
+  // the default values it should be set to on load
+  private def setInitialCFInfo(): Unit = {
+    colFamilyNameToIdMap.clear()
+    shouldForceSnapshot.set(false)
+    maxColumnFamilyId.set(0)
+  }
+
+  def getColFamilyCount(isInternal: Boolean): Long = {
+    if (isInternal) {
+      colFamilyNameToIdMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
+    } else {
+      colFamilyNameToIdMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
+    }
+  }
+
   /**
    * Load the given version of data in a native RocksDB instance.
    * Note that this will copy all the necessary file from DFS to local disk as needed,
@@ -185,12 +270,30 @@ class RocksDB(
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(version)
 
+        setInitialCFInfo()
+        metadata.columnFamilyMapping.foreach { mapping =>
+          colFamilyNameToIdMap.putAll(mapping.asJava)
+        }
+
+        metadata.maxColumnFamilyId.foreach { maxId =>
+          maxColumnFamilyId.set(maxId)
+        }
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
-          lastSnapshotVersion = 0L
+          synchronized {
+            if (latestSnapshot.isDefined) {
+              oldSnapshots += latestSnapshot.get
+              latestSnapshot = None
+            }
+          }
         }
+
+        // reset the last snapshot version to the latest available snapshot version
+        lastSnapshotVersion = latestSnapshotVersion
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
@@ -486,7 +589,7 @@ class RocksDB(
       var compactTimeMs = 0L
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
-      if (shouldCreateSnapshot()) {
+      if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -525,7 +628,9 @@ class RocksDB(
               RocksDBSnapshot(checkpointDir,
                 newVersion,
                 numKeysOnWritingVersion,
-                fileManager.captureFileMapReference()))
+                fileManager.captureFileMapReference(),
+                colFamilyNameToIdMap.asScala.toMap,
+                maxColumnFamilyId.get().toShort))
             lastSnapshotVersion = newVersion
           }
         }
@@ -534,17 +639,31 @@ class RocksDB(
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
-          try {
-            assert(changelogWriter.isDefined)
-            changelogWriter.foreach(_.commit())
-          } finally {
+          // If we have changed the columnFamilyId mapping, we have set a new
+          // snapshot and need to upload this to the DFS even if changelog checkpointing
+          // is enabled.
+          if (shouldForceSnapshot.get()) {
+            uploadSnapshot()
             changelogWriter = None
+            changelogWriter.foreach(_.abort())
+          } else {
+            try {
+              assert(changelogWriter.isDefined)
+              changelogWriter.foreach(_.commit())
+            } finally {
+              changelogWriter = None
+            }
           }
         } else {
           assert(changelogWriter.isEmpty)
           uploadSnapshot()
         }
       }
+
+      // Set maxVersion when checkpoint files are synced to DFS successfully
+      // We need to handle this explicitly in RocksDB as we could use different
+      // changeLogWriter instances in fileManager instance when committing
+      fileManager.setMaxSeenVersion(newVersion)
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
@@ -573,8 +692,7 @@ class RocksDB(
     if (enableChangelogCheckpointing) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
-      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot ||
-        changelogWriter.get.size > 10000
+      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot
     } else true
   }
 
@@ -592,10 +710,24 @@ class RocksDB(
       checkpoint
     }
     localCheckpoint match {
-      case Some(RocksDBSnapshot(localDir, version, numKeys, capturedFileMappings)) =>
+      case Some(
+        RocksDBSnapshot(
+          localDir,
+          version,
+          numKeys,
+          capturedFileMappings,
+          columnFamilyMapping,
+          maxColumnFamilyId)) =>
         try {
           val uploadTime = timeTakenMs {
-            fileManager.saveCheckpointToDfs(localDir, version, numKeys, capturedFileMappings)
+            fileManager.saveCheckpointToDfs(
+              localDir,
+              version,
+              numKeys,
+              capturedFileMappings,
+              Some(columnFamilyMapping.toMap),
+              Some(maxColumnFamilyId)
+            )
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
           logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
@@ -633,7 +765,7 @@ class RocksDB(
       uploadSnapshot()
     }
     val cleanupTime = timeTakenMs {
-      fileManager.deleteOldVersions(conf.minVersionsToRetain)
+      fileManager.deleteOldVersions(conf.minVersionsToRetain, conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
   }
@@ -889,6 +1021,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
  */
 case class RocksDBConf(
     minVersionsToRetain: Int,
+    minVersionsToDelete: Long,
     minDeltasForSnapshot: Int,
     compactOnCommit: Boolean,
     enableChangelogCheckpointing: Boolean,
@@ -1071,6 +1204,7 @@ object RocksDBConf {
 
     RocksDBConf(
       storeConf.minVersionsToRetain,
+      storeConf.minVersionsToDelete,
       storeConf.minDeltasForSnapshot,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
       getBooleanConf(ENABLE_CHANGELOG_CHECKPOINTING_CONF),

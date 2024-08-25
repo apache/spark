@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Union, TYPE_CHECKING, cast
+from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
@@ -23,6 +23,11 @@ from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.streaming.stateful_processor_api_client import (
+    StatefulProcessorApiClient,
+    StatefulProcessorHandleState,
+)
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
@@ -33,6 +38,7 @@ if TYPE_CHECKING:
         PandasCogroupedMapFunction,
         ArrowGroupedMapFunction,
         ArrowCogroupedMapFunction,
+        DataFrameLike as PandasDataFrameLike,
     )
     from pyspark.sql.group import GroupedData
 
@@ -101,8 +107,8 @@ class PandasGroupedOpsMixin:
             )
         ):
             raise PySparkTypeError(
-                error_class="INVALID_UDF_EVAL_TYPE",
-                message_parameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
+                errorClass="INVALID_UDF_EVAL_TYPE",
+                messageParameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
             )
 
         warnings.warn(
@@ -232,7 +238,7 @@ class PandasGroupedOpsMixin:
         udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc)
         return DataFrame(jdf, self.session)
 
     def applyInPandasWithState(
@@ -350,11 +356,177 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.applyInPandasWithState(
-            udf_column._jc.expr(),
+            udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             self.session._jsparkSession.parseDataType(stateStructType.json()),
             outputMode,
             timeoutConf,
+        )
+        return DataFrame(jdf, self.session)
+
+    def transformWithStateInPandas(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+    ) -> DataFrame:
+        """
+        Invokes methods defined in the stateful processor used in arbitrary state API v2. It
+        requires protobuf, pandas and pyarrow as dependencies to process input/state data. We
+        allow the user to act on per-group set of input rows along with keyed state and the user
+        can choose to output/return 0 or more rows.
+
+        For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
+        in each trigger and the user's state/state variables will be stored persistently across
+        invocations.
+
+        The `statefulProcessor` should be a Python class that implements the interface defined in
+        :class:`StatefulProcessor`.
+
+        The `outputStructType` should be a :class:`StructType` describing the schema of all
+        elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
+        returned `pandas.DataFrame` must either match the field names in the defined schema if
+        specified as strings, or match the field data types by position if not strings,
+        e.g. integer indices.
+
+        The size of each `pandas.DataFrame` in both the input and output can be arbitrary. The
+        number of `pandas.DataFrame` in both the input and output can also be arbitrary.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        statefulProcessor : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessor`
+            Instance of StatefulProcessor whose functions will be invoked by the operator.
+        outputStructType : :class:`pyspark.sql.types.DataType` or str
+            The type of the output records. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        outputMode : str
+            The output mode of the stateful processor.
+        timeMode : str
+            The time mode semantics of the stateful processor for timers and TTL.
+
+        Examples
+        --------
+        >>> from typing import Iterator
+        ...
+        >>> import pandas as pd # doctest: +SKIP
+        ...
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col, split
+        >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
+        >>> from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
+        ...
+        >>> spark.conf.set("spark.sql.streaming.stateStore.providerClass",
+        ...     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+        ... # Below is a simple example to find erroneous sensors from temperature sensor data. The
+        ... # processor returns a count of total readings, while keeping erroneous reading counts
+        ... # in streaming state. A violation is defined when the temperature is above 100.
+        ... # The input data is a DataFrame with the following schema:
+        ... #    `id: string, temperature: long`.
+        ... # The output schema and state schema are defined as below.
+        >>> output_schema = StructType([
+        ...     StructField("id", StringType(), True),
+        ...     StructField("count", IntegerType(), True)
+        ... ])
+        >>> state_schema = StructType([
+        ...     StructField("value", IntegerType(), True)
+        ... ])
+        >>> class SimpleStatefulProcessor(StatefulProcessor):
+        ...     def init(self, handle: StatefulProcessorHandle):
+        ...         self.num_violations_state = handle.getValueState("numViolations", state_schema)
+        ...
+        ...     def handleInputRows(self, key, rows):
+        ...         new_violations = 0
+        ...         count = 0
+        ...         exists = self.num_violations_state.exists()
+        ...         if exists:
+        ...             existing_violations_row = self.num_violations_state.get()
+        ...             existing_violations = existing_violations_row[0]
+        ...         else:
+        ...             existing_violations = 0
+        ...         for pdf in rows:
+        ...             pdf_count = pdf.count()
+        ...             count += pdf_count.get('temperature')
+        ...             violations_pdf = pdf.loc[pdf['temperature'] > 100]
+        ...             new_violations += violations_pdf.count().get('temperature')
+        ...         updated_violations = new_violations + existing_violations
+        ...         self.num_violations_state.update((updated_violations,))
+        ...         yield pd.DataFrame({'id': key, 'count': count})
+        ...
+        ...     def close(self) -> None:
+        ...         pass
+
+        Input DataFrame:
+        +---+-----------+
+        | id|temperature|
+        +---+-----------+
+        |  0|        123|
+        |  0|         23|
+        |  1|         33|
+        |  1|        188|
+        |  1|         88|
+        +---+-----------+
+
+        >>> df.groupBy("value").transformWithStateInPandas(statefulProcessor =
+        ...     SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
+        ...     timeMode="None") # doctest: +SKIP
+
+        Output DataFrame:
+        +---+-----+
+        | id|count|
+        +---+-----+
+        |  0|    2|
+        |  1|    3|
+        +---+-----+
+
+        Notes
+        -----
+        This function requires a full shuffle.
+
+        This API is experimental.
+        """
+
+        from pyspark.sql import GroupedData
+        from pyspark.sql.functions import pandas_udf
+
+        assert isinstance(self, GroupedData)
+
+        def transformWithStateUDF(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+            key: Any,
+            inputRows: Iterator["PandasDataFrameLike"],
+        ) -> Iterator["PandasDataFrameLike"]:
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
+
+            if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
+                statefulProcessor.init(handle)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.INITIALIZED
+                )
+
+            statefulProcessorApiClient.set_implicit_key(key)
+            result = statefulProcessor.handleInputRows(key, inputRows)
+
+            return result
+
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+
+        udf = pandas_udf(
+            transformWithStateUDF,  # type: ignore
+            returnType=outputStructType,
+            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+        )
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+
+        jdf = self._jgd.transformWithStateInPandas(
+            udf_column._jc,
+            self.session._jsparkSession.parseDataType(outputStructType.json()),
+            outputMode,
+            timeMode,
         )
         return DataFrame(jdf, self.session)
 
@@ -481,7 +653,7 @@ class PandasGroupedOpsMixin:
         )  # type: ignore[call-overload]
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc.expr())
+        jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc)
         return DataFrame(jdf, self.session)
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
@@ -621,7 +793,7 @@ class PandasCogroupedOps:
 
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
+        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc)
         return DataFrame(jdf, self._gd1.session)
 
     def applyInArrow(
@@ -719,7 +891,7 @@ class PandasCogroupedOps:
 
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInArrow(self._gd2._jgd, udf_column._jc.expr())
+        jdf = self._gd1._jgd.flatMapCoGroupsInArrow(self._gd2._jgd, udf_column._jc)
         return DataFrame(jdf, self._gd1.session)
 
     @staticmethod

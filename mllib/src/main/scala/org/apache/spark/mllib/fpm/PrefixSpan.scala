@@ -655,7 +655,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Get the type of item class
       val sample = model.freqSequences.first().sequence(0)(0)

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 
 private[catalyst] object ScalaSubtypeLock
 
@@ -322,6 +322,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) => STRICT_TIMESTAMP_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.Instant]) => STRICT_INSTANT_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) => LocalDateTimeEncoder
+      case t if isSubtype(t, localTypeOf[VariantVal]) => VariantEncoder
       case t if isSubtype(t, localTypeOf[Row]) => UnboundRowEncoder
 
       // UDT encoders

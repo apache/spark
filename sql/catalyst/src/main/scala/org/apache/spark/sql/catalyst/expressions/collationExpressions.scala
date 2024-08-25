@@ -36,24 +36,14 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
-      > SET spark.sql.collation.enabled=true;
-      spark.sql.collation.enabled	true
       > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_LCASE);
       UTF8_LCASE
-      > SET spark.sql.collation.enabled=false;
-      spark.sql.collation.enabled	false
   """,
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on line.contains.tab
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    // We need to throw collationNotEnabledError before unexpectedNullError
-    // and nonFoldableArgumentError, as we do not want user to see misleading
-    // messages that collation is enabled
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
-    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
@@ -107,12 +97,8 @@ case class Collate(child: Expression, collationName: String)
   """,
   examples = """
     Examples:
-      > SET spark.sql.collation.enabled=true;
-      spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL');
       UTF8_BINARY
-      > SET spark.sql.collation.enabled=false;
-      spark.sql.collation.enabled	false
   """,
   since = "4.0.0",
   group = "string_funcs")
@@ -120,7 +106,7 @@ case class Collate(child: Expression, collationName: String)
 case class Collation(child: Expression)
   extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, SQLConf.get.defaultStringType)

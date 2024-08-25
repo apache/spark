@@ -312,6 +312,7 @@ try:
             "pyspark.errors",
             "pyspark.errors.exceptions",
             "pyspark.examples.src.main.python",
+            "pyspark.logger",
         ],
         include_package_data=True,
         package_dir={

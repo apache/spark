@@ -188,8 +188,8 @@ class SparkConf:
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise PySparkRuntimeError(
-                error_class="KEY_VALUE_PAIR_REQUIRED",
-                message_parameters={},
+                errorClass="KEY_VALUE_PAIR_REQUIRED",
+                messageParameters={},
             )
         elif key is not None:
             self.set("spark.executorEnv.{}".format(key), cast(str, value))

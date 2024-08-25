@@ -192,9 +192,11 @@ trait FlatMapGroupsWithStateExecBase
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
-      stateSchemaVersion: Int): Array[String] = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      groupingAttributes.toStructType, stateManager.stateSchema, session.sessionState)
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      groupingAttributes.toStructType, stateManager.stateSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion))
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -413,8 +415,13 @@ case class FlatMapGroupsWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
-    copy(child = newLeft, initialState = newRight)
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec = {
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+  }
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store) {

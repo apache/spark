@@ -16,13 +16,14 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.NoTime
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.{INITIALIZED, PRE_INIT, StatefulProcessorHandleState, TIMER_PROCESSED}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{StatefulProcessorHandle, TimeMode}
 
-abstract class StatefulProcessorHandleImplBase(timeMode: TimeMode)
-  extends StatefulProcessorHandle {
+abstract class StatefulProcessorHandleImplBase(
+    timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any]) extends StatefulProcessorHandle {
 
   protected var currState: StatefulProcessorHandleState = PRE_INIT
 

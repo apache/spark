@@ -28,12 +28,15 @@ import org.scalatest.Assertions._
 import org.apache.spark.TestUtils
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
+import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -289,6 +292,81 @@ object IntegratedUDFTestUtils extends SQLHelper {
   } else {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
+
+  private lazy val pandasGroupedAggFuncStringifiedMax: Array[Byte] = if (shouldTestPandasUDFs) {
+    var binaryPandasFunc: Array[Byte] = null
+    withTempPath { path =>
+      Process(
+        Seq(
+          pythonExec,
+          "-c",
+          "from pyspark.sql.types import StringType; " +
+            "from pyspark.serializers import CloudPickleSerializer; " +
+            s"f = open('$path', 'wb');" +
+            "f.write(CloudPickleSerializer().dumps((" +
+            s"lambda x: x.apply(str).max(), StringType())))"),
+        None,
+        "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+      binaryPandasFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+  }
+
+  private lazy val pandasGroupedAggFuncReturnVariant: Array[Byte] = if (shouldTestPandasUDFs) {
+    var binaryPandasFunc: Array[Byte] = null
+    // The variant value returned corresponds to a JSON string of {"a": "b"}.
+    val variantValStr = "VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))"
+    withTempPath { path =>
+      Process(
+        Seq(
+          pythonExec,
+          "-c",
+          "from pyspark.sql.types import VariantType; " +
+          "from pyspark.sql.types import VariantVal;" +
+            "from pyspark.serializers import CloudPickleSerializer; " +
+            s"f = open('$path', 'wb');" +
+            "f.write(CloudPickleSerializer().dumps((" +
+            s"lambda x: $variantValStr, VariantType())))"),
+        None,
+        "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+      binaryPandasFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+  }
+
+  private lazy val pandasGroupedAggFuncReturnComplexVariant: Array[Byte] =
+    if (shouldTestPandasUDFs) {
+      var binaryPandasFunc: Array[Byte] = null
+      // The variant value returned corresponds to a JSON string of {"a": "b"}.
+      val variantValStr = "VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))"
+      withTempPath { path =>
+        Process(
+          Seq(
+            pythonExec,
+            "-c",
+            "from pyspark.sql.types import *;" +
+            "from pyspark.sql import Row;" +
+            "from pyspark.serializers import CloudPickleSerializer; " +
+            s"f = open('$path', 'wb');" +
+            "f.write(CloudPickleSerializer().dumps((" +
+            s"lambda x: Row(v = $variantValStr), " +
+            """StructType([StructField("a", StructType(""" +
+            """[StructField("v", VariantType(), True)]), True)]))))"""),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+        binaryPandasFunc = Files.readAllBytes(path.toPath)
+      }
+      assert(binaryPandasFunc != null)
+      binaryPandasFunc
+    } else {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
 
   private def createPandasGroupedMapFuncWithState(pythonScript: String): Array[Byte] = {
     if (shouldTestPandasUDFs) {
@@ -1370,6 +1448,78 @@ object IntegratedUDFTestUtils extends SQLHelper {
   }
 
   /**
+   * A Grouped Aggregate Pandas UDF that takes one column, executes the Python native function
+   * which finds the alphanumeric-maximum string.
+   */
+  case class TestGroupedAggPandasUDFStringifiedMax(name: String) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pandasGroupedAggFuncStringifiedMax.toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = StringType,
+      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      udfDeterministic = true)
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Grouped Aggregate Pandas UDF"
+  }
+
+  /**
+   * A Grouped Aggregate Pandas UDF that takes one column, executes the Python native function
+   * which returns a single variant value.
+   */
+  case class TestGroupedAggPandasUDFReturnVariant(name: String) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pandasGroupedAggFuncReturnVariant.toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = VariantType,
+      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      udfDeterministic = true)
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Grouped Aggregate Pandas UDF"
+  }
+
+  /**
+   * A Grouped Aggregate Pandas UDF that takes one column, executes the Python native function
+   * which returns a single struct of variant value.
+   */
+  case class TestGroupedAggPandasUDFReturnComplexVariant(name: String) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pandasGroupedAggFuncReturnComplexVariant.toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = StructType.fromDDL("a struct<v: variant>"),
+      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      udfDeterministic = true)
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Grouped Aggregate Pandas UDF"
+  }
+
+  /**
    * Arbitrary stateful processing in Python is used for
    * `DataFrame.groupBy.applyInPandasWithState`. It requires `pythonScript` to
    * define `func` (Python function) and `tpe` (`StructType` for state key).
@@ -1419,40 +1569,30 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema("col").dataType)
    * }}}
    */
-  class TestInternalScalaUDF(
-      name: String,
-      returnType: Option[DataType] = None) extends SparkUserDefinedFunction(
-    (input: Any) => if (input == null) {
-      null
-    } else {
-      input.toString
-    },
-    StringType,
-    inputEncoders = Seq.fill(1)(None),
-    name = Some(name)) {
+  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
+    private val udf: SparkUserDefinedFunction = {
+      val unnamed = functions.udf { (input: Any) =>
+        if (input == null) {
+          null
+        } else {
+          input.toString
+        }
+      }
+      unnamed.withName(name).asInstanceOf[SparkUserDefinedFunction]
+    }
 
-    override def apply(exprs: Column*): Column = {
+    val builder: FunctionRegistry.FunctionBuilder = { exprs =>
       assert(exprs.length == 1, "Defined UDF only has one column")
-      val expr = exprs.head.expr
+      val expr = exprs.head
       val rt = returnType.getOrElse {
         assert(expr.resolved, "column should be resolved to use the same type " +
-            "as input. Try df(name) or df.col(name)")
+          "as input. Try df(name) or df.col(name)")
         expr.dataType
       }
-      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), rt))
+      Cast(toScalaUDF(udf, Cast(expr, StringType) :: Nil), rt)
     }
 
-    override def withName(name: String): TestInternalScalaUDF = {
-      // "withName" should overridden to return TestInternalScalaUDF. Otherwise, the current object
-      // is sliced and the overridden "apply" is not invoked.
-      new TestInternalScalaUDF(name)
-    }
-  }
-
-  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
-    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name, returnType)
-
-    def apply(exprs: Column*): Column = udf(exprs: _*)
+    def apply(exprs: Column*): Column = builder(exprs.map(expression))
 
     val prettyName: String = "Scala UDF"
   }
@@ -1464,7 +1604,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
     case udf: TestPythonUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
-    case udf: TestScalaUDF => session.udf.register(udf.name, udf.udf)
+    case udf: TestScalaUDF =>
+      val registry = session.sessionState.functionRegistry
+      registry.createOrReplaceTempFunction(udf.name, udf.builder, "scala_udf")
     case other => throw new RuntimeException(s"Unknown UDF class [${other.getClass}]")
   }
 

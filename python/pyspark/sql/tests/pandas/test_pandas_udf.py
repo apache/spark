@@ -142,8 +142,8 @@ class PandasUDFTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
-                message_parameters={
+                errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
+                messageParameters={
                     "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF "
                     "or SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
                     "return_type": "DoubleType()",
@@ -165,8 +165,8 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_NONE",
-            message_parameters={"arg_name": "returnType"},
+            errorClass="CANNOT_BE_NONE",
+            messageParameters={"arg_name": "returnType"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -177,8 +177,8 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_PANDAS_UDF_TYPE",
-            message_parameters={"arg_name": "functionType", "arg_type": "100"},
+            errorClass="INVALID_PANDAS_UDF_TYPE",
+            messageParameters={"arg_name": "functionType", "arg_type": "100"},
         )
 
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
@@ -197,8 +197,8 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "returnType", "arg_type": "int"},
         )
 
     def test_stopiteration_in_udf(self):

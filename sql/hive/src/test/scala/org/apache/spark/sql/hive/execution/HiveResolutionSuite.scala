@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.test.TestHive.{read, sparkContext, sql}
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 import org.apache.spark.tags.SlowHiveTest
 
 case class Nested(a: Int, B: Int)

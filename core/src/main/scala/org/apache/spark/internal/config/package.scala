@@ -1110,13 +1110,6 @@ package object config {
     .stringConf
     .createOptional
 
-  // To limit how many applications are shown in the History Server summary ui
-  private[spark] val HISTORY_UI_MAX_APPS =
-    ConfigBuilder("spark.history.ui.maxApplications")
-      .version("2.0.1")
-      .intConf
-      .createWithDefault(Integer.MAX_VALUE)
-
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .version("2.1.0")
     .booleanConf
@@ -1249,7 +1242,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token|access[.]key".r)
+      .createWithDefault("(?i)secret|password|token|access[.]?key".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1472,6 +1465,14 @@ package object config {
         s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_FILE_MERGE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.merge.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file input stream, in KiB unless " +
+        "otherwise specified. These buffers use off-heap buffers and are related to the number " +
+        "of files in the shuffle file. Too large buffers should be avoided.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_FILE_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
@@ -1963,6 +1964,13 @@ package object config {
     .version("1.3.0")
     .intConf
     .createWithDefault(6066)
+
+  private[spark] val MASTER_REST_SERVER_FILTERS = ConfigBuilder("spark.master.rest.filters")
+    .doc("Comma separated list of filter class names to apply to the Spark Master REST API.")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")

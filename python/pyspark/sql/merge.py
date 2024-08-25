@@ -61,6 +61,7 @@ class MergeIntoWriter:
     ) -> "MergeIntoWriter.WhenNotMatched":
         """
         Initialize a `WhenNotMatched` action with a condition.
+
         This `WhenNotMatched` action will be executed when a source row does not match any target
         row based on the merge condition and the specified `condition` is satisfied.
 
@@ -76,9 +77,11 @@ class MergeIntoWriter:
     ) -> "MergeIntoWriter.WhenNotMatchedBySource":
         """
         Initialize a `WhenNotMatchedBySource` action with a condition.
+
         This `WhenNotMatchedBySource` action will be executed when a target row does not match any
         rows in the source table based on the merge condition and the specified `condition`
         is satisfied.
+
         This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
           - `updateAll`: Update all the not matched target table rows with source dataset rows.
           - `update(Dict)`: Update all the not matched target table rows while changing only

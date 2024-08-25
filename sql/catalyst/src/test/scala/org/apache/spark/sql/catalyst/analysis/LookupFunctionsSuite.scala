@@ -47,7 +47,7 @@ class LookupFunctionsSuite extends PlanTest {
           ignoreIfExists = false)
         val catalog = new SessionCatalog(externalCatalog, new SimpleFunctionRegistry)
         val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
-        catalog.setCurrentDatabase("db1")
+        catalogManager.setCurrentNamespace(Array("db1"))
         try {
           val analyzer = new Analyzer(catalogManager)
 

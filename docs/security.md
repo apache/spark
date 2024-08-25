@@ -49,9 +49,13 @@ specified below, the secret must be defined by setting the `spark.authenticate.s
 option. The same secret is shared by all Spark applications and daemons in that case, which limits
 the security of these deployments, especially on multi-tenant clusters.
 
-The REST Submission Server does not support authentication. You should
-ensure that all network access to the REST API (port 6066 by default) 
-is restricted to hosts that are trusted to submit jobs.
+The REST Submission Server supports HTTP `Authorization` header with
+a cryptographically signed JSON Web Token via `JWSFilter`.
+To enable authorization, Spark Master should have
+`spark.master.rest.filters=org.apache.spark.ui.JWSFilter` and
+`spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY` configurations, and
+client should provide HTTP `Authorization` header which contains JSON Web Token signed by
+the shared secret key.
 
 ### YARN
 
@@ -214,7 +218,7 @@ The following table describes the different options available for configuring th
     Cipher mode to use. Defaults "AES/CTR/NoPadding" for backward compatibility, which is not authenticated. 
     Recommended to use "AES/GCM/NoPadding", which is an authenticated encryption mode.
   </td>
-  <td>4.0.0</td>
+  <td>4.0.0, 3.5.2, 3.4.4</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.authEngineVersion</code></td>
@@ -351,6 +355,8 @@ The following options control the authentication of Web UIs:
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
+    Spark supports HTTP <code>Authorization</code> header with a cryptographically signed
+    JSON Web Token via <code>org.apache.spark.ui.JWSFilter</code>. <br />
     See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
     filters.
   </td>

@@ -42,6 +42,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -459,8 +460,8 @@ class SparkSession private[sql] (
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
-   * (Scala-specific) Implicit methods available in Scala for converting common names and
-   * [[Symbol]]s into [[Column]]s, and for converting common Scala objects into `DataFrame`s.
+   * (Scala-specific) Implicit methods available in Scala for converting common names and Symbols
+   * into [[Column]]s, and for converting common Scala objects into DataFrame`s.
    *
    * {{{
    *   val sparkSession = SparkSession.builder.getOrCreate()
@@ -647,8 +648,7 @@ class SparkSession private[sql] (
   def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
 
   /**
-   * Register a [[ClassFinder]] for dynamically generated classes.
-   *
+   * Register a ClassFinder for dynamically generated classes.
    * @since 3.5.0
    */
   @Experimental
@@ -715,7 +715,7 @@ class SparkSession private[sql] (
    * Release the current session and close the GRPC connection to the server. The API will not
    * error if any of these operations fail. Closing a closed session is a no-op.
    *
-   * Close the allocator. Fail if there are still open [[SparkResult]]s.
+   * Close the allocator. Fail if there are still open SparkResults.
    *
    * @since 3.4.0
    */
@@ -821,6 +821,11 @@ class SparkSession private[sql] (
       observationOrNull.setMetricsAndNotify(Some(metrics))
     }
   }
+
+  implicit class RichColumn(c: Column) {
+    def expr: proto.Expression = toExpr(c)
+    def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
+  }
 }
 
 // The minimal builder needed to create a spark session.
@@ -899,7 +904,7 @@ object SparkSession extends Logging {
     }
 
     /**
-     * Add an interceptor [[ClientInterceptor]] to be used during channel creation.
+     * Add an interceptor to be used during channel creation.
      *
      * Note that interceptors added last are executed first by gRPC.
      *

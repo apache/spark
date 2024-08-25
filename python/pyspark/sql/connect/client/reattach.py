@@ -266,8 +266,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             ):
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
-                        error_class="RESPONSE_ALREADY_RECEIVED",
-                        message_parameters={},
+                        errorClass="RESPONSE_ALREADY_RECEIVED",
+                        messageParameters={},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(

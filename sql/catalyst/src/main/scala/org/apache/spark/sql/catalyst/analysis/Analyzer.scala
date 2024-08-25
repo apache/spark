@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -80,7 +81,7 @@ object SimpleAnalyzer extends Analyzer(
   override def resolver: Resolver = caseSensitiveResolution
 }
 
-object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
+object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with SupportsNamespaces {
   private def fail() = throw SparkUnsupportedOperationException()
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
@@ -94,10 +95,23 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = CatalogManager.SESSION_CATALOG_NAME
   override def listFunctions(namespace: Array[String]): Array[Identifier] = fail()
   override def loadFunction(ident: Identifier): UnboundFunction = fail()
+  override def listNamespaces(): Array[Array[String]] = fail()
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = fail()
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    if (namespace.length == 1) {
+      mutable.HashMap[String, String]().asJava
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
+  override def createNamespace(
+    namespace: Array[String], metadata: util.Map[String, String]): Unit = fail()
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = fail()
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = fail()
 }
 
 /**
@@ -325,9 +339,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
-      RewriteDeleteFromTable ::
-      RewriteUpdateTable ::
-      RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
@@ -354,6 +365,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       UpdateAttributeNullability),
     Batch("UDF", Once,
       ResolveEncodersInUDF),
+    // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
+    // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
+    // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
+    // rewrite rules.
+    Batch("DML rewrite", fixedPoint,
+      RewriteDeleteFromTable,
+      RewriteUpdateTable,
+      RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -394,75 +413,80 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan =
       plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
-        case a @ Add(l, r, mode) if a.childrenResolved => (l.dataType, r.dataType) match {
-          case (DateType, DayTimeIntervalType(DAY, DAY)) => DateAdd(l, ExtractANSIIntervalDays(r))
-          case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
-          case (DayTimeIntervalType(DAY, DAY), DateType) => DateAdd(r, ExtractANSIIntervalDays(l))
-          case (_: DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
-          case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(l, r)
-          case (_: YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
-          case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
-            TimestampAddYMInterval(l, r)
-          case (_: YearMonthIntervalType, TimestampType | TimestampNTZType) =>
-            TimestampAddYMInterval(r, l)
-          case (CalendarIntervalType, CalendarIntervalType) |
-               (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
-          case (_: NullType, _: AnsiIntervalType) =>
-            a.copy(left = Cast(a.left, a.right.dataType))
-          case (_: AnsiIntervalType, _: NullType) =>
-            a.copy(right = Cast(a.right, a.left.dataType))
-          case (DateType, CalendarIntervalType) =>
-            DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
-          case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
-          case (CalendarIntervalType, DateType) =>
-            DateAddInterval(r, l, ansiEnabled = mode == EvalMode.ANSI)
-          case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
-          case (DateType, dt) if dt != StringType => DateAdd(l, r)
-          case (dt, DateType) if dt != StringType => DateAdd(r, l)
-          case _ => a
-        }
-        case s @ Subtract(l, r, mode) if s.childrenResolved => (l.dataType, r.dataType) match {
-          case (DateType, DayTimeIntervalType(DAY, DAY)) =>
-            DateAdd(l, UnaryMinus(ExtractANSIIntervalDays(r), mode == EvalMode.ANSI))
-          case (DateType, _: DayTimeIntervalType) =>
-            DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, mode == EvalMode.ANSI)))
-          case (DateType, _: YearMonthIntervalType) =>
-            DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
-          case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
-            DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
-          case (CalendarIntervalType, CalendarIntervalType) |
-               (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
-          case (_: NullType, _: AnsiIntervalType) =>
-            s.copy(left = Cast(s.left, s.right.dataType))
-          case (_: AnsiIntervalType, _: NullType) =>
-            s.copy(right = Cast(s.right, s.left.dataType))
-          case (DateType, CalendarIntervalType) =>
-            DatetimeSub(l, r, DateAddInterval(l,
-              UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
-          case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
-            Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
-          case _ if AnyTimestampTypeExpression.unapply(l) ||
-            AnyTimestampTypeExpression.unapply(r) => SubtractTimestamps(l, r)
-          case (_, DateType) => SubtractDates(l, r)
-          case (DateType, dt) if dt != StringType => DateSub(l, r)
-          case _ => s
-        }
-        case m @ Multiply(l, r, mode) if m.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => MultiplyInterval(l, r, mode == EvalMode.ANSI)
-          case (_, CalendarIntervalType) => MultiplyInterval(r, l, mode == EvalMode.ANSI)
-          case (_: YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
-          case (_, _: YearMonthIntervalType) => MultiplyYMInterval(r, l)
-          case (_: DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
-          case (_, _: DayTimeIntervalType) => MultiplyDTInterval(r, l)
-          case _ => m
-        }
-        case d @ Divide(l, r, mode) if d.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => DivideInterval(l, r, mode == EvalMode.ANSI)
-          case (_: YearMonthIntervalType, _) => DivideYMInterval(l, r)
-          case (_: DayTimeIntervalType, _) => DivideDTInterval(l, r)
-          case _ => d
-        }
+        case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide)
+          if expr.childrenResolved => resolve(expr)
       }
+
+    def resolve(expr: Expression): Expression = expr match {
+      case a @ Add(l, r, mode) => (l.dataType, r.dataType) match {
+        case (DateType, DayTimeIntervalType(DAY, DAY)) => DateAdd(l, ExtractANSIIntervalDays(r))
+        case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
+        case (DayTimeIntervalType(DAY, DAY), DateType) => DateAdd(r, ExtractANSIIntervalDays(l))
+        case (_: DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
+        case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(l, r)
+        case (_: YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
+        case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
+          TimestampAddYMInterval(l, r)
+        case (_: YearMonthIntervalType, TimestampType | TimestampNTZType) =>
+          TimestampAddYMInterval(r, l)
+        case (CalendarIntervalType, CalendarIntervalType) |
+             (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
+        case (_: NullType, _: AnsiIntervalType) =>
+          a.copy(left = Cast(a.left, a.right.dataType))
+        case (_: AnsiIntervalType, _: NullType) =>
+          a.copy(right = Cast(a.right, a.left.dataType))
+        case (DateType, CalendarIntervalType) =>
+          DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
+        case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+        case (CalendarIntervalType, DateType) =>
+          DateAddInterval(r, l, ansiEnabled = mode == EvalMode.ANSI)
+        case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
+        case (DateType, dt) if dt != StringType => DateAdd(l, r)
+        case (dt, DateType) if dt != StringType => DateAdd(r, l)
+        case _ => a
+      }
+      case s @ Subtract(l, r, mode) => (l.dataType, r.dataType) match {
+        case (DateType, DayTimeIntervalType(DAY, DAY)) =>
+          DateAdd(l, UnaryMinus(ExtractANSIIntervalDays(r), mode == EvalMode.ANSI))
+        case (DateType, _: DayTimeIntervalType) =>
+          DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, mode == EvalMode.ANSI)))
+        case (DateType, _: YearMonthIntervalType) =>
+          DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
+        case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
+          DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
+        case (CalendarIntervalType, CalendarIntervalType) |
+             (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
+        case (_: NullType, _: AnsiIntervalType) =>
+          s.copy(left = Cast(s.left, s.right.dataType))
+        case (_: AnsiIntervalType, _: NullType) =>
+          s.copy(right = Cast(s.right, s.left.dataType))
+        case (DateType, CalendarIntervalType) =>
+          DatetimeSub(l, r, DateAddInterval(l,
+            UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
+        case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
+          Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
+        case _ if AnyTimestampTypeExpression.unapply(l) ||
+          AnyTimestampTypeExpression.unapply(r) => SubtractTimestamps(l, r)
+        case (_, DateType) => SubtractDates(l, r)
+        case (DateType, dt) if dt != StringType => DateSub(l, r)
+        case _ => s
+      }
+      case m @ Multiply(l, r, mode) => (l.dataType, r.dataType) match {
+        case (CalendarIntervalType, _) => MultiplyInterval(l, r, mode == EvalMode.ANSI)
+        case (_, CalendarIntervalType) => MultiplyInterval(r, l, mode == EvalMode.ANSI)
+        case (_: YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
+        case (_, _: YearMonthIntervalType) => MultiplyYMInterval(r, l)
+        case (_: DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
+        case (_, _: DayTimeIntervalType) => MultiplyDTInterval(r, l)
+        case _ => m
+      }
+      case d @ Divide(l, r, mode) => (l.dataType, r.dataType) match {
+        case (CalendarIntervalType, _) => DivideInterval(l, r, mode == EvalMode.ANSI)
+        case (_: YearMonthIntervalType, _) => DivideYMInterval(l, r)
+        case (_: DayTimeIntervalType, _) => DivideDTInterval(l, r)
+        case _ => d
+      }
+    }
   }
 
   /**
@@ -486,32 +510,37 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
-      def extractOnly(e: Expression): Boolean = e match {
-        case _: ExtractValue => e.children.forall(extractOnly)
-        case _: Literal => true
-        case _: Attribute => true
-        case _ => false
-      }
       exprs.map(_.transformUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS)) {
-          case u @ UnresolvedAlias(child, optGenAliasFunc) =>
-          child match {
-            case ne: NamedExpression => ne
-            case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
-            case e if !e.resolved => u
-            case g: Generator => MultiAlias(g, Nil)
-            case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
-            case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
-            case e if optGenAliasFunc.isDefined =>
-              Alias(child, optGenAliasFunc.get.apply(e))()
-            case l: Literal => Alias(l, toPrettySQL(l))()
-            case e =>
-              val metaForAutoGeneratedAlias = new MetadataBuilder()
-                .putString(AUTO_GENERATED_ALIAS, "true")
-                .build()
-              Alias(e, toPrettySQL(e))(explicitMetadata = Some(metaForAutoGeneratedAlias))
-          }
+          case u: UnresolvedAlias => resolve(u)
         }
       ).asInstanceOf[Seq[NamedExpression]]
+    }
+
+    private[analysis] def resolve(u: UnresolvedAlias): Expression = {
+      val UnresolvedAlias(child, optGenAliasFunc) = u
+      child match {
+        case ne: NamedExpression => ne
+        case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
+        case e if !e.resolved => u
+        case g: Generator => MultiAlias(g, Nil)
+        case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
+        case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
+        case e if optGenAliasFunc.isDefined =>
+          Alias(child, optGenAliasFunc.get.apply(e))()
+        case l: Literal => Alias(l, toPrettySQL(l))()
+        case e =>
+          val metaForAutoGeneratedAlias = new MetadataBuilder()
+            .putString(AUTO_GENERATED_ALIAS, "true")
+            .build()
+          Alias(e, toPrettySQL(e))(explicitMetadata = Some(metaForAutoGeneratedAlias))
+      }
+    }
+
+    private def extractOnly(e: Expression): Boolean = e match {
+      case _: ExtractValue => e.children.forall(extractOnly)
+      case _: Literal => true
+      case _: Attribute => true
+      case _ => false
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
@@ -1227,7 +1256,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
       table.map {
-        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) =>
+        // To utilize this code path to execute V1 commands, e.g. INSERT,
+        // either it must be session catalog, or tracksPartitionsInCatalog
+        // must be false so it does not require use catalog to manage partitions.
+        // Obviously we cannot execute V1Table by V1 code path if the table
+        // is not from session catalog and the table still requires its catalog
+        // to manage partitions.
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog)
+          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
           if (isStreaming) {
             if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
               throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
@@ -1295,8 +1331,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 cachedConnectRelation
               }.getOrElse(cachedRelation)
             }.orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
-              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
+              val writePrivilegesString =
+                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
+              val table = CatalogV2Util.loadTable(
+                catalog, ident, finalTimeTravelSpec, writePrivilegesString)
+              val loaded = createRelation(
+                catalog, ident, table, u.clearWritePrivileges.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
                 loaded.map { loadedRelation =>
@@ -1564,6 +1604,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
+      case c: CollectMetrics if containsStar(c.metrics) =>
+        c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
@@ -1872,8 +1914,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } catch {
           case e: AnalysisException =>
             AnalysisContext.get.outerPlan.map {
-              // Only Project and Aggregate can host star expressions.
-              case u @ (_: Project | _: Aggregate) =>
+              // Only Project, Aggregate, CollectMetrics can host star expressions.
+              case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
                 Try(s.expand(u.children.head, resolver)) match {
                   case Success(expanded) => expanded.map(wrapOuterReference)
                   case Failure(_) => throw e
@@ -1911,6 +1953,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
       exprs.flatMap(_.collect { case s: Star => s })
 
+    private def isCountStarExpansionAllowed(arguments: Seq[Expression]): Boolean = arguments match {
+      case Seq(UnresolvedStar(None)) => true
+      case Seq(_: ResolvedStar) => true
+      case _ => false
+    }
+
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
@@ -1918,7 +1966,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
           f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
-          f0.arguments == Seq(UnresolvedStar(None)) =>
+          isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
           f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
@@ -2076,8 +2124,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _, _) =>
-          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
+          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
             f
           } else {
             val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
@@ -2122,7 +2170,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
-        lookupBuiltinOrTempFunction(nameParts)
+        lookupBuiltinOrTempFunction(nameParts, None)
           .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
             throw QueryCompilationErrors.expectPersistentFuncError(
@@ -2244,9 +2292,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _)
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
               if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
+            resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
@@ -2273,16 +2321,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           }
 
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _) => withPosition(u) {
-            resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).getOrElse {
-              val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
-              if (CatalogV2Util.isSessionCatalog(catalog)) {
-                resolveV1Function(ident.asFunctionIdentifier, arguments, u)
-              } else {
-                resolveV2Function(catalog.asFunctionCatalog, ident, arguments, u)
-              }
-            }
-          }
+          case u: UnresolvedFunction => resolveFunction(u)
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             // Check if this is a call to a Python user-defined table function whose polymorphic
@@ -2306,6 +2345,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }
     }
 
+    private[analysis] def resolveFunction(u: UnresolvedFunction): Expression = {
+      withPosition(u) {
+        resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
+          val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.nameParts)
+          if (CatalogV2Util.isSessionCatalog(catalog)) {
+            resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
+          } else {
+            resolveV2Function(catalog.asFunctionCatalog, ident, u.arguments, u)
+          }
+        }
+      }
+    }
+
     /**
      * Check if the arguments of a function are either resolved or a lambda function.
      */
@@ -2314,8 +2366,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       lambdas.nonEmpty && others.forall(_.resolved)
     }
 
-    def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
+    def lookupBuiltinOrTempFunction(
+        name: Seq[String],
+        u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
+      if (name.size == 1 && u.exists(_.isInternal)) {
+        FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
+      } else if (name.size == 1) {
         v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
       } else {
         None
@@ -2333,13 +2389,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def resolveBuiltinOrTempFunction(
         name: Seq[String],
         arguments: Seq[Expression],
-        u: Option[UnresolvedFunction]): Option[Expression] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
-          if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
-        }
+        u: UnresolvedFunction): Option[Expression] = {
+      val expression = if (name.size == 1  && u.isInternal) {
+        Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
+      } else if (name.size == 1) {
+        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
       } else {
         None
+      }
+      expression.map { func =>
+        validateFunction(func, arguments.length, u)
       }
     }
 
@@ -3904,7 +3963,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         fieldName: Seq[String],
         context: Expression): ResolvedFieldName = {
       resolveFieldNamesOpt(table, fieldName, context)
-        .getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
+        .getOrElse {
+          throw QueryCompilationErrors.unresolvedColumnError(fieldName, table.schema.fieldNames,
+            context.origin)
+        }
     }
 
     private def resolveFieldNamesOpt(

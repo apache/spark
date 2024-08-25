@@ -3746,8 +3746,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         allowed_inclusive_values = ["left", "right", "both", "neither"]
         if inclusive not in allowed_inclusive_values:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "inclusive",
                     "allowed_values": str(allowed_inclusive_values),
                 },

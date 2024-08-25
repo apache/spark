@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.functions.{fnWithOptions, lit}
+import org.apache.spark.sql.functions.lit
 
 // scalastyle:off: object.name
 object functions {
@@ -64,7 +64,7 @@ object functions {
       data: Column,
       jsonFormatSchema: String,
       options: java.util.Map[String, String]): Column = {
-    fnWithOptions("from_avro", options.asScala.iterator, data, lit(jsonFormatSchema))
+    Column.fnWithOptions("from_avro", options.asScala.iterator, data, lit(jsonFormatSchema))
   }
 
   /**

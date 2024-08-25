@@ -150,9 +150,6 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
-    }
     val key = SQLConf.DEFAULT_COLLATION.key
     SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
   }
@@ -238,7 +235,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       invalidStatement("EXPLAIN LOGICAL", ctx)
     }
 
-    val statement = plan(ctx.statement)
+    val statement = plan(Option(ctx.statement()).getOrElse(ctx.setResetStatement()))
     if (statement == null) {
       null  // This is enough since ParseException will raise later.
     } else {
@@ -399,19 +396,18 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Fail an unsupported Hive native command.
+   * Fail an unsupported Hive native command (SET ROLE is handled separately).
    */
   override def visitFailNativeCommand(
-    ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    val keywords = if (ctx.unsupportedHiveNativeCommands != null) {
-      ctx.unsupportedHiveNativeCommands.children.asScala.collect {
-        case n: TerminalNode => n.getText
-      }.mkString(" ")
-    } else {
-      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
-      "SET ROLE"
-    }
+      ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
+    val keywords = ctx.unsupportedHiveNativeCommands.children.asScala.collect {
+      case n: TerminalNode => n.getText
+    }.mkString(" ")
     invalidStatement(keywords, ctx)
+  }
+
+  override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
+    invalidStatement("SET ROLE", ctx);
   }
 
   /**
@@ -575,7 +571,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      withIdentClause(ctx.identifierReference(), ident => {
+      withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val tableIdentifier = ident.asTableIdentifier
         if (tableIdentifier.database.isDefined) {
           // Temporary view names should NOT contain database prefix like "database.table"
@@ -589,7 +585,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           visitCommentSpecList(ctx.commentSpec()),
           properties,
           Option(source(ctx.query)),
-          qPlan,
+          otherPlans.head,
           ctx.EXISTS != null,
           ctx.REPLACE != null,
           viewType = viewType)

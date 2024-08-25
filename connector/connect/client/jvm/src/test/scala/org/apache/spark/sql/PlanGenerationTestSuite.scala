@@ -71,7 +71,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connect/server` module
+ * `sql/connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -88,7 +88,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /sql/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -118,6 +118,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+    internal.UnresolvedNamedLambdaVariable.resetIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -2433,6 +2434,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("aggregate with finish lambda") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y, x => x + lit(2))
+  }
+
   functionTest("reduce") {
     fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
@@ -2491,6 +2496,10 @@ class PlanGenerationTestSuite
 
   functionTest("from_json") {
     fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_json with json schema") {
+    fn.from_json(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   functionTest("schema_of_json") {
@@ -2675,6 +2684,10 @@ class PlanGenerationTestSuite
 
   functionTest("url_decode") {
     fn.url_decode(fn.col("g"))
+  }
+
+  functionTest("try_url_decode") {
+    fn.try_url_decode(fn.col("g"))
   }
 
   functionTest("url_encode") {
@@ -2962,6 +2975,14 @@ class PlanGenerationTestSuite
 
   functionTest("call_function") {
     fn.call_function("lower", fn.col("g"))
+  }
+
+  functionTest("from_xml") {
+    fn.from_xml(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_xml with json schema") {
+    fn.from_xml(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   test("hll_sketch_agg with column lgConfigK") {
@@ -3260,7 +3281,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
@@ -3321,10 +3342,10 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connect/common/src/main/protobuf/spark/connect
+  //  1. cd sql/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connect/" +
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/sql/connect/" +
     "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there

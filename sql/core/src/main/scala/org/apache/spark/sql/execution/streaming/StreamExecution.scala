@@ -30,10 +30,11 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.CloseableThreadContext
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -89,6 +90,8 @@ abstract class StreamExecution(
    */
   protected val awaitProgressLock = new ReentrantLock(true)
   protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
+
+  protected var loggingThreadContext: CloseableThreadContext.Instance = _
 
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
@@ -287,6 +290,11 @@ abstract class StreamExecution(
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
       sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
+      loggingThreadContext = CloseableThreadContext.putAll(
+        Map(
+          QUERY_ID.name -> id.toString,
+          RUN_ID.name -> runId.toString
+        ).asJava)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -404,6 +412,10 @@ abstract class StreamExecution(
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
             errorClassOpt))
+
+        if (loggingThreadContext != null) {
+          loggingThreadContext.close()
+        }
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&

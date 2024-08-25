@@ -231,6 +231,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val sessionStart =
           PreciseTimestampConversion(session.timeColumn, session.timeColumn.dataType, LongType)
         val gapDuration = session.gapDuration match {
+          case expr if expr.dataType == CalendarIntervalType =>
+            expr
           case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
             Cast(expr, CalendarIntervalType)
           case other =>
@@ -257,10 +259,11 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        val filterByTimeRange = session.gapDuration match {
-          case Literal(interval: CalendarInterval, CalendarIntervalType) =>
-            interval == null || interval.months + interval.days + interval.microseconds <= 0
-          case _ => true
+        val filterByTimeRange = if (gapDuration.foldable) {
+          val interval = gapDuration.eval().asInstanceOf[CalendarInterval]
+          interval == null || interval.months + interval.days + interval.microseconds <= 0
+        } else {
+          true
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.

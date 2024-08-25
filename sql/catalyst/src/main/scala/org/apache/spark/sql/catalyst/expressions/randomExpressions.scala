@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, TreePattern}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -69,6 +70,14 @@ trait ExpressionWithRandomSeed extends Expression {
 
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
+}
+
+private[catalyst] object ExpressionWithRandomSeed {
+  def expressionToSeed(e: Expression, source: String): Option[Long] = e match {
+    case LongLiteral(seed) => Some(seed)
+    case Literal(null, _) => None
+    case _ => throw QueryCompilationErrors.invalidRandomSeedParameter(source, e)
+  }
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
