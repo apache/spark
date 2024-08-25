@@ -400,20 +400,17 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         (distinctAggOperatorMap.flatMap(_._2) ++
           regularAggOperatorMap.map(e => (e._1, e._3))).toMap
 
+      val groupByMapNonFoldable = groupByMap.filter(!_._1.foldable)
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case e: Expression =>
             // The same GROUP BY clauses can have different forms (different names for instance) in
             // the groupBy and aggregate expressions of an aggregate. This makes a map lookup
             // tricky. So we do a linear search for a semantically equal group by expression.
-            if (e.foldable) {
-              e
-            } else {
-              groupByMap
-                .find(ge => e.semanticEquals(ge._1))
-                .map(_._2)
-                .getOrElse(transformations.getOrElse(e, e))
-            }
+            groupByMapNonFoldable
+              .find(ge => e.semanticEquals(ge._1))
+              .map(_._2)
+              .getOrElse(transformations.getOrElse(e, e))
         }.asInstanceOf[NamedExpression]
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
