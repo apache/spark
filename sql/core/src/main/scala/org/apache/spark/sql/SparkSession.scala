@@ -93,7 +93,8 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private[sql] val initialSessionOptions: Map[String, String])
+    @transient private[sql] val initialSessionOptions: Map[String, String],
+    @transient private val parentUserDefinedToRealTagsMap: Map[String, String])
   extends Serializable with Closeable with Logging { self =>
 
   // The call site where this SparkSession was constructed.
@@ -108,8 +109,13 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None, SparkSession.applyExtensions(sc, new SparkSessionExtensions),
-      initialSessionOptions.asScala.toMap)
+    this(
+      sc,
+      existingSharedState = None,
+      parentSessionState = None,
+      SparkSession.applyExtensions(sc, new SparkSessionExtensions),
+      initialSessionOptions.asScala.toMap,
+      parentUserDefinedToRealTagsMap = Map.empty)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -128,7 +134,9 @@ class SparkSession private(
    * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
    * Real tag have the current session ID attached: `"tag1" -> s"spark-$sessionUUID-tag1"`.
    */
-  private val userDefinedToRealTagsMap: ConcurrentHashMap[String, String] = new ConcurrentHashMap()
+  @transient
+  private lazy val userDefinedToRealTagsMap: ConcurrentHashMap[String, String] =
+    new ConcurrentHashMap(parentUserDefinedToRealTagsMap.asJava)
 
   /**
    * The version of Spark on which this application is running.
@@ -285,7 +293,8 @@ class SparkSession private(
       Some(sharedState),
       parentSessionState = None,
       extensions,
-      initialSessionOptions)
+      initialSessionOptions,
+      parentUserDefinedToRealTagsMap = Map.empty)
   }
 
   /**
@@ -306,8 +315,10 @@ class SparkSession private(
       Some(sharedState),
       Some(sessionState),
       extensions,
-      Map.empty)
+      Map.empty,
+      userDefinedToRealTagsMap.asScala.toMap)
     result.sessionState // force copy of SessionState
+    result.userDefinedToRealTagsMap // force copy of userDefinedToRealTagsMap
     result
   }
 
@@ -1261,7 +1272,12 @@ object SparkSession extends Logging {
         loadExtensions(extensions)
         applyExtensions(sparkContext, extensions)
 
-        session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
+        session = new SparkSession(sparkContext,
+          existingSharedState = None,
+          parentSessionState = None,
+          extensions,
+          initialSessionOptions = options.toMap,
+          parentUserDefinedToRealTagsMap = Map.empty)
         setDefaultSession(session)
         setActiveSession(session)
         registerContextListener(sparkContext)

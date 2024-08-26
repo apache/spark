@@ -2698,10 +2698,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
    *    the given tag. If the function returns true, the job will be cancelled.
    * @return A future that will be completed with the set of job IDs that were cancelled.
-   *
-   * @since 4.0.0
    */
-  def cancelJobsWithTag(
+  private[spark] def cancelJobsWithTag(
       tag: String,
       reason: String,
       shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {
@@ -2755,7 +2753,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *    the given tag. If the function returns true, the job will be cancelled.
    * @return A future that will be completed with the set of job IDs that were cancelled.
    */
-  def cancelAllJobs(shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {
+  private[spark] def cancelAllJobs(shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {
     assertNotStopped()
 
     val cancelledJobs = Promise[Set[Int]]()
@@ -2779,7 +2777,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return A future that will be completed with the set of job IDs that were cancelled.
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
-  def cancelJob(
+  private[spark] def cancelJob(
       jobId: Int,
       reason: String,
       shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {

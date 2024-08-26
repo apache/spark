@@ -39,10 +39,10 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Test cases for the cancellation APIs provided by [[SparkSession]].
+ * Test cases for the tagging and cancellation APIs provided by [[SparkSession]].
  */
 @ExtendedSQLTest
-class SparkSessionJobCancellationSuite
+class SparkSessionJobTaggingAndCancellationSuite
   extends SparkFunSuite
   with Eventually
   with LocalSparkContext {
@@ -58,6 +58,33 @@ class SparkSessionJobCancellationSuite
     } finally {
       super.afterEach()
     }
+  }
+
+  test("Tags are not inherited by new sessions") {
+    val session = SparkSession.builder().master("local").getOrCreate()
+
+    assert(session.getTags() == Set())
+    session.addTag("one")
+    assert(session.getTags() == Set("one"))
+
+    val newSession = session.newSession()
+    assert(newSession.getTags() == Set())
+  }
+
+  test("Tags are inherited by cloned sessions") {
+    val session = SparkSession.builder().master("local").getOrCreate()
+
+    assert(session.getTags() == Set())
+    session.addTag("one")
+    assert(session.getTags() == Set("one"))
+
+    val clonedSession = session.cloneSession()
+    assert(clonedSession.getTags() == Set("one"))
+    clonedSession.addTag("two")
+    assert(clonedSession.getTags() == Set("one", "two"))
+
+    // Tags are not propagated back to the original session
+    assert(session.getTags() == Set("one"))
   }
 
   test("Cancellation APIs in SparkSession are isolated") {
