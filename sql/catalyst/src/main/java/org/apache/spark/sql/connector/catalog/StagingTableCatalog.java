@@ -104,6 +104,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * This is deprecated, please override
    * {@link #stageReplace(Identifier, StructType, Transform[], Map)} instead.
    */
+  @Deprecated(since = "3.4.0")
   default StagedTable stageReplace(
       Identifier ident,
       StructType schema,
@@ -156,6 +157,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * This is deprecated, please override
    * {@link #stageCreateOrReplace(Identifier, Column[], Transform[], Map)} instead.
    */
+  @Deprecated(since = "3.4.0")
   default StagedTable stageCreateOrReplace(
       Identifier ident,
       StructType schema,
