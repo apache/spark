@@ -845,15 +845,17 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val getReusablePVCs =
       PrivateMethod[mutable.Buffer[PersistentVolumeClaim]](Symbol("getReusablePVCs"))
 
-    val pvc1 = persistentVolumeClaim("pvc-0", "gp2", "200Gi")
-    val pvc2 = persistentVolumeClaim("pvc-1", "gp2", "200Gi")
+    val pvc1 = persistentVolumeClaim("pvc-1", "gp2", "200Gi")
+    val pvc2 = persistentVolumeClaim("pvc-2", "gp2", "200Gi")
 
     val now = Instant.now()
     pvc1.getMetadata.setCreationTimestamp(now.minus(2 * podAllocationDelay, MILLIS).toString)
     pvc2.getMetadata.setCreationTimestamp(now.toString)
 
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc1, pvc2).asJava)
-    assert((podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq("pvc-1"))).size == 1)
+    val reusablePVCs = podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq.empty)
+    assert(reusablePVCs.size == 1)
+    assert(reusablePVCs.head.getMetadata.getName == "pvc-1")
   }
 
   test("SPARK-41410: Support waitToReusePersistentVolumeClaims") {
