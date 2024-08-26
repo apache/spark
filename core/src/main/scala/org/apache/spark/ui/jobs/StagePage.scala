@@ -189,6 +189,16 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
               {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
           }}
+          {if (hasPeakExecutionMemory(stageData)) {
+            <li>
+              <strong>Peak OnHeap Execution Memory: </strong>
+              {Utils.bytesToString(stageData.peakOnHeapExecutionMemory)}
+            </li>
+            <li>
+              <strong>Peak OffHeap Execution Memory: </strong>
+              {Utils.bytesToString(stageData.peakOffHeapExecutionMemory)}
+            </li>
+        }}
           {if (!stageJobIds.isEmpty) {
             <li>
               <strong>Associated Job Ids: </strong>
@@ -465,6 +475,8 @@ private[spark] object ApiHelper {
   val HEADER_SER_TIME = "Result Serialization Time"
   val HEADER_GETTING_RESULT_TIME = "Getting Result Time"
   val HEADER_PEAK_MEM = "Peak Execution Memory"
+  val HEADER_ON_HEAP_PEAK_MEM = "Peak OnHeap Execution Memory"
+  val HEADER_OFF_HEAP_PEAK_MEM = "Peak OffHeap Execution Memory"
   val HEADER_ACCUMULATORS = "Accumulators"
   val HEADER_INPUT_SIZE = "Input Size / Records"
   val HEADER_OUTPUT_SIZE = "Output Size / Records"
@@ -495,6 +507,8 @@ private[spark] object ApiHelper {
     HEADER_SER_TIME -> TaskIndexNames.SER_TIME,
     HEADER_GETTING_RESULT_TIME -> TaskIndexNames.GETTING_RESULT_TIME,
     HEADER_PEAK_MEM -> TaskIndexNames.PEAK_MEM,
+    HEADER_ON_HEAP_PEAK_MEM -> TaskIndexNames.PEAK_ON_HEAP_MEM,
+    HEADER_OFF_HEAP_PEAK_MEM -> TaskIndexNames.PEAK_OFF_HEAP_MEM,
     HEADER_ACCUMULATORS -> TaskIndexNames.ACCUMULATORS,
     HEADER_INPUT_SIZE -> TaskIndexNames.INPUT_SIZE,
     HEADER_OUTPUT_SIZE -> TaskIndexNames.OUTPUT_SIZE,
@@ -525,6 +539,10 @@ private[spark] object ApiHelper {
 
   def hasBytesSpilled(stageData: StageData): Boolean = {
     stageData.diskBytesSpilled > 0 || stageData.memoryBytesSpilled > 0
+  }
+
+  def hasPeakExecutionMemory(stageData: StageData): Boolean = {
+    stageData.peakOnHeapExecutionMemory > 0 || stageData.peakOffHeapExecutionMemory > 0
   }
 
   def totalBytesRead(metrics: ShuffleReadMetrics): Long = {

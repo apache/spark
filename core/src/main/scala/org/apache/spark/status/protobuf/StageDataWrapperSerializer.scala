@@ -62,6 +62,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       .setMemoryBytesSpilled(stageData.memoryBytesSpilled)
       .setDiskBytesSpilled(stageData.diskBytesSpilled)
       .setPeakExecutionMemory(stageData.peakExecutionMemory)
+      .setPeakOnHeapExecutionMemory(stageData.peakOnHeapExecutionMemory)
+      .setPeakOffHeapExecutionMemory(stageData.peakOffHeapExecutionMemory)
       .setInputBytes(stageData.inputBytes)
       .setInputRecords(stageData.inputRecords)
       .setOutputBytes(stageData.outputBytes)
@@ -192,6 +194,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       .setMemoryBytesSpilled(tm.memoryBytesSpilled)
       .setDiskBytesSpilled(tm.diskBytesSpilled)
       .setPeakExecutionMemory(tm.peakExecutionMemory)
+      .setPeakOnHeapExecutionMemory(tm.peakOnHeapExecutionMemory)
+      .setPeakOffHeapExecutionMemory(tm.peakOffHeapExecutionMemory)
       .setInputMetrics(serializeInputMetrics(tm.inputMetrics))
       .setOutputMetrics(serializeOutputMetrics(tm.outputMetrics))
       .setShuffleReadMetrics(serializeShuffleReadMetrics(tm.shuffleReadMetrics))
@@ -278,6 +282,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
     tmd.gettingResultTime.foreach(grt => builder.addGettingResultTime(grt))
     tmd.schedulerDelay.foreach(sd => builder.addSchedulerDelay(sd))
     tmd.peakExecutionMemory.foreach(pem => builder.addPeakExecutionMemory(pem))
+    tmd.peakOnHeapExecutionMemory.foreach(peonm => builder.addPeakOnHeapExecutionMemory(peonm))
+    tmd.peakOffHeapExecutionMemory.foreach(peoffm => builder.addPeakOffHeapExecutionMemory(peoffm))
     tmd.memoryBytesSpilled.foreach(mbs => builder.addMemoryBytesSpilled(mbs))
     tmd.diskBytesSpilled.foreach(dbs => builder.addDiskBytesSpilled(dbs))
     builder
@@ -441,6 +447,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       memoryBytesSpilled = binary.getMemoryBytesSpilled,
       diskBytesSpilled = binary.getDiskBytesSpilled,
       peakExecutionMemory = binary.getPeakExecutionMemory,
+      peakOnHeapExecutionMemory = binary.getPeakOnHeapExecutionMemory,
+      peakOffHeapExecutionMemory = binary.getPeakOffHeapExecutionMemory,
       inputBytes = binary.getInputBytes,
       inputRecords = binary.getInputRecords,
       outputBytes = binary.getOutputBytes,
@@ -515,6 +523,10 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       gettingResultTime = binary.getGettingResultTimeList.asScala.map(_.toDouble).toIndexedSeq,
       schedulerDelay = binary.getSchedulerDelayList.asScala.map(_.toDouble).toIndexedSeq,
       peakExecutionMemory = binary.getPeakExecutionMemoryList.asScala.map(_.toDouble).toIndexedSeq,
+      peakOnHeapExecutionMemory = binary.getPeakOnHeapExecutionMemoryList.asScala
+        .map(_.toDouble).toIndexedSeq,
+      peakOffHeapExecutionMemory = binary.getPeakOffHeapExecutionMemoryList.asScala
+        .map(_.toDouble).toIndexedSeq,
       memoryBytesSpilled = binary.getMemoryBytesSpilledList.asScala.map(_.toDouble).toIndexedSeq,
       diskBytesSpilled = binary.getDiskBytesSpilledList.asScala.map(_.toDouble).toIndexedSeq,
       inputMetrics = deserializeInputMetricDistributions(binary.getInputMetrics),
@@ -664,6 +676,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       binary.getMemoryBytesSpilled,
       binary.getDiskBytesSpilled,
       binary.getPeakExecutionMemory,
+      binary.getPeakOnHeapExecutionMemory,
+      binary.getPeakOffHeapExecutionMemory,
       deserializeInputMetrics(binary.getInputMetrics),
       deserializeOutputMetrics(binary.getOutputMetrics),
       deserializeShuffleReadMetrics(binary.getShuffleReadMetrics),

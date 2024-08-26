@@ -128,6 +128,8 @@ message TaskDataWrapper {
   int64 shuffle_merged_local_bytes_read = 49;
   int64 shuffle_remote_reqs_duration = 50;
   int64 shuffle_merged_remote_req_duration = 51;
+  int64 peak_on_heap_execution_memory = 52;
+  int64 peak_off_heap_execution_memory = 53;
 }
 
 message ExecutorMetrics {
@@ -323,6 +325,8 @@ message CachedQuantile {
   double shuffle_merged_local_bytes_read = 40;
   double shuffle_remote_reqs_duration = 41;
   double shuffle_merged_remote_reqs_duration = 42;
+  double peak_on_heap_execution_memory = 43;
+  double peak_off_heap_execution_memory = 44;
 }
 
 message SpeculationStageSummary {
@@ -611,6 +615,8 @@ message StageData {
   int64 shuffle_merged_remote_reqs_duration = 62;
   bool is_shuffle_push_enabled = 63;
   int32 shuffle_mergers_count = 64;
+  int64 peak_on_heap_execution_memory = 65;
+  int64 peak_off_heap_execution_memory = 66;
 }
 
 message TaskMetrics {
@@ -628,6 +634,8 @@ message TaskMetrics {
   OutputMetrics output_metrics = 12;
   ShuffleReadMetrics shuffle_read_metrics = 13;
   ShuffleWriteMetrics shuffle_write_metrics = 14;
+  int64 peak_on_heap_execution_memory = 15;
+  int64 peak_off_heap_execution_memory = 16;
 }
 
 message InputMetrics {
@@ -689,6 +697,8 @@ message TaskMetricDistributions {
   OutputMetricDistributions output_metrics = 16;
   ShuffleReadMetricDistributions shuffle_read_metrics = 17;
   ShuffleWriteMetricDistributions shuffle_write_metrics = 18;
+  repeated double peak_on_heap_execution_memory = 19;
+  repeated double peak_off_heap_execution_memory = 20;
 }
 
 message InputMetricDistributions {

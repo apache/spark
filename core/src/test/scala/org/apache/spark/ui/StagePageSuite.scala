@@ -65,6 +65,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         memoryBytesSpilled = 1L,
         diskBytesSpilled = 1L,
         peakExecutionMemory = 1L,
+        peakOnHeapExecutionMemory = 1L,
+        peakOffHeapExecutionMemory = 1L,
         inputBytes = 1L,
         inputRecords = 1L,
         outputBytes = 1L,

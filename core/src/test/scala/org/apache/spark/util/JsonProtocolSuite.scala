@@ -371,6 +371,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.executorDeserializeCpuTime == 0)
     assert(newMetrics.executorCpuTime == 0)
     assert(newMetrics.peakExecutionMemory == 0)
+    assert(newMetrics.peakOnHeapExecutionMemory == 0)
+    assert(newMetrics.peakOffHeapExecutionMemory == 0)
   }
 
   test("StorageLevel backward compatibility") {

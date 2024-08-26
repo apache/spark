@@ -158,6 +158,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         memoryBytesSpilled = 14L,
         diskBytesSpilled = 15L,
         peakExecutionMemory = 16L,
+        peakOnHeapExecutionMemory = 43L,
+        peakOffHeapExecutionMemory = 44L,
         inputBytesRead = 17L,
         inputRecordsRead = 18L,
         outputBytesWritten = 19L,
@@ -212,6 +214,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
       assert(result.diskBytesSpilled == input.diskBytesSpilled)
       assert(result.peakExecutionMemory == input.peakExecutionMemory)
+      assert(result.peakOnHeapExecutionMemory == input.peakOnHeapExecutionMemory)
+      assert(result.peakOffHeapExecutionMemory == input.peakOffHeapExecutionMemory)
       assert(result.inputBytesRead == input.inputBytesRead)
       assert(result.inputRecordsRead == input.inputRecordsRead)
       assert(result.outputBytesWritten == input.outputBytesWritten)
@@ -645,6 +649,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         gettingResultTime = 12.1,
         schedulerDelay = 13.1,
         peakExecutionMemory = 14.1,
+        peakOnHeapExecutionMemory = 14.2,
+        peakOffHeapExecutionMemory = 14.3,
         memoryBytesSpilled = 15.1,
         diskBytesSpilled = 16.1,
         bytesRead = 17.1,
@@ -689,6 +695,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.gettingResultTime == input.gettingResultTime)
       assert(result.schedulerDelay == input.schedulerDelay)
       assert(result.peakExecutionMemory == input.peakExecutionMemory)
+      assert(result.peakOnHeapExecutionMemory == input.peakOnHeapExecutionMemory)
+      assert(result.peakOffHeapExecutionMemory == input.peakOffHeapExecutionMemory)
       assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
       assert(result.diskBytesSpilled == input.diskBytesSpilled)
       assert(result.bytesRead == input.bytesRead)
@@ -1064,6 +1072,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       memoryBytesSpilled = 8L,
       diskBytesSpilled = 9L,
       peakExecutionMemory = 10L,
+      peakOnHeapExecutionMemory = 11L,
+      peakOffHeapExecutionMemory = 12L,
       inputMetrics = inputMetrics,
       outputMetrics = outputMetrics,
       shuffleReadMetrics = shuffleReadMetrics,
@@ -1209,6 +1219,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       gettingResultTime = IndexedSeq(19.001D, 20.001D),
       schedulerDelay = IndexedSeq(21.001D, 22.001D),
       peakExecutionMemory = IndexedSeq(23.001D, 24.001D),
+      peakOnHeapExecutionMemory = IndexedSeq(29.001D, 30.001D),
+      peakOffHeapExecutionMemory = IndexedSeq(31.001D, 32.001D),
       memoryBytesSpilled = IndexedSeq(25.001D, 26.001D),
       diskBytesSpilled = IndexedSeq(27.001D, 28.001D),
       inputMetrics = inputMetricDistributions,
@@ -1263,6 +1275,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       memoryBytesSpilled = 16L,
       diskBytesSpilled = 17L,
       peakExecutionMemory = 18L,
+      peakOnHeapExecutionMemory = 44L,
+      peakOffHeapExecutionMemory = 45L,
       inputBytes = 19L,
       inputRecords = 20L,
       outputBytes = 21L,
@@ -1345,6 +1359,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.memoryBytesSpilled == input.info.memoryBytesSpilled)
     assert(result.info.diskBytesSpilled == input.info.diskBytesSpilled)
     assert(result.info.peakExecutionMemory == input.info.peakExecutionMemory)
+    assert(result.info.peakOnHeapExecutionMemory == input.info.peakOnHeapExecutionMemory)
+    assert(result.info.peakOffHeapExecutionMemory == input.info.peakOffHeapExecutionMemory)
     assert(result.info.inputBytes == input.info.inputBytes)
     assert(result.info.inputRecords == input.info.inputRecords)
     assert(result.info.outputBytes == input.info.outputBytes)
@@ -1461,6 +1477,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.memoryBytesSpilled == expected.memoryBytesSpilled)
     assert(result.diskBytesSpilled == expected.diskBytesSpilled)
     assert(result.peakExecutionMemory == expected.peakExecutionMemory)
+    assert(result.peakOnHeapExecutionMemory == expected.peakOnHeapExecutionMemory)
+    assert(result.peakOffHeapExecutionMemory == expected.peakOffHeapExecutionMemory)
     checkAnswer(result.inputMetrics, expected.inputMetrics)
     checkAnswer(result.outputMetrics, expected.outputMetrics)
     checkAnswer(result.shuffleReadMetrics, expected.shuffleReadMetrics)
@@ -1613,6 +1631,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.gettingResultTime == expected.gettingResultTime)
     assert(result.schedulerDelay == expected.schedulerDelay)
     assert(result.peakExecutionMemory == expected.peakExecutionMemory)
+    assert(result.peakOnHeapExecutionMemory == expected.peakOnHeapExecutionMemory)
+    assert(result.peakOffHeapExecutionMemory == expected.peakOffHeapExecutionMemory)
     assert(result.memoryBytesSpilled == expected.memoryBytesSpilled)
     assert(result.diskBytesSpilled == expected.diskBytesSpilled)
 

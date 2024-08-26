@@ -266,6 +266,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           memoryBytesSpilled = 0L,
           diskBytesSpilled = 0L,
           peakExecutionMemory = 0L,
+          peakOnHeapExecutionMemory = 0L,
+          peakOffHeapExecutionMemory = 0L,
           inputBytes = 0L,
           inputRecords = 0L,
           outputBytes = 0L,
