@@ -2224,6 +2224,18 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+
+  val STREAMING_STATE_STORE_COMMIT_LOG_VERSION =
+    buildConf("spark.sql.streaming.aggregation.commitLog.version")
+      .internal()
+      .doc("Commit log version used by streaming aggregation operations in a streaming query. " +
+        "Commit log between versions are tend to be incompatible, so commit log version " +
+        "shouldn't be modified after running.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(1)
+
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
     .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
@@ -5441,6 +5453,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
+
+  def stateStoreCommitLogVersion: Int = getConf(STREAMING_STATE_STORE_COMMIT_LOG_VERSION)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

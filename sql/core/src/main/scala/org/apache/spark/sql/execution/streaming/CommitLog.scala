@@ -56,7 +56,7 @@ class CommitLog(sparkSession: SparkSession, path: String)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
-    validateVersion(lines.next().trim, VERSION)
+    validateVersion(lines.next().trim, VERSION) // TODO: some error handling here?
     val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
     CommitMetadata(metadataJson)
   }
@@ -72,12 +72,15 @@ class CommitLog(sparkSession: SparkSession, path: String)
 }
 
 object CommitLog {
-  private val VERSION = 1
+  private val VERSION = SQLConf.get.stateStoreCommitLogVersion
   private val EMPTY_JSON = "{}"
 }
 
 
-case class CommitMetadata(nextBatchWatermarkMs: Long = 0) {
+case class CommitMetadata(
+    nextBatchWatermarkMs: Long = 0,
+    stateUniqueIds: Map[String, Map[String, Seq[String]]] = Map.Empty
+) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 
