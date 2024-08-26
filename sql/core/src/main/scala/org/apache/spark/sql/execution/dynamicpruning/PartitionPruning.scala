@@ -221,11 +221,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
+    val dynamicPartitionPruningMaxLength = plan.conf.dynamicPartitionPruningMaxLength
+
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
-      case j @ Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
-      case j @ Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
-      case j @ Join(left, right, joinType, Some(condition), hint) =>
+      case j@Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
+      case j@Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
+      case j@Join(left, right, joinType, Some(condition), hint) =>
         var newLeft = left
         var newRight = right
 
@@ -240,12 +242,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           def fromLeftRight(x: Expression, y: Expression) =
             !x.references.isEmpty && x.references.subsetOf(left.outputSet) &&
               !y.references.isEmpty && y.references.subsetOf(right.outputSet)
+
           fromLeftRight(x, y) || fromLeftRight(y, x)
         }
 
         splitConjunctivePredicates(condition).foreach {
           case EqualTo(a: Expression, b: Expression)
-              if fromDifferentSides(a, b) =>
+            if fromDifferentSides(a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&
               b.references.subsetOf(right.outputSet)) {
               a -> b
@@ -257,13 +260,24 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
-              newLeft = insertPredicate(l, newLeft, Seq(r), right, rightKeys, filterableScan.get)
+              hasPartitionPruningFilter(right)) {
+              val currentLength = newLeft.toString.length + right.toString.length
+              if (currentLength > dynamicPartitionPruningMaxLength) {
+                newLeft
+              } else {
+                newLeft = insertPredicate(l, newLeft, Seq(r), right, rightKeys, filterableScan.get)
+              }
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
-                newRight = insertPredicate(r, newRight, Seq(l), left, leftKeys, filterableScan.get)
+                hasPartitionPruningFilter(left)) {
+                val currentLength = newRight.toString.length + left.toString.length
+                if (currentLength > dynamicPartitionPruningMaxLength) {
+                  newRight
+                } else {
+                  newRight = insertPredicate(r, newRight, Seq(l), left, leftKeys,
+                    filterableScan.get)
+                }
               }
             }
           case _ =>

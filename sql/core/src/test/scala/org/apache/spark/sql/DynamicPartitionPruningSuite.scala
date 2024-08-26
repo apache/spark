@@ -1820,6 +1820,48 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
   }
+
+  test("SPARK-48486: When DynamicPartitionPruning transforms a subquery, if the length of " +
+    "the nested plan is too large, it can cause the maximum length of the plan to be exceeded or " +
+    "memory overflow. ") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_MAX_LENGTH.key -> "1024000") {
+      val df = sql(
+        """
+          |SELECT *
+          |FROM fact_sk a
+          |LEFT JOIN fact_sk b on b.store_id = a.store_id
+          |LEFT JOIN fact_sk c on c.store_id = a.store_id
+          |LEFT JOIN fact_sk d on d.store_id = a.store_id
+          |LEFT JOIN fact_sk e on e.store_id = a.store_id
+          |LEFT JOIN fact_sk f on f.store_id = a.store_id
+          |LEFT JOIN fact_sk g on g.store_id = a.store_id
+          |LEFT JOIN fact_sk h on h.store_id = a.store_id
+          |LEFT JOIN fact_sk i on i.store_id = a.store_id
+          |LEFT JOIN fact_sk j on j.store_id = a.store_id
+          |LEFT JOIN fact_sk k on k.store_id = a.store_id
+          |LEFT JOIN fact_sk l on l.store_id = a.store_id
+          |LEFT JOIN fact_sk m on m.store_id = a.store_id
+          |LEFT JOIN fact_sk n on n.store_id = a.store_id
+          |LEFT JOIN fact_sk o on o.store_id = a.store_id
+          |LEFT JOIN fact_sk p on p.store_id = a.store_id
+          |LEFT JOIN fact_sk q on q.store_id = a.store_id
+          |LEFT JOIN fact_sk r on r.store_id = a.store_id
+          |WHERE a.store_id in ('4','5')
+          """.stripMargin)
+
+      val plan = df.queryExecution.executedPlan
+
+      /**
+       * DYNAMIC_PARTITION_PRUNING_MAX_LENGTH=1024000  => plan.toString.length:3985794
+       * DYNAMIC_PARTITION_PRUNING_MAX_LENGTH=2048000  => plan.toString.length:8152816
+       * DYNAMIC_PARTITION_PRUNING_MAX_LENGTH=10240000  => plan.toString.length:34088767
+       */
+      assert(plan.toString.length == 3985794 || plan.toString.length < 3985794 * 1.5)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {

@@ -351,6 +351,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_MAX_LENGTH =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.max.length")
+      .doc("The maximum character length of the plan for the nested subquery.When the set length " +
+        "is too large, it may cause the final plan to exceed the limit or memory overflow.")
+      .version("3.3.0")
+      .intConf
+      .createWithDefault(10 * 1024 * 1024)
+
   val DYNAMIC_PARTITION_PRUNING_USE_STATS =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.useStats")
       .internal()
@@ -5295,6 +5303,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
+
+  def dynamicPartitionPruningMaxLength: Int = getConf(DYNAMIC_PARTITION_PRUNING_MAX_LENGTH)
 
   def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
 
