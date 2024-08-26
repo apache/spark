@@ -135,6 +135,11 @@ private[sql] object UdfUtils extends Serializable {
     f(value).iterator.to(Seq)
   }
 
+  // ----------------------------------------------------------------------------------------------
+  // Scala Functions wrappers for java UDFs.
+  //
+  // DO NOT REMOVE THESE, THEY ARE NEEDED FOR BACKWARDS COMPATIBILITY WITH OLDER CLIENTS!
+  // ----------------------------------------------------------------------------------------------
   //  (1 to 22).foreach { i =>
   //    val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
   //    val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
