@@ -395,9 +395,20 @@ private[sql] case class UnresolvedNamedLambdaVariable(
 
 object UnresolvedNamedLambdaVariable {
   private val nextId = new AtomicLong()
+
+  /**
+   * Create a lambda variable with a unique name.
+   */
   def apply(name: String): UnresolvedNamedLambdaVariable = {
     // Generate a unique name because we reuse lambda variable names (e.g. x, y, or z).
     new UnresolvedNamedLambdaVariable(s"${name}_${nextId.incrementAndGet()}")
+  }
+
+  /**
+   * Reset the ID generator. For testing purposes only!
+   */
+  private[sql] def resetIdGenerator(): Unit = {
+    nextId.set(0)
   }
 }
 

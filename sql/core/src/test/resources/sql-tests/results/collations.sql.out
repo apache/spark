@@ -486,3 +486,62 @@ drop table t4
 struct<>
 -- !query output
 
+
+
+-- !query
+create table t5(str string collate utf8_binary, delimiter string collate utf8_lcase, partNum int) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t5 values('11AB12AB13', 'AB', 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select split_part(str, delimiter, partNum) from t5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select split_part(str collate utf8_binary, delimiter collate utf8_lcase, partNum) from t5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select split_part(str collate utf8_binary, delimiter collate utf8_binary, partNum) from t5
+-- !query schema
+struct<split_part(collate(str, utf8_binary), collate(delimiter, utf8_binary), partNum):string>
+-- !query output
+12
+
+
+-- !query
+drop table t5
+-- !query schema
+struct<>
+-- !query output
+

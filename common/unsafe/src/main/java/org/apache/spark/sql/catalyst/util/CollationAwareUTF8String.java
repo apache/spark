@@ -1125,20 +1125,29 @@ public class CollationAwareUTF8String {
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the left to find the first character that is not in the set.
-    int searchIndex = 0, codePoint;
+    int searchIndex = 0, codePoint, codePointBuffer = -1;
     Iterator<Integer> srcIter = srcString.codePointIterator();
     while (srcIter.hasNext()) {
-      codePoint = getLowercaseCodePoint(srcIter.next());
+      // Get the next code point from either the buffer or the iterator.
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      }
+      else {
+        codePoint = getLowercaseCodePoint(srcIter.next());
+      }
       // Special handling for Turkish dotted uppercase letter I.
       if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I && srcIter.hasNext() &&
           trimChars.contains(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
-        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
-        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == SpecialCodePointConstants.COMBINING_DOT) {
+        codePointBuffer = codePoint;
+        codePoint = getLowercaseCodePoint(srcIter.next());
+        if (codePoint == SpecialCodePointConstants.COMBINING_DOT) {
           searchIndex += 2;
-        }
-        else {
-          if (trimChars.contains(codePoint)) ++searchIndex;
+          codePointBuffer = -1;
+        } else if (trimChars.contains(codePointBuffer)) {
+          ++searchIndex;
+          codePointBuffer = codePoint;
+        } else {
           break;
         }
       } else if (trimChars.contains(codePoint)) {
@@ -1235,20 +1244,28 @@ public class CollationAwareUTF8String {
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the right to find the first character that is not in the set.
-    int searchIndex = srcString.numChars(), codePoint;
+    int searchIndex = srcString.numChars(), codePoint, codePointBuffer = -1;
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
     while (srcIter.hasNext()) {
-      codePoint = getLowercaseCodePoint(srcIter.next());
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      }
+      else {
+        codePoint = getLowercaseCodePoint(srcIter.next());
+      }
       // Special handling for Turkish dotted uppercase letter I.
       if (codePoint == SpecialCodePointConstants.COMBINING_DOT && srcIter.hasNext() &&
           trimChars.contains(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
-        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
-        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == SpecialCodePointConstants.ASCII_SMALL_I) {
+        codePointBuffer = codePoint;
+        codePoint = getLowercaseCodePoint(srcIter.next());
+        if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I) {
           searchIndex -= 2;
-        }
-        else {
-          if (trimChars.contains(codePoint)) --searchIndex;
+          codePointBuffer = -1;
+        } else if (trimChars.contains(codePointBuffer)) {
+          --searchIndex;
+          codePointBuffer = codePoint;
+        } else {
           break;
         }
       } else if (trimChars.contains(codePoint)) {

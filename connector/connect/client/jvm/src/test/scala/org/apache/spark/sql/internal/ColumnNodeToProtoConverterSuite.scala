@@ -14,16 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect
+package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.FrameBoundary
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveIntEncoder
+import org.apache.spark.sql.{Column, Encoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoDataTypes}
-import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
-import org.apache.spark.sql.internal._
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, LongType, MetadataBuilder, ShortType, StringType, StructType}
 
@@ -46,7 +46,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
   }
 
   private def attribute(name: String): proto.Expression =
-    expr(_.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name).setIsMetadataColumn(false))
+    expr(_.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name))
 
   private def structField(
       name: String,
@@ -360,17 +360,62 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
   }
 
   test("udf") {
-    val udf =
-      ScalaUserDefinedFunction((i: Int) => i, Seq(PrimitiveIntEncoder), PrimitiveIntEncoder)
-    val named = udf.withName("boo")
+    val fn = (i: Int) => i + 1
+    val udf = SparkUserDefinedFunction(fn, PrimitiveIntEncoder :: Nil, PrimitiveIntEncoder)
+    val named = udf.withName("boo").asNondeterministic()
     testConversion(
-      InvokeInlineUserDefinedFunction(named, Seq(UnresolvedAttribute(("a")))),
+      InvokeInlineUserDefinedFunction(named, Seq(UnresolvedAttribute("a"))),
       expr(
         _.getCommonInlineUserDefinedFunctionBuilder
           .setFunctionName("boo")
+          .setDeterministic(false)
+          .addArguments(attribute("a"))
+          .getScalarScalaUdfBuilder
+          .setPayload(
+            UdfToProtoUtils.toUdfPacketBytes(fn, PrimitiveIntEncoder :: Nil, PrimitiveIntEncoder))
+          .addInputTypes(ProtoDataTypes.IntegerType)
+          .setOutputType(ProtoDataTypes.IntegerType)
+          .setNullable(false)
+          .setAggregate(false)))
+
+    val aggregator = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0
+      override def reduce(b: Long, a: Long): Long = a + b
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = PrimitiveLongEncoder
+      override def outputEncoder: Encoder[Long] = PrimitiveLongEncoder
+    }
+    val uda = UserDefinedAggregator(aggregator, PrimitiveLongEncoder)
+      .withName("lsum")
+      .asNonNullable()
+    testConversion(
+      InvokeInlineUserDefinedFunction(uda, Seq(UnresolvedAttribute(("a")))),
+      expr(
+        _.getCommonInlineUserDefinedFunctionBuilder
+          .setFunctionName("lsum")
           .setDeterministic(true)
-          .setScalarScalaUdf(named.udf)
-          .addArguments(attribute("a"))))
+          .addArguments(attribute("a"))
+          .getScalarScalaUdfBuilder
+          .setPayload(UdfToProtoUtils
+            .toUdfPacketBytes(aggregator, PrimitiveLongEncoder :: Nil, PrimitiveLongEncoder))
+          .addInputTypes(ProtoDataTypes.LongType)
+          .setOutputType(ProtoDataTypes.LongType)
+          .setNullable(false)
+          .setAggregate(true)))
+
+    val result = ColumnNodeToProtoConverter.toTypedExpr(
+      Column(InvokeInlineUserDefinedFunction(aggregator, Nil)),
+      PrimitiveLongEncoder)
+    val expected = expr(
+      _.getTypedAggregateExpressionBuilder.getScalarScalaUdfBuilder
+        .setPayload(UdfToProtoUtils
+          .toUdfPacketBytes(aggregator, PrimitiveLongEncoder :: Nil, PrimitiveLongEncoder))
+        .addInputTypes(ProtoDataTypes.LongType)
+        .setOutputType(ProtoDataTypes.LongType)
+        .setNullable(true)
+        .setAggregate(true))
+    assert(result == expected)
   }
 
   test("extension") {
@@ -383,7 +428,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
   }
 }
 
-private[connect] case class Nope(override val origin: Origin = CurrentOrigin.get)
+private[internal] case class Nope(override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = "nope"
 }

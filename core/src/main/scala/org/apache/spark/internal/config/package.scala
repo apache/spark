@@ -1466,6 +1466,14 @@ package object config {
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
+  private[spark] val SHUFFLE_FILE_MERGE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.merge.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file input stream, in KiB unless " +
+        "otherwise specified. These buffers use off-heap buffers and are related to the number " +
+        "of files in the shuffle file. Too large buffers should be avoided.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_FILE_BUFFER_SIZE)
+
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
       .doc("(Deprecated since Spark 4.0, please use 'spark.shuffle.localDisk.file.output.buffer'.)")

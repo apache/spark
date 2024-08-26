@@ -44,6 +44,8 @@ private[sql] trait SqlApiConf {
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
   def defaultStringType: StringType
+  def stackTracesInDataFrameContext: Int
+  def legacyAllowUntypedScalaUDFs: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -81,4 +83,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
   override def defaultStringType: StringType = StringType
+  override def stackTracesInDataFrameContext: Int = 1
+  override def legacyAllowUntypedScalaUDFs: Boolean = false
 }

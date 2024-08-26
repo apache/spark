@@ -170,11 +170,11 @@ class ColumnTestSuite extends ConnectFunSuite {
     val x = fn.col("a") + fn.col("b")
     val explain1 = captureStdOut(x.explain(false))
     val explain2 = captureStdOut(x.explain(true))
-    assert(explain1 == explain2)
-    val expectedFragments = Seq("unresolved_function", "function_name: \"+\"", "arguments")
-    expectedFragments.foreach { fragment =>
-      assert(explain1.contains(fragment))
-    }
+    assert(explain1 != explain2)
+    assert(explain1.strip() == "+(a, b)")
+    assert(explain2.contains("UnresolvedFunction(+"))
+    assert(explain2.contains("UnresolvedAttribute(a"))
+    assert(explain2.contains("UnresolvedAttribute(b"))
   }
 
   private def testColName(dataType: DataType, f: ColumnName => StructField): Unit = {
