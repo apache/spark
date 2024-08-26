@@ -425,8 +425,7 @@ class BoxPlotBase:
         fliers_df = outliers.filter("`__{}_outlier`".format(colname))
 
         # If it shows fliers, take the top 1k with highest absolute values
-        # Here we normalize the values by subtracting the fences from
-        # each, and use absolute values.
+        # Here we normalize the values by subtracting the fences.
         formated_colname = "`{}`".format(colname)
         order_col = (
             F.when(
