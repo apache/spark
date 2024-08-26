@@ -110,7 +110,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
     // Make sure this doesn't trigger if there is a non-foldable branch before the true branch
     assertEquivalent(
       CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None),
-      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+      CaseWhen(normalBranch :: trueBranch :: Nil, Literal(5)))
   }
 
   test("simplify CaseWhen, prune branches following a definite true") {
@@ -120,7 +120,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
         trueBranch :: normalBranch ::
         Nil,
         None),
-      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+      CaseWhen(normalBranch :: trueBranch :: Nil, Literal(5)))
   }
 
   test("simplify CaseWhen if all the outputs are semantic equivalence") {

@@ -598,7 +598,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
         // a branch with a true condition eliminates all following branches,
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
-        CaseWhen( h :+ t.head, None)
+        CaseWhen( h :+ t.head, t.head._2)
 
       case e @ CaseWhen(branches, elseOpt)
           if branches.forall(_._2.semanticEquals(elseOpt.getOrElse(Literal(null, e.dataType)))) =>

@@ -145,7 +145,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       (UnresolvedAttribute("i") < Literal(10)) -> TrueLiteral,
       (UnresolvedAttribute("i") > Literal(10)) -> FalseLiteral,
       TrueLiteral -> TrueLiteral)
-    val expectedCond = CaseWhen(expectedBranches, FalseLiteral)
+    // elseValue is simplified to the value of first True branch
+    val expectedCond = CaseWhen(expectedBranches, TrueLiteral)
 
     testFilter(originalCond, expectedCond)
     testJoin(originalCond, expectedCond)

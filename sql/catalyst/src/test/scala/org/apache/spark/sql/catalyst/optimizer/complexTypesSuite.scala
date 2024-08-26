@@ -235,7 +235,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
           (EqualTo(13L, $"id"), ($"id" + 1L)),
           (EqualTo(13L, ($"id" + 1L)), ($"id" + 2L)),
           (EqualTo(13L, ($"id" + 2L)), ($"id" + 3L)),
-          (Literal(true), $"id"))) as "a")
+          (Literal(true), $"id")),
+          $"id"
+        ) as "a")
     checkRule(query, expected)
   }
 
@@ -256,7 +258,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
           (EqualTo($"id" + 3L, $"id"), ($"id" + 1L)),
           (EqualTo($"id" + 3L, ($"id" + 1L)), ($"id" + 2L)),
           (EqualTo($"id" + 3L, ($"id" + 2L)), ($"id" + 3L)),
-          (Literal(true), ($"id" + 4L)))) as "a")
+          (Literal(true), ($"id" + 4L))),
+          ($"id" + 4L)
+        ) as "a")
     checkRule(query, expected)
   }
 
@@ -329,7 +333,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
           // this is a definite match (two constants),
           // but it cannot override a potential match with ('id + 2L),
           // which is exactly what [[Coalesce]] would do in this case.
-          (Literal.TrueLiteral, $"id"))) as "a")
+          (Literal.TrueLiteral, $"id")), $"id") as "a")
     checkRule(rel, expected)
   }
 
