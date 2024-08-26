@@ -24,8 +24,6 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics._
 import io.opentelemetry.api.common.Attributes
 import io.opentelemetry.api.metrics.{DoubleGauge, DoubleHistogram, LongCounter}
-import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator
-import io.opentelemetry.context.propagation.ContextPropagators
 import io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporter
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
@@ -117,8 +115,7 @@ private[spark] class OpenTelemetryPushReporter(
   val openTelemetry = OpenTelemetrySdk
     .builder()
     .setMeterProvider(sdkMeterProvider)
-    .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
-    .buildAndRegisterGlobal();
+    .build();
   val openTelemetryMeter = openTelemetry.getMeter("apache-spark")
 
   override def report(
