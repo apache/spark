@@ -2085,6 +2085,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       )
 
       // Negative tests for to_protobuf.
+      var fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2099,9 +2100,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             "string representing the Protobuf message name"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())",
+          fragment = fragment,
           start = 10,
-          stop = 153))
+          stop = fragment.length + 9))
       )
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2121,6 +2122,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           start = 10,
           stop = 73))
       )
+      fragment = s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2137,13 +2139,13 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             "to Protobuf format"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment =
-            s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
+          fragment = fragment,
           start = 10,
-          stop = 172))
+          stop = fragment.length + 9))
       )
 
       // Negative tests for from_protobuf.
+      fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2157,9 +2159,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             "string representing the Protobuf message name"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())",
+          fragment = fragment,
           start = 8,
-          stop = 152))
+          stop = fragment.length + 7))
       )
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2178,6 +2180,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           start = 8,
           stop = 72))
       )
+      fragment = s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2194,10 +2197,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             "from Protobuf format"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment =
-            s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
+          fragment = fragment,
           start = 10,
-          stop = 173))
+          stop = fragment.length + 9))
       )
     }
   }

@@ -26,6 +26,7 @@ from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import DoubleType
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -198,25 +199,18 @@ class HistogramPlotBase(NumericPlotBase):
                 idx = bisect.bisect(bins, value) - 1
             return float(idx)
 
-        output_df = None
-        for group_id, (colname, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            # sdf.na.drop to match handleInvalid="skip" in Bucketizer
-
-            bucket_df = sdf.na.drop(subset=[colname]).withColumn(
-                bucket_name,
-                binary_search_for_buckets(F.col(colname).cast("double")),
+        output_df = (
+            sdf.select(
+                F.posexplode(
+                    F.array([F.col(colname).cast("double") for colname in colnames])
+                ).alias("__group_id", "__value")
             )
-
-            if output_df is None:
-                output_df = bucket_df.select(
-                    F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
-                )
-            else:
-                output_df = output_df.union(
-                    bucket_df.select(
-                        F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
-                    )
-                )
+            # to match handleInvalid="skip" in Bucketizer
+            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN()).select(
+                F.col("__group_id"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
+            )
+        )
 
         # 2. Calculate the count based on each group and bucket.
         #     +----------+-------+------+
@@ -444,6 +438,37 @@ class BoxPlotBase:
 
         return fliers
 
+    @staticmethod
+    def get_multicol_fliers(colnames, multicol_outliers, multicol_whiskers):
+        scols = []
+        extract_colnames = []
+        for i, colname in enumerate(colnames):
+            formated_colname = "`{}`".format(colname)
+            outlier_colname = "__{}_outlier".format(colname)
+            min_val = multicol_whiskers[colname]["min"]
+            pair_col = F.struct(
+                F.abs(F.col(formated_colname) - F.lit(min_val)).alias("ord"),
+                F.col(formated_colname).alias("val"),
+            )
+            scols.append(
+                SF.collect_top_k(
+                    F.when(F.col(outlier_colname), pair_col)
+                    .otherwise(F.lit(None))
+                    .alias(f"pair_{i}"),
+                    1001,
+                    False,
+                ).alias(f"top_{i}")
+            )
+            extract_colnames.append(f"top_{i}.val")
+
+        results = multicol_outliers.select(scols).select(extract_colnames).first()
+
+        fliers = {}
+        for i, colname in enumerate(colnames):
+            fliers[colname] = results[i]
+
+        return fliers
+
 
 class KdePlotBase(NumericPlotBase):
     @staticmethod
@@ -481,7 +506,7 @@ class KdePlotBase(NumericPlotBase):
         return ind
 
     @staticmethod
-    def compute_kde(sdf, bw_method=None, ind=None):
+    def compute_kde_col(input_col, bw_method=None, ind=None):
         # refers to org.apache.spark.mllib.stat.KernelDensity
         assert bw_method is not None and isinstance(
             bw_method, (int, float)
@@ -504,21 +529,25 @@ class KdePlotBase(NumericPlotBase):
             log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
             return F.exp(log_density)
 
-        dataCol = F.col(sdf.columns[0]).cast("double")
-
-        estimated = [
-            F.avg(
-                norm_pdf(
-                    dataCol,
-                    F.lit(bandwidth),
-                    F.lit(log_std_plus_half_log2_pi),
-                    F.lit(point),
+        return F.array(
+            [
+                F.avg(
+                    norm_pdf(
+                        input_col.cast("double"),
+                        F.lit(bandwidth),
+                        F.lit(log_std_plus_half_log2_pi),
+                        F.lit(point),
+                    )
                 )
-            )
-            for point in points
-        ]
+                for point in points
+            ]
+        )
 
-        row = sdf.select(F.array(estimated)).first()
+    @staticmethod
+    def compute_kde(sdf, bw_method=None, ind=None):
+        input_col = F.col(sdf.columns[0])
+        kde_col = KdePlotBase.compute_kde_col(input_col, bw_method, ind).alias("kde")
+        row = sdf.select(kde_col).first()
         return row[0]
 
 

@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
   enable(SparkUnidoc.settings)(spark)
 
   /* Enable unidoc only for the root spark connect client project */
-  enable(SparkConnectClientUnidoc.settings)(connectClient)
+  // enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -1486,8 +1486,8 @@ object SparkConnectClientUnidoc extends SharedUnidocSettings {
   }
 
   lazy val settings = baseSettings ++ Seq(
-    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
-    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
   )
 }
 
