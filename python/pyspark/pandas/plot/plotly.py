@@ -199,10 +199,18 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
         # Computes min and max values of non-outliers - the whiskers
         whiskers = BoxPlotBase.calc_multicol_whiskers(numeric_column_names, outliers)
 
+        fliers = None
+        if boxpoints:
+            fliers = BoxPlotBase.get_multicol_fliers(numeric_column_names, outliers, whiskers)
+
         i = 0
         for colname in numeric_column_names:
             col_stats = multicol_stats[colname]
             col_whiskers = whiskers[colname]
+
+            col_fliers = None
+            if fliers is not None and colname in fliers and len(fliers[colname]) > 0:
+                col_fliers = [fliers[colname]]
 
             fig.add_trace(
                 go.Box(
@@ -214,7 +222,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     mean=[col_stats["mean"]],
                     lowerfence=[col_whiskers["min"]],
                     upperfence=[col_whiskers["max"]],
-                    y=None,  # todo: support y=fliers
+                    y=col_fliers,
                     boxpoints=boxpoints,
                     notched=notched,
                     **kwargs,
