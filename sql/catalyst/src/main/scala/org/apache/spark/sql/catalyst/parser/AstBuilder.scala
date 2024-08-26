@@ -3448,6 +3448,8 @@ class AstBuilder extends DataTypeAstBuilder
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
       } catch {
+        // Bypass SparkThrowables
+        case st: SparkThrowable => throw st
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
           val pe = new ParseException(

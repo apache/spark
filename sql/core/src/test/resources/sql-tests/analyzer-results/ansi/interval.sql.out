@@ -979,114 +979,102 @@ Project [INTERVAL '30' DAY AS days#x]
 -- !query
 select interval '20 15:40:32.99899999' day to hour
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR` when cast to interval day to hour: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 50,
-    "fragment" : "'20 15:40:32.99899999' day to hour"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "20 15:40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR`",
+    "typeName" : "interval day to hour"
+  }
 }
 
 
 -- !query
 select interval '20 15:40:32.99899999' day to minute
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE` when cast to interval day to minute: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 52,
-    "fragment" : "'20 15:40:32.99899999' day to minute"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "20 15:40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE`",
+    "typeName" : "interval day to minute"
+  }
 }
 
 
 -- !query
 select interval '15:40:32.99899999' hour to minute
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE` when cast to interval hour to minute: 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 50,
-    "fragment" : "'15:40:32.99899999' hour to minute"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "15:40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE`",
+    "typeName" : "interval hour to minute"
+  }
 }
 
 
 -- !query
 select interval '15:40.99899999' hour to second
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 47,
-    "fragment" : "'15:40.99899999' hour to second"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "15:40.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND`",
+    "typeName" : "interval hour to second"
+  }
 }
 
 
 -- !query
 select interval '15:40' hour to second
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 38,
-    "fragment" : "'15:40' hour to second"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "15:40",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND`",
+    "typeName" : "interval hour to second"
+  }
 }
 
 
 -- !query
 select interval '20 40:32.99899999' minute to second
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND` when cast to interval minute to second: 20 40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 52,
-    "fragment" : "'20 40:32.99899999' minute to second"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "20 40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND`",
+    "typeName" : "interval minute to second"
+  }
 }
 
 
@@ -1458,19 +1446,14 @@ Project [INTERVAL '178956970-7' YEAR TO MONTH AS INTERVAL '178956970-7' YEAR TO 
 -- !query
 SELECT INTERVAL '178956970-8' YEAR TO MONTH
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.INTERVAL_PARSING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.INTERVAL_PARSING] Interval error. Error parsing interval year-month string: integer overflow. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 43,
-    "fragment" : "'178956970-8' YEAR TO MONTH"
-  } ]
+    "interval" : "year-month",
+    "msg" : "integer overflow"
+  }
 }
 
 
@@ -1907,19 +1890,17 @@ Project [INTERVAL '2-2' YEAR TO MONTH AS INTERVAL '2-2' YEAR TO MONTH#x]
 -- !query
 select interval '-\t2-2\t' year to month
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match year-month format of `[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` when cast to interval year to month: -\t2-2\t. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 40,
-    "fragment" : "'-\\t2-2\\t' year to month"
-  } ]
+    "fallBackNotice" : "",
+    "input" : "-\t2-2\t",
+    "intervalStr" : "year-month",
+    "supportedFormat" : "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
+    "typeName" : "interval year to month"
+  }
 }
 
 
@@ -1933,19 +1914,17 @@ Project [INTERVAL '0 12:34:46.789' DAY TO SECOND AS INTERVAL '0 12:34:46.789' DA
 -- !query
 select interval '\n-\t10\t 12:34:46.789\t' day to second
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22009",
   "messageParameters" : {
-    "msg" : "[INTERVAL_ERROR.UNMATCHED_FORMAT_STRING] Interval error. Interval string does not match day-time format of `[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND` when cast to interval day to second: \n-\t10\t 12:34:46.789\t, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.. SQLSTATE: 22009"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 56,
-    "fragment" : "'\\n-\\t10\\t 12:34:46.789\\t' day to second"
-  } ]
+    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
+    "input" : "\n-\t10\t 12:34:46.789\t",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`",
+    "typeName" : "interval day to second"
+  }
 }
 
 
