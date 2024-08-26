@@ -20695,8 +20695,14 @@ def nullifzero(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
-    >>> df.select(nullifzero(df.a).alias('r')).collect()
+    >>> df.select(nullifzero(df.a).alias("result")).show()
     [Row(r=None), Row(r=1)]
+    +------+
+    |result|
+    +------+
+    |  None|
+    |     1|
+    +------+
     """
     return _invoke_function_over_columns("nullifzero", col)
 
@@ -20758,8 +20764,13 @@ def zeroifnull(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([(None,), (1,)], ["a"])
-    >>> df.select(zeroifnull(df.a).alias('r')).collect()
-    [Row(r=0), Row(r=1)]
+    >>> df.select(zeroifnull(df.a).alias("result")).show()
+    +------+
+    |result|
+    +------+
+    |     0|
+    |     1|
+    +------+
     """
     return _invoke_function_over_columns("zeroifnull", col)
 

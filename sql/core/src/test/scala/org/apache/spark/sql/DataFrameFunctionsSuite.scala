@@ -332,12 +332,51 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("nullifzero function") {
+    withTable("t") {
+      // Here we exercise a non-nullable, non-foldable column.
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(df.selectExpr("nullifzero(col)"), Seq(Row(null)))
+    }
+    // Here we exercise invalid cases including types that do not support ordering.
     val df = Seq((0)).toDF("a")
-    checkAnswer(df.selectExpr("nullifzero(0)"), Seq(Row(null)))
-    checkAnswer(df.select(nullifzero(lit(0))), Seq(Row(null)))
-
-    checkAnswer(df.selectExpr("nullifzero(a)"), Seq(Row(null)))
-    checkAnswer(df.select(nullifzero(lit(5))), Seq(Row(5)))
+    var expr = "nullifzero(map(1, 'a'))"
+    checkError(
+      intercept[AnalysisException](df.selectExpr(expr)),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = Map(
+        "left" -> "\"MAP<INT, STRING>\"",
+        "right" -> "\"INT\"",
+        "sqlExpr" -> "\"(map(1, a) = 0)\""),
+      context = ExpectedContext(
+        fragment = s"$expr",
+        start = 0,
+        stop = expr.length - 1))
+    expr = "nullifzero(array(1, 2))"
+    checkError(
+      intercept[AnalysisException](df.selectExpr(expr)),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = Map(
+        "left" -> "\"ARRAY<INT>\"",
+        "right" -> "\"INT\"",
+        "sqlExpr" -> "\"(array(1, 2) = 0)\""),
+      context = ExpectedContext(
+        fragment = s"$expr",
+        start = 0,
+        stop = expr.length - 1))
+    expr = "nullifzero(date'2020-12-31')"
+    checkError(
+      intercept[AnalysisException](df.selectExpr(expr)),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = Map(
+        "left" -> "\"DATE\"",
+        "right" -> "\"INT\"",
+        "sqlExpr" -> "\"(DATE '2020-12-31' = 0)\""),
+      context = ExpectedContext(
+        fragment = s"$expr",
+        start = 0,
+        stop = expr.length - 1))
   }
 
   test("nvl") {
@@ -359,12 +398,51 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("zeroifnull function") {
-    val df = Seq[(Integer)]((null)).toDF("a")
-    checkAnswer(df.selectExpr("zeroifnull(null)"), Seq(Row(0)))
-    checkAnswer(df.select(zeroifnull(lit(null))), Seq(Row(0)))
-
-    checkAnswer(df.selectExpr("zeroifnull(a)"), Seq(Row(0)))
-    checkAnswer(df.select(zeroifnull(lit(5))), Seq(Row(5)))
+    withTable("t") {
+      // Here we exercise a non-nullable, non-foldable column.
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(df.selectExpr("zeroifnull(col)"), Seq(Row(0)))
+    }
+    // Here we exercise invalid cases including types that do not support ordering.
+    val df = Seq((0)).toDF("a")
+    var expr = "zeroifnull(map(1, 'a'))"
+    checkError(
+      intercept[AnalysisException](df.selectExpr(expr)),
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`coalesce`",
+        "dataType" ->"(\"MAP<INT, STRING>\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(map(1, a), 0)\""),
+      context = ExpectedContext(
+        fragment = s"$expr",
+        start = 0,
+        stop = expr.length - 1))
+    expr = "zeroifnull(array(1, 2))"
+    checkError(
+      intercept[AnalysisException](df.selectExpr(expr)),
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`coalesce`",
+        "dataType" ->"(\"ARRAY<INT>\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(array(1, 2), 0)\""),
+      context = ExpectedContext(
+        fragment = s"$expr",
+        start = 0,
+        stop = expr.length - 1))
+    expr = "zeroifnull(date'2020-12-31')"
+    checkError(
+      intercept[AnalysisException](df.selectExpr(expr)),
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`coalesce`",
+        "dataType" ->"(\"DATE\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(DATE '2020-12-31', 0)\""),
+      context = ExpectedContext(
+        fragment = s"$expr",
+        start = 0,
+        stop = expr.length - 1))
   }
 
   test("misc md5 function") {
