@@ -728,7 +728,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     val pvc = persistentVolumeClaim("pvc-0", "gp2", "200Gi")
     pvc.getMetadata
-      .setCreationTimestamp(Instant.now().minus(podAllocationDelay + 1, MILLIS).toString)
+      .setCreationTimestamp(Instant.now().minus(podCreationTimeout + 1, MILLIS).toString)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc).asJava)
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
         meq(kubernetesClient), any(classOf[ResourceProfile])))
@@ -806,7 +806,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val pvc2 = persistentVolumeClaim("pvc-2", "gp2", "200Gi")
 
     val now = Instant.now()
-    pvc1.getMetadata.setCreationTimestamp(now.minus(2 * podAllocationDelay, MILLIS).toString)
+    pvc1.getMetadata.setCreationTimestamp(now.minus(podCreationTimeout + 1, MILLIS).toString)
     pvc2.getMetadata.setCreationTimestamp(now.toString)
 
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc1, pvc2).asJava)
