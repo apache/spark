@@ -56,7 +56,7 @@ public class CollationAwareUTF8String {
    * point marker used to represent the two lowercase characters that are the result of converting
    * the uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
    */
-  public static final int COMBINED_ASCII_SMALL_I_COMBINING_DOT =
+  private static final int COMBINED_ASCII_SMALL_I_COMBINING_DOT =
           SpecialCodePointConstants.ASCII_SMALL_I << 16 | SpecialCodePointConstants.COMBINING_DOT;
 
   /**
