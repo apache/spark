@@ -1771,12 +1771,15 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("load the same version of pending snapshot uploading") {
+  testWithChangelogCheckpointingEnabled("reloading the same version") {
+    // Keep executing the same batch for two or more times. Some queries with ForEachBatch
+    // will cause this behavior.
     // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
     withDB(remoteDir, conf = conf) { db =>
+      // load the same version of pending snapshot uploading
       db.load(0)
       db.put("foo", "bar")
       db.commit()
@@ -1803,60 +1806,80 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.load(2)
       db.put("foo", "bar")
       db.commit()
-    }
-  }
 
-  for (random_seed <- 1 to 16) {
-    testWithChangelogCheckpointingEnabled(s"randomized snapshotting $random_seed") {
-      // The unit test simulates the case where batches can be reloaded and maintenance tasks
-      // can be delayed. After each batch, we randomly decide whether we would move onto the
-      // next batch, and whetehr maintenance task is executed.
-      // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
-      val remoteDir = Utils.createTempDir().toString
-      val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf) { db =>
-        val random = new Random(random_seed)
-        var curVer: Int = 0
-        for (i <- 1 to 100) {
-          db.load(curVer)
+      // Test the maintenance thread is delayed even after the next snapshot is created.
+      for (i <- 3 to 6) {
+        db.load(i)
+        db.put("foo", "bar")
+        db.commit()
+
+        db.load(i)
+        db.put("foo", "bar")
+        db.commit()
+      }
+      db.doMaintenance()
+
+      // Test the maintenance is called after each batch
+      for (i <- 7 to 10) {
+        for (j <- 0 to 1) {
+          db.load(i)
           db.put("foo", "bar")
           db.commit()
-	  // For a one in five chance, maintenance task is executed. The chance is created to
-	  // simulate the case where snapshot isn't immediatelly uploaded, and even delayed
-	  // so that the next snapshot is ready. We create a snapshot in every 3 batches, so
-	  // with 1/5 chance, it is more likely to create longer maintenance delay.
-          if (random.nextInt(5) == 0) {
-            db.doMaintenance()
-          }
-	  // For half the chance, we move to the next version, and half the chance we keep the
-	  // same version
-	  if (random.nextInt(2) == 0) {
-            curVer = curVer + 1
-          }
+          db.doMaintenance()
         }
       }
     }
   }
 
-  testWithChangelogCheckpointingEnabled(s"simulate ForEachBatch") {
-    // In ForEachBatch, often batches are executed twice. We simulate this case.
-    // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
-    val remoteDir = Utils.createTempDir().toString
-    val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
-    new File(remoteDir).delete() // to make sure that the directory gets created
-    withDB(remoteDir, conf = conf) { db =>
-      val random = new Random(seed = 66)
-      var curVer: Int = 0
-      for (i <- 1 to 100) {
-        db.load(curVer)
-        db.put("foo", "bar")
-        db.commit()
-        if (random.nextInt(5) == 0) {
-          db.doMaintenance()
-        }
-        if (i % 2 == 1) {
-          curVer = curVer + 1
+  for (random_seed <- 1 to 8) {
+    for (ifTestSkipBatch <- 0 to 1) {
+      testWithChangelogCheckpointingEnabled(
+        s"randomized snapshotting $random_seed ifTestSkipBatch $ifTestSkipBatch") {
+        // The unit test simulates the case where batches can be reloaded and maintenance tasks
+        // can be delayed. After each batch, we randomly decide whether we would move onto the
+        // next batch, and whetehr maintenance task is executed.
+        // The test was accidentally fixed by
+        // SPARK-48931 (https://github.com/apache/spark/pull/47393)
+        val remoteDir = Utils.createTempDir().toString
+        val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+        new File(remoteDir).delete() // to make sure that the directory gets created
+        withDB(remoteDir, conf = conf) { db =>
+          // A second DB is opened to simulate another executor that runs some batches that
+	  // skipped in the current DB.
+          withDB(remoteDir, conf = conf) { db2 =>
+            val random = new Random(random_seed)
+            var curVer: Int = 0
+            for (i <- 1 to 100) {
+              db.load(curVer)
+              db.put("foo", "bar")
+              db.commit()
+              // For a one in five chance, maintenance task is executed. The chance is created to
+              // simulate the case where snapshot isn't immediatelly uploaded, and even delayed
+              // so that the next snapshot is ready. We create a snapshot in every 3 batches, so
+              // with 1/5 chance, it is more likely to create longer maintenance delay.
+              if (random.nextInt(5) == 0) {
+                db.doMaintenance()
+              }
+              // For half the chance, we move to the next version, and half the chance we keep the
+              // same version
+              if (random.nextInt(2) == 0) {
+                val inc = if (ifTestSkipBatch == 1) {
+                  random.nextInt(3)
+                } else {
+                  1
+                }
+                if (inc > 1) {
+                  // Create changelog files in the gap
+                  for (j <- 1 to inc - 1) {
+                    db2.load(curVer + j)
+                    db2.put("foo", "bar")
+                    db2.commit()
+                  }
+                }
+                curVer = curVer + inc
+              }
+            }
+          }
         }
       }
     }
