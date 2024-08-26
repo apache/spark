@@ -428,7 +428,6 @@ class BoxPlotBase:
         # Here we normalize the values by subtracting the minimum value from
         # each, and use absolute values.
         order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
-
         fliers = (
             fliers_df.select(F.col("`{}`".format(colname)))
             .orderBy(order_col)
