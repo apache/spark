@@ -873,10 +873,12 @@ class SparkSession private(
   def clearTags(): Unit = userDefinedToRealTagsMap.clear()
 
   /**
-   * Interrupt all operations of this session that are currently running.
+   * Request to interrupt all currently running operations of this session.
    *
-   * @return
-   *   sequence of Job IDs of interrupted operations.
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+
+   * @return Sequence of job IDs requested to be interrupted.
+
    * @since 4.0.0
    */
   def interruptAll(): Seq[String] = {
@@ -885,12 +887,12 @@ class SparkSession private(
   }
 
   /**
-   * Interrupt all operations of this session with the given operation tag.
+   * Request to interrupt all currently running operations of this session with the given operation
+   * tag.
    *
-   * @return
-   *   sequence of Job IDs of interrupted operations.
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
-   * @since 4.0.0
+   * @return Sequence of job IDs requested to be interrupted.
    */
   def interruptTag(tag: String): Seq[String] = {
     val realTag = userDefinedToRealTagsMap.get(tag)
@@ -901,10 +903,12 @@ class SparkSession private(
   }
 
   /**
-   * Interrupt an operation of this session with the given Job ID.
+   * Request to interrupt an operation of this session, given its job ID.
    *
-   * @return
-   *   sequence of Job IDs of interrupted operations.
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return The job ID requested to be interrupted, as a single-element sequence, or an empty
+   *    sequence if the operation is not started by this session.
    *
    * @since 4.0.0
    */
@@ -917,7 +921,7 @@ class SparkSession private(
           shouldCancelJob = _.getSparkSessionUUID.contains(sessionUUID))
         ThreadUtils.awaitResult(cancelledIds, 60.seconds).map(_.toString).toSeq
       case None =>
-        throw new IllegalArgumentException("jobId must be a number.")
+        throw new IllegalArgumentException("jobId must be a number in string form.")
     }
   }
 
