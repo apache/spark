@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expressi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
-import org.apache.spark.sql.internal.TypedAggUtils
+import org.apache.spark.sql.internal.TypedAggUtils.{aggKeyColumn, withInputType}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
 /**
@@ -49,6 +49,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
+  import queryExecution.sparkSession._
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -969,9 +970,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(c => encoderFor(c.encoder))
-    val namedColumns =
-      columns.map(_.withInputType(vExprEnc, dataAttributes).named)
-    val keyColumn = TypedAggUtils.aggKeyColumn(kExprEnc, groupingAttributes)
+    val namedColumns = columns.map(c => withInputType(c.named, vExprEnc, dataAttributes))
+    val keyColumn = aggKeyColumn(kExprEnc, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)
 

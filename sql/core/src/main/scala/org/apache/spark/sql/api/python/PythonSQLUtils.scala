@@ -32,12 +32,13 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -140,40 +141,37 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+  def castTimestampNTZToLong(c: Column): Column =
+    Column.internalFn("timestamp_ntz_to_long", c)
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(new EWM(e.expr, alpha, ignoreNA))
+    Column.internalFn("ewm", e, lit(alpha), lit(ignoreNA))
 
-  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
+  def nullIndex(e: Column): Column = Column.internalFn("null_index", e)
 
-  def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))
-  }
+  def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
-  def pandasStddev(e: Column, ddof: Int): Column = {
-    Column(PandasStddev(e.expr, ddof).toAggregateExpression(false))
-  }
+  def pandasProduct(e: Column, ignoreNA: Boolean): Column =
+    Column.internalFn("pandas_product", e, lit(ignoreNA))
 
-  def pandasVariance(e: Column, ddof: Int): Column = {
-    Column(PandasVariance(e.expr, ddof).toAggregateExpression(false))
-  }
+  def pandasStddev(e: Column, ddof: Int): Column =
+    Column.internalFn("pandas_stddev", e, lit(ddof))
 
-  def pandasSkewness(e: Column): Column = {
-    Column(PandasSkewness(e.expr).toAggregateExpression(false))
-  }
+  def pandasVariance(e: Column, ddof: Int): Column =
+    Column.internalFn("pandas_var", e, lit(ddof))
 
-  def pandasKurtosis(e: Column): Column = {
-    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
-  }
+  def pandasSkewness(e: Column): Column =
+    Column.internalFn("pandas_skew", e)
 
-  def pandasMode(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
-  }
+  def pandasKurtosis(e: Column): Column =
+    Column.internalFn("pandas_kurt", e)
 
-  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
-    Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
-  }
+  def pandasMode(e: Column, ignoreNA: Boolean): Column =
+    Column.internalFn("pandas_mode", e, lit(ignoreNA))
+
+  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
+    Column.internalFn("pandas_covar", col1, col2, lit(ddof))
 
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
@@ -184,13 +182,12 @@ private[sql] object PythonSQLUtils extends Logging {
     Column(internal.LambdaFunction(function.node, arguments))
   }
 
-  def namedArgumentExpression(name: String, e: Column): Column =
-    Column(ExpressionColumnNode(NamedArgumentExpression(name, e.expr)))
+  def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
 
   def distributedIndex(): Column = {
     val expr = MonotonicallyIncreasingID()
     expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    Column(ExpressionColumnNode(expr))
+    expr
   }
 
   @scala.annotation.varargs

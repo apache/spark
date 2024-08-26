@@ -48,13 +48,14 @@ class SQLStringFormatter(string.Formatter):
         from py4j.java_gateway import is_instance_of
 
         from pyspark import SparkContext
-        from pyspark.sql import Column, DataFrame
+        from pyspark.sql import Column, DataFrame, SparkSession
 
         if isinstance(val, Column):
-            assert SparkContext._gateway is not None
+            jsession = SparkSession.active()._jsparkSession
+            jexpr = jsession.expression(val._jc)
 
+            assert SparkContext._gateway is not None
             gw = SparkContext._gateway
-            jexpr = val._jc.expr()
             if is_instance_of(
                 gw, jexpr, "org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute"
             ) or is_instance_of(

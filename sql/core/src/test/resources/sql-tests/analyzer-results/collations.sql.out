@@ -389,3 +389,107 @@ select 'I' collate tr_ci = 'ı'
 -- !query analysis
 Project [(collate(I, tr_ci) = cast(ı as string collate tr_CI)) AS (collate(I, tr_ci) = ı)#x]
 +- OneRowRelation
+
+
+-- !query
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
+
+
+-- !query
+insert into t4 values('a:1,b:2,c:3', ',', ':')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t4], Append, `spark_catalog`.`default`.`t4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t4), [text, pairDelim, keyValueDelim]
++- Project [cast(col1#x as string) AS text#x, cast(col2#x as string collate UTF8_LCASE) AS pairDelim#x, cast(col3#x as string) AS keyValueDelim#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select str_to_map(text, pairDelim, keyValueDelim) from t4
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4
+-- !query analysis
+Project [str_to_map(collate(text#x, utf8_binary), collate(pairDelim#x, utf8_binary), collate(keyValueDelim#x, utf8_binary)) AS str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), collate(keyValueDelim, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t4
+   +- Relation spark_catalog.default.t4[text#x,pairDelim#x,keyValueDelim#x] parquet
+
+
+-- !query
+drop table t4
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4
+
+
+-- !query
+create table t5(str string collate utf8_binary, delimiter string collate utf8_lcase, partNum int) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t5`, false
+
+
+-- !query
+insert into t5 values('11AB12AB13', 'AB', 2)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [str, delimiter, partNum]
++- Project [cast(col1#x as string) AS str#x, cast(col2#x as string collate UTF8_LCASE) AS delimiter#x, cast(col3#x as int) AS partNum#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select split_part(str, delimiter, partNum) from t5
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select split_part(str collate utf8_binary, delimiter collate utf8_lcase, partNum) from t5
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select split_part(str collate utf8_binary, delimiter collate utf8_binary, partNum) from t5
+-- !query analysis
+Project [split_part(collate(str#x, utf8_binary), collate(delimiter#x, utf8_binary), partNum#x) AS split_part(collate(str, utf8_binary), collate(delimiter, utf8_binary), partNum)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[str#x,delimiter#x,partNum#x] parquet
+
+
+-- !query
+drop table t5
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t5

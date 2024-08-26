@@ -12,22 +12,17 @@
       }
     },
     "expressions": [{
-      "alias": {
-        "expr": {
-          "unresolvedFunction": {
-            "functionName": "session_window",
-            "arguments": [{
-              "unresolvedAttribute": {
-                "unparsedIdentifier": "t"
-              }
-            }, {
-              "literal": {
-                "string": "10 minutes"
-              }
-            }]
+      "unresolvedFunction": {
+        "functionName": "session_window",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "t"
           }
-        },
-        "name": ["session_window"]
+        }, {
+          "literal": {
+            "string": "10 minutes"
+          }
+        }]
       }
     }]
   }
