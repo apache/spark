@@ -26,6 +26,10 @@ Note that this migration guide describes the items specific to SparkR.
 Many items of SQL migration can be applied when migrating SparkR to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
+## Upgrading from SparkR 3.5 to 4.0
+
+ - In Spark 4.0, SparkR is deprecated and will be removed in a future version.
+
 ## Upgrading from SparkR 3.1 to 3.2
 
  - Previously, SparkR automatically downloaded and installed the Spark distribution in user's cache directory to complete SparkR installation when SparkR runs in a plain R shell or Rscript, and the Spark distribution cannot be found. Now, it asks if users want to download and install or not. To restore the previous behavior, set `SPARKR_ASK_INSTALLATION` environment variable to `FALSE`.

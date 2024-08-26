@@ -49,6 +49,34 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       messageParameters = Map("filePath" -> filePath),
       cause = Option(cause))
   }
+
+  def usingUntypedScalaUDFError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNTYPED_SCALA_UDF",
+      messageParameters = Map.empty)
+  }
+
+  def invalidBoundaryStartError(start: Long): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_BOUNDARY.START",
+      messageParameters = Map(
+        "boundary" -> toSQLId("start"),
+        "invalidValue" -> toSQLValue(start),
+        "longMinValue" -> toSQLValue(Long.MinValue),
+        "intMinValue" -> toSQLValue(Int.MinValue),
+        "intMaxValue" -> toSQLValue(Int.MaxValue)))
+  }
+
+  def invalidBoundaryEndError(end: Long): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_BOUNDARY.END",
+      messageParameters = Map(
+        "boundary" -> toSQLId("end"),
+        "invalidValue" -> toSQLValue(end),
+        "longMaxValue" -> toSQLValue(Long.MaxValue),
+        "intMinValue" -> toSQLValue(Int.MinValue),
+        "intMaxValue" -> toSQLValue(Int.MaxValue)))
+  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors

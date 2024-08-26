@@ -213,7 +213,8 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
-  extends Serializable {
+  extends api.Dataset[T] with Serializable {
+  override type DS[_] = Dataset[_]
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {

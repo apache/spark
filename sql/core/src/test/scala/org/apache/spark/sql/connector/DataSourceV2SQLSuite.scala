@@ -3770,6 +3770,19 @@ class DataSourceV2SQLSuiteV1Filter
     checkWriteOperations("read_only_cat")
   }
 
+  test("StagingTableCatalog without atomic support") {
+    withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
+      withTable("fakeStagedCat.t") {
+        sql("CREATE TABLE fakeStagedCat.t AS SELECT 1 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1))
+        sql("REPLACE TABLE fakeStagedCat.t AS SELECT 2 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(2))
+        sql("CREATE OR REPLACE TABLE fakeStagedCat.t AS SELECT 1 c1, 2 c2")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1, 2))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3853,5 +3866,64 @@ class ReadOnlyCatalog extends InMemoryCatalog {
       writePrivileges: util.Set[TableWritePrivilege]): Table = {
     throw new RuntimeException("cannot write with " +
       writePrivileges.asScala.toSeq.map(_.toString).sorted.mkString(","))
+  }
+}
+
+class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
+  override def stageCreate(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    throw new RuntimeException("shouldn't be called")
+  }
+
+  override def stageCreate(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    throw new RuntimeException("shouldn't be called")
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.dropTable(ident)
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    throw new RuntimeException("shouldn't be called")
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    try {
+      super.dropTable(ident)
+    } catch {
+      case _: Throwable =>
+    }
+    super.createTable(ident, columns, partitions, properties)
+    null
   }
 }

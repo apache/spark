@@ -12,13 +12,14 @@
       }
     },
     "expressions": [{
-      "callFunction": {
+      "unresolvedFunction": {
         "functionName": "lower",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }
-        }]
+        }],
+        "isUserDefinedFunction": true
       }
     }]
   }
