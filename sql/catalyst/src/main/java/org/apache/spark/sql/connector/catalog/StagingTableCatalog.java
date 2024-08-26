@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -61,11 +62,13 @@ public interface StagingTableCatalog extends TableCatalog {
    * {@link #stageCreate(Identifier, Column[], Transform[], Map)} instead.
    */
   @Deprecated(since = "3.4.0")
-  StagedTable stageCreate(
+  default StagedTable stageCreate(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("stageCreate");
+  }
 
   /**
    * Stage the creation of a table, preparing it to be committed into the metastore.
@@ -101,11 +104,13 @@ public interface StagingTableCatalog extends TableCatalog {
    * This is deprecated, please override
    * {@link #stageReplace(Identifier, StructType, Transform[], Map)} instead.
    */
-  StagedTable stageReplace(
+  default StagedTable stageReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException;
+      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("stageReplace");
+  }
 
   /**
    * Stage the replacement of a table, preparing it to be committed into the metastore when the
@@ -151,11 +156,13 @@ public interface StagingTableCatalog extends TableCatalog {
    * This is deprecated, please override
    * {@link #stageCreateOrReplace(Identifier, Column[], Transform[], Map)} instead.
    */
-  StagedTable stageCreateOrReplace(
+  default StagedTable stageCreateOrReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException;
+      Map<String, String> properties) throws NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("stageCreateOrReplace");
+  }
 
   /**
    * Stage the creation or replacement of a table, preparing it to be committed into the metastore

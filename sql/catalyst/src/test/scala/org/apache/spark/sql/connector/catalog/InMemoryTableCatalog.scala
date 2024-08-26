@@ -87,14 +87,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   override def createTable(
       ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    throw QueryCompilationErrors.createTableDeprecatedError()
-  }
-
-  override def createTable(
-      ident: Identifier,
       columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
