@@ -292,7 +292,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
 
         if showfliers:
-            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
+            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, *col_fences)
         else:
             fliers = []
 
