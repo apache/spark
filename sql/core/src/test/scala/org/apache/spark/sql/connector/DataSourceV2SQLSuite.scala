@@ -3620,7 +3620,7 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+      properties: jutil.Map[String, String]): StagedTable = {
     throw new RuntimeException("shouldn't be called")
   }
 
@@ -3628,7 +3628,7 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
       ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+      properties: jutil.Map[String, String]): StagedTable = {
     super.createTable(ident, columns, partitions, properties)
     null
   }
@@ -3637,7 +3637,7 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+      properties: jutil.Map[String, String]): StagedTable = {
     throw new RuntimeException("shouldn't be called")
   }
 
@@ -3645,7 +3645,7 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
       ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+      properties: jutil.Map[String, String]): StagedTable = {
     super.dropTable(ident)
     super.createTable(ident, columns, partitions, properties)
     null
@@ -3655,7 +3655,7 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+      properties: jutil.Map[String, String]): StagedTable = {
     throw new RuntimeException("shouldn't be called")
   }
 
@@ -3663,7 +3663,7 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
       ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+      properties: jutil.Map[String, String]): StagedTable = {
     try {
       super.dropTable(ident)
     } catch {
