@@ -531,10 +531,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
 
-    val resolved = q.map { p =>
-      resolveDataFrameColumnRecursively(u, planId, isMetadataAccess, p, 0)
-    }
-    val matched = resolved.exists(_._2)
+    val (resolved, matched) = resolveDataFrameColumnByPlanId(
+      u, planId, isMetadataAccess, q, 0)
     if (!matched) {
       // Can not find the target plan node with plan id, e.g.
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
@@ -542,7 +540,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
+    resolved.map(_._1)
+  }
 
+  private def resolveDataFrameColumnByPlanId(
+      u: UnresolvedAttribute,
+      id: Long,
+      isMetadataAccess: Boolean,
+      q: Seq[LogicalPlan],
+      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
+    val resolved = q.map(resolveDataFrameColumnRecursively(
+      u, id, isMetadataAccess, _, currentDepth))
     val merged = resolved
       .flatMap(_._1)
       .sortBy(_._2) // sort by depth
@@ -551,7 +559,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case (Some((r1, 0)), (r2, d2)) if d2 != 0 => Some((r1, 0))
         case _ => throw QueryCompilationErrors.ambiguousColumnReferences(u)
       }
-    merged.map(_._1)
+    val matched = resolved.exists(_._2)
+    (merged, matched)
   }
 
   private def resolveDataFrameColumnRecursively(
@@ -559,9 +568,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan,
-      currentDepth: Int): (Seq[(NamedExpression, Int)], Boolean) = {
+      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      val r = try {
+      val resolved = try {
         if (!isMetadataAccess) {
           p.resolve(u.nameParts, conf.resolver)
         } else if (u.nameParts.size == 1) {
@@ -574,14 +583,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           logDebug(s"Fail to resolve $u with $p due to $e")
           None
       }
-      (r.toSeq.map(r0 => (r0, currentDepth)), true)
+      (resolved.map(r => (r, currentDepth)), true)
     } else {
-      p.children.foldLeft((Seq.empty[(NamedExpression, Int)], false)) {
-        case ((r1, m1), c) =>
-          val (r2, m2) = resolveDataFrameColumnRecursively(u, id,
-            isMetadataAccess, c, currentDepth + 1)
-          (r1 ++ r2, m1 || m2)
+      val children = p match {
+        // treat Union node as the leaf node
+        case _: Union => Seq.empty[LogicalPlan]
+        case _ => p.children
       }
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, children, currentDepth + 1)
     }
 
     // In self join case like:
