@@ -128,12 +128,14 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
   testQuietly("foreach with error") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
+
+      val funcEx = new RuntimeException("ForeachSinkSuite error")
       val query = input.toDS().repartition(1).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
             super.process(value)
-            throw new RuntimeException("ForeachSinkSuite error")
+            throw funcEx
           }
         }).start()
       input.addData(1, 2, 3, 4)
@@ -147,7 +149,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
 
       // verify that we classified the exception
       assert(e.getMessage.contains(errClass))
-      assert(e.getCause.getMessage.contains("ForeachSinkSuite error"))
+      assert(e.cause.asInstanceOf[RuntimeException].getMessage == funcEx.getMessage)
+
       assert(query.isActive === false)
 
       val allEvents = ForeachWriterSuite.allEvents()
@@ -162,12 +165,13 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       // 'close' shouldn't be called with abort message if close with error has been called
       assert(allEvents(0).size == 3)
 
+      val sparkEx = ExecutorDeadException("network error")
       val e2 = intercept[StreamingQueryException] {
         val query2 = input.toDS().repartition(1).writeStream
           .foreach(new TestForeachWriter() {
             override def process(value: Int): Unit = {
               super.process(value)
-              throw ExecutorDeadException("network error")
+              throw sparkEx
             }
           }).start()
         query2.processAllAvailable()
@@ -175,7 +179,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
 
       // we didn't wrap the spark exception
       assert(!e2.getMessage.contains(errClass))
-      assert(e2.getCause.getMessage.contains("network error"))
+      assert(e2.getCause.getCause.asInstanceOf[ExecutorDeadException].getMessage
+        == sparkEx.getMessage)
     }
   }
 
