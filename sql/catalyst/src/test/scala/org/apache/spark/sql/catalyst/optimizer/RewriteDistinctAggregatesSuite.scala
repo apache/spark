@@ -110,7 +110,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
-  test("SPARK-49261: Don't patch literals in aggregate expressions with group-by expressions") {
+  test("SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
     val relation = testRelation2
       .select(Literal(6).as("gb"), $"a", $"b", $"c", $"d")
     val input = relation

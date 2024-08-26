@@ -2491,7 +2491,7 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-  test("SPARK-49261: Don't patch literals in aggregate expressions with group-by expressions") {
+  test("SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
     val data = Seq((1, 1.001d, 2), (2, 3.001d, 4), (2, 3.001, 4)).toDF("a", "b", "c")
     withTempView("v1") {
       data.createOrReplaceTempView("v1")
