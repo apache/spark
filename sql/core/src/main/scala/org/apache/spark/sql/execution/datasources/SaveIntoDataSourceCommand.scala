@@ -23,8 +23,9 @@ import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
-import org.apache.spark.sql.sources.CreatableRelationProvider
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 
 /**
  * Saves the results of `query` in to a data source.
@@ -44,8 +45,23 @@ case class SaveIntoDataSourceCommand(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val relation = dataSource.createRelation(
-      sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+    var relation: BaseRelation = null
+
+    try {
+      relation = dataSource.createRelation(
+        sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+    } catch {
+      case e @ (_: NullPointerException | _: MatchError | _: ArrayIndexOutOfBoundsException |
+          _: IllegalArgumentException | _: ClassCastException | _: IllegalStateException) =>
+        // These are some of the exceptions thrown by the data source API. We catch these
+        // exceptions here and rethrow QueryCompilationErrors.externalDataSourceException to
+        // provide a more friendly error message for the user. This list is not exhaustive.
+        throw QueryCompilationErrors.externalDataSourceException(Some(e))
+      case _: Throwable =>
+        // Skip other exceptions for now, as they may be handled by some other part of the code.
+    }
+
+    assert(relation != null)
 
     try {
       val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None, false)
