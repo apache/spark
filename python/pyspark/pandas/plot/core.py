@@ -429,14 +429,6 @@ class BoxPlotBase:
         # each, and use absolute values.
         order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
 
-        print()
-        print()
-        print()
-        print(f"min_val = {min_val.item()}")
-        print()
-        print()
-        print()
-
         fliers = (
             fliers_df.select(F.col("`{}`".format(colname)))
             .orderBy(order_col)
@@ -445,31 +437,16 @@ class BoxPlotBase:
             .values
         )
 
-        print()
-        print()
-        print()
-        print(fliers)
-        print()
-        print()
-        print()
-
         return fliers
 
     @staticmethod
     def get_multicol_fliers(colnames, multicol_outliers, multicol_whiskers):
-        print()
-        print()
-        print(f"multicol_whiskers = {multicol_whiskers}")
-        print()
-        print()
-
         scols = []
         extract_colnames = []
         for i, colname in enumerate(colnames):
             formated_colname = "`{}`".format(colname)
             outlier_colname = "__{}_outlier".format(colname)
             min_val = multicol_whiskers[colname]["min"]
-            print(f"min_val = {min_val}")
             pair_col = F.struct(
                 F.abs(F.col(formated_colname) - min_val).alias("ord"),
                 F.col(formated_colname).alias("val"),
@@ -487,25 +464,9 @@ class BoxPlotBase:
 
         results = multicol_outliers.select(scols).select(extract_colnames).first()
 
-        print()
-        print()
-        print()
-        print(results)
-        print()
-        print()
-        print()
-
         fliers = {}
         for i, colname in enumerate(colnames):
             fliers[colname] = results[i]
-
-        print()
-        print()
-        print()
-        print(fliers)
-        print()
-        print()
-        print()
 
         return fliers
 
