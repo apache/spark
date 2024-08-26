@@ -1702,7 +1702,9 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS <: api.Dataset[_]](df: DS): DS = df.hint("broadcast").asInstanceOf[DS]
+  def broadcast[T](df: api.Dataset[T]): df.type = {
+    df.hint("broadcast").asInstanceOf[df.type]
+  }
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
