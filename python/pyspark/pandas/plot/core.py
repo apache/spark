@@ -448,7 +448,7 @@ class BoxPlotBase:
             outlier_colname = "__{}_outlier".format(colname)
             min_val = multicol_whiskers[colname]["min"]
             pair_col = F.struct(
-                F.abs(F.col(formated_colname) - min_val).alias("ord"),
+                F.abs(F.col(formated_colname) - F.lit(min_val)).alias("ord"),
                 F.col(formated_colname).alias("val"),
             )
             scols.append(
