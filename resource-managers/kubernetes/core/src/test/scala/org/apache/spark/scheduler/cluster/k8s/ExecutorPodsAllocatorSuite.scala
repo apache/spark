@@ -853,7 +853,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     pvc2.getMetadata.setCreationTimestamp(now.toString)
 
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc1, pvc2).asJava)
-    podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq("pvc-1"))
+    assert((podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq("pvc-1"))).size == 1)
   }
 
   test("SPARK-41410: Support waitToReusePersistentVolumeClaims") {
