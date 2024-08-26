@@ -2937,6 +2937,26 @@ class PlanGenerationTestSuite
     fn.try_aes_decrypt(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("zstd_compress") {
+    fn.zstd_compress(fn.col("g"))
+  }
+
+  functionTest("zstd_compress with level") {
+    fn.zstd_compress(fn.col("g"), fn.lit(5))
+  }
+
+  functionTest("zstd_compress with level streaming_mode") {
+    fn.zstd_compress(fn.col("g"), fn.lit(5), fn.lit(true))
+  }
+
+  functionTest("zstd_decompress") {
+    fn.zstd_decompress(fn.col("g"))
+  }
+
+  functionTest("try_zstd_decompress") {
+    fn.try_zstd_decompress(fn.col("g"))
+  }
+
   functionTest("sha") {
     fn.sha(fn.col("g"))
   }

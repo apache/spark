@@ -463,7 +463,11 @@ object FunctionRegistry {
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
+<<<<<<<
     expression[TryUrlDecode]("try_url_decode"),
+=======
+    expression[TryZstdDecompress]("try_zstd_decompress"),
+>>>>>>>
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -769,6 +773,8 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ZstdCompress]("zstd_compress"),
+    expression[ZstdDecompress]("zstd_decompress"),
 
     // grouping sets
     expression[Grouping]("grouping"),
