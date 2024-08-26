@@ -182,6 +182,9 @@ abstract class AbstractCommandBuilder {
           if (project.equals("sql/connect/server") || project.equals("sql/connect/common")) {
             continue;
           }
+          if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
+            continue;
+          }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
         }
