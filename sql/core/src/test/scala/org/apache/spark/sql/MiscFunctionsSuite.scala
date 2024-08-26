@@ -196,32 +196,6 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.select(try_aes_decrypt(unhex(col("input")), col("key"))))
   }
 
-  test("zstd_compress") {
-    val df = Seq("Spark" * 10).toDF("a")
-    checkAnswer(df.selectExpr("zstd_compress(a)"), df.select(zstd_compress(col("a"))))
-    checkAnswer(df.selectExpr("zstd_compress(a, 5)"), df.select(zstd_compress(col("a"), lit(5))))
-    checkAnswer(
-      df.selectExpr("zstd_compress(a, 5, true)"),
-      df.select(zstd_compress(col("a"), lit(5), lit(true)))
-    )
-  }
-
-  test("zstd_decompress") {
-    val df = Seq("Spark" * 10).toDF("a")
-    checkAnswer(
-      df.selectExpr("zstd_decompress(zstd_compress(a))"),
-      df.select(zstd_decompress(zstd_compress(col("a"))))
-    )
-  }
-
-  test("try_zstd_decompress") {
-    val df = Seq("Spark" * 10).toDF("a")
-    checkAnswer(
-      df.selectExpr("try_zstd_decompress(zstd_compress(a))"),
-      df.select(try_zstd_decompress(zstd_compress(col("a"))))
-    )
-  }
-
   test("sha") {
     val df = Seq("Spark").toDF("a")
     checkAnswer(df.selectExpr("sha(a)"), df.select(sha(col("a"))))

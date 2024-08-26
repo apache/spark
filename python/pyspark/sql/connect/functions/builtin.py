@@ -3963,37 +3963,6 @@ def try_aes_decrypt(
 try_aes_decrypt.__doc__ = pysparkfuncs.try_aes_decrypt.__doc__
 
 
-def zstd_compress(
-    input: "ColumnOrName",
-    level: Optional["ColumnOrName"] = None,
-    streaming_mode: Optional["ColumnOrName"] = None,
-) -> Column:
-    _level = lit(3) if level is None else level
-    _streaming_mode = lit(False) if streaming_mode is None else streaming_mode
-    return _invoke_function_over_columns("zstd_compress", input, _level, _streaming_mode)
-
-
-zstd_compress.__doc__ = pysparkfuncs.zstd_compress.__doc__
-
-
-def zstd_decompress(
-    input: "ColumnOrName",
-) -> Column:
-    return _invoke_function_over_columns("zstd_decompress", input)
-
-
-zstd_decompress.__doc__ = pysparkfuncs.zstd_decompress.__doc__
-
-
-def try_zstd_decompress(
-    input: "ColumnOrName",
-) -> Column:
-    return _invoke_function_over_columns("try_zstd_decompress", input)
-
-
-try_zstd_decompress.__doc__ = pysparkfuncs.try_zstd_decompress.__doc__
-
-
 def sha(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sha", col)
 

@@ -2381,16 +2381,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId("aes_encrypt")))
   }
 
-  def zstdDecompressError(): RuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE.ZSTD_DECOMPRESS_INPUT",
-      messageParameters = Map(
-        "parameter" -> toSQLId("input"),
-        "functionName" -> toSQLId("zstd_decompress")
-      )
-    )
-  }
-
   def hiveTableWithAnsiIntervalsError(
       table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
