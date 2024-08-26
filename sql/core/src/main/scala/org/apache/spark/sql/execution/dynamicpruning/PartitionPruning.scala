@@ -225,9 +225,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
-      case j@Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
-      case j@Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
-      case j@Join(left, right, joinType, Some(condition), hint) =>
+      case j @ Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
+      case j @ Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
+      case j @ Join(left, right, joinType, Some(condition), hint) =>
         var newLeft = left
         var newRight = right
 
@@ -242,13 +242,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           def fromLeftRight(x: Expression, y: Expression) =
             !x.references.isEmpty && x.references.subsetOf(left.outputSet) &&
               !y.references.isEmpty && y.references.subsetOf(right.outputSet)
-
           fromLeftRight(x, y) || fromLeftRight(y, x)
         }
 
         splitConjunctivePredicates(condition).foreach {
           case EqualTo(a: Expression, b: Expression)
-            if fromDifferentSides(a, b) =>
+              if fromDifferentSides(a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&
               b.references.subsetOf(right.outputSet)) {
               a -> b
