@@ -64,7 +64,7 @@ private[scheduler] case class JobCancelled(
     jobId: Int,
     reason: Option[String],
     shouldCancelJob: Option[ActiveJob => Boolean],
-    cancelledJobs: Option[Promise[Set[Int]]])
+    jobsToBeCancelled: Option[Promise[Set[Int]]])
   extends DAGSchedulerEvent
 
 private[scheduler] case class JobGroupCancelled(
@@ -77,11 +77,11 @@ private[scheduler] case class JobTagCancelled(
     tagName: String,
     reason: Option[String],
     shouldCancelJob: Option[ActiveJob => Boolean],
-    cancelledJobs: Option[Promise[Set[Int]]]) extends DAGSchedulerEvent
+    jobsToBeCancelled: Option[Promise[Set[Int]]]) extends DAGSchedulerEvent
 
 private[scheduler] case class AllJobsCancelled(
     shouldCancelJob: Option[ActiveJob => Boolean],
-    cancelledJobs: Option[Promise[Set[Int]]]) extends DAGSchedulerEvent
+    jobsToBeCancelled: Option[Promise[Set[Int]]]) extends DAGSchedulerEvent
 
 private[scheduler]
 case class BeginEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent

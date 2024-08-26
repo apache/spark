@@ -2726,7 +2726,7 @@ class SparkContext(config: SparkConf) extends Logging {
       tag,
       Option(reason),
       shouldCancelJob = None,
-      cancelledJobs = None)
+      jobsToBeCancelled = None)
   }
 
   /**
@@ -2743,7 +2743,7 @@ class SparkContext(config: SparkConf) extends Logging {
       tag,
       reason = None,
       shouldCancelJob = None,
-      cancelledJobs = None)
+      jobsToBeCancelled = None)
   }
 
   /**
@@ -2764,7 +2764,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Cancel all jobs that have been scheduled or are running.  */
   def cancelAllJobs(): Unit = {
     assertNotStopped()
-    dagScheduler.cancelAllJobs(shouldCancelJob = None, cancelledJobs = None)
+    dagScheduler.cancelAllJobs(shouldCancelJob = None, jobsToBeCancelled = None)
   }
 
   /**
@@ -2794,7 +2794,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int, reason: String): Unit = {
-    dagScheduler.cancelJob(jobId, Option(reason), shouldCancelJob = None, cancelledJobs = None)
+    dagScheduler.cancelJob(jobId, Option(reason), shouldCancelJob = None, jobsToBeCancelled = None)
   }
 
   /**
@@ -2804,7 +2804,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int): Unit = {
-    dagScheduler.cancelJob(jobId, reason = None, shouldCancelJob = None, cancelledJobs = None)
+    dagScheduler.cancelJob(jobId, reason = None, shouldCancelJob = None, jobsToBeCancelled = None)
   }
 
   /**

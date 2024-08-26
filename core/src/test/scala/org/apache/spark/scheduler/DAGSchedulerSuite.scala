@@ -534,7 +534,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   /** Sends JobCancelled to the DAG scheduler. */
   private def cancel(jobId: Int): Unit = {
-    runEvent(JobCancelled(jobId, reason = None, shouldCancelJob = None, cancelledJobs = None))
+    runEvent(JobCancelled(jobId, reason = None, shouldCancelJob = None, jobsToBeCancelled = None))
   }
 
   /** Make some tasks in task set success and check results. */
