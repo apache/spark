@@ -1222,6 +1222,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
+<<<<<<< HEAD
     def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
@@ -1237,6 +1238,17 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             jdf = self._jdf.dropDuplicates(self._jseq(item))
+=======
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            jdf = self._jdf.dropDuplicates()
+>>>>>>> parent of 560c08332b3 ([SPARK-48482][PYTHON] dropDuplicates and dropDuplicatesWIthinWatermark should accept variable length args)
         else:
             for c in subset:  # type: ignore[assignment]
                 if not isinstance(c, str):
@@ -1247,19 +1259,15 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
-    drop_duplicates = dropDuplicates
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
 
-    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
-        if len(subset) > 1:
-            assert all(isinstance(c, str) for c in subset)
-
-        if not subset:
+        if subset is None:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset[0]))
         else:
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
@@ -1804,6 +1812,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         return self.groupBy(*cols)
+
+    def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
+        return self.dropDuplicates(subset)
 
     def writeTo(self, table: str) -> DataFrameWriterV2:
         return DataFrameWriterV2(self, table)
