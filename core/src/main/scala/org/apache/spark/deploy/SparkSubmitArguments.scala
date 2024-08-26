@@ -50,6 +50,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var executorCores: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
+  private var loadSparkDefaults: Boolean = false
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -85,26 +86,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = false // used internally
 
-  /** Default properties present in the currently defined defaults file. */
-  lazy val defaultSparkProperties: HashMap[String, String] = {
-    val defaultProperties = new HashMap[String, String]()
-    if (verbose) {
-      logInfo(log"Using properties file: ${MDC(PATH, propertiesFile)}")
-    }
-    Option(propertiesFile).foreach { filename =>
-      val properties = Utils.getPropertiesFromFile(filename)
-      properties.foreach { case (k, v) =>
-        defaultProperties(k) = v
-      }
-      // Property files may contain sensitive information, so redact before printing
-      if (verbose) {
-        Utils.redact(properties).foreach { case (k, v) =>
-          logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
-        }
-      }
-    }
-    defaultProperties
-  }
+  override protected def logName: String = classOf[SparkSubmitArguments].getName
 
   // Set parameters from command line arguments
   parse(args.asJava)
@@ -121,17 +103,43 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   validateArguments()
 
   /**
+   * Load properties from the file with the given path into `sparkProperties`.
+   * No-op if the file path is null
+   */
+  private def loadPropertiesFromFile(filePath: String): Unit = {
+    if (filePath != null) {
+      if (verbose) {
+        logInfo(log"Using properties file: ${MDC(PATH, filePath)}")
+      }
+      val properties = Utils.getPropertiesFromFile(filePath)
+      properties.foreach { case (k, v) =>
+        if (!sparkProperties.contains(k)) {
+          sparkProperties(k) = v
+        }
+      }
+      // Property files may contain sensitive information, so redact before printing
+      if (verbose) {
+        Utils.redact(properties).foreach { case (k, v) =>
+          logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
+        }
+      }
+    }
+  }
+
+  /**
    * Merge values from the default properties file with those specified through --conf.
    * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
   private def mergeDefaultSparkProperties(): Unit = {
-    // Use common defaults file, if not specified by user
-    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
-    // Honor --conf before the defaults file
-    defaultSparkProperties.foreach { case (k, v) =>
-      if (!sparkProperties.contains(k)) {
-        sparkProperties(k) = v
-      }
+    // Honor --conf before the specified properties file and defaults file
+    loadPropertiesFromFile(propertiesFile)
+
+    // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
+    // and --conf list when:
+    //   - no input properties file is specified
+    //   - input properties file is specified, but `--load-spark-defaults` flag is set
+    if (propertiesFile == null || loadSparkDefaults) {
+      loadPropertiesFromFile(Utils.getDefaultPropertiesFile(env))
     }
   }
 
@@ -389,6 +397,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case PROPERTIES_FILE =>
         propertiesFile = value
 
+      case LOAD_SPARK_DEFAULTS =>
+        loadSparkDefaults = true
+
       case KILL_SUBMISSION =>
         submissionToKill = value
         if (action != null) {
@@ -532,6 +543,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --conf, -c PROP=VALUE       Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
+        |  --load-spark-defaults       Whether to load properties from conf/spark-defaults.conf,
+        |                              even if --properties-file is specified. Configurations
+        |                              specified in --properties-file will take precedence over
+        |                              those in conf/spark-defaults.conf.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).
         |  --driver-java-options       Extra Java options to pass to the driver.
@@ -588,7 +603,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     )
 
     if (SparkSubmit.isSqlShell(mainClass)) {
-      logInfo(log"CLI options:\n${MDC(SHELL_OPTIONS, getSqlShellOptions())}")
+      logInfo("CLI options:")
+      logInfo(getSqlShellOptions())
     }
 
     throw SparkUserAppException(exitCode)

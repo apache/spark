@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
-import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
+import java.net.{ConnectException, HttpURLConnection, SocketException, URI, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
@@ -79,7 +79,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
    * it to the user. Otherwise, report the error message provided by the server.
    */
   def createSubmission(request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request to launch an application in $master.")
+    logInfo(log"Submitting a request to launch an application in ${MDC(MASTER_URL, master)}.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !handled) {
@@ -109,7 +109,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Request that the server kill the specified submission. */
   def killSubmission(submissionId: String): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request to kill submission $submissionId in $master.")
+    logInfo(log"Submitting a request to kill submission " +
+      log"${MDC(SUBMISSION_ID, submissionId)} in " +
+      log"${MDC(MASTER_URL, master)}.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !handled) {
@@ -138,7 +140,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Request that the server kill all submissions. */
   def killAllSubmissions(): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request to kill all submissions in $master.")
+    logInfo(log"Submitting a request to kill all submissions in ${MDC(MASTER_URL, master)}.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !handled) {
@@ -167,7 +169,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Request that the server clears all submissions and applications. */
   def clear(): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request to clear $master.")
+    logInfo(log"Submitting a request to clear ${MDC(MASTER_URL, master)}.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !handled) {
@@ -196,7 +198,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Check the readiness of Master. */
   def readyz(): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request to check the status of $master.")
+    logInfo(log"Submitting a request to check the status of ${MDC(MASTER_URL, master)}.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = new ErrorResponse
     for (m <- masters if !handled) {
@@ -227,7 +229,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   def requestSubmissionStatus(
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
+      logInfo(log"Submitting a request for the status of submission " +
+      log"${MDC(SUBMISSION_ID, submissionId)} in " +
+      log"${MDC(MASTER_URL, master)}.")
 
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
@@ -379,37 +383,37 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   /** Return the REST URL for creating a new submission. */
   private def getSubmitUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/create")
+    new URI(s"$baseUrl/create").toURL
   }
 
   /** Return the REST URL for killing an existing submission. */
   private def getKillUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/kill/$submissionId")
+    new URI(s"$baseUrl/kill/$submissionId").toURL
   }
 
   /** Return the REST URL for killing all submissions. */
   private def getKillAllUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/killall")
+    new URI(s"$baseUrl/killall").toURL
   }
 
   /** Return the REST URL for clear all existing submissions and applications. */
   private def getClearUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/clear")
+    new URI(s"$baseUrl/clear").toURL
   }
 
   /** Return the REST URL for requesting the readyz API. */
   private def getReadyzUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/readyz")
+    new URI(s"$baseUrl/readyz").toURL
   }
 
   /** Return the REST URL for requesting the status of an existing submission. */
   private def getStatusUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/status/$submissionId")
+    new URI(s"$baseUrl/status/$submissionId").toURL
   }
 
   /** Return the base URL for communicating with the server, including the protocol version. */
@@ -440,7 +444,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     if (submitResponse.success) {
       val submissionId = submitResponse.submissionId
       if (submissionId != null) {
-        logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
+        logInfo(log"Submission successfully created as ${MDC(SUBMISSION_ID, submissionId)}. " +
+          log"Polling submission state...")
         pollSubmissionStatus(submissionId)
       } else {
         // should never happen
@@ -470,13 +475,17 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         val exception = Option(statusResponse.message)
         // Log driver state, if present
         driverState match {
-          case Some(state) => logInfo(s"State of driver $submissionId is now $state.")
+          case Some(state) =>
+            logInfo(log"State of driver ${MDC(SUBMISSION_ID, submissionId)} is now " +
+              log"${MDC(DRIVER_STATE, state)}.")
           case _ =>
             logError(log"State of driver ${MDC(SUBMISSION_ID, submissionId)} was not found!")
         }
         // Log worker node, if present
         (workerId, workerHostPort) match {
-          case (Some(id), Some(hp)) => logInfo(s"Driver is running on worker $id at $hp.")
+          case (Some(id), Some(hp)) =>
+            logInfo(
+              log"Driver is running on worker ${MDC(WORKER_ID, id)} at ${MDC(HOST_PORT, hp)}.")
           case _ =>
         }
         // Log exception stack trace, if present
@@ -490,7 +499,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Log the response sent by the server in the REST application submission protocol. */
   private def handleRestResponse(response: SubmitRestProtocolResponse): Unit = {
-    logInfo(s"Server responded with ${response.messageType}:\n${response.toJson}")
+    logInfo(log"Server responded with ${MDC(CLASS_NAME, response.messageType)}:\n" +
+      log"${MDC(RESULT, response.toJson)}")
   }
 
   /** Log an appropriate error if the response sent by the server is not of the expected type. */

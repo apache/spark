@@ -183,8 +183,8 @@ private[consumer] object InternalKafkaConsumerPool {
       setMaxTotal(-1)
 
       // Set minimum evictable idle time which will be referred from evictor thread
-      setMinEvictableIdleTime(Duration.ofMillis(minEvictableIdleTimeMillis))
-      setSoftMinEvictableIdleTime(BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_DURATION)
+      setMinEvictableIdleDuration(Duration.ofMillis(minEvictableIdleTimeMillis))
+      setSoftMinEvictableIdleDuration(BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_DURATION)
 
       // evictor thread will run test with ten idle objects
       setTimeBetweenEvictionRuns(Duration.ofMillis(evictorThreadRunIntervalMillis))

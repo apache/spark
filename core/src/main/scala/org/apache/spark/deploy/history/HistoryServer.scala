@@ -30,7 +30,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.Utils.addRenderLogHandler
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
@@ -61,11 +60,13 @@ class HistoryServer(
     poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
+  val title = conf.get(History.HISTORY_SERVER_UI_TITLE)
+
   // How many applications to retain
   private val retainedApplications = conf.get(History.RETAINED_APPLICATIONS)
 
   // How many applications the summary ui displays
-  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
+  private[history] val maxApplications = conf.get(History.HISTORY_UI_MAX_APPS);
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
@@ -291,18 +292,18 @@ class HistoryServer(
  * This launches the HistoryServer as a Spark daemon.
  */
 object HistoryServer extends Logging {
-  private val conf = new SparkConf
+  private lazy val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
     val securityManager = createSecurityManager(conf)
 
     val providerName = conf.get(History.PROVIDER)
-      .getOrElse(classOf[FsHistoryProvider].getName())
     val provider = Utils.classForName[ApplicationHistoryProvider](providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)

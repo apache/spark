@@ -27,10 +27,10 @@ from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
 from pyspark import pandas as ps
 from pyspark.sql import SparkSession
+from pyspark.sql.utils import get_lit_sql_str
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
-from pyspark.errors import PySparkTypeError
 from pyspark.sql.utils import is_remote
 
 
@@ -203,15 +203,16 @@ def sql(
     session = default_session()
     formatter = PandasSQLStringFormatter(session)
     try:
-        # ps.DataFrame are not supported for Spark Connect currently.
-        if is_remote():
-            for obj in kwargs.values():
-                if isinstance(obj, ps.DataFrame):
-                    raise PySparkTypeError(
-                        error_class="UNSUPPORTED_DATA_TYPE",
-                        message_parameters={"data_type": type(obj).__name__},
-                    )
-        sdf = session.sql(formatter.format(query, **kwargs), args)
+        if not is_remote():
+            sdf = session.sql(formatter.format(query, **kwargs), args)
+        else:
+            ps_query = formatter.format(query, **kwargs)
+            # here the new_kwargs stores the views
+            new_kwargs = {}
+            for psdf, name in formatter._temp_views:
+                new_kwargs[name] = psdf._to_spark()
+            # delegate views to spark.sql
+            sdf = session.sql(ps_query, args, **new_kwargs)
     finally:
         formatter.clear()
 
@@ -264,30 +265,42 @@ class PandasSQLStringFormatter(string.Formatter):
         elif isinstance(val, (DataFrame, pd.DataFrame)):
             df_name = "_pandas_api_%s" % str(uuid.uuid4()).replace("-", "")
 
-            if isinstance(val, pd.DataFrame):
-                # Don't store temp view for plain pandas instances
-                # because it is unable to know which pandas DataFrame
-                # holds which Series.
-                val = ps.from_pandas(val)
+            if not is_remote():
+                if isinstance(val, pd.DataFrame):
+                    # Don't store temp view for plain pandas instances
+                    # because it is unable to know which pandas DataFrame
+                    # holds which Series.
+                    val = ps.from_pandas(val)
+                else:
+                    for df, n in self._temp_views:
+                        if df is val:
+                            return n
+                    self._temp_views.append((val, df_name))
+                val._to_spark().createOrReplaceTempView(df_name)
+                return df_name
             else:
+                if isinstance(val, pd.DataFrame):
+                    # Always convert pd.DataFrame to ps.DataFrame, and record it in _temp_views.
+                    val = ps.from_pandas(val)
+
                 for df, n in self._temp_views:
                     if df is val:
                         return n
-                self._temp_views.append((val, df_name))
-
-            val._to_spark().createOrReplaceTempView(df_name)
-            return df_name
+                self._temp_views.append((val, name))
+                # In Spark Connect, keep the original view name here (not the UUID one),
+                # the reformatted query is like: 'select * from {tbl} where A > 1'
+                # and then delegate the view operations to spark.sql.
+                return "{" + name + "}"
         elif isinstance(val, str):
-            # This is matched to behavior from JVM implementation.
-            # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
-            # sql/catalyst/expressions/literals.scala`
-            return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+            return get_lit_sql_str(val)
         else:
             return val
 
     def clear(self) -> None:
-        for _, n in self._temp_views:
-            self._session.catalog.dropTempView(n)
+        # In Spark Connect, views are created and dropped in Connect Server
+        if not is_remote():
+            for _, n in self._temp_views:
+                self._session.catalog.dropTempView(n)
         self._temp_views = []
         self._ref_sers = []
 

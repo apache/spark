@@ -138,6 +138,35 @@ CREATE TABLE t(c3 INT NOT NULL, c2 INT) USING PARQUET;
 SELECT * FROM v;
 DESCRIBE EXTENDED v;
 
+-- 3. Test the behavior of grandfathered views and temp views
+SET spark.sql.legacy.viewSchemaBindingMode = false;
+SET spark.sql.legacy.viewSchemaCompensation = false;
+CREATE OR REPLACE VIEW v AS SELECT 1;
+SET spark.sql.legacy.viewSchemaBindingMode = true;
+DESCRIBE EXTENDED v;
+SHOW TABLE EXTENDED LIKE 'v';
+SHOW CREATE TABLE v;
+
+SET spark.sql.legacy.viewSchemaCompensation = true;
+DESCRIBE EXTENDED v;
+SHOW TABLE EXTENDED LIKE 'v';
+SHOW CREATE TABLE v;
+
+DROP VIEW IF EXISTS v;
+
+SET spark.sql.legacy.viewSchemaBindingMode = false;
+SET spark.sql.legacy.viewSchemaCompensation = false;
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1;
+SET spark.sql.legacy.viewSchemaBindingMode = true;
+DESCRIBE EXTENDED v;
+SHOW TABLE EXTENDED LIKE 'v';
+
+SET spark.sql.legacy.viewSchemaCompensation = true;
+DESCRIBE EXTENDED v;
+SHOW TABLE EXTENDED LIKE 'v';
+
+DROP VIEW IF EXISTS v;
+
 -- 99 Cleanup
 DROP VIEW IF EXISTS v;
 DROP TABLE IF EXISTS t;

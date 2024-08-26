@@ -430,6 +430,19 @@ The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
 
+When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
+
+```
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+```
+
+You can add additional custom variables to this url template, populated with the values of existing executor environment variables like
+
+```
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXISTING_EXECUTOR_ENV_VAR)'
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
+```
+
 ### Accessing Driver UI
 
 The UI associated with any application can be accessed locally using
@@ -988,7 +1001,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Prefix to use in front of the executor pod names. It must conform the rules defined by the Kubernetes
     <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names">DNS Label Names</a>.
-    The prefix will be used to generate executor pod names in the form of <code>$podNamePrefix-exec-$id</code>, where the `id` is
+    The prefix will be used to generate executor pod names in the form of <code>\$podNamePrefix-exec-\$id</code>, where the `id` is
     a positive int value, so the length of the `podNamePrefix` needs to be less than or equal to 47(= 63 - 10 - 6).
   </td>
   <td>2.3.0</td>
@@ -1327,7 +1340,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
   Specify whether executor pods should be check all containers (including sidecars) or only the executor container when determining the pod status.
   </td>
@@ -1875,7 +1888,7 @@ Spark allows users to specify a custom Kubernetes schedulers.
   ```
 
 ##### Build
-To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+To create a Spark distribution along with Volcano support like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
 
 ```bash
 ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
@@ -1939,10 +1952,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.5.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.5.2 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.5.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.5.2 on an existing Kubernetes cluster.
 
 ##### Get started
 

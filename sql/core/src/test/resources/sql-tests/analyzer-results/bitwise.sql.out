@@ -306,3 +306,136 @@ select getbit(11L, 64)
 -- !query analysis
 Project [getbit(11, 64) AS getbit(11, 64)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT 20181117 >> 2
+-- !query analysis
+Project [(20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 << 2
+-- !query analysis
+Project [(20181117 << 2) AS (20181117 << 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 >>> 2
+-- !query analysis
+Project [(20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 > > 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 < < 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 > >> 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 <<< 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 >>>> 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >>> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as map<int, array<int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as map<int,array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select 1 << 1 + 2 as plus_over_shift
+-- !query analysis
+Project [(1 << (1 + 2)) AS plus_over_shift#x]
++- OneRowRelation
+
+
+-- !query
+select 2 >> 1 << 1 as left_to_right
+-- !query analysis
+Project [((2 >> 1) << 1) AS left_to_right#x]
++- OneRowRelation
+
+
+-- !query
+select 1 & 2 >> 1 as shift_over_ampersand
+-- !query analysis
+Project [(1 & (2 >> 1)) AS shift_over_ampersand#x]
++- OneRowRelation

@@ -41,13 +41,14 @@ class RelationalGroupedDataset private[sql] (
     groupType: proto.Aggregate.GroupType,
     pivot: Option[proto.Aggregate.Pivot] = None,
     groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None) {
+  import df.sparkSession.RichColumn
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
     df.sparkSession.newDataFrame { builder =>
       builder.getAggregateBuilder
         .setInput(df.plan.getRoot)
         .addAllGroupingExpressions(groupingExprs.map(_.expr).asJava)
-        .addAllAggregateExpressions(aggExprs.map(e => e.expr).asJava)
+        .addAllAggregateExpressions(aggExprs.map(e => e.typedExpr(df.encoder)).asJava)
 
       groupType match {
         case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
@@ -182,10 +183,7 @@ class RelationalGroupedDataset private[sql] (
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    toDF((expr +: exprs).map { case c =>
-      c
-    // TODO: deal with typed columns.
-    })
+    toDF(expr +: exprs)
   }
 
   /**

@@ -493,7 +493,8 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Compute the sum of earnings for each year by course with each course as a separate column
 
-        >>> df1.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").show()
+        >>> df1.groupBy("year").pivot(
+        ...     "course", ["dotNET", "Java"]).sum("earnings").sort("year").show()
         +----+------+-----+
         |year|dotNET| Java|
         +----+------+-----+
@@ -503,14 +504,15 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Or without specifying column values (less efficient)
 
-        >>> df1.groupBy("year").pivot("course").sum("earnings").show()
+        >>> df1.groupBy("year").pivot("course").sum("earnings").sort("year").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+
         |2012|20000| 15000|
         |2013|30000| 48000|
         +----+-----+------+
-        >>> df2.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").show()
+        >>> df2.groupBy(
+        ...     "sales.year").pivot("sales.course").sum("sales.earnings").sort("year").show()
         ... # doctest: +SKIP
         +----+-----+------+
         |year| Java|dotNET|

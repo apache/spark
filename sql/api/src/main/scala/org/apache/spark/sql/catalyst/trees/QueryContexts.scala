@@ -145,36 +145,30 @@ case class DataFrameQueryContext(
   override def stopIndex: Int = throw SparkUnsupportedOperationException()
 
   override val fragment: String = {
-    stackTrace.headOption.map { firstElem =>
-      val methodName = firstElem.getMethodName
-      if (methodName.length > 1 && methodName(0) == '$') {
-        methodName.substring(1)
-      } else {
-        methodName
-      }
-    }.getOrElse("")
+    pysparkErrorContext.map(_._1).getOrElse {
+      stackTrace.headOption.map { firstElem =>
+        val methodName = firstElem.getMethodName
+        if (methodName.length > 1 && methodName(0) == '$') {
+          methodName.substring(1)
+        } else {
+          methodName
+        }
+      }.getOrElse("")
+    }
   }
 
-  override val callSite: String = stackTrace.tail.mkString("\n")
-
-  val pysparkFragment: String = pysparkErrorContext.map(_._1).getOrElse("")
-  val pysparkCallSite: String = pysparkErrorContext.map(_._2).getOrElse("")
-
-  val (displayedFragment, displayedCallsite) = if (pysparkErrorContext.nonEmpty) {
-    (pysparkFragment, pysparkCallSite)
-  } else {
-    (fragment, callSite)
-  }
+  override val callSite: String = pysparkErrorContext.map(
+    _._2).getOrElse(stackTrace.tail.mkString("\n"))
 
   override lazy val summary: String = {
     val builder = new StringBuilder
     builder ++= "== DataFrame ==\n"
     builder ++= "\""
 
-    builder ++= displayedFragment
+    builder ++= fragment
     builder ++= "\""
     builder ++= " was called from\n"
-    builder ++= displayedCallsite
+    builder ++= callSite
     builder += '\n'
 
     builder.result()

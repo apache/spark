@@ -85,6 +85,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
           .setNumBuckets(2)
           .addBucketColumnNames("col1")
           .addBucketColumnNames("col2"))
+      .addClusteringColumns("col3")
 
     val expectedPlan = proto.Plan
       .newBuilder()
@@ -95,6 +96,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .sortBy("col1")
       .partitionBy("col99")
       .bucketBy(2, "col1", "col2")
+      .clusterBy("col3")
       .parquet("my/test/path")
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
@@ -134,8 +136,9 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     builder
       .setInput(df.plan.getRoot)
       .setTableName("t1")
-      .addPartitioningColumns(col("col99").expr)
+      .addPartitioningColumns(toExpr(col("col99")))
       .setProvider("json")
+      .addClusteringColumns("col3")
       .putTableProperties("key", "value")
       .putOptions("key2", "value2")
       .setMode(proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
@@ -147,6 +150,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     df.writeTo("t1")
       .partitionedBy(col("col99"))
+      .clusterBy("col3")
       .using("json")
       .tableProperty("key", "value")
       .options(Map("key2" -> "value2"))

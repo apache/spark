@@ -342,8 +342,8 @@ final class ShuffleBlockFetcherIterator(
                 if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
                   // The fetcher can fail remaining blocks in batch for the same error. So we only
                   // log the warning once to avoid flooding the logs.
-                  logInfo(s"Block $blockId has failed $failureTimes times " +
-                    s"due to Netty OOM, will retry")
+                  logInfo(log"Block ${MDC(BLOCK_ID, blockId)} has failed " +
+                    log"${MDC(FAILURES, failureTimes)} times due to Netty OOM, will retry")
                 }
                 remainingBlocks -= blockId
                 deferredBlocks += blockId
@@ -448,14 +448,17 @@ final class ShuffleBlockFetcherIterator(
         s"the number of host-local blocks ${numHostLocalBlocks} " +
         s"the number of push-merged-local blocks ${pushMergedLocalBlocks.size} " +
         s"+ the number of remote blocks ${numRemoteBlocks} ")
-    logInfo(s"Getting $blocksToFetchCurrentIteration " +
-      s"(${Utils.bytesToString(totalBytes)}) non-empty blocks including " +
-      s"${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local and " +
-      s"${numHostLocalBlocks} (${Utils.bytesToString(hostLocalBlockBytes)}) " +
-      s"host-local and ${pushMergedLocalBlocks.size} " +
-      s"(${Utils.bytesToString(pushMergedLocalBlockBytes)}) " +
-      s"push-merged-local and $numRemoteBlocks (${Utils.bytesToString(remoteBlockBytes)}) " +
-      s"remote blocks")
+    logInfo(
+      log"Getting ${MDC(NUM_BLOCKS, blocksToFetchCurrentIteration)} " +
+      log"(${MDC(TOTAL_SIZE, Utils.bytesToString(totalBytes))}) non-empty blocks including " +
+      log"${MDC(NUM_LOCAL_BLOCKS, localBlocks.size)} " +
+      log"(${MDC(LOCAL_BLOCKS_SIZE, Utils.bytesToString(localBlockBytes))}) local and " +
+      log"${MDC(NUM_HOST_LOCAL_BLOCKS, numHostLocalBlocks)} " +
+      log"(${MDC(HOST_LOCAL_BLOCKS_SIZE, Utils.bytesToString(hostLocalBlockBytes))}) " +
+      log"host-local and ${MDC(NUM_PUSH_MERGED_LOCAL_BLOCKS, pushMergedLocalBlocks.size)} " +
+      log"(${MDC(PUSH_MERGED_LOCAL_BLOCKS_SIZE, Utils.bytesToString(pushMergedLocalBlockBytes))})" +
+      log" push-merged-local and ${MDC(NUM_REMOTE_BLOCKS, numRemoteBlocks)} " +
+      log"(${MDC(REMOTE_BLOCKS_SIZE, Utils.bytesToString(remoteBlockBytes))}) remote blocks")
     this.hostLocalBlocks ++= hostLocalBlocksByExecutor.values
       .flatMap { infos => infos.map(info => (info._1, info._3)) }
     collectedRemoteRequests
@@ -719,8 +722,10 @@ final class ShuffleBlockFetcherIterator(
 
     val numDeferredRequest = deferredFetchRequests.values.map(_.size).sum
     val numFetches = remoteRequests.size - fetchRequests.size - numDeferredRequest
-    logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}" +
-      (if (numDeferredRequest > 0 ) s", deferred $numDeferredRequest requests" else ""))
+    logInfo(log"Started ${MDC(COUNT, numFetches)} remote fetches in " +
+      log"${MDC(DURATION, Utils.getUsedTimeNs(startTimeNs))}" +
+      (if (numDeferredRequest > 0) log", deferred ${MDC(NUM_REQUESTS, numDeferredRequest)} requests"
+      else log""))
 
     // Get Local Blocks
     fetchLocalBlocks(localBlocks)
@@ -1141,7 +1146,8 @@ final class ShuffleBlockFetcherIterator(
           case otherCause =>
             s"Block $blockId is corrupted due to $otherCause"
         }
-        logInfo(s"Finished corruption diagnosis in $duration ms. $diagnosisResponse")
+        logInfo(log"Finished corruption diagnosis in ${MDC(DURATION, duration)} ms. " +
+          log"${MDC(STATUS, diagnosisResponse)}")
         diagnosisResponse
       case shuffleBlockChunk: ShuffleBlockChunkId =>
         // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
@@ -1277,7 +1283,8 @@ final class ShuffleBlockFetcherIterator(
       originalLocalBlocks, originalHostLocalBlocksByExecutor, originalMergedLocalBlocks)
     // Add the remote requests into our queue in a random order
     fetchRequests ++= Utils.randomize(originalRemoteReqs)
-    logInfo(s"Created ${originalRemoteReqs.size} fallback remote requests for push-merged")
+    logInfo(log"Created ${MDC(NUM_REQUESTS, originalRemoteReqs.size)} fallback remote requests " +
+      log"for push-merged")
     // fetch all the fallback blocks that are local.
     fetchLocalBlocks(originalLocalBlocks)
     // Merged local blocks should be empty during fallback

@@ -66,12 +66,6 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
-  /**
-   * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
-   * between them. For example, [1A C0].
-   */
-  def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
-
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
 

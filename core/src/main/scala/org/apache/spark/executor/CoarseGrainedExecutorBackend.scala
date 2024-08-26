@@ -74,13 +74,14 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def onStart(): Unit = {
     if (env.conf.get(DECOMMISSION_ENABLED)) {
       val signal = env.conf.get(EXECUTOR_DECOMMISSION_SIGNAL)
-      logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
+      logInfo(log"Registering SIG${MDC(LogKeys.SIGNAL, signal)}" +
+        log" handler to trigger decommissioning.")
       SignalUtils.register(signal, log"Failed to register SIG${MDC(LogKeys.SIGNAL, signal)} " +
         log"handler - disabling executor decommission feature.")(
         self.askSync[Boolean](ExecutorDecommissionSigReceived))
     }
 
-    logInfo("Connecting to driver: " + driverUrl)
+    logInfo(log"Connecting to driver: ${MDC(LogKeys.URL, driverUrl)}" )
     try {
       val securityManager = new SecurityManager(env.conf)
       val shuffleClientTransportConf = SparkTransportConf.fromSparkConf(
@@ -182,7 +183,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
         val taskDesc = TaskDescription.decode(data.value)
-        logInfo("Got assigned task " + taskDesc.taskId)
+        logInfo(log"Got assigned task ${MDC(LogKeys.TASK_ID, taskDesc.taskId)}")
         executor.launchTask(this, taskDesc)
       }
 
@@ -219,7 +220,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       }.start()
 
     case UpdateDelegationTokens(tokenBytes) =>
-      logInfo(s"Received tokens of ${tokenBytes.length} bytes")
+      logInfo(log"Received tokens of ${MDC(LogKeys.NUM_BYTES, tokenBytes.length)} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
     case DecommissionExecutor =>
@@ -252,7 +253,8 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (stopping.get()) {
-      logInfo(s"Driver from $remoteAddress disconnected during shutdown")
+      logInfo(log"Driver from ${MDC(LogKeys.RPC_ADDRESS, remoteAddress)}" +
+        log" disconnected during shutdown")
     } else if (driver.exists(_.address == remoteAddress)) {
       exitExecutor(1, s"Driver $remoteAddress disassociated! Shutting down.", null,
         notifyDriver = false)
@@ -315,8 +317,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         log"already started decommissioning.")
       return
     }
-    val msg = s"Decommission executor $executorId."
-    logInfo(msg)
+    logInfo(log"Decommission executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}.")
     try {
       decommissioned = true
       val migrationEnabled = env.conf.get(STORAGE_DECOMMISSION_ENABLED) &&
@@ -369,7 +370,8 @@ private[spark] class CoarseGrainedExecutorBackend(
                 exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
               }
             } else {
-              logInfo(s"Blocked from shutdown by ${executor.numRunningTasks} running tasks")
+              logInfo(log"Blocked from shutdown by" +
+                log" ${MDC(LogKeys.NUM_TASKS, executor.numRunningTasks)} running tasks")
             }
             Thread.sleep(sleep_time)
           }
@@ -420,6 +422,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
         CoarseGrainedExecutorBackend): Unit = {
 
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>

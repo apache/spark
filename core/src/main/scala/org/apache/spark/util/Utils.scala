@@ -564,10 +564,8 @@ private[spark] object Utils
         // Do nothing if the file contents are the same, i.e. this file has been copied
         // previously.
         logInfo(
-          "%s has been previously copied to %s".format(
-            sourceFile.getAbsolutePath,
-            destFile.getAbsolutePath
-          )
+          log"${MDC(SOURCE_PATH, sourceFile.getAbsolutePath)} has been previously" +
+            log" copied to ${MDC(DESTINATION_PATH, destFile.getAbsolutePath)}"
         )
         return
       }
@@ -577,7 +575,8 @@ private[spark] object Utils
     if (removeSourceFile) {
       Files.move(sourceFile.toPath, destFile.toPath)
     } else {
-      logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
+      logInfo(log"Copying ${MDC(SOURCE_PATH, sourceFile.getAbsolutePath)}" +
+        log" to ${MDC(DESTINATION_PATH, destFile.getAbsolutePath)}")
       copyRecursive(sourceFile, destFile)
     }
   }
@@ -639,7 +638,7 @@ private[spark] object Utils
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
-        val uc = new URL(url).openConnection()
+        val uc = new URI(url).toURL.openConnection()
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
@@ -1203,7 +1202,7 @@ private[spark] object Utils
     val process = builder.start()
     if (redirectStderr) {
       val threadName = "redirect stderr for command " + command(0)
-      def log(s: String): Unit = logInfo(s)
+      def log(s: String): Unit = logInfo(log"${MDC(LINE, s)}")
       processStreamByLine(threadName, process.getErrorStream, log)
     }
     process
@@ -1754,12 +1753,6 @@ private[spark] object Utils
     Files.createSymbolicLink(dst.toPath, src.toPath)
   }
 
-
-  /** Return the class name of the given object, removing all dollar signs */
-  def getFormattedClassName(obj: AnyRef): String = {
-    getSimpleName(obj.getClass).replace("$", "")
-  }
-
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
@@ -2137,26 +2130,37 @@ private[spark] object Utils
 
   /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
-   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
-   *
-   * @param startPort The initial port to start the service on.
-   * @param startService Function to start service on a given port.
-   *                     This is expected to throw java.net.BindException on port collision.
-   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
-   * @param serviceName Name of the service.
-   * @return (service: T, port: Int)
+   * Use a shared configuration for the maximum number of port retries.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
+    startServiceOnPort(startPort, startService, portMaxRetries(conf), serviceName)
+  }
+
+  /**
+   * Attempt to start a service on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
+   *
+   * @param startPort The initial port to start the service on.
+   * @param startService Function to start service on a given port.
+   *                     This is expected to throw java.net.BindException on port collision.
+   * @param maxRetries The maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
+   */
+  def startServiceOnPort[T](
+      startPort: Int,
+      startService: Int => (T, Int),
+      maxRetries: Int,
+      serviceName: String): (T, Int) = {
 
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
@@ -2166,7 +2170,8 @@ private[spark] object Utils
       }
       try {
         val (service, port) = startService(tryPort)
-        logInfo(s"Successfully started service$serviceString on port $port.")
+        logInfo(log"Successfully started service${MDC(SERVICE_NAME, serviceString)}" +
+          log" on port ${MDC(PORT, port)}.")
         return (service, port)
       } catch {
         case e: Exception if isBindCollision(e) =>
@@ -2219,6 +2224,9 @@ private[spark] object Utils
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
         (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+          isBindCollision(e.getCause)
+      case e: IOException =>
+        (e.getMessage != null && e.getMessage.startsWith("Failed to bind to address")) ||
           isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
@@ -2541,9 +2549,10 @@ private[spark] object Utils
       conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS),
       conf.get(EXECUTOR_INSTANCES).getOrElse(0)).max
 
-    logInfo(s"Using initial executors = $initialExecutors, max of " +
-      s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key}, ${DYN_ALLOCATION_MIN_EXECUTORS.key} and " +
-        s"${EXECUTOR_INSTANCES.key}")
+    logInfo(log"Using initial executors = ${MDC(NUM_EXECUTORS, initialExecutors)}, max of " +
+      log"${MDC(CONFIG, DYN_ALLOCATION_INITIAL_EXECUTORS.key)}," +
+      log"${MDC(CONFIG2, DYN_ALLOCATION_MIN_EXECUTORS.key)} and" +
+      log" ${MDC(CONFIG3, EXECUTOR_INSTANCES.key)}")
     initialExecutors
   }
 
@@ -2569,6 +2578,19 @@ private[spark] object Utils
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
+  }
+
+  /**
+   * Utility function to enable or disable structured logging based on system properties.
+   * This is designed for a code path which we cannot use SparkConf yet, and should be used before
+   * the first invocation of `Logging.log()`. For example, this should be used before `initDaemon`.
+   */
+  def resetStructuredLogging(): Unit = {
+    if (System.getProperty(STRUCTURED_LOGGING_ENABLED.key, "false").equals("false")) {
+      Logging.disableStructuredLogging()
+    } else {
+      Logging.enableStructuredLogging()
+    }
   }
 
   /**
@@ -2731,7 +2753,7 @@ private[spark] object Utils
           e.getCause() match {
             case uoe: UnsupportedOperationException =>
               logDebug(s"Extension $name not being initialized.", uoe)
-              logInfo(s"Extension $name not being initialized.")
+              logInfo(log"Extension ${MDC(CLASS_NAME, name)} not being initialized.")
               None
 
             case null => throw e
@@ -2755,8 +2777,8 @@ private[spark] object Utils
     // To handle master URLs, e.g., k8s://host:port.
     if (!masterWithoutK8sPrefix.contains("://")) {
       val resolvedURL = s"https://$masterWithoutK8sPrefix"
-      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-        s"URL is $resolvedURL.")
+      logInfo(log"No scheme specified for kubernetes master URL, so defaulting to https." +
+        log" Resolved URL is ${MDC(LogKeys.URL, resolvedURL)}.")
       return s"k8s://$resolvedURL"
     }
 
@@ -2797,68 +2819,6 @@ private[spark] object Utils
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
-  }
-
-  /**
-   * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
-   * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
-   */
-  def getSimpleName(cls: Class[_]): String = {
-    try {
-      cls.getSimpleName
-    } catch {
-      // TODO: the value returned here isn't even quite right; it returns simple names
-      // like UtilsSuite$MalformedClassObject$MalformedClass instead of MalformedClass
-      // The exact value may not matter much as it's used in log statements
-      case _: InternalError =>
-        stripDollars(stripPackages(cls.getName))
-    }
-  }
-
-  /**
-   * Remove the packages from full qualified class name
-   */
-  private def stripPackages(fullyQualifiedName: String): String = {
-    fullyQualifiedName.split("\\.").takeRight(1)(0)
-  }
-
-  /**
-   * Remove trailing dollar signs from qualified class name,
-   * and return the trailing part after the last dollar sign in the middle
-   */
-  @scala.annotation.tailrec
-  def stripDollars(s: String): String = {
-    val lastDollarIndex = s.lastIndexOf('$')
-    if (lastDollarIndex < s.length - 1) {
-      // The last char is not a dollar sign
-      if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an interpreter
-        // generated class, so we should return the full string
-        s
-      } else {
-        // The class name is interpreter generated,
-        // return the part after the last dollar sign
-        // This is the same behavior as getClass.getSimpleName
-        s.substring(lastDollarIndex + 1)
-      }
-    }
-    else {
-      // The last char is a dollar sign
-      // Find last non-dollar char
-      val lastNonDollarChar = s.findLast(_ != '$')
-      lastNonDollarChar match {
-        case None => s
-        case Some(c) =>
-          val lastNonDollarIndex = s.lastIndexOf(c)
-          if (lastNonDollarIndex == -1) {
-            s
-          } else {
-            // Strip the trailing dollar signs
-            // Invoke stripDollars again to get the simple name
-            stripDollars(s.substring(0, lastNonDollarIndex + 1))
-          }
-      }
-    }
   }
 
   /**
@@ -3009,7 +2969,7 @@ private[spark] object Utils
         entry = in.getNextEntry()
       }
       in.close() // so that any error in closing does not get ignored
-      logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
+      logInfo(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
       IOUtils.closeQuietly(in)

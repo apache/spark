@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.encoders
 
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -169,10 +170,10 @@ class EncoderResolutionSuite extends PlanTest {
     fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
 
     // If there is null value, it should throw runtime exception
-    val e = intercept[RuntimeException] {
+    val exception = intercept[SparkRuntimeException] {
       fromRow(InternalRow(new GenericArrayData(Array(1, null))))
     }
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("the real number of fields doesn't match encoder schema: tuple encoder") {

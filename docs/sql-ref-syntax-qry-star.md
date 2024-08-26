@@ -59,31 +59,31 @@ except_clause
 
 ```sql
 -- Return all columns in the FROM clause
-SELECT * FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+SELECT * FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 1  2  a  b
 
 -- Return all columns from TA
-SELECT TA.* FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+SELECT TA.* FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 1  2
 
 -- Return all columns except TA.c1 and TB.cb
-SELECT * EXCEPT (c1, cb)  FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+SELECT * EXCEPT (c1, cb)  FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 2  a
 
 -- Return all columns, but strip the field x from the struct.
-SELECT TA.* EXCEPT (c1.x) FROM VALUES(named_struct(‘x’, x, ‘y’, ‘y’), 2) AS (c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+SELECT TA.* EXCEPT (c1.x) FROM VALUES(named_struct('x', x, 'y', 'y'), 2) AS (c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 { y } 2 a b
 
 -- Return the first not-NULL column in TA
-SELECT coalesce(TA.*)  FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+SELECT coalesce(TA.*)  FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 1
 
--- Return 1 if any column in TB contains a ‘c’.
-SELECT CASE WHEN ‘c’ IN (TB.*) THEN 1 END FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+-- Return 1 if any column in TB contains a 'c'.
+SELECT CASE WHEN 'c' IN (TB.*) THEN 1 END FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 NULL
 
 -- Return all column as a single struct
-SELECT (*) FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
+SELECT (*) FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb);
 { c1: 1, c2: 2, ca: a, cb: b }
 
 -- Flatten a struct into individual columns

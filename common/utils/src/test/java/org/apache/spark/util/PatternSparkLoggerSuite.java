@@ -54,6 +54,12 @@ public class PatternSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
+  String expectedPatternForBasicMsgWithEscapeChar(Level level) {
+    return toRegexPattern(level,
+      ".*<level> <className>: This is a log message\\nThis is a new line \\t other msg\\n");
+  }
+
+  @Override
   String expectedPatternForBasicMsgWithException(Level level) {
     return toRegexPattern(level, """
         .*<level> <className>: This is a log message
@@ -84,7 +90,12 @@ public class PatternSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
-  String expectedPatternForExternalSystemCustomLogKey(Level level) {
-    return toRegexPattern(level, ".*<level> <className>: External system custom log message.\n");
+  String expectedPatternForScalaCustomLogKey(Level level) {
+    return toRegexPattern(level, ".*<level> <className>: Scala custom log message.\n");
+  }
+
+  @Override
+  String expectedPatternForJavaCustomLogKey(Level level) {
+    return toRegexPattern(level, ".*<level> <className>: Java custom log message.\n");
   }
 }

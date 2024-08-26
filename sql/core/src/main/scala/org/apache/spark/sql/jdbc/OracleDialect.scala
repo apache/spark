@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, Timestamp, Types}
+import java.sql.{Date, SQLException, Timestamp, Types}
 import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
+private case class OracleDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
@@ -229,6 +231,23 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          case 955 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
+        }
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
+    }
+  }
 }
 
 private[jdbc] object OracleDialect {

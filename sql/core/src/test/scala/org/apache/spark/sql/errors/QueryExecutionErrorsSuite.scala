@@ -211,7 +211,7 @@ class QueryExecutionErrorsSuite
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(
-        exception = intercept[SparkRuntimeException] { lit(v) },
+        exception = intercept[SparkRuntimeException] { spark.expression(lit(v)) },
         errorClass = "UNSUPPORTED_FEATURE.LITERAL_TYPE",
         parameters = Map("value" -> literal, "type" -> dataType),
         sqlState = "0A000")
@@ -777,7 +777,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         val row = spark.sparkContext.parallelize(Seq(1, 2)).map(Row(_))
-        spark.sqlContext.createDataFrame(row, StructType.fromString("StructType()"))
+        spark.createDataFrame(row, StructType.fromString("StructType()"))
       },
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map(

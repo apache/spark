@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -1046,6 +1046,15 @@ object TypeCoercion extends TypeCoercionBase {
           } else {
             null
           }
+        }
+
+      case (MapType(fromKeyType, fromValueType, fn), AbstractMapType(toKeyType, toValueType)) =>
+        val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+        val newValueType = implicitCast(fromValueType, toValueType).orNull
+        if (newKeyType != null && newValueType != null) {
+          MapType(newKeyType, newValueType, fn)
+        } else {
+          null
         }
 
       case _ => null

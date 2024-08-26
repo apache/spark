@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnaryMinus, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
-import org.apache.spark.sql.expressions.{Window, WindowSpec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.CalendarIntervalType
 
@@ -503,11 +503,11 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("Window frame bounds lower and upper do not have the same type") {
     val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
-    val windowSpec = new WindowSpec(
-      Seq(Column("value").expr),
-      Seq(SortOrder(Column("key").expr, Ascending)),
-      SpecifiedWindowFrame(RangeFrame, Literal.create(null, CalendarIntervalType), Literal(2))
-    )
+
+    val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value(ExpressionColumnNode(Literal.create(null, CalendarIntervalType))),
+      internal.WindowFrame.Value(lit(2).node))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"key", count("key").over(windowSpec)).collect()
@@ -526,11 +526,10 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("Window frame lower bound is not a literal") {
     val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
-    val windowSpec = new WindowSpec(
-      Seq(Column("value").expr),
-      Seq(SortOrder(Column("key").expr, Ascending)),
-      SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(1), Literal(2))
-    )
+    val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value(ExpressionColumnNode(NonFoldableLiteral(1))),
+      internal.WindowFrame.Value(lit(2).node))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"key", count("key").over(windowSpec)).collect()
@@ -546,8 +545,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-41805: Reuse expressions in WindowSpecDefinition") {
     val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
-    val sortOrder = SortOrder($"n".cast("string").expr, Ascending)
-    val window = new WindowSpec(Seq($"n".expr), Seq(sortOrder), UnspecifiedFrame)
+    val window = Window.partitionBy($"n").orderBy($"n".cast("string").asc)
     val df = ds.select(sum("i").over(window), avg("i").over(window))
     val ws = df.queryExecution.analyzed.collect { case w: WindowNode => w }
     assert(ws.size === 1)
@@ -557,9 +555,10 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
     "decimals") {
-    val window = new WindowSpec(Seq($"a".expr), Seq(SortOrder($"b".expr, Ascending)),
-      SpecifiedWindowFrame(RangeFrame,
-        UnaryMinus(Literal(BigDecimal(10.2345))), Literal(BigDecimal(6.7890))))
+    val window = Window.partitionBy($"a").orderBy($"b".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value((-lit(BigDecimal(10.2345))).node),
+      internal.WindowFrame.Value(lit(BigDecimal(10.2345)).node))
 
     val df = Seq(
       1 -> "11342371013783243717493546650944543.47",

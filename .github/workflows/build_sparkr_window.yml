@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-name: "Build / SparkR-only (master, 4.3.3, windows-2019)"
+name: "Build / SparkR-only (master, 4.4.1, windows-2022)"
 
 on:
   schedule:
@@ -25,7 +25,7 @@ on:
 jobs:
   build:
     name: "Build module: sparkr"
-    runs-on: windows-2019
+    runs-on: windows-2022
     timeout-minutes: 300
     if: github.repository == 'apache/spark'
     steps:
@@ -35,7 +35,7 @@ jobs:
         repository: cdarlint/winutils
     - name: Move Hadoop winutil into home directory
       run: |
-        Move-Item -Path hadoop-3.3.5 -Destination ~\
+        Move-Item -Path hadoop-3.3.6 -Destination ~\
     - name: Checkout Spark repository
       uses: actions/checkout@v4
     - name: Cache Maven local repository
@@ -50,10 +50,10 @@ jobs:
       with:
         distribution: zulu
         java-version: 17
-    - name: Install R 4.3.3
+    - name: Install R 4.4.1
       uses: r-lib/actions/setup-r@v2
       with:
-        r-version: 4.3.3
+        r-version: 4.4.1
     - name: Install R dependencies
       run: |
         Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'xml2'), repos='https://cloud.r-project.org/')"
@@ -79,7 +79,7 @@ jobs:
       shell: cmd
     - name: Run SparkR tests
       run: |
-        set HADOOP_HOME=%USERPROFILE%\hadoop-3.3.5
+        set HADOOP_HOME=%USERPROFILE%\hadoop-3.3.6
         set PATH=%HADOOP_HOME%\bin;%PATH%
         .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configurationFile=file:///%CD:\=/%/R/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
       shell: cmd

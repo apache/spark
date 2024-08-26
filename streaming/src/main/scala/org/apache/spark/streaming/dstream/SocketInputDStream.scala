@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
@@ -56,7 +56,7 @@ class SocketReceiver[T: ClassTag](
 
   def onStart(): Unit = {
 
-    logInfo(s"Connecting to $host:$port")
+    logInfo(log"Connecting to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
     try {
       socket = new Socket(host, port)
     } catch {
@@ -64,7 +64,7 @@ class SocketReceiver[T: ClassTag](
         restart(s"Error connecting to $host:$port", e)
         return
     }
-    logInfo(s"Connected to $host:$port")
+    logInfo(log"Connected to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
 
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
@@ -79,7 +79,7 @@ class SocketReceiver[T: ClassTag](
       if (socket != null) {
         socket.close()
         socket = null
-        logInfo(s"Closed socket to $host:$port")
+        logInfo(log"Closed socket to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
       }
     }
   }

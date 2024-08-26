@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
+from io import StringIO
 import os
 import pstats
 from threading import RLock
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, TYPE_CHECKING, overload
 
 from pyspark.accumulators import (
     Accumulator,
@@ -323,8 +324,8 @@ class Profile:
                 self.profiler_collector.show_memory_profiles(id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
@@ -353,12 +354,90 @@ class Profile:
                 self.profiler_collector.dump_memory_profiles(path, id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
             )
+
+    @overload
+    def render(self, id: int, *, type: Optional[str] = None, renderer: Optional[str] = None) -> Any:
+        ...
+
+    @overload
+    def render(
+        self, id: int, *, type: Optional[Literal["perf"]], renderer: Callable[[pstats.Stats], Any]
+    ) -> Any:
+        ...
+
+    @overload
+    def render(
+        self, id: int, *, type: Literal["memory"], renderer: Callable[[CodeMapDict], Any]
+    ) -> Any:
+        ...
+
+    def render(
+        self,
+        id: int,
+        *,
+        type: Optional[str] = None,
+        renderer: Optional[
+            Union[str, Callable[[pstats.Stats], Any], Callable[[CodeMapDict], Any]]
+        ] = None,
+    ) -> Any:
+        """
+        Render the profile results.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        id : int
+            The UDF ID whose profiling results should be rendered.
+        type : str, optional
+            The profiler type to clear results for, which can be either "perf" or "memory".
+        renderer : str or callable, optional
+            The renderer to use. If not specified, the default renderer will be "flameprof"
+            for the "perf" profiler, which returns an :class:`IPython.display.HTML` object in
+            an IPython environment to draw the figure; otherwise, it returns the SVG source string.
+            For the "memory" profiler, no default renderer is provided.
+
+            If a callable is provided, it should take a `pstats.Stats` object for "perf" profiler,
+            and `CodeMapDict` for "memory" profiler, and return the rendered result.
+        """
+        result: Optional[Union[pstats.Stats, CodeMapDict]]
+        if type is None:
+            type = "perf"
+        if type == "perf":
+            result = self.profiler_collector._perf_profile_results.get(id)
+        elif type == "memory":
+            result = self.profiler_collector._memory_profile_results.get(id)
+        else:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
+                    "arg_name": "type",
+                    "allowed_values": str(["perf", "memory"]),
+                },
+            )
+
+        render: Optional[Union[Callable[[pstats.Stats], Any], Callable[[CodeMapDict], Any]]] = None
+        if renderer is None or isinstance(renderer, str):
+            render = _renderers.get((type, renderer))
+        elif callable(renderer):
+            render = renderer
+        if render is None:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
+                    "arg_name": "(type, renderer)",
+                    "allowed_values": str(list(_renderers.keys())),
+                },
+            )
+
+        if result is not None:
+            return render(result)  # type:ignore[arg-type]
 
     def clear(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
         """
@@ -382,9 +461,45 @@ class Profile:
                 self.profiler_collector.clear_memory_profiles(id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
             )
+
+
+def _render_flameprof(stats: pstats.Stats) -> Any:
+    try:
+        from flameprof import render
+    except ImportError:
+        raise PySparkValueError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={"package_name": "flameprof", "minimum_version": "0.4"},
+        )
+
+    buf = StringIO()
+    render(stats.stats, buf)  # type: ignore[attr-defined]
+    svg = buf.getvalue()
+
+    try:
+        import IPython
+
+        ipython = IPython.get_ipython()
+    except ImportError:
+        ipython = None
+
+    if ipython:
+        from IPython.display import HTML
+
+        return HTML(svg)
+    else:
+        return svg
+
+
+_renderers: Dict[
+    Tuple[str, Optional[str]], Union[Callable[[pstats.Stats], Any], Callable[[CodeMapDict], Any]]
+] = {
+    ("perf", None): _render_flameprof,
+    ("perf", "flameprof"): _render_flameprof,
+}

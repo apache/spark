@@ -36,6 +36,7 @@ import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -70,7 +71,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connector/connect/server` module
+ * `sql/connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -87,7 +88,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /sql/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -117,6 +118,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+    internal.UnresolvedNamedLambdaVariable.resetIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -699,7 +701,8 @@ class PlanGenerationTestSuite
   }
 
   test("select collated string") {
-    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    val schema =
+      StructType(StructField("s", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
@@ -1778,6 +1781,10 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
+  functionTest("substring using columns") {
+    fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
+  }
+
   functionTest("substring_index") {
     fn.substring_index(fn.col("g"), ";", 5)
   }
@@ -2309,6 +2316,10 @@ class PlanGenerationTestSuite
     fn.timestamp_diff("year", fn.col("t"), fn.col("t"))
   }
 
+  temporalFunctionTest("timestamp_add") {
+    fn.timestamp_add("week", fn.col("x"), fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long
@@ -2423,6 +2434,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("aggregate with finish lambda") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y, x => x + lit(2))
+  }
+
   functionTest("reduce") {
     fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
@@ -2481,6 +2496,10 @@ class PlanGenerationTestSuite
 
   functionTest("from_json") {
     fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_json with json schema") {
+    fn.from_json(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   functionTest("schema_of_json") {
@@ -2665,6 +2684,10 @@ class PlanGenerationTestSuite
 
   functionTest("url_decode") {
     fn.url_decode(fn.col("g"))
+  }
+
+  functionTest("try_url_decode") {
+    fn.try_url_decode(fn.col("g"))
   }
 
   functionTest("url_encode") {
@@ -2952,6 +2975,14 @@ class PlanGenerationTestSuite
 
   functionTest("call_function") {
     fn.call_function("lower", fn.col("g"))
+  }
+
+  functionTest("from_xml") {
+    fn.from_xml(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_xml with json schema") {
+    fn.from_xml(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   test("hll_sketch_agg with column lgConfigK") {
@@ -3250,7 +3281,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
@@ -3311,11 +3342,11 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connector/connect/common/src/main/protobuf/spark/connect
+  //  1. cd sql/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
-    "connect/common/src/test/resources/protobuf-tests/common.desc"
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/sql/connect/" +
+    "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
   //  are no other negative impacts. For the problem description, please refer to SPARK-45029

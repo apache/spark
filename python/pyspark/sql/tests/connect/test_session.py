@@ -119,6 +119,34 @@ class JobCancellationTests(ReusedConnectTestCase):
         self.assertEqual(self.spark.getTags(), set())
         self.spark.clearTags()
 
+    def test_tags_multithread(self):
+        output1 = None
+        output2 = None
+
+        def tag1():
+            nonlocal output1
+
+            self.spark.addTag("tag1")
+            output1 = self.spark.getTags()
+
+        def tag2():
+            nonlocal output2
+
+            self.spark.addTag("tag2")
+            output2 = self.spark.getTags()
+
+        t1 = threading.Thread(target=tag1)
+        t1.start()
+        t1.join()
+        t2 = threading.Thread(target=tag2)
+        t2.start()
+        t2.join()
+
+        self.assertIsNotNone(output1)
+        self.assertEquals(output1, {"tag1"})
+        self.assertIsNotNone(output2)
+        self.assertEquals(output2, {"tag2"})
+
     def test_interrupt_tag(self):
         thread_ids = range(4)
         self.check_job_cancellation(

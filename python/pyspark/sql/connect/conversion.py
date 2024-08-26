@@ -48,12 +48,10 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.pandas.types import to_arrow_schema, _dedup_names, _deduplicate_field_names
 
-from typing import (
-    Any,
-    Callable,
-    Sequence,
-    List,
-)
+from typing import Any, Callable, Sequence, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect.dataframe import DataFrame
 
 
 class LocalDataToArrowConversion:
@@ -157,8 +155,8 @@ class LocalDataToArrowConversion:
                     else:
                         if len(value) != len(field_names):
                             raise PySparkValueError(
-                                error_class="AXIS_LENGTH_MISMATCH",
-                                message_parameters={
+                                errorClass="AXIS_LENGTH_MISMATCH",
+                                messageParameters={
                                     "expected_length": str(len(field_names)),
                                     "actual_length": str(len(value)),
                                 },
@@ -308,7 +306,7 @@ class LocalDataToArrowConversion:
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 
@@ -354,8 +352,8 @@ class LocalDataToArrowConversion:
             else:
                 if len(item) != len(column_names):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(column_names)),
                             "actual_length": str(len(item)),
                         },
@@ -524,7 +522,7 @@ class ArrowTableToRowsConversion:
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 
@@ -569,4 +567,18 @@ def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
         useOffHeap=storage_level.use_off_heap,
         deserialized=storage_level.deserialized,
         replication=storage_level.replication,
+    )
+
+
+def proto_to_remote_cached_dataframe(relation: pb2.CachedRemoteRelation) -> "DataFrame":
+    assert relation is not None and isinstance(relation, pb2.CachedRemoteRelation)
+
+    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.session import SparkSession
+    import pyspark.sql.connect.plan as plan
+
+    session = SparkSession.active()
+    return DataFrame(
+        plan=plan.CachedRemoteRelation(relation.relation_id, session),
+        session=session,
     )

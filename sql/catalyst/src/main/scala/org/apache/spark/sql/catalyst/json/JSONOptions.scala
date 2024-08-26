@@ -122,12 +122,8 @@ class JSONOptions(
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
-    } else {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
-    })
+  val timestampFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String =
@@ -192,6 +188,9 @@ class JSONOptions(
   // as a single VARIANT type column in the table with the given column name.
   // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
+    SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
@@ -288,6 +287,7 @@ object JSONOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

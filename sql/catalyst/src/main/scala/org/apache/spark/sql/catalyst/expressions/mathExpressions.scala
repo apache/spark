@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.HexFormat.fromHexDigit
 import java.util.Locale
 
 import org.apache.spark.QueryContext
@@ -1007,20 +1008,18 @@ case class Bin(child: Expression)
   override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
+    UTF8String.toBinaryString(input.asInstanceOf[Long])
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c) =>
-      s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
+    defineCodeGen(ctx, ev, c => s"UTF8String.toBinaryString($c)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Bin = copy(child = newChild)
 }
 
 object Hex {
-  val hexDigits = Array[Char](
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
-  ).map(_.toByte)
+  private final val hexDigits =
+    Array[Byte]('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F')
 
   // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
   val unhexDigits = {
@@ -1033,61 +1032,66 @@ object Hex {
 
   def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
-    val value = new Array[Byte](length * 2)
+    if (length == 0) {
+      return UTF8String.EMPTY_UTF8
+    }
+    val targetLength = length * 2L
+    if (targetLength > Int.MaxValue) {
+      throw QueryExecutionErrors.tooManyArrayElementsError(targetLength, Int.MaxValue)
+    }
+    val value = new Array[Byte](targetLength.toInt)
     var i = 0
     while (i < length) {
-      value(i * 2) = Hex.hexDigits((bytes(i) & 0xF0) >> 4)
-      value(i * 2 + 1) = Hex.hexDigits(bytes(i) & 0x0F)
+      value(i * 2) = hexDigits((bytes(i) & 0xF0) >> 4)
+      value(i * 2 + 1) = hexDigits(bytes(i) & 0x0F)
       i += 1
     }
     UTF8String.fromBytes(value)
   }
 
   def hex(num: Long): UTF8String = {
-    // Extract the hex digits of num into value[] from right to left
-    val value = new Array[Byte](16)
+    val zeros = jl.Long.numberOfLeadingZeros(num)
+    if (zeros == jl.Long.SIZE) return UTF8String.ZERO_UTF8
+    val len = (jl.Long.SIZE - zeros + 3) / 4
     var numBuf = num
-    var len = 0
-    do {
-      len += 1
-      value(value.length - len) = Hex.hexDigits((numBuf & 0xF).toInt)
+    val value = new Array[Byte](len)
+    var i = len - 1
+    while (i >= 0) {
+      value(i) = hexDigits((numBuf & 0xF).toInt)
       numBuf >>>= 4
-    } while (numBuf != 0)
-    UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, value.length - len, value.length))
+      i -= 1
+    }
+    UTF8String.fromBytes(value)
   }
 
   def unhex(bytes: Array[Byte]): Array[Byte] = {
-    val out = new Array[Byte]((bytes.length + 1) >> 1)
-    var i = 0
-    var oddShift = 0
-    if ((bytes.length & 0x01) != 0) {
-      // padding with '0'
-      if (bytes(0) < 0) {
-        return null
-      }
-      val v = Hex.unhexDigits(bytes(0))
-      if (v == -1) {
-        return null
-      }
-      out(0) = v
-      i += 1
-      oddShift = 1
+    val length = bytes.length
+    if (length == 0) {
+      return Array.emptyByteArray
     }
-    // two characters form the hex value.
-    while (i < bytes.length) {
-      if (bytes(i) < 0 || bytes(i + 1) < 0) {
-        return null
+    if ((length & 0x1) != 0) {
+      // while length of bytes is odd, loop from the end to beginning w/o the head
+      val result = new Array[Byte](length / 2  + 1)
+      var i = result.length - 1
+      while (i > 0) {
+        result(i) = ((fromHexDigit(bytes(i * 2 - 1)) << 4) | fromHexDigit(bytes(i * 2))).toByte
+        i -= 1
       }
-      val first = Hex.unhexDigits(bytes(i))
-      val second = Hex.unhexDigits(bytes(i + 1))
-      if (first == -1 || second == -1) {
-        return null
+      // add it 'tailing' head
+      result(0) = fromHexDigit(bytes(0)).toByte
+      result
+    } else {
+      val result = new Array[Byte](length / 2)
+      var i = 0
+      while (i < result.length) {
+        result(i) = ((fromHexDigit(bytes(2 * i)) << 4) | fromHexDigit(bytes(2 * i + 1))).toByte
+        i += 1
       }
-      out(i / 2 + oddShift) = (((first << 4) | second) & 0xFF).toByte
-      i += 2
+      result
     }
-    out
   }
+
+  def unhex(str: String): Array[Byte] = unhex(str.getBytes())
 }
 
 /**
@@ -1160,41 +1164,26 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
   override def dataType: DataType = BinaryType
 
   protected override def nullSafeEval(num: Any): Any = {
-    val result = Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
-    if (failOnError && result == null) {
-      // The failOnError is set only from `ToBinary` function - hence we might safely set `hint`
-      // parameter to `try_to_binary`.
-      throw QueryExecutionErrors.invalidInputInConversionError(
-        BinaryType,
-        num.asInstanceOf[UTF8String],
-        UTF8String.fromString("HEX"),
-        "try_to_binary")
+    try {
+      Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+    } catch {
+      case _: IllegalArgumentException if !failOnError => null
+      case _: IllegalArgumentException =>
+        throw QueryExecutionErrors.invalidInputInConversionError(
+          BinaryType,
+          num.asInstanceOf[UTF8String],
+          UTF8String.fromString("HEX"),
+          "try_to_binary")
     }
-    result
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val hex = Hex.getClass.getName.stripSuffix("$")
-      val maybeFailOnErrorCode = if (failOnError) {
-        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
-        s"""
-           |if (${ev.value} == null) {
-           |  throw QueryExecutionErrors.invalidInputInConversionError(
-           |    $binaryType,
-           |    $c,
-           |    UTF8String.fromString("HEX"),
-           |    "try_to_binary");
-           |}
-           |""".stripMargin
-      } else {
-        s"${ev.isNull} = ${ev.value} == null;"
-      }
-
+    val expr = ctx.addReferenceObj("this", this)
+    nullSafeCodeGen(ctx, ev, input => {
       s"""
-        ${ev.value} = $hex.unhex($c.getBytes());
-        $maybeFailOnErrorCode
-       """
+        ${ev.value} = (byte[]) $expr.nullSafeEval($input);
+        ${ev.isNull} = ${ev.value} == null;
+      """
     })
   }
 
@@ -1261,6 +1250,41 @@ case class Pow(left: Expression, right: Expression)
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
+sealed trait BitShiftOperation
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def symbol: String
+  def shiftInt: (Int, Int) => Int
+  def shiftLong: (Long, Int) => Long
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
+
+  override def dataType: DataType = left.dataType
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (left, right) => s"$left $symbol $right")
+  }
+
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = input1 match {
+    case l: jl.Long => shiftLong(l, input2.asInstanceOf[Int])
+    case i: jl.Integer => shiftInt(i, input2.asInstanceOf[Int])
+  }
+
+  override def toString: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS) match {
+      case Some(alias) if alias == symbol => s"($left $symbol $right)"
+      case _ => super.toString
+    }
+  }
+
+  override def sql: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS) match {
+      case Some(alias) if alias == symbol => s"(${left.sql} $symbol ${right.sql})"
+      case _ => super.sql
+    }
+  }
+}
 
 /**
  * Bitwise left shift.
@@ -1269,37 +1293,27 @@ case class Pow(left: Expression, right: Expression)
  * @param right number of bits to left shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(base, expr) - Bitwise left shift.",
+  usage = "base << exp - Bitwise left shift.",
   examples = """
     Examples:
-      > SELECT _FUNC_(2, 1);
+      > SELECT shiftleft(2, 1);
+       4
+      > SELECT 2 << 1;
        4
   """,
+  note = """
+      `<<` operator is added in Spark 4.0.0 as an alias for `shiftleft`.
+    """,
   since = "1.5.0",
   group = "bitwise_funcs")
-case class ShiftLeft(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(IntegerType, LongType), IntegerType)
-
-  override def dataType: DataType = left.dataType
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    input1 match {
-      case l: jl.Long => l << input2.asInstanceOf[jl.Integer]
-      case i: jl.Integer => i << input2.asInstanceOf[jl.Integer]
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
-  }
-
+case class ShiftLeft(left: Expression, right: Expression) extends BitShiftOperation {
+  override def symbol: String = "<<"
+  override def shiftInt: (Int, Int) => Int = (x: Int, y: Int) => x << y
+  override def shiftLong: (Long, Int) => Long = (x: Long, y: Int) => x << y
+  val shift: (Number, Int) => Any = (x: Number, y: Int) => x.longValue() << y
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ShiftLeft = copy(left = newLeft, right = newRight)
 }
-
 
 /**
  * Bitwise (signed) right shift.
@@ -1308,37 +1322,26 @@ case class ShiftLeft(left: Expression, right: Expression)
  * @param right number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(base, expr) - Bitwise (signed) right shift.",
+  usage = "base >> expr - Bitwise (signed) right shift.",
   examples = """
     Examples:
-      > SELECT _FUNC_(4, 1);
+      > SELECT shiftright(4, 1);
+       2
+      > SELECT 4 >> 1;
        2
   """,
+  note = """
+      `>>` operator is added in Spark 4.0.0 as an alias for `shiftright`.
+    """,
   since = "1.5.0",
   group = "bitwise_funcs")
-case class ShiftRight(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(IntegerType, LongType), IntegerType)
-
-  override def dataType: DataType = left.dataType
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    input1 match {
-      case l: jl.Long => l >> input2.asInstanceOf[jl.Integer]
-      case i: jl.Integer => i >> input2.asInstanceOf[jl.Integer]
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
-  }
-
+case class ShiftRight(left: Expression, right: Expression) extends BitShiftOperation {
+  override def symbol: String = ">>"
+  override def shiftInt: (Int, Int) => Int = (x: Int, y: Int) => x >> y
+  override def shiftLong: (Long, Int) => Long = (x: Long, y: Int) => x >> y
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ShiftRight = copy(left = newLeft, right = newRight)
 }
-
 
 /**
  * Bitwise unsigned right shift, for integer and long data type.
@@ -1347,33 +1350,23 @@ case class ShiftRight(left: Expression, right: Expression)
  * @param right the number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(base, expr) - Bitwise unsigned right shift.",
+  usage = "base >>> expr - Bitwise unsigned right shift.",
   examples = """
     Examples:
-      > SELECT _FUNC_(4, 1);
+      > SELECT shiftrightunsigned(4, 1);
        2
+      > SELECT 4 >>> 1;
+       2
+  """,
+  note = """
+    `>>>` operator is added in Spark 4.0.0 as an alias for `shiftrightunsigned`.
   """,
   since = "1.5.0",
   group = "bitwise_funcs")
-case class ShiftRightUnsigned(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(IntegerType, LongType), IntegerType)
-
-  override def dataType: DataType = left.dataType
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    input1 match {
-      case l: jl.Long => l >>> input2.asInstanceOf[jl.Integer]
-      case i: jl.Integer => i >>> input2.asInstanceOf[jl.Integer]
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
-  }
-
+case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitShiftOperation {
+  override def symbol: String = ">>>"
+  override def shiftInt: (Int, Int) => Int = (x: Int, y: Int) => x >>> y
+  override def shiftLong: (Long, Int) => Long = (x: Long, y: Int) => x >>> y
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ShiftRightUnsigned =
     copy(left = newLeft, right = newRight)

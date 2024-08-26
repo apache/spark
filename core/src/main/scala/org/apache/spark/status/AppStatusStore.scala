@@ -861,7 +861,7 @@ private[spark] object AppStatusStore extends Logging {
     def createStorePath(rootDir: String): Option[File] = {
       try {
         val localDir = Utils.createDirectory(rootDir, "spark-ui")
-        logInfo(s"Created spark ui store directory at $rootDir")
+        logInfo(log"Created spark ui store directory at ${MDC(PATH, rootDir)}")
         Some(localDir)
       } catch {
         case e: IOException =>

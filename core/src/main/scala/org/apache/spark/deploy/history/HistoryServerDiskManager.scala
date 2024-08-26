@@ -27,6 +27,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend.ROCKSDB
 import org.apache.spark.status.KVUtils
@@ -58,7 +59,7 @@ private class HistoryServerDiskManager(
     throw new IllegalArgumentException(s"Failed to create app directory ($appStoreDir).")
   }
   private val extension =
-    if (conf.get(HYBRID_STORE_DISK_BACKEND) == ROCKSDB.toString) ".rdb" else ".ldb"
+    if (conf.get(History.HYBRID_STORE_DISK_BACKEND) == ROCKSDB.toString) ".rdb" else ".ldb"
 
   private val tmpStoreDir = new File(path, "temp")
   if (!tmpStoreDir.isDirectory() && !tmpStoreDir.mkdir()) {

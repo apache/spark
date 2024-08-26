@@ -24,14 +24,15 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-private case class DB2Dialect() extends JdbcDialect {
+private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
@@ -87,7 +88,7 @@ private case class DB2Dialect() extends JdbcDialect {
       typeName: String,
       size: Int,
       md: MetadataBuilder): Option[DataType] = sqlType match {
-    case Types.SMALLINT if !SQLConf.get.legacyDB2numericMappingEnabled =>
+    case Types.SMALLINT if !conf.legacyDB2numericMappingEnabled =>
       Option(ShortType)
     case Types.REAL => Option(FloatType)
     case Types.OTHER =>
@@ -102,7 +103,9 @@ private case class DB2Dialect() extends JdbcDialect {
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Option(JdbcType("CLOB", java.sql.Types.CLOB))
-    case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case BooleanType if conf.legacyDB2BooleanMappingEnabled =>
+      Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
@@ -165,6 +168,9 @@ private case class DB2Dialect() extends JdbcDialect {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
+          case "42710" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case _ => super.classifyException(e, errorClass, messageParameters, description)

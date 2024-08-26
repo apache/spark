@@ -553,13 +553,25 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(deduplicate_on_all_columns_plan.root.deduplicate.all_columns_as_keys, True)
         self.assertEqual(len(deduplicate_on_all_columns_plan.root.deduplicate.column_names), 0)
 
-        deduplicate_on_subset_columns_plan = df.dropDuplicates(["name", "height"])._plan.to_proto(
-            self.connect
+        deduplicate_on_subset_columns_plan_list_arg = df.dropDuplicates(
+            ["name", "height"]
+        )._plan.to_proto(self.connect)
+        self.assertEqual(
+            deduplicate_on_subset_columns_plan_list_arg.root.deduplicate.all_columns_as_keys, False
         )
         self.assertEqual(
-            deduplicate_on_subset_columns_plan.root.deduplicate.all_columns_as_keys, False
+            len(deduplicate_on_subset_columns_plan_list_arg.root.deduplicate.column_names), 2
         )
-        self.assertEqual(len(deduplicate_on_subset_columns_plan.root.deduplicate.column_names), 2)
+
+        deduplicate_on_subset_columns_plan_var_arg = df.dropDuplicates(
+            "name", "height"
+        )._plan.to_proto(self.connect)
+        self.assertEqual(
+            deduplicate_on_subset_columns_plan_var_arg.root.deduplicate.all_columns_as_keys, False
+        )
+        self.assertEqual(
+            len(deduplicate_on_subset_columns_plan_var_arg.root.deduplicate.column_names), 2
+        )
 
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -656,8 +668,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_POSITIVE",
-            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
 
         with self.assertRaises(PySparkValueError) as pe:
@@ -665,8 +677,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_POSITIVE",
-            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
 
     def test_repartition_by_expression(self):

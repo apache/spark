@@ -20,9 +20,8 @@ package org.apache.spark.sql.jdbc.v2
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
@@ -67,10 +66,17 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update nullability of not existing column
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
-    }.getMessage
-    assert(msg.contains("Missing field bad_column"))
+    val sqlText = s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(sqlText)
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map(
+        "objectName" -> "`bad_column`",
+        "proposal" -> "`ID`"),
+      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length -1))
   }
 
   def testRenameColumn(tbl: String): Unit = {
@@ -83,6 +89,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   def testCreateTableWithProperty(tbl: String): Unit = {}
+
+  private def checkErrorFailedJDBC(
+      e: AnalysisException,
+      errorClass: String,
+      tbl: String): Unit = {
+    checkErrorMatchPVals(
+      exception = e,
+      errorClass = errorClass,
+      parameters = Map(
+        "url" -> "jdbc:.*",
+        "tableName" -> s"`$tbl`")
+    )
+  }
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
@@ -122,9 +141,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
     }
-    checkErrorTableNotFound(e, s"`$catalogName`.`not_existing_table`",
-      ExpectedContext(s"$catalogName.not_existing_table", 12,
-        11 + s"$catalogName.not_existing_table".length))
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -137,36 +154,46 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         .add("C2", StringType, true, defaultMetadata())
       assert(t.schema === expectedSchema)
       // Drop not existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column")
-      }.getMessage
-      assert(msg.contains(s"Missing field bad_column in table $catalogName.alt_table"))
+      val sqlText = s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`C2`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length -1))
     }
     // Drop a column from a not existing table
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
     }
-    checkErrorTableNotFound(e, s"`$catalogName`.`not_existing_table`",
-      ExpectedContext(s"$catalogName.not_existing_table", 12,
-        11 + s"$catalogName.not_existing_table".length))
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnType(s"$catalogName.alt_table")
       // Update not existing column
-      val msg2 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
-      }.getMessage
-      assert(msg2.contains("Missing field bad_column"))
+      val sqlText = s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column TYPE DOUBLE"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length -1))
     }
     // Update column type in not existing table
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
-    checkErrorTableNotFound(e, s"`$catalogName`.`not_existing_table`",
-      ExpectedContext(s"$catalogName.not_existing_table", 12,
-        11 + s"$catalogName.not_existing_table".length))
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -194,11 +221,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
     }
-    checkErrorTableNotFound(e,
-      UnresolvedAttribute.parseAttributeName(s"$catalogName.not_existing_table")
-        .map(part => quoteIdentifier(part)).mkString("."),
-      ExpectedContext(s"$catalogName.not_existing_table", 12,
-        11 + s"$catalogName.not_existing_table".length))
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -209,9 +232,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
-    checkErrorTableNotFound(e, s"`$catalogName`.`not_existing_table`",
-      ExpectedContext(s"$catalogName.not_existing_table", 12,
-        11 + s"$catalogName.not_existing_table".length))
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("CREATE TABLE with table comment") {
@@ -233,7 +254,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val e = intercept[AnalysisException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
       }
-      assert(e.getErrorClass == "FAILED_JDBC.UNCLASSIFIED")
+      checkErrorFailedJDBC(e, "FAILED_JDBC.CREATE_TABLE", "new_table")
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
@@ -942,6 +963,21 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(0).getDouble(0) === 20000.0)
       assert(row(1).getDouble(0) === 5000.0)
       assert(row(2).getDouble(0) === 0.0)
+    }
+  }
+
+  test("SPARK-48618: Renaming the table to the name of an existing table") {
+    withTable(s"$catalogName.tbl1", s"$catalogName.tbl2") {
+      sql(s"CREATE TABLE $catalogName.tbl1 (col1 INT, col2 INT)")
+      sql(s"CREATE TABLE $catalogName.tbl2 (col3 INT, col4 INT)")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $catalogName.tbl2 RENAME TO tbl1")
+        },
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`tbl1`")
+      )
     }
   }
 }

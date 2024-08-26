@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets._
 import com.google.common.io.Files
 
 import org.apache.spark._
+import org.apache.spark.internal.config.{ConfigEntry, History}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Tests._
 
@@ -50,6 +51,18 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
       val hsa = new HistoryServerArguments(conf, argStrings)
       assert(conf.get("spark.test.CustomPropertyA") === "blah")
       assert(conf.get("spark.test.CustomPropertyB") === "notblah")
+    }
+  }
+
+  test("SPARK-48471: all history configurations should have documentations") {
+    val configs = History.getClass.getDeclaredFields
+      .filter(f => classOf[ConfigEntry[_]].isAssignableFrom(f.getType))
+      .map { f =>
+        f.setAccessible(true)
+        f.get(History).asInstanceOf[ConfigEntry[_]]
+      }
+    configs.foreach { config =>
+      assert(config.doc.nonEmpty, s"Config ${config.key} doesn't have documentation")
     }
   }
 }

@@ -232,7 +232,7 @@ class ResourceProfile(
     }
     val limiting =
       if (taskLimit == -1) "cpu" else s"$limitingResource at $taskLimit tasks per executor"
-    logInfo(s"Limiting resource is $limiting")
+    logInfo(log"Limiting resource is ${MDC(RESOURCE, limiting)}")
     _executorResourceSlotsPerAddr = Some(numPartsPerResourceMap.toMap)
     _maxTasksPerExecutor = if (taskLimit == -1) Some(1) else Some(taskLimit)
     _limitingResource = Some(limitingResource)
@@ -327,7 +327,7 @@ object ResourceProfile extends Logging {
    */
   val CORES = "cores"
   /**
-   * built-in executor resource: cores
+   * built-in executor resource: memory
    */
   val MEMORY = "memory"
   /**
@@ -374,9 +374,9 @@ object ResourceProfile extends Logging {
           val defProf = new ResourceProfile(executorResources, taskResources)
           defProf.setToDefaultProfile()
           defaultProfile = Some(defProf)
-          logInfo("Default ResourceProfile created, executor resources: " +
-            s"${defProf.executorResources}, task resources: " +
-            s"${defProf.taskResources}")
+          logInfo(log"Default ResourceProfile created, executor resources: " +
+            log"${MDC(EXECUTOR_RESOURCES, defProf.executorResources)}, task resources: " +
+            log"${MDC(TASK_RESOURCES, defProf.taskResources)}")
           defProf
       }
     }

@@ -31,11 +31,11 @@ import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSu
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
 
-private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
+private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -157,7 +157,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
         // scalastyle:on line.size.limit
         Some(getTimestampType(md.build()))
-      case Types.TIMESTAMP => Some(TimestampType)
+      case Types.TIMESTAMP if !conf.legacyMySqlTimestampNTZMappingEnabled => Some(TimestampType)
       case _ => None
     }
   }
@@ -243,7 +243,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
     // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
     // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
     // scalastyle:on line.size.limit
-    case TimestampNTZType => Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case TimestampNTZType if !conf.legacyMySqlTimestampNTZMappingEnabled =>
+      Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
@@ -336,6 +337,9 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
+          case 1050 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case 1061 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")

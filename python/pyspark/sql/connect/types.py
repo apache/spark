@@ -55,16 +55,6 @@ from pyspark.errors import PySparkAssertionError, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 
 
-JVM_BYTE_MIN: int = -(1 << 7)
-JVM_BYTE_MAX: int = (1 << 7) - 1
-JVM_SHORT_MIN: int = -(1 << 15)
-JVM_SHORT_MAX: int = (1 << 15) - 1
-JVM_INT_MIN: int = -(1 << 31)
-JVM_INT_MAX: int = (1 << 31) - 1
-JVM_LONG_MIN: int = -(1 << 63)
-JVM_LONG_MAX: int = (1 << 63) - 1
-
-
 class UnparsedDataType(DataType):
     """
     Unparsed data type.
@@ -111,26 +101,26 @@ class UnparsedDataType(DataType):
 
     def jsonValue(self) -> Dict[str, Any]:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "jsonValue"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "jsonValue"},
         )
 
     def needConversion(self) -> bool:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "needConversion"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "needConversion"},
         )
 
     def toInternal(self, obj: Any) -> Any:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "toInternal"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "toInternal"},
         )
 
     def fromInternal(self, obj: Any) -> Any:
         raise PySparkAssertionError(
-            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
-            message_parameters={"func_name": "fromInternal"},
+            errorClass="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            messageParameters={"func_name": "fromInternal"},
         )
 
 
@@ -139,7 +129,7 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     if isinstance(data_type, NullType):
         ret.null.CopyFrom(pb2.DataType.NULL())
     elif isinstance(data_type, StringType):
-        ret.string.collation_id = data_type.collationId
+        ret.string.collation = data_type.collation
     elif isinstance(data_type, BooleanType):
         ret.boolean.CopyFrom(pb2.DataType.Boolean())
     elif isinstance(data_type, BinaryType):
@@ -209,8 +199,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.unparsed.data_type_string = data_type_string
     else:
         raise PySparkValueError(
-            error_class="UNSUPPORTED_OPERATION",
-            message_parameters={"operation": f"data type {data_type}"},
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": f"data type {data_type}"},
         )
     return ret
 
@@ -239,7 +229,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         s = schema.decimal.scale if schema.decimal.HasField("scale") else 0
         return DecimalType(precision=p, scale=s)
     elif schema.HasField("string"):
-        return StringType.fromCollationId(schema.string.collation_id)
+        collation = schema.string.collation if schema.string.collation != "" else "UTF8_BINARY"
+        return StringType(collation)
     elif schema.HasField("char"):
         return CharType(schema.char.length)
     elif schema.HasField("var_char"):
@@ -312,8 +303,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         return UserDefinedType.fromJson(json_value)
     else:
         raise PySparkValueError(
-            error_class="UNSUPPORTED_OPERATION",
-            message_parameters={"operation": f"data type {schema}"},
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": f"data type {schema}"},
         )
 
 

@@ -1211,11 +1211,11 @@ private[spark] class Client(
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>
-            val msg = s"Failed to contact YARN for application $appId."
+            val msg = log"Failed to contact YARN for application ${MDC(LogKeys.APP_ID, appId)}."
             logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
             return YarnAppReport(YarnApplicationState.FAILED, FinalApplicationStatus.FAILED,
-              Some(msg))
+              Some(msg.message))
         }
       val state = report.getYarnApplicationState
       reportsSinceLastLog += 1
@@ -1385,7 +1385,7 @@ private[spark] class Client(
       val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
-          logError(s"Application diagnostics message: $err")
+          logError(log"Application diagnostics message: ${MDC(LogKeys.ERROR, err)}")
         }
         throw new SparkException(s"Application $appId finished with failed status")
       }

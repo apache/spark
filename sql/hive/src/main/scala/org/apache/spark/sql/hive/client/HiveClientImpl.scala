@@ -46,7 +46,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -906,11 +906,11 @@ private[hive] class HiveClientImpl(
     } catch {
       case e: Exception =>
         logError(
-          s"""
+          log"""
             |======================
             |HIVE FAILURE OUTPUT
             |======================
-            |${outputBuffer.toString}
+            |${MDC(LogKeys.OUTPUT_BUFFER, outputBuffer.toString)}
             |======================
             |END HIVE FAILURE OUTPUT
             |======================
@@ -1339,6 +1339,15 @@ private[hive] object HiveClientImpl extends Logging {
       logWarning(log"Detected HiveConf hive.execution.engine is '${MDC(ENGINE, engine)}' and " +
         log"will be reset to 'mr' to disable useless hive logic")
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
+    }
+    val cpType = hiveConf.get("datanucleus.connectionPoolingType")
+    // Bonecp might cause memory leak, it could affect some hive client versions we support
+    // See more details in HIVE-15551
+    // Also, Bonecp is removed in Hive 4.0.0, see HIVE-23258
+    // Here we use DBCP to replace bonecp instead of HikariCP as HikariCP was introduced in
+    // Hive 2.2.0 (see HIVE-13931) while the minium Hive we support is 2.0.0.
+    if ("bonecp".equalsIgnoreCase(cpType)) {
+      hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
     hiveConf
   }

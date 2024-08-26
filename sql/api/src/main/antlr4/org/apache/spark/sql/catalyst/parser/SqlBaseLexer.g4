@@ -69,6 +69,35 @@ lexer grammar SqlBaseLexer;
   public void markUnclosedComment() {
     has_unclosed_bracketed_comment = true;
   }
+
+  /**
+   * When greater than zero, it's in the middle of parsing ARRAY/MAP/STRUCT type.
+   */
+  public int complex_type_level_counter = 0;
+
+  /**
+   * Increase the counter by one when hits KEYWORD 'ARRAY', 'MAP', 'STRUCT'.
+   */
+  public void incComplexTypeLevelCounter() {
+    complex_type_level_counter++;
+  }
+
+  /**
+   * Decrease the counter by one when hits close tag '>' && the counter greater than zero
+   * which means we are in the middle of complex type parsing. Otherwise, it's a dangling
+   * GT token and we do nothing.
+   */
+  public void decComplexTypeLevelCounter() {
+    if (complex_type_level_counter > 0) complex_type_level_counter--;
+  }
+
+  /**
+   * If the counter is zero, it's a shift right operator. It can be closing tags of an complex
+   * type definition, such as MAP<INT, ARRAY<INT>>.
+   */
+  public boolean isShiftRightOperator() {
+    return complex_type_level_counter == 0 ? true : false;
+  }
 }
 
 SEMICOLON: ';';
@@ -100,11 +129,12 @@ ANTI: 'ANTI';
 ANY: 'ANY';
 ANY_VALUE: 'ANY_VALUE';
 ARCHIVE: 'ARCHIVE';
-ARRAY: 'ARRAY';
+ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';
 ASC: 'ASC';
 AT: 'AT';
 AUTHORIZATION: 'AUTHORIZATION';
+BEGIN: 'BEGIN';
 BETWEEN: 'BETWEEN';
 BIGINT: 'BIGINT';
 BINARY: 'BINARY';
@@ -116,6 +146,7 @@ BUCKETS: 'BUCKETS';
 BY: 'BY';
 BYTE: 'BYTE';
 CACHE: 'CACHE';
+CALLED: 'CALLED';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
@@ -142,6 +173,7 @@ COMPENSATION: 'COMPENSATION';
 COMPUTE: 'COMPUTE';
 CONCATENATE: 'CONCATENATE';
 CONSTRAINT: 'CONSTRAINT';
+CONTAINS: 'CONTAINS';
 COST: 'COST';
 CREATE: 'CREATE';
 CROSS: 'CROSS';
@@ -168,16 +200,19 @@ DECIMAL: 'DECIMAL';
 DECLARE: 'DECLARE';
 DEFAULT: 'DEFAULT';
 DEFINED: 'DEFINED';
+DEFINER: 'DEFINER';
 DELETE: 'DELETE';
 DELIMITED: 'DELIMITED';
 DESC: 'DESC';
 DESCRIBE: 'DESCRIBE';
+DETERMINISTIC: 'DETERMINISTIC';
 DFS: 'DFS';
 DIRECTORIES: 'DIRECTORIES';
 DIRECTORY: 'DIRECTORY';
 DISTINCT: 'DISTINCT';
 DISTRIBUTE: 'DISTRIBUTE';
 DIV: 'DIV';
+DO: 'DO';
 DOUBLE: 'DOUBLE';
 DROP: 'DROP';
 ELSE: 'ELSE';
@@ -230,6 +265,7 @@ INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 INNER: 'INNER';
 INPATH: 'INPATH';
+INPUT: 'INPUT';
 INPUTFORMAT: 'INPUTFORMAT';
 INSERT: 'INSERT';
 INTERSECT: 'INTERSECT';
@@ -237,10 +273,12 @@ INTERVAL: 'INTERVAL';
 INT: 'INT';
 INTEGER: 'INTEGER';
 INTO: 'INTO';
+INVOKER: 'INVOKER';
 IS: 'IS';
 ITEMS: 'ITEMS';
 JOIN: 'JOIN';
 KEYS: 'KEYS';
+LANGUAGE: 'LANGUAGE';
 LAST: 'LAST';
 LATERAL: 'LATERAL';
 LAZY: 'LAZY';
@@ -259,7 +297,7 @@ LOCKS: 'LOCKS';
 LOGICAL: 'LOGICAL';
 LONG: 'LONG';
 MACRO: 'MACRO';
-MAP: 'MAP';
+MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
 MICROSECOND: 'MICROSECOND';
@@ -268,6 +306,7 @@ MILLISECOND: 'MILLISECOND';
 MILLISECONDS: 'MILLISECONDS';
 MINUTE: 'MINUTE';
 MINUTES: 'MINUTES';
+MODIFIES: 'MODIFIES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
@@ -278,6 +317,7 @@ NANOSECOND: 'NANOSECOND';
 NANOSECONDS: 'NANOSECONDS';
 NATURAL: 'NATURAL';
 NO: 'NO';
+NONE: 'NONE';
 NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
@@ -312,6 +352,7 @@ PURGE: 'PURGE';
 QUARTER: 'QUARTER';
 QUERY: 'QUERY';
 RANGE: 'RANGE';
+READS: 'READS';
 REAL: 'REAL';
 RECORDREADER: 'RECORDREADER';
 RECORDWRITER: 'RECORDWRITER';
@@ -326,6 +367,8 @@ REPLACE: 'REPLACE';
 RESET: 'RESET';
 RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
+RETURN: 'RETURN';
+RETURNS: 'RETURNS';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
 RLIKE: 'RLIKE' | 'REGEXP';
@@ -339,6 +382,7 @@ SECOND: 'SECOND';
 SECONDS: 'SECONDS';
 SCHEMA: 'SCHEMA';
 SCHEMAS: 'SCHEMAS';
+SECURITY: 'SECURITY';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';
@@ -357,12 +401,14 @@ SOME: 'SOME';
 SORT: 'SORT';
 SORTED: 'SORTED';
 SOURCE: 'SOURCE';
+SPECIFIC: 'SPECIFIC';
+SQL: 'SQL';
 START: 'START';
 STATISTICS: 'STATISTICS';
 STORED: 'STORED';
 STRATIFY: 'STRATIFY';
 STRING: 'STRING';
-STRUCT: 'STRUCT';
+STRUCT: 'STRUCT' {incComplexTypeLevelCounter();};
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
 SYNC: 'SYNC';
@@ -422,6 +468,7 @@ WEEK: 'WEEK';
 WEEKS: 'WEEKS';
 WHEN: 'WHEN';
 WHERE: 'WHERE';
+WHILE: 'WHILE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 WITHIN: 'WITHIN';
@@ -439,8 +486,11 @@ NEQ : '<>';
 NEQJ: '!=';
 LT  : '<';
 LTE : '<=' | '!>';
-GT  : '>';
+GT  : '>' {decComplexTypeLevelCounter();};
 GTE : '>=' | '!<';
+SHIFT_LEFT: '<<';
+SHIFT_RIGHT: '>>' {isShiftRightOperator()}?;
+SHIFT_RIGHT_UNSIGNED: '>>>' {isShiftRightOperator()}?;
 
 PLUS: '+';
 MINUS: '-';

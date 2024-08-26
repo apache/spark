@@ -26,7 +26,7 @@ import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecord
 import org.apache.avro.io.EncoderFactory
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
@@ -284,6 +284,91 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause.getMessage
       assert(msg.contains("Invalid default for field id: null not a \"long\""))
+    }
+  }
+
+  test("SPARK-48545: from_avro and to_avro SQL functions") {
+    withTable("t") {
+      sql(
+        """
+          |create table t as
+          |  select named_struct('u', named_struct('member0', member0, 'member1', member1)) as s
+          |  from values (1, null), (null,  'a') tab(member0, member1)
+          |""".stripMargin)
+      val jsonFormatSchema =
+        """
+          |{
+          |  "type": "record",
+          |  "name": "struct",
+          |  "fields": [{
+          |    "name": "u",
+          |    "type": ["int","string"]
+          |  }]
+          |}
+          |""".stripMargin
+      val toAvroSql =
+        s"""
+           |select to_avro(s, '$jsonFormatSchema') as result from t
+           |""".stripMargin
+      val avroResult = spark.sql(toAvroSql).collect()
+      assert(avroResult != null)
+      checkAnswer(
+        spark.sql(s"select from_avro(result, '$jsonFormatSchema', map()).u from ($toAvroSql)"),
+        Seq(Row(Row(1, null)),
+          Row(Row(null, "a"))))
+      // The 'jsonFormatSchema' argument of the 'to_avro' function is optional.
+      checkAnswer(
+        spark.sql(s"select length(to_avro(s)) > 0 from t"),
+        Seq(Row(true), Row(true)))
+
+      // Negative tests.
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |select to_avro(s, 42) as result from t
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map("sqlExpr" -> "\"toavro(s, 42)\"",
+          "msg" -> ("The second argument of the TO_AVRO SQL function must be a constant string " +
+            "containing the JSON representation of the schema to use for converting the value to " +
+            "AVRO format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "to_avro(s, 42)",
+          start = 8,
+          stop = 21)))
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |select from_avro(s, 42, '') as result from t
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map("sqlExpr" -> "\"fromavro(s, 42, )\"",
+          "msg" -> ("The second argument of the FROM_AVRO SQL function must be a constant string " +
+            "containing the JSON representation of the schema to use for converting the value " +
+            "from AVRO format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "from_avro(s, 42, '')",
+          start = 8,
+          stop = 27)))
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |select from_avro(s, '$jsonFormatSchema', 42) as result from t
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"\"fromavro(s, $jsonFormatSchema, 42)\"".stripMargin,
+          "msg" -> ("The third argument of the FROM_AVRO SQL function must be a constant map of " +
+            "strings to strings containing the options to use for converting the value " +
+            "from AVRO format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = s"from_avro(s, '$jsonFormatSchema', 42)",
+          start = 8,
+          stop = 138)))
     }
   }
 }

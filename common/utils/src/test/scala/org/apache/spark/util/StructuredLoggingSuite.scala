@@ -25,7 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC, MessageWithContext}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -40,7 +40,7 @@ trait LoggingSuiteBase
   }
 
   // Return the newly added log contents in the log file after executing the function `f`
-  private def captureLogOutput(f: () => Unit): String = {
+  protected def captureLogOutput(f: () => Unit): String = {
     val content = if (logFile.exists()) {
       Files.readString(logFile.toPath)
     } else {
@@ -52,6 +52,16 @@ trait LoggingSuiteBase
   }
 
   def basicMsg: String = "This is a log message"
+
+  def basicMsgWithEscapeChar: String = "This is a log message\nThis is a new line \t other msg"
+
+  def basicMsgWithEscapeCharMDC: LogEntry =
+    log"This is a log message\nThis is a new line \t other msg"
+
+  // scalastyle:off line.size.limit
+  def msgWithMDCAndEscapeChar: LogEntry =
+    log"The first message\nthe first new line\tthe first other msg\n${MDC(LogKeys.PATHS, "C:\\Users\\run-all_1.R\nC:\\Users\\run-all_2.R")}\nThe second message\nthe second new line\tthe second other msg"
+  // scalastyle:on line.size.limit
 
   def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
@@ -66,6 +76,15 @@ trait LoggingSuiteBase
   // test for basic message (without any mdc)
   def expectedPatternForBasicMsg(level: Level): String
 
+  // test for basic message (with escape char)
+  def expectedPatternForBasicMsgWithEscapeChar(level: Level): String
+
+  // test for basic message (with escape char mdc)
+  def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String
+
+  // test for message (with mdc and escape char)
+  def expectedPatternForMsgWithMDCAndEscapeChar(level: Level): String
+
   // test for basic message and exception
   def expectedPatternForBasicMsgWithException(level: Level): String
 
@@ -78,8 +97,8 @@ trait LoggingSuiteBase
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
-  // test for external system custom LogKey
-  def expectedPatternForExternalSystemCustomLogKey(level: Level): String
+  // test for custom LogKey
+  def expectedPatternForCustomLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -92,6 +111,43 @@ trait LoggingSuiteBase
       (Level.TRACE, () => logTrace(basicMsg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with escape char") {
+    Seq(
+      (Level.ERROR, () => logError(basicMsgWithEscapeChar)),
+      (Level.WARN, () => logWarning(basicMsgWithEscapeChar)),
+      (Level.INFO, () => logInfo(basicMsgWithEscapeChar)),
+      (Level.DEBUG, () => logDebug(basicMsgWithEscapeChar)),
+      (Level.TRACE, () => logTrace(basicMsgWithEscapeChar))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithEscapeChar(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with escape char MDC") {
+    Seq(
+      (Level.ERROR, () => logError(basicMsgWithEscapeCharMDC)),
+      (Level.WARN, () => logWarning(basicMsgWithEscapeCharMDC)),
+      (Level.INFO, () => logInfo(basicMsgWithEscapeCharMDC)),
+      (Level.DEBUG, () => logDebug(basicMsgWithEscapeCharMDC)),
+      (Level.TRACE, () => logTrace(basicMsgWithEscapeCharMDC))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithEscapeCharMDC(level).r.matches(logOutput))
+    }
+  }
+
+  test("Logging with MDC and escape char") {
+    Seq(
+      (Level.ERROR, () => logError(msgWithMDCAndEscapeChar)),
+      (Level.WARN, () => logWarning(msgWithMDCAndEscapeChar)),
+      (Level.INFO, () => logInfo(msgWithMDCAndEscapeChar)),
+      (Level.DEBUG, () => logDebug(msgWithMDCAndEscapeChar)),
+      (Level.TRACE, () => logTrace(msgWithMDCAndEscapeChar))
+    ).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForMsgWithMDCAndEscapeChar(level).r.matches(logOutput))
     }
   }
 
@@ -146,18 +202,17 @@ trait LoggingSuiteBase
       }
   }
 
-  private val externalSystemCustomLog =
-    log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.")}"
-  test("Logging with external system custom LogKey") {
+  private val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
+  test("Logging with custom LogKey") {
     Seq(
-      (Level.ERROR, () => logError(externalSystemCustomLog)),
-      (Level.WARN, () => logWarning(externalSystemCustomLog)),
-      (Level.INFO, () => logInfo(externalSystemCustomLog)),
-      (Level.DEBUG, () => logDebug(externalSystemCustomLog)),
-      (Level.TRACE, () => logTrace(externalSystemCustomLog))).foreach {
+      (Level.ERROR, () => logError(customLog)),
+      (Level.WARN, () => logWarning(customLog)),
+      (Level.INFO, () => logInfo(customLog)),
+      (Level.DEBUG, () => logDebug(customLog)),
+      (Level.TRACE, () => logTrace(customLog))).foreach {
       case (level, logFunc) =>
         val logOutput = captureLogOutput(logFunc)
-        assert(expectedPatternForExternalSystemCustomLogKey(level).r.matches(logOutput))
+        assert(expectedPatternForCustomLogKey(level).r.matches(logOutput))
     }
   }
 
@@ -173,6 +228,37 @@ trait LoggingSuiteBase
           verifyMsgWithConcat(level, logOutput)
       }
   }
+
+  test("LogEntry should construct MessageWithContext only once") {
+    var constructionCount = 0
+
+    def constructMessageWithContext(): MessageWithContext = {
+      constructionCount += 1
+      log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
+    }
+    logInfo(constructMessageWithContext())
+    assert(constructionCount === 1)
+  }
+
+  test("LogEntry should construct MessageWithContext only once II") {
+    var constructionCount = 0
+    var constructionCount2 = 0
+
+    def executorId(): String = {
+      constructionCount += 1
+      "1"
+    }
+
+    def workerId(): String = {
+      constructionCount2 += 1
+      "2"
+    }
+
+    logInfo(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId())}." +
+      log"worker id ${MDC(LogKeys.WORKER_ID, workerId())}")
+    assert(constructionCount === 1)
+    assert(constructionCount2 === 1)
+  }
 }
 
 class StructuredLoggingSuite extends LoggingSuiteBase {
@@ -184,6 +270,7 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     jsonMapper.readTree(json).toString.
       replace("<timestamp>", """[^"]+""").
       replace(""""<stacktrace>"""", """.*""").
+      replace("<windows_paths>", """.*""").
       replace("{", """\{""") + "\n"
   }
 
@@ -196,6 +283,44 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           "msg": "This is a log message",
           "logger": "$className"
         }""")
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeChar(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForMsgWithMDCAndEscapeChar(level: Level): String = {
+    // scalastyle:off line.size.limit
+    compactAndToRegexPattern(
+    s"""
+      {
+         "ts": "<timestamp>",
+         "level": "$level",
+         "msg": "The first message\\\\nthe first new line\\\\tthe first other msg\\\\n<windows_paths>\\\\nThe second message\\\\nthe second new line\\\\tthe second other msg",
+         "context": {
+           "paths": "<windows_paths>"
+         },
+         "logger": "$className"
+      }""")
+    // scalastyle:on line.size.limit
   }
 
   override def expectedPatternForBasicMsgWithException(level: Level): String = {
@@ -261,15 +386,15 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
-  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
+  override def expectedPatternForCustomLogKey(level: Level): String = {
     compactAndToRegexPattern(
       s"""
         {
           "ts": "<timestamp>",
           "level": "$level",
-          "msg": "External system custom log message.",
+          "msg": "Custom log message.",
           "context": {
-              "custom_log_key": "External system custom log message."
+              "custom_log_key": "Custom log message."
           },
           "logger": "$className"
         }"""
@@ -304,9 +429,56 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
     assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
   }
+
+  test("process escape sequences") {
+    assert(log"\n".message == "\n")
+    assert(log"\t".message == "\t")
+    assert(log"\b".message == "\b")
+    assert(log"\r".message == "\r")
+    assert((log"\r" + log"\n" + log"\t" + log"\b").message == "\r\n\t\b")
+    assert((log"\r${MDC(LogKeys.EXECUTOR_ID, 1)}\n".message == "\r1\n"))
+  }
+
+  test("disabled structured logging won't log context") {
+    Logging.disableStructuredLogging()
+    val expectedPatternWithoutContext = compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "INFO",
+          "msg": "Lost executor 1.",
+          "logger": "$className"
+        }""")
+
+    Seq(
+      () => logInfo(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."),
+      () => logInfo( // blocked when explicitly constructing the MessageWithContext
+        MessageWithContext(
+          "Lost executor 1.",
+          new java.util.HashMap[String, String] { put(LogKeys.EXECUTOR_ID.name, "1") }
+        )
+      )
+    ).foreach { f =>
+      val logOutput = captureLogOutput(f)
+      assert(expectedPatternWithoutContext.r.matches(logOutput))
+    }
+    Logging.enableStructuredLogging()
+  }
+
+  test("setting to MDC gets logged") {
+    val mdcPattern = s""""${LogKeys.DATA.name}":"some-data""""
+
+    org.slf4j.MDC.put(LogKeys.DATA.name, "some-data")
+    val logOutputWithMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
+    assert(mdcPattern.r.findFirstIn(logOutputWithMDCSet).isDefined)
+
+    org.slf4j.MDC.remove(LogKeys.DATA.name)
+    val logOutputWithoutMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
+    assert(mdcPattern.r.findFirstIn(logOutputWithoutMDCSet).isEmpty)
+  }
 }
 
 object CustomLogKeys {
-  // External system custom LogKey must be `extends LogKey`
+  // Custom `LogKey` must be `extends LogKey`
   case object CUSTOM_LOG_KEY extends LogKey
 }

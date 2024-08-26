@@ -15,14 +15,18 @@
 # limitations under the License.
 #
 
+import bisect
 import importlib
+import math
 
 import pandas as pd
 import numpy as np
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
+from pyspark.sql.types import DoubleType
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -145,10 +149,9 @@ class HistogramPlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_hist(psdf, bins):
-        from pyspark.ml.feature import Bucketizer
-
         # 'data' is a Spark DataFrame that selects one column.
         assert isinstance(bins, (np.ndarray, np.generic))
+        assert len(bins) > 2, "the number of buckets must be higher than 2."
 
         sdf = psdf._internal.spark_frame
         scols = []
@@ -179,25 +182,35 @@ class HistogramPlotBase(NumericPlotBase):
         colnames = sdf.columns
         bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
-        output_df = None
-        for group_id, (colname, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            # creates a Bucketizer to get corresponding bin of each value
-            bucketizer = Bucketizer(
-                splits=bins, inputCol=colname, outputCol=bucket_name, handleInvalid="skip"
-            )
+        # TODO(SPARK-49202): register this function in scala side
+        @F.udf(returnType=DoubleType())
+        def binary_search_for_buckets(value):
+            # Given bins = [1.0, 2.0, 3.0, 4.0]
+            # the intervals are:
+            #   [1.0, 2.0) -> 0.0
+            #   [2.0, 3.0) -> 1.0
+            #   [3.0, 4.0] -> 2.0 (the last bucket is a closed interval)
+            if value < bins[0] or value > bins[-1]:
+                raise ValueError(f"value {value} out of the bins bounds: [{bins[0]}, {bins[-1]}]")
 
-            bucket_df = bucketizer.transform(sdf)
-
-            if output_df is None:
-                output_df = bucket_df.select(
-                    F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
-                )
+            if value == bins[-1]:
+                idx = len(bins) - 2
             else:
-                output_df = output_df.union(
-                    bucket_df.select(
-                        F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
-                    )
-                )
+                idx = bisect.bisect(bins, value) - 1
+            return float(idx)
+
+        output_df = (
+            sdf.select(
+                F.posexplode(
+                    F.array([F.col(colname).cast("double") for colname in colnames])
+                ).alias("__group_id", "__value")
+            )
+            # to match handleInvalid="skip" in Bucketizer
+            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN()).select(
+                F.col("__group_id"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
+            )
+        )
 
         # 2. Calculate the count based on each group and bucket.
         #     +----------+-------+------+
@@ -407,14 +420,24 @@ class BoxPlotBase:
         return minmax.iloc[0][["min", "max"]].values
 
     @staticmethod
-    def get_fliers(colname, outliers, min_val):
+    def get_fliers(colname, outliers, lfence, ufence):
         # Filters only the outliers, should "showfliers" be True
         fliers_df = outliers.filter("`__{}_outlier`".format(colname))
 
         # If it shows fliers, take the top 1k with highest absolute values
-        # Here we normalize the values by subtracting the minimum value from
-        # each, and use absolute values.
-        order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
+        # Here we normalize the values by subtracting the fences.
+        formated_colname = "`{}`".format(colname)
+        order_col = (
+            F.when(
+                F.col(formated_colname) > F.lit(ufence),
+                F.col(formated_colname) - F.lit(ufence),
+            )
+            .when(
+                F.col(formated_colname) < F.lit(lfence),
+                F.lit(lfence) - F.col(formated_colname),
+            )
+            .otherwise(F.lit(None))
+        )
         fliers = (
             fliers_df.select(F.col("`{}`".format(colname)))
             .orderBy(order_col)
@@ -422,6 +445,47 @@ class BoxPlotBase:
             .toPandas()[colname]
             .values
         )
+
+        return fliers
+
+    @staticmethod
+    def get_multicol_fliers(colnames, multicol_outliers, multicol_stats):
+        scols = []
+        for i, colname in enumerate(colnames):
+            formated_colname = "`{}`".format(colname)
+            outlier_colname = "__{}_outlier".format(colname)
+            lfence, ufence = multicol_stats[colname]["lfence"], multicol_stats[colname]["ufence"]
+            order_col = (
+                F.when(
+                    F.col(formated_colname) > F.lit(ufence),
+                    F.col(formated_colname) - F.lit(ufence),
+                )
+                .when(
+                    F.col(formated_colname) < F.lit(lfence),
+                    F.lit(lfence) - F.col(formated_colname),
+                )
+                .otherwise(F.lit(None))
+            )
+
+            pair_col = F.struct(
+                order_col.alias("ord"),
+                F.col(formated_colname).alias("val"),
+            )
+            scols.append(
+                SF.collect_top_k(
+                    F.when(F.col(outlier_colname), pair_col)
+                    .otherwise(F.lit(None))
+                    .alias(f"pair_{i}"),
+                    1001,
+                    False,
+                ).alias(f"top_{i}")["val"]
+            )
+
+        results = multicol_outliers.select(scols).first()
+
+        fliers = {}
+        for i, colname in enumerate(colnames):
+            fliers[colname] = results[i]
 
         return fliers
 
@@ -462,23 +526,49 @@ class KdePlotBase(NumericPlotBase):
         return ind
 
     @staticmethod
+    def compute_kde_col(input_col, bw_method=None, ind=None):
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
+
+        assert ind is not None, "'ind' must be a scalar array."
+
+        bandwidth = float(bw_method)
+        points = [float(i) for i in ind]
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
+
+        def norm_pdf(
+            mean: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
+
+        return F.array(
+            [
+                F.avg(
+                    norm_pdf(
+                        input_col.cast("double"),
+                        F.lit(bandwidth),
+                        F.lit(log_std_plus_half_log2_pi),
+                        F.lit(point),
+                    )
+                )
+                for point in points
+            ]
+        )
+
+    @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
-        from pyspark.mllib.stat import KernelDensity
-
-        # 'sdf' is a Spark DataFrame that selects one column.
-
-        # Using RDD is slow so we might have to change it to Dataset based implementation
-        # once Spark has that implementation.
-        sample = sdf.rdd.map(lambda x: float(x[0]))
-        kd = KernelDensity()
-        kd.setSample(sample)
-
-        assert isinstance(bw_method, (int, float)), "'bw_method' must be set as a scalar number."
-
-        if bw_method is not None:
-            # Match the bandwidth with Spark.
-            kd.setBandwidth(float(bw_method))
-        return kd.estimate(list(map(float, ind)))
+        input_col = F.col(sdf.columns[0])
+        kde_col = KdePlotBase.compute_kde_col(input_col, bw_method, ind).alias("kde")
+        row = sdf.select(kde_col).first()
+        return row[0]
 
 
 class PandasOnSparkPlotAccessor(PandasObject):
@@ -574,7 +664,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
-        kind = {"density": "kde"}.get(kind, kind)
         if hasattr(plot_backend, "plot_pandas_on_spark"):
             # use if there's pandas-on-Spark specific method.
             return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
@@ -1065,7 +1154,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
-            ...                        freq='M'))
+            ...                        freq='ME'))
             >>> df.sales.plot.area()  # doctest: +SKIP
 
         For DataFrame
@@ -1077,7 +1166,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
-            ...                        freq='M'))
+            ...                        freq='ME'))
             >>> df.plot.area()  # doctest: +SKIP
         """
         from pyspark.pandas import DataFrame, Series

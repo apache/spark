@@ -156,7 +156,7 @@ private[memory] class ExecutionMemoryPool(
     val memoryToFree = if (curMem < numBytes) {
       logWarning(
         log"Internal error: release called on ${MDC(NUM_BYTES, numBytes)} " +
-          log"bytes but task only has ${MDC(CURRENT_MEMORY_BYTES, curMem)} bytes " +
+          log"bytes but task only has ${MDC(CURRENT_MEMORY_SIZE, curMem)} bytes " +
           log"of memory from the ${MDC(MEMORY_POOL_NAME, poolName)} pool")
       curMem
     } else {

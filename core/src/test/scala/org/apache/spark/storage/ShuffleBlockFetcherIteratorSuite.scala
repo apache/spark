@@ -392,9 +392,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     configureMockTransfer(Map())
     val iterator = createShuffleBlockIteratorWithDefaults(
-      Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1))
+      Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)),
+      blockManager = Some(blockManager)
     )
     intercept[FetchFailedException] { iterator.next() }
+    verify(mockExternalBlockStoreClient, times(1)).getHostLocalDirs(any(), any(), any(), any())
   }
 
   test("Hit maxBytesInFlight limitation before maxBlocksInFlightPerAddress") {

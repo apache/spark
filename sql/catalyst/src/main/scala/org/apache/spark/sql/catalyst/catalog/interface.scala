@@ -197,10 +197,22 @@ object ClusterBySpec {
     ret
   }
 
+  /**
+   * Converts the clustering column property to a ClusterBySpec.
+   */
   def fromProperty(columns: String): ClusterBySpec = {
     ClusterBySpec(mapper.readValue[Seq[Seq[String]]](columns).map(FieldReference(_)))
   }
 
+  /**
+   * Converts a ClusterBySpec to a clustering column property map entry, with validation
+   * of the column names against the schema.
+   *
+   * @param schema the schema of the table.
+   * @param clusterBySpec the ClusterBySpec to be converted to a property.
+   * @param resolver the resolver used to match the column names.
+   * @return a map entry for the clustering column property.
+   */
   def toProperty(
       schema: StructType,
       clusterBySpec: ClusterBySpec,
@@ -209,10 +221,25 @@ object ClusterBySpec {
       normalizeClusterBySpec(schema, clusterBySpec, resolver).toJson
   }
 
+  /**
+   * Converts a ClusterBySpec to a clustering column property map entry, without validating
+   * the column names against the schema.
+   *
+   * @param clusterBySpec existing ClusterBySpec to be converted to properties.
+   * @return a map entry for the clustering column property.
+   */
+  def toPropertyWithoutValidation(clusterBySpec: ClusterBySpec): (String, String) = {
+    (CatalogTable.PROP_CLUSTERING_COLUMNS -> clusterBySpec.toJson)
+  }
+
   private def normalizeClusterBySpec(
       schema: StructType,
       clusterBySpec: ClusterBySpec,
       resolver: Resolver): ClusterBySpec = {
+    if (schema.isEmpty) {
+      return clusterBySpec
+    }
+
     val normalizedColumns = clusterBySpec.columnNames.map { columnName =>
       val position = SchemaUtils.findColumnPosition(
         columnName.fieldNames().toImmutableArraySeq, schema, resolver)
@@ -230,6 +257,18 @@ object ClusterBySpec {
     transforms.collectFirst {
       case ClusterByTransform(columnNames) => ClusterBySpec(columnNames)
     }
+  }
+
+  def extractClusterByTransform(
+      schema: StructType,
+      clusterBySpec: ClusterBySpec,
+      resolver: Resolver): ClusterByTransform = {
+    val normalizedClusterBySpec = normalizeClusterBySpec(schema, clusterBySpec, resolver)
+    ClusterByTransform(normalizedClusterBySpec.columnNames)
+  }
+
+  def fromColumnNames(names: Seq[String]): ClusterBySpec = {
+    ClusterBySpec(names.map(FieldReference(_)))
   }
 }
 
@@ -402,14 +441,14 @@ case class CatalogTable(
   }
 
   /**
-   * Return the schema binding mode. Defaults to SchemaCompensation if not a view or an older
+   * Return the schema binding mode. Defaults to SchemaBinding if not a view or an older
    * version, unless the viewSchemaBindingMode config is set to false
    */
   def viewSchemaMode: ViewSchemaMode = {
     if (!SQLConf.get.viewSchemaBindingEnabled) {
       SchemaUnsupported
     } else {
-      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaCompensation.toString)
+      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaBinding.toString)
       schemaMode match {
         case SchemaBinding.toString => SchemaBinding
         case SchemaEvolution.toString => SchemaEvolution

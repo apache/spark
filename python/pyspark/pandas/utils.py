@@ -42,7 +42,7 @@ from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
-from pyspark.sql.utils import is_remote, get_dataframe_class
+from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import (
@@ -915,8 +915,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
-    SparkDataFrame = get_dataframe_class()
-    assert isinstance(df, SparkDataFrame), type(df)
+    assert isinstance(df, PySparkDataFrame), type(df)
     assert (
         column_name not in df.columns
     ), "The given column name `{}` already exists in the Spark DataFrame: {}".format(
@@ -948,13 +947,13 @@ def spark_column_equals(left: Column, right: Column) -> bool:
 
         if not isinstance(left, ConnectColumn):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN",
-                message_parameters={"arg_name": "left", "arg_type": type(left).__name__},
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "left", "arg_type": type(left).__name__},
             )
         if not isinstance(right, ConnectColumn):
             raise PySparkTypeError(
-                error_class="NOT_COLUMN",
-                message_parameters={"arg_name": "right", "arg_type": type(right).__name__},
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "right", "arg_type": type(right).__name__},
             )
         return repr(left).replace("`", "") == repr(right).replace("`", "")
     else:

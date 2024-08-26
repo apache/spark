@@ -29,6 +29,6 @@ testpaths = [
 # GitHub workflow version and dev/reformat-python
 required-version = "23.9.1"
 line-length = 100
-target-version = ['py38']
+target-version = ['py39']
 include = '\.pyi?$'
 extend-exclude = 'cloudpickle|error_classes.py'

@@ -40,7 +40,7 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
         sql(s"DROP NAMESPACE default")
       },
       errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-      parameters = Map("database" -> "`default`")
+      parameters = Map("database" -> s"`$catalog`.`default`")
     )
   }
 }

@@ -27,7 +27,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class NoSuchDatabaseException private(
+class NoSuchDatabaseException private[analysis](
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
@@ -60,7 +60,7 @@ class NoSuchNamespaceException private(
     cause: Option[Throwable],
     errorClass: Option[String],
     messageParameters: Map[String, String])
-  extends AnalysisException(
+  extends NoSuchDatabaseException(
     message,
     cause = cause,
     errorClass = errorClass,

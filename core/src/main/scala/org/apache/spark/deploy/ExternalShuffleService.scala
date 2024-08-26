@@ -71,8 +71,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     if (localDirs.length >= 1) {
       new File(localDirs.find(new File(_, dbName).exists()).getOrElse(localDirs(0)), dbName)
     } else {
-      logWarning(s"'spark.local.dir' should be set first when we use db in " +
-        s"ExternalShuffleService. Note that this only affects standalone mode.")
+      logWarning("'spark.local.dir' should be set first when we use db in " +
+        "ExternalShuffleService. Note that this only affects standalone mode.")
       null
     }
   }
@@ -165,6 +165,7 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)

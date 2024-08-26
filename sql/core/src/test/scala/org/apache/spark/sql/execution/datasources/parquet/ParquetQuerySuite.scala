@@ -369,16 +369,14 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
 
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            testIgnoreCorruptFiles(options)
-          }.getCause
-          assert(exception.getMessage().contains("is not a Parquet file"))
-          val exception2 = intercept[SparkException] {
-            testIgnoreCorruptFilesWithoutSchemaInfer(options)
-          }.getCause
-          assert(exception2.getMessage().contains("is not a Parquet file"))
-        }
+        val exception = intercept[SparkException] {
+          testIgnoreCorruptFiles(options)
+        }.getCause
+        assert(exception.getMessage().contains("is not a Parquet file"))
+        val exception2 = intercept[SparkException] {
+          testIgnoreCorruptFilesWithoutSchemaInfer(options)
+        }.getCause
+        assert(exception2.getMessage().contains("is not a Parquet file"))
       }
     }
   }

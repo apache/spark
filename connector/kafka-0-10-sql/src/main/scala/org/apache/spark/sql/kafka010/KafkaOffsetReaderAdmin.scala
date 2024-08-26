@@ -120,10 +120,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       isStartingOffsets: Boolean): Map[TopicPartition, Long] = {
     def validateTopicPartitions(partitions: Set[TopicPartition],
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-      assert(partitions == partitionOffsets.keySet,
-        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest.\n" +
-          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
+      if (partitions != partitionOffsets.keySet) {
+        throw KafkaExceptions.startOffsetDoesNotMatchAssigned(partitionOffsets.keySet, partitions)
+      }
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }

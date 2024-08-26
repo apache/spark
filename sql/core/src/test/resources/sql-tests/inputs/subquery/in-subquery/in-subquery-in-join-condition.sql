@@ -84,3 +84,7 @@ select * from x inner join y on x1 = y1 and y2 IN (select z1 from z where z1 = y
 select * from x inner join y on x1 = y1 and y2 not IN (select z1 from z where z1 = y1) order by x1, x2, y1, y2;
 select * from x left join y on x1 = y1 and y2 IN (select z1 from z where z1 = y1) order by x1, x2, y1, y2;
 select * from x left join y on x1 = y1 and y2 not IN (select z1 from z where z1 = y1) order by x1, x2, y1, y2;
+
+-- Correlated subquery references both left and right children, errors
+select * from x left join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2 AND z2 = y2) order by x1, x2, y1, y2;
+select * from x left join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2 AND z2 = y2) order by x1, x2, y1, y2;

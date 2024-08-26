@@ -103,20 +103,25 @@ such as `--master`, as shown above. `spark-submit` can accept any Spark property
 flag, but uses special flags for properties that play a part in launching the Spark application.
 Running `./bin/spark-submit --help` will show the entire list of these options.
 
-`bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which
-each line consists of a key and a value separated by whitespace. For example:
+When configurations are specified via the `--conf/-c` flags, `bin/spark-submit` will also read
+configuration options from `conf/spark-defaults.conf`, in which each line consists of a key and
+a value separated by whitespace. For example:
 
     spark.master            spark://5.6.7.8:7077
     spark.executor.memory   4g
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
+In addition, a property file with Spark configurations can be passed to `bin/spark-submit` via
+`--properties-file` parameter. When this is set, Spark will no longer load configurations from
+`conf/spark-defaults.conf` unless another parameter `--load-spark-defaults` is provided.
+
 Any values specified as flags or in the properties file will be passed on to the application
 and merged with those specified through SparkConf. Properties set directly on the SparkConf
-take highest precedence, then flags passed to `spark-submit` or `spark-shell`, then options
-in the `spark-defaults.conf` file. A few configuration keys have been renamed since earlier
-versions of Spark; in such cases, the older key names are still accepted, but take lower
-precedence than any instance of the newer key.
+take the highest precedence, then those through `--conf` flags or `--properties-file` passed to
+`spark-submit` or `spark-shell`, then options in the `spark-defaults.conf` file. A few
+configuration keys have been renamed since earlier versions of Spark; in such cases, the older
+key names are still accepted, but take lower precedence than any instance of the newer key.
 
 Spark properties mainly can be divided into two kinds: one is related to deploy, like
 "spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
@@ -789,7 +794,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password|token|access[.]key</td>
+  <td>(?i)secret|password|token|access[.]?key</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -1025,13 +1030,31 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.file.merge.buffer</code></td>
+  <td>32k</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file input stream, in KiB unless otherwise
+    specified. These buffers use off-heap buffers and are related to the number of files in
+    the shuffle file. Too large buffers should be avoided.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.unsafe.file.output.buffer</code></td>
   <td>32k</td>
   <td>
-    The file system for this buffer size after each partition is written in unsafe shuffle writer.
-    In KiB unless otherwise specified.
+    Deprecated since Spark 4.0, please use <code>spark.shuffle.localDisk.file.output.buffer</code>.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.localDisk.file.output.buffer</code></td>
+  <td>32k</td>
+  <td>
+    The file system for this buffer size after each partition is written in all local disk shuffle writers.
+    In KiB unless otherwise specified.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.spill.diskWriteBufferSize</code></td>
@@ -1653,7 +1676,7 @@ Apart from these, the following properties are also available, and may be useful
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
-    For now, only YARN mode supports this configuration
+    For now, only YARN and K8s cluster manager supports this configuration
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1720,6 +1743,10 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.ui.filters=com.test.filter1</code>
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
+    <br />
+    <br />Note that some filter requires additional dependencies. For example,
+    the built-in <code>org.apache.spark.ui.JWSFilter</code> requires
+    <code>jjwt-impl</code> and <code>jjwt-jackson</code> jar files.
   </td>
   <td>1.0.0</td>
 </tr>
@@ -1887,6 +1914,14 @@ Apart from these, the following properties are also available, and may be useful
     no worker is spawned, it works in single-threaded mode. When value > 0, it triggers
     asynchronous mode, corresponding number of threads are spawned. More workers improve
     performance, but also increase memory cost.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.lzf.parallel.enabled</code></td>
+  <td>false</td>
+  <td>
+    When true, LZF compression will use multiple threads to compress data in parallel.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -3396,7 +3431,7 @@ Spark subsystems.
 
 Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
-Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
+Also, they can be set and queried by SET commands and reset to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
 
 {% include_api_gen generated-runtime-sql-config-table.html %}
@@ -3541,7 +3576,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### SparkR
+### SparkR (deprecated)
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

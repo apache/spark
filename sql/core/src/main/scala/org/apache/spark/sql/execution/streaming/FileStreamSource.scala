@@ -168,7 +168,7 @@ class FileStreamSource(
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(limit: ReadLimit): FileStreamSourceOffset = synchronized {
-    val newFiles = if (unreadFiles != null) {
+    val newFiles = if (unreadFiles != null && unreadFiles.nonEmpty) {
       logDebug(s"Reading from unread files - ${unreadFiles.size} files are available.")
       unreadFiles
     } else {
@@ -184,9 +184,11 @@ class FileStreamSource(
       }
     }
 
+    val shouldCache = !sourceOptions.latestFirst && allFilesForTriggerAvailableNow == null
+
     // Obey user's setting to limit the number of files in this batch trigger.
     val (batchFiles, unselectedFiles) = limit match {
-      case files: ReadMaxFiles if !sourceOptions.latestFirst =>
+      case files: ReadMaxFiles if shouldCache =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
         if (usFiles.size < files.maxFiles() * discardCachedInputRatio) {
@@ -200,10 +202,10 @@ class FileStreamSource(
         }
 
       case files: ReadMaxFiles =>
-        // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
+        // don't use the cache, just take files for the next batch
         (newFiles.take(files.maxFiles()), null)
 
-      case files: ReadMaxBytes if !sourceOptions.latestFirst =>
+      case files: ReadMaxBytes if shouldCache =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
           takeFilesUntilMax(newFiles, files.maxBytes())
@@ -218,20 +220,23 @@ class FileStreamSource(
         }
 
       case files: ReadMaxBytes =>
+        // don't use the cache, just take files for the next batch
         val (FilesSplit(bFiles, _), _) = takeFilesUntilMax(newFiles, files.maxBytes())
-        // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
         (bFiles, null)
 
       case _: ReadAllAvailable => (newFiles, null)
     }
 
-    if (unselectedFiles != null && unselectedFiles.nonEmpty) {
+    // need to ensure that if maxCachedFiles is set to 0 that the next batch will be forced to
+    // list files again
+    if (unselectedFiles != null && unselectedFiles.nonEmpty && maxCachedFiles > 0) {
       logTrace(s"Taking first $maxCachedFiles unread files.")
       unreadFiles = unselectedFiles.take(maxCachedFiles)
       logTrace(s"${unreadFiles.size} unread files are available for further batches.")
     } else {
       unreadFiles = null
-      logTrace(s"No unread file is available for further batches.")
+      logTrace(s"No unread file is available for further batches or maxCachedFiles has been set " +
+        s" to 0 to disable caching.")
     }
 
     batchFiles.foreach { case NewFileEntry(p, _, timestamp) =>

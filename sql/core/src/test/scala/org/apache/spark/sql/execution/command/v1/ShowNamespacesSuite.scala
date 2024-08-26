@@ -50,7 +50,7 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`dummy`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`dummy`"))
   }
 }
 

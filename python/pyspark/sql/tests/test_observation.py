@@ -50,8 +50,8 @@ class DataFrameObservationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NO_OBSERVE_BEFORE_GET",
-            message_parameters={},
+            errorClass="NO_OBSERVE_BEFORE_GET",
+            messageParameters={},
         )
 
         observed = (
@@ -85,8 +85,8 @@ class DataFrameObservationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="REUSE_OBSERVATION",
-            message_parameters={},
+            errorClass="REUSE_OBSERVATION",
+            messageParameters={},
         )
 
         # observation requires name (if given) to be non empty string
@@ -101,8 +101,8 @@ class DataFrameObservationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "exprs"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "exprs"},
         )
 
         # dataframe.observe requires non-None Columns
@@ -113,8 +113,8 @@ class DataFrameObservationTestsMixin:
 
                 self.check_error(
                     exception=pe.exception,
-                    error_class="NOT_LIST_OF_COLUMN",
-                    message_parameters={"arg_name": "exprs"},
+                    errorClass="NOT_LIST_OF_COLUMN",
+                    messageParameters={"arg_name": "exprs"},
                 )
 
     def test_observe_str(self):

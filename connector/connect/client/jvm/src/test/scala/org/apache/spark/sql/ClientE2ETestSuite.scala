@@ -33,19 +33,23 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
-class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+class ClientE2ETestSuite
+    extends ConnectFunSuite
+    with RemoteSparkSession
+    with SQLHelper
+    with PrivateMethodTester {
 
   test("throw SparkException with null filename in stack trace elements") {
     withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
@@ -161,8 +165,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     }
   }
 
-  test("throw NoSuchDatabaseException") {
-    val ex = intercept[NoSuchDatabaseException] {
+  test("throw NoSuchNamespaceException") {
+    val ex = intercept[NoSuchNamespaceException] {
       spark.sql("use database123")
     }
     assert(ex.getErrorClass != null)
@@ -304,7 +308,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
-        "connector",
+        "sql",
         "connect",
         "common",
         "src",
@@ -344,7 +348,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
-        "connector",
+        "sql",
         "connect",
         "common",
         "src",
@@ -375,7 +379,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
-        "connector",
+        "sql",
         "connect",
         "common",
         "src",
@@ -1553,6 +1557,14 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     // make sure the thread is unblocked after the query is finished
     val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
+  }
+
+  test("SPARK-48852: trim function on a string column returns correct results") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq("  a  ", "b  ", "   c").toDF("col")
+    val result = df.select(trim(col("col"), " ").as("trimmed_col")).collect()
+    assert(result sameElements Array(Row("a"), Row("b"), Row("c")))
   }
 }
 

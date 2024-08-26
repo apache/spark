@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{expr, lit, window}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This test ensures that any optimizations done by Spark SQL optimizer are
@@ -449,6 +450,78 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         // a bug, it was incorrect marked to the streaming. SPARK-47305 fixed the bug.
         CheckNewAnswer()
       )
+    }
+  }
+
+  test("SPARK-48481: DISTINCT with empty stream source should retain AGGREGATE") {
+    def doTest(numExpectedStatefulOperatorsForOneEmptySource: Int): Unit = {
+      withTempView("tv1", "tv2") {
+        val inputStream1 = MemoryStream[Int]
+        val ds1 = inputStream1.toDS()
+        ds1.registerTempTable("tv1")
+
+        val inputStream2 = MemoryStream[Int]
+        val ds2 = inputStream2.toDS()
+        ds2.registerTempTable("tv2")
+
+        // DISTINCT is rewritten to AGGREGATE, hence an AGGREGATEs for each source
+        val unioned = spark.sql(
+          """
+            | WITH u AS (
+            |   SELECT DISTINCT value AS value FROM tv1
+            | ), v AS (
+            |   SELECT DISTINCT value AS value FROM tv2
+            | )
+            | SELECT value FROM u UNION ALL SELECT value FROM v
+            |""".stripMargin
+        )
+
+        testStream(unioned, OutputMode.Update())(
+          MultiAddData(inputStream1, 1, 1, 2)(inputStream2, 1, 1, 2),
+          CheckNewAnswer(1, 2, 1, 2),
+          Execute { qe =>
+            val stateOperators = qe.lastProgress.stateOperators
+            // Aggregate should be "stateful" one
+            assert(stateOperators.length === 2)
+            stateOperators.zipWithIndex.foreach { case (op, id) =>
+              assert(op.numRowsUpdated === 2, s"stateful OP ID: $id")
+            }
+          },
+          AddData(inputStream2, 2, 2, 3),
+          // NOTE: this is probably far from expectation to have 2 as output given user intends
+          // deduplicate, but the behavior is still correct with rewritten node and output mode:
+          // Aggregate & Update mode.
+          // TODO: Probably we should disallow DISTINCT or rewrite to
+          //  dropDuplicates(WithinWatermark) for streaming source?
+          CheckNewAnswer(2, 3),
+          Execute { qe =>
+            val stateOperators = qe.lastProgress.stateOperators
+            // Aggregate should be "stateful" one
+            assert(stateOperators.length === numExpectedStatefulOperatorsForOneEmptySource)
+            val opWithUpdatedRows = stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
+            assert(opWithUpdatedRows.length === 1)
+            // If this were dropDuplicates, numRowsUpdated should have been 1.
+            assert(opWithUpdatedRows.head._1.numRowsUpdated === 2,
+              s"stateful OP ID: ${opWithUpdatedRows.head._2}")
+          },
+          AddData(inputStream1, 4, 4, 5),
+          CheckNewAnswer(4, 5),
+          Execute { qe =>
+            val stateOperators = qe.lastProgress.stateOperators
+            assert(stateOperators.length === numExpectedStatefulOperatorsForOneEmptySource)
+            val opWithUpdatedRows = stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
+            assert(opWithUpdatedRows.length === 1)
+            assert(opWithUpdatedRows.head._1.numRowsUpdated === 2,
+              s"stateful OP ID: ${opWithUpdatedRows.head._2}")
+          }
+        )
+      }
+    }
+
+    doTest(numExpectedStatefulOperatorsForOneEmptySource = 2)
+
+    withSQLConf(SQLConf.STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED.key -> "true") {
+      doTest(numExpectedStatefulOperatorsForOneEmptySource = 1)
     }
   }
 }

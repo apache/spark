@@ -118,6 +118,7 @@ options for deployment:
 
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark Scala API (Scaladoc)](api/scala/org/apache/spark/index.html)
+* [Spark Connect Scala Client API (Scaladoc)](api/connect/scala/org/apache/spark/index.html)
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)
 * [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)

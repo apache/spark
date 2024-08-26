@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
@@ -187,6 +188,8 @@ object ExpressionEncoder {
       }
       constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
     } catch {
+      case e: SparkRuntimeException if e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION" =>
+        throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionDecodingError(e, expressions)
     }
@@ -213,6 +216,8 @@ object ExpressionEncoder {
       inputRow(0) = t
       extractProjection(inputRow)
     } catch {
+      case e: SparkRuntimeException if e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION" =>
+        throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionEncodingError(e, expressions)
     }

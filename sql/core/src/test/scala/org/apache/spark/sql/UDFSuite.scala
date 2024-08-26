@@ -775,7 +775,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`b`",
-        "proposal" -> "`a`"))
+        "proposal" -> "`a`"),
+      context = ExpectedContext("apply", ".*"))
   }
 
   test("wrong order of input fields for case class") {
@@ -1210,5 +1211,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         parameters = Map("dataType" -> s"\"${dt.sql}\"")
       )
     }
+  }
+
+  test("SPARK-47927: ScalaUDF null handling") {
+    val f = udf[Int, Int](_ + 1)
+    val df = Seq(Some(1), None).toDF("c")
+      .select(f($"c").as("f"), f($"f"))
+    checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
   }
 }

@@ -141,7 +141,10 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Examples demonstrate alternative syntax, see SPARK-45574
       "org.apache.spark.sql.catalyst.expressions.Cast",
       // Examples demonstrate alternative syntax, see SPARK-47012
-      "org.apache.spark.sql.catalyst.expressions.Collate"
+      "org.apache.spark.sql.catalyst.expressions.Collate",
+      classOf[ShiftLeft].getName,
+      classOf[ShiftRight].getName,
+      classOf[ShiftRightUnsigned].getName
     )
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
@@ -222,6 +225,11 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Throws an error
       "org.apache.spark.sql.catalyst.expressions.RaiseErrorExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.AssertTrue",
+      // Requires dynamic class loading not available in this test suite.
+      "org.apache.spark.sql.catalyst.expressions.FromAvro",
+      "org.apache.spark.sql.catalyst.expressions.ToAvro",
+      "org.apache.spark.sql.catalyst.expressions.FromProtobuf",
+      "org.apache.spark.sql.catalyst.expressions.ToProtobuf",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)

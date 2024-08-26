@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  */
 abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
-  protected def _sqlContext: SQLContext
+  protected def session: SparkSession
 
   /**
    * Converts $"col name" into a [[Column]].
@@ -242,7 +242,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    * @since 1.6.0
    */
   implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
-    DatasetHolder(_sqlContext.createDataset(rdd))
+    DatasetHolder(session.createDataset(rdd))
   }
 
   /**
@@ -250,7 +250,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    * @since 1.6.0
    */
   implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
-    DatasetHolder(_sqlContext.createDataset(s))
+    DatasetHolder(session.createDataset(s))
   }
 
   /**

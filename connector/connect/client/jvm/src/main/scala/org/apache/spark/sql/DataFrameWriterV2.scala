@@ -32,6 +32,7 @@ import org.apache.spark.connect.proto
 @Experimental
 final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     extends CreateTableWriter[T] {
+  import ds.sparkSession.RichColumn
 
   private var provider: Option[String] = None
 
@@ -40,6 +41,8 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
   private val properties = new mutable.HashMap[String, String]()
 
   private var partitioning: Option[Seq[proto.Expression]] = None
+
+  private var clustering: Option[Seq[String]] = None
 
   private var overwriteCondition: Option[proto.Expression] = None
 
@@ -77,6 +80,12 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     this
   }
 
+  @scala.annotation.varargs
+  override def clusterBy(colName: String, colNames: String*): CreateTableWriter[T] = {
+    this.clustering = Some(colName +: colNames)
+    this
+  }
+
   override def create(): Unit = {
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_CREATE)
   }
@@ -92,12 +101,8 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
   /**
    * Append the contents of the data frame to the output table.
    *
-   * If the output table does not exist, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
+   * If the output table does not exist, this operation will fail. The data frame will be
    * validated to ensure it is compatible with the existing table.
-   *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-   *   If the table does not exist
    */
   def append(): Unit = {
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_APPEND)
@@ -107,12 +112,8 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
    * Overwrite rows matching the given filter condition with the contents of the data frame in the
    * output table.
    *
-   * If the output table does not exist, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
+   * If the output table does not exist, this operation will fail. The data frame will be
    * validated to ensure it is compatible with the existing table.
-   *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-   *   If the table does not exist
    */
   def overwrite(condition: Column): Unit = {
     overwriteCondition = Some(condition.expr)
@@ -126,12 +127,8 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
    * This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
    * partitions dynamically depending on the contents of the data frame.
    *
-   * If the output table does not exist, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
+   * If the output table does not exist, this operation will fail. The data frame will be
    * validated to ensure it is compatible with the existing table.
-   *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-   *   If the table does not exist
    */
   def overwritePartitions(): Unit = {
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
@@ -145,6 +142,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     provider.foreach(builder.setProvider)
 
     partitioning.foreach(columns => builder.addAllPartitioningColumns(columns.asJava))
+    clustering.foreach(columns => builder.addAllClusteringColumns(columns.asJava))
 
     options.foreach { case (k, v) =>
       builder.putOptions(k, v)
@@ -225,11 +223,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * The new table's schema, partition layout, properties, and other configuration will be based
    * on the configuration set on this writer.
    *
-   * If the output table exists, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException]].
-   *
-   * @throws org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-   *   If the table already exists
+   * If the output table exists, this operation will fail.
    */
   def create(): Unit
 
@@ -239,11 +233,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * The existing table's schema, partition layout, properties, and other configuration will be
    * replaced with the contents of the data frame and the configuration set on this writer.
    *
-   * If the output table does not exist, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException]].
-   *
-   * @throws org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-   *   If the table does not exist
+   * If the output table does not exist, this operation will fail.
    */
   def replace(): Unit
 
@@ -272,7 +262,21 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    *
    * @since 3.4.0
    */
+  @scala.annotation.varargs
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
+
+  /**
+   * Clusters the output by the given columns on the storage. The rows with matching values in the
+   * specified clustering columns will be consolidated within the same group.
+   *
+   * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
+   * together in a file. This arrangement improves query efficiency when you apply selective
+   * filters to these clustering columns, thanks to data skipping.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colName: String, colNames: String*): CreateTableWriter[T]
 
   /**
    * Specifies a provider for the underlying output data source. Spark's default catalog supports
