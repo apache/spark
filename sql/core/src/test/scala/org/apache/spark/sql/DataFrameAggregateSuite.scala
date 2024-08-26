@@ -2491,7 +2491,7 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-  test("plunk") {
+  test("SPARK-49261: Don't patch literals in aggregate expressions with group-by expressions") {
     val data = Seq((1, 1.001d, 2), (2, 3.001d, 4), (2, 3.001, 4)).toDF("a", "b", "c")
     withTempView("v1") {
       data.createOrReplaceTempView("v1")
@@ -2500,12 +2500,12 @@ class DataFrameAggregateSuite extends QueryTest
               |  round(sum(b), 6) as sum1,
               |  count(distinct a) as count1,
               |  count(distinct c) as count2
-              |  from (
-              |    select
-              |      6 as gb,
-              |      *
-              |    from v1
-              |  )
+              |from (
+              |  select
+              |    6 as gb,
+              |    *
+              |  from v1
+              |)
               |group by a, gb
               |""".stripMargin)
       checkAnswer(df, Row(1.001d, 1, 1) :: Row(6.002d, 1, 1) :: Nil)

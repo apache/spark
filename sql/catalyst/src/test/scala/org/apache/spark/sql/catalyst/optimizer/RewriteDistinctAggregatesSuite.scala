@@ -110,7 +110,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
-  test("plunk") {
+  test("SPARK-49261: Don't patch literals in aggregate expressions with group-by expressions") {
     val relation = testRelation2
       .select(Literal(6).as("gb"), $"a", $"b", $"c", $"d")
     val input = relation
