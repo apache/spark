@@ -2346,6 +2346,10 @@ public class CollationSupportSuite {
     assertStringLocate("", "asd", 100, "UTF8_LCASE", 1);
     assertStringLocate("", "asd", 100, "UNICODE", 1);
     assertStringLocate("", "asd", 100, "UNICODE_CI", 1);
+    assertStringLocate("asd", "", 100, "UTF8_BINARY", 0);
+    assertStringLocate("asd", "", 100, "UTF8_LCASE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE_CI", 0);
   }
 
   /**
