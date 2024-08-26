@@ -50,6 +50,16 @@ public class CollationAwareUTF8String {
   private static final int MATCH_NOT_FOUND = -1;
 
   /**
+   * `COMBINED_ASCII_SMALL_I_COMBINING_DOT` is an internal representation of the combined
+   * lowercase code point for ASCII lowercase letter i with an additional combining dot character
+   * (U+0307). This integer value is not a valid code point itself, but rather an artificial code
+   * point marker used to represent the two lowercase characters that are the result of converting
+   * the uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
+   */
+  public static final int COMBINED_ASCII_SMALL_I_COMBINING_DOT =
+          SpecialCodePointConstants.ASCII_SMALL_I << 16 | SpecialCodePointConstants.COMBINING_DOT;
+
+  /**
    * Returns whether the target string starts with the specified prefix, starting from the
    * specified position (0-based index referring to character position in UTF8String), with respect
    * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased prior
@@ -106,7 +116,7 @@ public class CollationAwareUTF8String {
       } else {
         // Use buffered lowercase code point iteration to handle one-to-many case mappings.
         targetCodePoint = getLowercaseCodePoint(targetIterator.next());
-        if (targetCodePoint == SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+        if (targetCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
           targetCodePoint = SpecialCodePointConstants.ASCII_SMALL_I;
           codePointBuffer = SpecialCodePointConstants.COMBINING_DOT;
         }
@@ -208,7 +218,7 @@ public class CollationAwareUTF8String {
       } else {
         // Use buffered lowercase code point iteration to handle one-to-many case mappings.
         targetCodePoint = getLowercaseCodePoint(targetIterator.next());
-        if (targetCodePoint == SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+        if (targetCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
           targetCodePoint = SpecialCodePointConstants.COMBINING_DOT;
           codePointBuffer = SpecialCodePointConstants.ASCII_SMALL_I;
         }
@@ -462,7 +472,7 @@ public class CollationAwareUTF8String {
    */
   private static void appendLowercaseCodePoint(final int codePoint, final StringBuilder sb) {
     int lowercaseCodePoint = getLowercaseCodePoint(codePoint);
-    if (lowercaseCodePoint == SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+    if (lowercaseCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
       sb.appendCodePoint(SpecialCodePointConstants.ASCII_SMALL_I);
       sb.appendCodePoint(SpecialCodePointConstants.COMBINING_DOT);
@@ -481,7 +491,7 @@ public class CollationAwareUTF8String {
   private static int getLowercaseCodePoint(final int codePoint) {
     if (codePoint == SpecialCodePointConstants.CAPITAL_I_WITH_DOT_ABOVE) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      return SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT;
+      return COMBINED_ASCII_SMALL_I_COMBINING_DOT;
     }
     else if (codePoint == SpecialCodePointConstants.GREEK_FINAL_SIGMA) {
       // Greek final and non-final letter sigma should be mapped the same. This is achieved by
@@ -973,11 +983,11 @@ public class CollationAwareUTF8String {
       }
       // Special handling for letter i (U+0069) followed by a combining dot (U+0307). By ensuring
       // that `CODE_POINT_LOWERCASE_I` is buffered, we guarantee finding a max-length match.
-      if (lowercaseDict.containsKey(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT)
+      if (lowercaseDict.containsKey(COMBINED_ASCII_SMALL_I_COMBINING_DOT)
           && codePoint == SpecialCodePointConstants.ASCII_SMALL_I && inputIter.hasNext()) {
         int nextCodePoint = inputIter.next();
         if (nextCodePoint == SpecialCodePointConstants.COMBINING_DOT) {
-          codePoint = SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT;
+          codePoint = COMBINED_ASCII_SMALL_I_COMBINING_DOT;
         } else {
           codePointBuffer = nextCodePoint;
         }
@@ -1138,7 +1148,7 @@ public class CollationAwareUTF8String {
       }
       // Special handling for Turkish dotted uppercase letter I.
       if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I && srcIter.hasNext() &&
-          trimChars.contains(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
+          trimChars.contains(COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
         codePointBuffer = codePoint;
         codePoint = getLowercaseCodePoint(srcIter.next());
         if (codePoint == SpecialCodePointConstants.COMBINING_DOT) {
@@ -1256,7 +1266,7 @@ public class CollationAwareUTF8String {
       }
       // Special handling for Turkish dotted uppercase letter I.
       if (codePoint == SpecialCodePointConstants.COMBINING_DOT && srcIter.hasNext() &&
-          trimChars.contains(SpecialCodePointConstants.COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
+          trimChars.contains(COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
         codePointBuffer = codePoint;
         codePoint = getLowercaseCodePoint(srcIter.next());
         if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I) {
