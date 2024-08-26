@@ -199,10 +199,18 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
         # Computes min and max values of non-outliers - the whiskers
         whiskers = BoxPlotBase.calc_multicol_whiskers(numeric_column_names, outliers)
 
+        fliers = None
+        if boxpoints:
+            fliers = BoxPlotBase.get_multicol_fliers(numeric_column_names, outliers, whiskers)
+
         i = 0
         for colname in numeric_column_names:
             col_stats = multicol_stats[colname]
             col_whiskers = whiskers[colname]
+
+            col_fliers = None
+            if fliers is not None and colname in fliers and len(fliers[colname]) > 0:
+                col_fliers = [fliers[colname]]
 
             fig.add_trace(
                 go.Box(
@@ -214,7 +222,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     mean=[col_stats["mean"]],
                     lowerfence=[col_whiskers["min"]],
                     upperfence=[col_whiskers["max"]],
-                    y=None,  # todo: support y=fliers
+                    y=col_fliers,
                     boxpoints=boxpoints,
                     notched=notched,
                     **kwargs,
@@ -239,22 +247,28 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     ind = KdePlotBase.get_ind(sdf.select(*data_columns), kwargs.pop("ind", None))
     bw_method = kwargs.pop("bw_method", None)
 
-    pdfs = []
-    for label in psdf._internal.column_labels:
-        pdfs.append(
+    kde_cols = [
+        KdePlotBase.compute_kde_col(
+            input_col=psdf._internal.spark_column_for(label),
+            ind=ind,
+            bw_method=bw_method,
+        ).alias(f"kde_{i}")
+        for i, label in enumerate(psdf._internal.column_labels)
+    ]
+    kde_results = sdf.select(*kde_cols).first()
+
+    pdf = pd.concat(
+        [
             pd.DataFrame(
                 {
-                    "Density": KdePlotBase.compute_kde(
-                        sdf.select(psdf._internal.spark_column_for(label)),
-                        ind=ind,
-                        bw_method=bw_method,
-                    ),
+                    "Density": kde_result,
                     "names": name_like_string(label),
                     "index": ind,
                 }
             )
-        )
-    pdf = pd.concat(pdfs)
+            for label, kde_result in zip(psdf._internal.column_labels, list(kde_results))
+        ]
+    )
 
     fig = express.line(pdf, x="index", y="Density", **kwargs)
     fig["layout"]["xaxis"]["title"] = None

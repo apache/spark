@@ -3576,7 +3576,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### SparkR
+### SparkR (deprecated)
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

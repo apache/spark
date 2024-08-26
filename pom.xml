@@ -3015,6 +3015,9 @@
               <goals>
                 <goal>doc-jar</goal>
               </goals>
+              <configuration>
+                <skip>${maven.scaladoc.skip}</skip>
+              </configuration>
             </execution>
           </executions>
           <configuration>
@@ -3022,7 +3025,6 @@
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
-            <skip>${maven.scaladoc.skip}</skip>
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
