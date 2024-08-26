@@ -1261,7 +1261,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
@@ -1280,7 +1280,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
@@ -1299,7 +1299,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
@@ -1318,7 +1318,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
@@ -1337,7 +1337,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
@@ -1356,7 +1356,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
@@ -2334,7 +2334,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : "",
     "input" : "-\t2-2\t",
     "intervalStr" : "year-month",
     "supportedFormat" : "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
@@ -2358,7 +2357,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
     "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",

@@ -107,14 +107,18 @@ object IntervalUtils extends SparkIntervalUtils {
       typeName: String,
       fallBackNotice: Option[String] = None) = {
     throw new SparkIllegalArgumentException(
-      errorClass = "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING",
+      errorClass = fallBackNotice match {
+        case Some(_) => "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE"
+        case _ => "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING"
+      },
       messageParameters = Map(
         "intervalStr" -> intervalStr,
         "supportedFormat" -> supportedFormat((intervalStr, startFiled, endField))
           .map(format => s"`$format`").mkString(", "),
         "typeName" -> typeName,
-        "input" -> input.toString,
-        "fallBackNotice" -> fallBackNotice.map(s => s", $s").getOrElse("")))
+        "input" -> input.toString)
+        ++ fallBackNotice.map(s => Map("fallBackNotice" -> s", $s and $fallbackNotice")
+      ).getOrElse(Map.empty))
   }
 
   val supportedFormat = Map(

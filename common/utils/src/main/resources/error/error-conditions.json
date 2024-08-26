@@ -1959,6 +1959,11 @@
       },
       "UNMATCHED_FORMAT_STRING" : {
         "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input>."
+        ]
+      },
+      "UNMATCHED_FORMAT_STRING_WITH_NOTICE" : {
+        "message" : [
           "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
         ]
       },
