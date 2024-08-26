@@ -2915,23 +2915,23 @@ class PlanGenerationTestSuite
   }
 
   functionTest("zstd_compress") {
-    fn.zstd_compress(fn.col("g"))
+    fn.zstd_compress(fn.col("bytes"))
   }
 
   functionTest("zstd_compress with level") {
-    fn.zstd_compress(fn.col("g"), fn.lit(5))
+    fn.zstd_compress(fn.col("bytes"), fn.lit(5))
   }
 
   functionTest("zstd_compress with level streaming_mode") {
-    fn.zstd_compress(fn.col("g"), fn.lit(5), fn.lit(true))
+    fn.zstd_compress(fn.col("bytes"), fn.lit(5), fn.lit(true))
   }
 
   functionTest("zstd_decompress") {
-    fn.zstd_decompress(fn.col("g"))
+    fn.zstd_decompress(fn.col("bytes"))
   }
 
   functionTest("try_zstd_decompress") {
-    fn.try_zstd_decompress(fn.col("g"))
+    fn.try_zstd_decompress(fn.col("bytes"))
   }
 
   functionTest("sha") {

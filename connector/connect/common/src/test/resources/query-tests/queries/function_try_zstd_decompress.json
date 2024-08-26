@@ -16,7 +16,7 @@
         "functionName": "try_zstd_decompress",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "g"
+            "unparsedIdentifier": "bytes"
           }
         }]
       }
