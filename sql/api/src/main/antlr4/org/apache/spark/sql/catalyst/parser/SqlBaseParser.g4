@@ -1464,10 +1464,7 @@ operatorPipeStatement
     : operatorPipeStatement OPERATOR_PIPE (
         selectClause
       | whereClause
-      | queryOrganization
-      | ({legacy_setops_precedence_enabled}? setOperationLegacy
-      | {!legacy_setops_precedence_enabled}? setOperationNonLegacyIntersect
-      | {!legacy_setops_precedence_enabled}? setOperationNonLegacyUnionExceptMinus))
+      | queryOrganization)
     | query
     ;
 
