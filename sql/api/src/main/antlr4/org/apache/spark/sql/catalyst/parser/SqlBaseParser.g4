@@ -130,7 +130,8 @@ statement
         (commentSpec |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) propertyList))*             #createNamespace
-    | ALTER namespace identifierReference SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
+    | ALTER namespace identifierReference
+        SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
     | ALTER namespace identifierReference
         UNSET (DBPROPERTIES | PROPERTIES) propertyList                 #unsetNamespaceProperties
     | ALTER namespace identifierReference
@@ -584,11 +585,11 @@ multiInsertQueryBody
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
     | left=queryTerm {legacy_setops_precedence_enabled}?
-        setOperationLegacy                                                               #setOperation
+        operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
-        setOperationNonLegacyIntersect                                                   #setOperation
+        operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
-        setOperationNonLegacyUnionExceptMinus                                            #setOperation
+        operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
 setOperationLegacy

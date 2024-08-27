@@ -1287,30 +1287,9 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
     val left = plan(ctx.left)
-    var right: LogicalPlan = null
-    var all: Boolean = false
-    var operatorType: Int = 0
-    Option(ctx.setOperationLegacy()).foreach { c =>
-      right = plan(c.right)
-      all = Option(c.setQuantifier()).exists(_.ALL != null)
-      operatorType = c.operator.getType
-    }
-    Option(ctx.setOperationNonLegacyIntersect()).foreach { c =>
-      right = plan(c.right)
-      all = Option(c.setQuantifier()).exists(_.ALL != null)
-      operatorType = c.operator.getType
-    }
-    Option(ctx.setOperationNonLegacyUnionExceptMinus()).foreach { c =>
-      right = plan(c.right)
-      all = Option(c.setQuantifier()).exists(_.ALL != null)
-      operatorType = c.operator.getType
-    }
-    buildSetOperation(left, right, operatorType, all)
-  }
-
-  private def buildSetOperation(
-      left: LogicalPlan, right: LogicalPlan, operatorType: Int, all: Boolean): LogicalPlan = {
-    operatorType match {
+    val right = plan(ctx.right)
+    val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
+    ctx.operator.getType match {
       case SqlBaseParser.UNION if all =>
         Union(left, right)
       case SqlBaseParser.UNION =>
