@@ -171,7 +171,7 @@ class SparkSessionJobTaggingAndCancellationSuite
       val threeJobs = sc.dagScheduler.activeJobs
       assert(threeJobs.size == 3)
       for(ss <- Seq(sessionA, sessionB, sessionC)) {
-        val job = threeJobs.filter(_.getSparkSessionUUID.getOrElse("") == ss.sessionUUID)
+        val job = threeJobs.filter(_.properties.get("spark.sparkSession.uuid") == ss.sessionUUID)
         assert(job.size == 1)
         val tags = job.head.properties.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
           .split(SparkContext.SPARK_JOB_TAGS_SEP)

@@ -133,7 +133,7 @@ class SparkSession private(
 
   /**
    * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
-   * Real tag have the current session ID attached: `"tag1" -> s"spark-$sessionUUID-tag1"`.
+   * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
    */
   @transient
   private lazy val userDefinedToRealTagsMap: ConcurrentHashMap[String, String] =
