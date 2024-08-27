@@ -38,7 +38,7 @@ USER root
 RUN chown -R ${NB_UID} ${HOME}
 
 # To solve add-apt-repository : command not found
-RUN apt-get -y install software-properties-common
+RUN apt-get update && apt-get -y install software-properties-common
 
 # Install Java
 RUN \
