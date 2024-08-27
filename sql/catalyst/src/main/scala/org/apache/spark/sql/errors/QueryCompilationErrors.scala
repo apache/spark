@@ -3985,7 +3985,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def externalDataSourceException(cause: Option[Throwable]): Throwable = {
     new AnalysisException(
       errorClass = "DATA_SOURCE_EXTERNAL_ERROR",
-      messageParameters = Map("error" -> cause.getOrElse("unknown").getClass.toString),
+      messageParameters = Map(),
       cause = cause
     )
   }

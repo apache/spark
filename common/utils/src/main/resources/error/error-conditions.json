@@ -1041,7 +1041,7 @@
   },
   "DATA_SOURCE_EXTERNAL_ERROR" : {
     "message" : [
-      "Encountered error when saving to external data source: <error>."
+      "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD00F"
   },

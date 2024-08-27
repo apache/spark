@@ -399,7 +399,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         cmd.run(spark)
       },
       errorClass = "DATA_SOURCE_EXTERNAL_ERROR",
-      parameters = Map("error" -> "class java.lang.NullPointerException"),
+      parameters = Map(),
       sqlState = "KD00F"
     )
   }
