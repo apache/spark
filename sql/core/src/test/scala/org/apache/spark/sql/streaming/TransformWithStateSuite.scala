@@ -726,7 +726,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   // TODO SPARK-48796 after restart state id will not be the same
-  ignore("transformWithState - test deleteIfExists operator") {
+  test("transformWithState - test deleteIfExists operator") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
