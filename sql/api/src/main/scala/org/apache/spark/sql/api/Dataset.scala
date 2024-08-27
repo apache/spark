@@ -19,6 +19,8 @@ package org.apache.spark.sql.api
 abstract class Dataset[E] {
   type DS[_] <: Dataset[_]
 
+  def sparkSession: SparkSession
+
   @scala.annotation.varargs
   def hint(name: String, parameters: Any*): DS[E]
 }

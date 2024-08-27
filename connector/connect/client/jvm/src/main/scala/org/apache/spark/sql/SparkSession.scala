@@ -16,10 +16,8 @@
  */
 package org.apache.spark.sql
 
-import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.jdk.CollectionConverters._
@@ -69,8 +67,7 @@ import org.apache.spark.util.ArrayImplicits._
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
-    extends Serializable
-    with Closeable
+    extends api.SparkSession
     with Logging {
 
   private[this] val allocator = new RootAllocator()
@@ -99,22 +96,6 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   val conf: RuntimeConfig = new RuntimeConfig(client)
-
-  /**
-   * Executes some code block and prints to stdout the time taken to execute the block. This is
-   * available in Scala only and is used primarily for interactive testing and debugging.
-   *
-   * @since 3.4.0
-   */
-  def time[T](f: => T): T = {
-    val start = System.nanoTime()
-    val ret = f
-    val end = System.nanoTime()
-    // scalastyle:off println
-    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
-    // scalastyle:on println
-    ret
-  }
 
   /**
    * Returns a `DataFrame` with no rows or columns.
@@ -311,7 +292,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
     builder =>
       // Send the SQL once to the server and then check the output.
       val cmd = newCommand(b =>
@@ -341,7 +322,7 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  def sql(query: String): DataFrame = {
+  override def sql(query: String): DataFrame = {
     sql(query, Array.empty)
   }
 
@@ -701,13 +682,6 @@ class SparkSession private[sql] (
   def interruptOperation(operationId: String): Seq[String] = {
     client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
-
-  /**
-   * Synonym for `close()`.
-   *
-   * @since 3.4.0
-   */
-  def stop(): Unit = close()
 
   /**
    * Close the [[SparkSession]].

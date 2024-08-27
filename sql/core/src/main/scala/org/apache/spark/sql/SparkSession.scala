@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
-import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.jdk.CollectionConverters._
@@ -92,7 +90,7 @@ class SparkSession private(
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String])
-  extends Serializable with Closeable with Logging { self =>
+  extends api.SparkSession with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -754,7 +752,7 @@ class SparkSession private(
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
 
@@ -764,7 +762,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
+  override def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Execute an arbitrary string command inside an external execution engine rather than Spark.
@@ -817,22 +815,6 @@ class SparkSession private(
    */
   def readStream: DataStreamReader = new DataStreamReader(self)
 
-  /**
-   * Executes some code block and prints to stdout the time taken to execute the block. This is
-   * available in Scala only and is used primarily for interactive testing and debugging.
-   *
-   * @since 2.1.0
-   */
-  def time[T](f: => T): T = {
-    val start = System.nanoTime()
-    val ret = f
-    val end = System.nanoTime()
-    // scalastyle:off println
-    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
-    // scalastyle:on println
-    ret
-  }
-
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -853,15 +835,6 @@ class SparkSession private(
 
   /**
    * Stop the underlying `SparkContext`.
-   *
-   * @since 2.0.0
-   */
-  def stop(): Unit = {
-    sparkContext.stop()
-  }
-
-  /**
-   * Synonym for `stop()`.
    *
    * @since 2.1.0
    */
