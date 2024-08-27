@@ -2010,10 +2010,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): DS[Row] = {
-    val selected = if (cols.isEmpty) this.toDF() else select(cols.head, cols.tail: _*)
-    selected.summary("count", "mean", "stddev", "min", "max")
-  }
+  def describe(cols: String*): DS[Row]
 
   /**
    * Computes specified statistics for numeric and string columns. Available statistics are:
@@ -2436,7 +2433,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def persist(): this.type
+  def persist(): DS[T]
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
@@ -2444,7 +2441,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def cache(): this.type = persist()
+  def cache(): DS[T]
 
 
   /**
@@ -2456,7 +2453,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def persist(newLevel: StorageLevel): this.type
+  def persist(newLevel: StorageLevel): DS[T]
 
   /**
    * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
@@ -2474,7 +2471,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def unpersist(blocking: Boolean): this.type
+  def unpersist(blocking: Boolean): DS[T]
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
@@ -2483,7 +2480,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def unpersist(): this.type = unpersist(blocking = false)
+  def unpersist(): DS[T]
 
   /**
    * Registers this Dataset as a temporary table using the given name. The lifetime of this

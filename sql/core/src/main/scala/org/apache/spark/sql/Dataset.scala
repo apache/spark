@@ -1305,16 +1305,7 @@ class Dataset[T] private[sql](
     Intersect(logicalPlan, other.logicalPlan, isAll = true)
   }
 
-  /**
-   * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
-   * This is equivalent to `EXCEPT DISTINCT` in SQL.
-   *
-   * @note Equality checking is performed directly on the encoded representation of the data
-   * and thus is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def except(other: Dataset[T]): Dataset[T] = withSetOperator {
     Except(logicalPlan, other.logicalPlan, isAll = false)
   }
@@ -1563,6 +1554,13 @@ class Dataset[T] private[sql](
   def summary(statistics: String*): DataFrame = StatFunctions.summary(this, statistics)
 
   /** @inheritdoc */
+  @scala.annotation.varargs
+  override def describe(cols: String*): DataFrame = {
+    val selected = if (cols.isEmpty) this else select(cols.head, cols.tail: _*)
+    selected.summary("count", "mean", "stddev", "min", "max")
+  }
+
+  /** @inheritdoc */
   def head(n: Int): Array[T] = withAction("head", limit(n).queryExecution)(collectFromPlan)
 
   /** @inheritdoc */
@@ -1734,6 +1732,9 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  override def cache(): this.type = persist()
+
+  /** @inheritdoc */
   def persist(): this.type = persist(sparkSession.sessionState.conf.defaultCacheStorageLevel)
 
   /** @inheritdoc */
@@ -1754,6 +1755,9 @@ class Dataset[T] private[sql](
     sparkSession.sharedState.cacheManager.uncacheQuery(this, cascade = false, blocking)
     this
   }
+
+  /** @inheritdoc */
+  override def unpersist(): this.type = unpersist(blocking = false)
 
   // Represents the `QueryExecution` used to produce the content of the Dataset as an `RDD`.
   @transient private lazy val rddQueryExecution: QueryExecution = {
@@ -2088,6 +2092,142 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   override def withColumnsRenamed(colsMap: util.Map[String, String]): DataFrame =
     super.withColumnsRenamed(colsMap)
+
+  /** @inheritdoc */
+  override def checkpoint(): Dataset[T] = super.checkpoint()
+
+  /** @inheritdoc */
+  override def checkpoint(eager: Boolean): Dataset[T] = super.checkpoint(eager)
+
+  /** @inheritdoc */
+  override def localCheckpoint(): Dataset[T] = super.localCheckpoint()
+
+  /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
+
+  /** @inheritdoc */
+  override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
+    super.joinWith(other, condition)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def sortWithinPartitions(sortCol: String, sortCols: String*): Dataset[T] =
+    super.sortWithinPartitions(sortCol, sortCols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def sortWithinPartitions(sortExprs: Column*): Dataset[T] =
+    super.sortWithinPartitions(sortExprs: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def sort(sortCol: String, sortCols: String*): Dataset[T] =
+    super.sort(sortCol, sortCols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def sort(sortExprs: Column*): Dataset[T] = super.sort(sortExprs: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def orderBy(sortCol: String, sortCols: String*): Dataset[T] =
+    super.orderBy(sortCol, sortCols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def orderBy(sortExprs: Column*): Dataset[T] = super.orderBy(sortExprs: _*)
+
+  /** @inheritdoc */
+  override def as(alias: Symbol): Dataset[T] = super.as(alias)
+
+  /** @inheritdoc */
+  override def alias(alias: String): Dataset[T] = super.alias(alias)
+
+  /** @inheritdoc */
+  override def alias(alias: Symbol): Dataset[T] = super.alias(alias)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def selectExpr(exprs: String*): DataFrame = super.selectExpr(exprs: _*)
+
+  /** @inheritdoc */
+  override def filter(conditionExpr: String): Dataset[T] = super.filter(conditionExpr)
+
+  /** @inheritdoc */
+  override def where(condition: Column): Dataset[T] = super.where(condition)
+
+  /** @inheritdoc */
+  override def where(conditionExpr: String): Dataset[T] = super.where(conditionExpr)
+
+  /** @inheritdoc */
+  override def unionAll(other: Dataset[T]): Dataset[T] = super.unionAll(other)
+
+  /** @inheritdoc */
+  override def unionByName(other: Dataset[T]): Dataset[T] = super.unionByName(other)
+
+  /** @inheritdoc */
+  override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)
+
+  /** @inheritdoc */
+  override def sample(fraction: Double): Dataset[T] = super.sample(fraction)
+
+  /** @inheritdoc */
+  override def sample(withReplacement: Boolean, fraction: Double): Dataset[T] =
+    super.sample(withReplacement, fraction)
+
+  /** @inheritdoc */
+  override def dropDuplicates(colNames: Array[String]): Dataset[T] = super.dropDuplicates(colNames)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def dropDuplicates(col1: String, cols: String*): Dataset[T] =
+    super.dropDuplicates(col1, cols: _*)
+
+  /** @inheritdoc */
+  override def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] =
+    super.dropDuplicatesWithinWatermark(colNames)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] =
+    super.dropDuplicatesWithinWatermark(col1, cols: _*)
+
+  /** @inheritdoc */
+  override def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] = super.flatMap(func)
+
+  /** @inheritdoc */
+  override def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    super.flatMap(f, encoder)
+
+  /** @inheritdoc */
+  override def foreach(func: ForeachFunction[T]): Unit = super.foreach(func)
+
+  /** @inheritdoc */
+  override def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
+    super.foreachPartition(func)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] =
+    super.repartition(numPartitions, partitionExprs: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def repartition(partitionExprs: Column*): Dataset[T] =
+    super.repartition(partitionExprs: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] =
+    super.repartitionByRange(numPartitions, partitionExprs: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def repartitionByRange(partitionExprs: Column*): Dataset[T] =
+    super.repartitionByRange(partitionExprs: _*)
+
+  /** @inheritdoc */
+  override def distinct(): Dataset[T] = super.distinct()
 
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
