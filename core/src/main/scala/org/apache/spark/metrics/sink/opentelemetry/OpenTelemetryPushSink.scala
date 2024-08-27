@@ -52,8 +52,7 @@ private[spark] class OpenTelemetryPushSink(val property: Properties, val registr
   val OPEN_TELEMETRY_KEY_UNIT = "unit"
   val OPEN_TELEMETRY_DEFAULT_PERIOD = "10"
   val OPEN_TELEMETRY_DEFAULT_UNIT = "SECONDS"
-  val OPEN_TELEMETRY_KEY_HOST = "host"
-  val OPEN_TELEMETRY_KEY_PORT = "port"
+  val OPEN_TELEMETRY_KEY_ENDPOINT = "endpoint"
   val GRPC_METRIC_EXPORTER_HEADER_KEY = "grpc.metric.exporter.header"
   val GRPC_METRIC_EXPORTER_ATTRIBUTES_KEY = "grpc.metric.exporter.attributes"
   val TRUSTED_CERTIFICATE_PATH = "trusted.certificate.path"
@@ -69,8 +68,7 @@ private[spark] class OpenTelemetryPushSink(val property: Properties, val registr
       .getProperty(OPEN_TELEMETRY_KEY_UNIT, OPEN_TELEMETRY_DEFAULT_UNIT)
       .toUpperCase(Locale.ROOT))
 
-  val host = property.getProperty(OPEN_TELEMETRY_KEY_HOST)
-  val port = property.getProperty(OPEN_TELEMETRY_KEY_PORT)
+  val endpoint = property.getProperty(OPEN_TELEMETRY_KEY_ENDPOINT)
 
   val headersMap =
     OpenTelemetryPushSink.fetchMapFromProperties(property, GRPC_METRIC_EXPORTER_HEADER_KEY)
@@ -88,8 +86,7 @@ private[spark] class OpenTelemetryPushSink(val property: Properties, val registr
     registry,
     pollInterval = pollPeriod,
     pollUnit,
-    host,
-    port,
+    endpoint,
     headersMap,
     attributesMap,
     trustedCertificatesPath,

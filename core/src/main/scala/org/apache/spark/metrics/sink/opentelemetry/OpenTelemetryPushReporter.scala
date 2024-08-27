@@ -34,8 +34,7 @@ private[spark] class OpenTelemetryPushReporter(
     registry: MetricRegistry,
     pollInterval: Int = 10,
     pollUnit: TimeUnit = TimeUnit.SECONDS,
-    host: String = "http://localhost",
-    port: String = "4317",
+    endpoint: String = "http://localhost:4317",
     headersMap: Map[String, String] = Map(),
     attributesMap: Map[String, String] = Map(),
     trustedCertificatesPath: String,
@@ -85,8 +84,7 @@ private[spark] class OpenTelemetryPushReporter(
         Files.readAllBytes(Paths.get(certificatePemPath)))
   }
 
-  val grpcEndpoint = host + ":" + port
-  otlpGrpcMetricExporterBuilder.setEndpoint(grpcEndpoint)
+  otlpGrpcMetricExporterBuilder.setEndpoint(endpoint)
 
   val arrtributesBuilder = Attributes.builder()
   for ((key, value) <- attributesMap) {

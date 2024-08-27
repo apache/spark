@@ -44,8 +44,7 @@ class OpenTelemetryPushSinkSuite
 
   test("OpenTelemetry sink with one counter added") {
     val props = new Properties
-    props.put("host", "http://127.0.0.1")
-    props.put("port", "10086")
+    props.put("endpoint", "http://127.0.0.1:10086")
     val registry = new MetricRegistry
     val sink = new OpenTelemetryPushSink(props, registry)
     sink.start()
