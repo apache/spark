@@ -754,12 +754,21 @@ object ZstdUtils {
    * Decompresses the input using Zstandard.
    */
   def decompress(input: Array[Byte]): Array[Byte] = {
-    val destSize = Zstd.getFrameContentSize(input)
-    if (destSize <= 0) {
-      // If we can't parse the content size from its header, try decompressing in streaming mode.
-      decompressInStreamingMode(input)
-    } else {
-      decompressInSinglePassMode(input, destSize.toInt)
+    try {
+      // Although decompressedSize() is deprecated since zstd-jni 1.5.5-6 and getFrameContentSize()
+      // was added as an alternative, we still use decompressedSize() here because the version used
+      // by DBR 15.x is 1.5.5-4.
+      val destSize = Zstd.decompressedSize(input)
+      if (destSize <= 0) {
+        // If we can't parse the content size from its header, try decompressing in streaming mode.
+        decompressInStreamingMode(input)
+      } else {
+        decompressInSinglePassMode(input, destSize.toInt)
+      }
+    } catch {
+      // Handle exceptions from Zstd.decompressedSize or Zstd.decompress on invalid input,
+      // e.g. ArrayIndexOutOfBoundsException
+      case _: Exception => null
     }
   }
 
