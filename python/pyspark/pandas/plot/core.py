@@ -420,14 +420,24 @@ class BoxPlotBase:
         return minmax.iloc[0][["min", "max"]].values
 
     @staticmethod
-    def get_fliers(colname, outliers, min_val):
+    def get_fliers(colname, outliers, lfence, ufence):
         # Filters only the outliers, should "showfliers" be True
         fliers_df = outliers.filter("`__{}_outlier`".format(colname))
 
         # If it shows fliers, take the top 1k with highest absolute values
-        # Here we normalize the values by subtracting the minimum value from
-        # each, and use absolute values.
-        order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
+        # Here we normalize the values by subtracting the fences.
+        formated_colname = "`{}`".format(colname)
+        order_col = (
+            F.when(
+                F.col(formated_colname) > F.lit(ufence),
+                F.col(formated_colname) - F.lit(ufence),
+            )
+            .when(
+                F.col(formated_colname) < F.lit(lfence),
+                F.lit(lfence) - F.col(formated_colname),
+            )
+            .otherwise(F.lit(None))
+        )
         fliers = (
             fliers_df.select(F.col("`{}`".format(colname)))
             .orderBy(order_col)
@@ -439,15 +449,26 @@ class BoxPlotBase:
         return fliers
 
     @staticmethod
-    def get_multicol_fliers(colnames, multicol_outliers, multicol_whiskers):
+    def get_multicol_fliers(colnames, multicol_outliers, multicol_stats):
         scols = []
-        extract_colnames = []
         for i, colname in enumerate(colnames):
             formated_colname = "`{}`".format(colname)
             outlier_colname = "__{}_outlier".format(colname)
-            min_val = multicol_whiskers[colname]["min"]
+            lfence, ufence = multicol_stats[colname]["lfence"], multicol_stats[colname]["ufence"]
+            order_col = (
+                F.when(
+                    F.col(formated_colname) > F.lit(ufence),
+                    F.col(formated_colname) - F.lit(ufence),
+                )
+                .when(
+                    F.col(formated_colname) < F.lit(lfence),
+                    F.lit(lfence) - F.col(formated_colname),
+                )
+                .otherwise(F.lit(None))
+            )
+
             pair_col = F.struct(
-                F.abs(F.col(formated_colname) - F.lit(min_val)).alias("ord"),
+                order_col.alias("ord"),
                 F.col(formated_colname).alias("val"),
             )
             scols.append(
@@ -457,11 +478,10 @@ class BoxPlotBase:
                     .alias(f"pair_{i}"),
                     1001,
                     False,
-                ).alias(f"top_{i}")
+                ).alias(f"top_{i}")["val"]
             )
-            extract_colnames.append(f"top_{i}.val")
 
-        results = multicol_outliers.select(scols).select(extract_colnames).first()
+        results = multicol_outliers.select(scols).first()
 
         fliers = {}
         for i, colname in enumerate(colnames):

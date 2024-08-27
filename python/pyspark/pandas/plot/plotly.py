@@ -162,7 +162,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
         fliers = None
         if boxpoints:
-            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
+            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, *col_fences)
             fliers = [fliers] if len(fliers) > 0 else None
 
         fig.add_trace(
@@ -201,7 +201,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
         fliers = None
         if boxpoints:
-            fliers = BoxPlotBase.get_multicol_fliers(numeric_column_names, outliers, whiskers)
+            fliers = BoxPlotBase.get_multicol_fliers(numeric_column_names, outliers, multicol_stats)
 
         i = 0
         for colname in numeric_column_names:
