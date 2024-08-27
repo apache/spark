@@ -181,7 +181,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                 mean=[result["mean"]],
                 lowerfence=[result["lower_whisker"]],
                 upperfence=[result["upper_whisker"]],
-                y=[result["fliers"]] if boxpoints else None,
+                y=[result["fliers"]] if result["fliers"] else None,
                 boxpoints=boxpoints,
                 notched=notched,
                 **kwargs,  # this is for workarounds. Box takes different options from express.box.
@@ -203,7 +203,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     mean=[result["mean"]],
                     lowerfence=[result["lower_whisker"]],
                     upperfence=[result["upper_whisker"]],
-                    y=[result["fliers"]] if boxpoints else None,
+                    y=[result["fliers"]] if result["fliers"] else None,
                     boxpoints=boxpoints,
                     notched=notched,
                     **kwargs,

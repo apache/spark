@@ -292,10 +292,6 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         assert len(results) == 1
         result = results[0]
 
-        fliers = []
-        if showfliers and result["fliers"] is not None:
-            fliers = result["fliers"]
-
         # Builds bxpstats dict
         stats = []
         item = {
@@ -305,7 +301,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
             "q3": result["q3"],
             "whislo": result["lower_whisker"],
             "whishi": result["upper_whisker"],
-            "fliers": fliers,
+            "fliers": result["fliers"] if result["fliers"] else [],
             "label": labels[0],
         }
         stats.append(item)
