@@ -33,6 +33,12 @@ if have_pyarrow:
     import pyarrow.compute as pc
 
 
+def iter_func(func):
+    """Wraps a applyInArrow function returning a Table to return an iter of batches"""
+    def inner(*args, **kwargs):
+        yield from func(*args, **kwargs).to_batches()
+    return inner
+
 @unittest.skipIf(
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
@@ -61,6 +67,9 @@ class GroupedMapInArrowTestsMixin:
         actual = grouped_df.applyInArrow(func, "id long, value long").collect()
         self.assertEqual(actual, expected)
 
+        actual = grouped_df.applyInArrow(iter_func(func), "id long, value long").collect()
+        self.assertEqual(actual, expected)
+
     def test_apply_in_arrow_with_key(self):
         def func(key, group):
             assert isinstance(key, tuple)
@@ -77,6 +86,9 @@ class GroupedMapInArrowTestsMixin:
         expected = df.collect()
 
         actual2 = grouped_df.applyInArrow(func, "id long, value long").collect()
+        self.assertEqual(actual2, expected)
+
+        actual2 = grouped_df.applyInArrow(iter_func(func), "id long, value long").collect()
         self.assertEqual(actual2, expected)
 
     def test_apply_in_arrow_empty_groupby(self):
