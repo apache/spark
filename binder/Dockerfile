@@ -36,6 +36,7 @@ USER ${USER}
 COPY . ${HOME}
 USER root
 RUN chown -R ${NB_UID} ${HOME}
+RUN add-apt-repository ppa:openjdk-r/ppa
 RUN apt-get update && apt-get install -y openjdk-11-jre git coreutils
 USER ${NB_USER}
 
