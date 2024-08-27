@@ -38,9 +38,9 @@ else
 fi
 
 if [[ ! $VERSION < "3.4.0" ]]; then
-  pip install plotly "pandas<2.0.0" "pyspark[sql,ml,mllib,pandas_on_spark,connect]$SPECIFIER$VERSION"
+  pip install plotly "pandas<2.0.0" "numpy>=1.15,<2" "pyspark[sql,ml,mllib,pandas_on_spark,connect]$SPECIFIER$VERSION"
 else
-  pip install plotly "pandas<2.0.0" "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
+  pip install plotly "pandas<2.0.0" "numpy>=1.15,<2" "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
 fi
 
 # Set 'PYARROW_IGNORE_TIMEZONE' to surpress warnings from PyArrow.
