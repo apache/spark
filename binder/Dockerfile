@@ -36,8 +36,23 @@ USER ${USER}
 COPY . ${HOME}
 USER root
 RUN chown -R ${NB_UID} ${HOME}
-RUN add-apt-repository ppa:openjdk-r/ppa
-RUN apt-get update && apt-get install -y openjdk-11-jre git coreutils
+
+# To solve add-apt-repository : command not found
+RUN apt-get -y install software-properties-common
+
+# Install Java
+RUN \
+  echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | debconf-set-selections && \
+  add-apt-repository -y ppa:webupd8team/java && \
+  apt-get update && \
+  apt-get install -y oracle-java8-installer --allow-unauthenticated && \
+  rm -rf /var/lib/apt/lists/* && \
+  rm -rf /var/cache/oracle-jdk8-installer
+
+# Define commonly used JAVA_HOME variable
+ENV JAVA_HOME /usr/lib/jvm/java-8-oracle
+
+RUN apt-get update && apt-get install -y git coreutils
 USER ${NB_USER}
 
 RUN binder/postBuild
