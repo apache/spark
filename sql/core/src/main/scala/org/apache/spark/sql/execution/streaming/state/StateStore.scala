@@ -364,6 +364,11 @@ case class RangeKeyScanStateEncoderSpec(
  *   version of the data can be accessed. It is the responsible of the provider to populate
  *   this store with context information like the schema of keys and values, etc.
  *
+ *   If the checkpoint format version 2 is used, an additional argument `checkponitID` may be
+ *   provided as part of `getStore(version, checkpoinId)`. The provider needs to guarantee
+ *   that the loaded version is of this unique ID. It needs to load the version for this specific
+ *   ID from the checkpoint if needed.
+ *
  * - After the streaming query is stopped, the created provider instances are lazily disposed off.
  */
 trait StateStoreProvider {
@@ -405,13 +410,15 @@ trait StateStoreProvider {
   /** Called when the provider instance is unloaded from the executor */
   def close(): Unit
 
-  /** Return an instance of [[StateStore]] representing state data of the given version */
+  /** Return an instance of [[StateStore]] representing state data of the given version.
+   * If `checkpointUniqueId` is provided, the instance also needs to match the ID. */
   def getStore(
       version: Long,
       checkpointUniqueId: Option[String] = None): StateStore
 
   /**
-   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * Return an instance of [[ReadStateStore]] representing state data of the given version
+   * and uniqueID if provided.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
    * modification. Providers can override and return optimized version of [[ReadStateStore]]
    * based on the fact the instance will be only used for reading.
