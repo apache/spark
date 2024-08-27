@@ -1009,7 +1009,9 @@ class SparkConnectClient(object):
         except Exception:
             return "<Truncated message due to truncation error>"
 
-    def _truncate(self, p: google.protobuf.message.Message, allowed_recursion_depth: int) -> google.protobuf.message.Message:
+    def _truncate(
+        self, p: google.protobuf.message.Message, allowed_recursion_depth: int
+    ) -> google.protobuf.message.Message:
         """
         Helper method to truncate the protobuf message.
         Refer to 'org.apache.spark.sql.connect.common.Abbreviator' in the server side.
@@ -1036,9 +1038,13 @@ class SparkConnectClient(object):
                         p2.ClearField(field_name)
                     elif descriptor.label == descriptor.LABEL_REPEATED:
                         p2.ClearField(field_name)
-                        getattr(p2, field_name).extend([self._truncate(v, allowed_recursion_depth - 1) for v in value])
+                        getattr(p2, field_name).extend(
+                            [self._truncate(v, allowed_recursion_depth - 1) for v in value]
+                        )
                     else:
-                        getattr(p2, field_name).CopyFrom(self._truncate(value, allowed_recursion_depth - 1))
+                        getattr(p2, field_name).CopyFrom(
+                            self._truncate(value, allowed_recursion_depth - 1)
+                        )
 
                 elif descriptor.type == descriptor.TYPE_STRING:
                     if descriptor.label == descriptor.LABEL_REPEATED:

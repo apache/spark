@@ -1444,6 +1444,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
         self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
 
+
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod
     def setUpClass(cls):
