@@ -16,7 +16,6 @@
 #
 
 import os
-import shutil
 import time
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
