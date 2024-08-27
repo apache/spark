@@ -156,10 +156,20 @@ class RocksDB(
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+
+  // variables to manage checkpoint ID. Once a checkpoingting finishes, it nees to return
+  // the `lastCommittedCheckpointId` as the committed checkpointID, as well as
+  // `LastCommitBasedCheckpointId` as the checkpontID of the previous version that is based on.
+  // `loadedCheckpointId` is the checkpointID for the current live DB. After the batch finishes
+  // and checkpoint finishes, it will turn into `LastCommitBasedCheckpointId`.
+  // `sessionCheckpointId` store an ID to be used for future checkpoints. It is kept being used
+  // until we have to use a new one. We don't need to reuse any uniqueID, but reusing when possible
+  // can help debug problems.
   @volatile private var LastCommitBasedCheckpointId: Option[String] = None
   @volatile private var lastCommittedCheckpointId: Option[String] = None
   @volatile private var loadedCheckpointId: Option[String] = None
   @volatile private var sessionCheckpointId: Option[String] = None
+
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
@@ -335,6 +345,8 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         LastCommitBasedCheckpointId = None
         lastCommittedCheckpointId = None
+        loadedCheckpointId = None
+        sessionCheckpointId = None
         throw t
     }
     if (enableChangelogCheckpointing && !readOnly) {
