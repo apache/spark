@@ -105,20 +105,18 @@ object IntervalUtils extends SparkIntervalUtils {
       endField: Byte,
       intervalStr: String,
       typeName: String,
-      fallBackNotice: Option[String] = None) = {
+      fallBackNotice: Boolean = false) = {
     throw new SparkIllegalArgumentException(
-      errorClass = fallBackNotice match {
-        case Some(_) => "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE"
-        case _ => "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING"
+      errorClass = {
+        if (fallBackNotice) "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE"
+        else "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING"
       },
       messageParameters = Map(
         "intervalStr" -> intervalStr,
         "supportedFormat" -> supportedFormat((intervalStr, startFiled, endField))
           .map(format => s"`$format`").mkString(", "),
         "typeName" -> typeName,
-        "input" -> input.toString)
-        ++ fallBackNotice.map(s => Map("fallBackNotice" -> s", $s and $fallbackNotice")
-      ).getOrElse(Map.empty))
+        "input" -> input.toString))
   }
 
   val supportedFormat = Map(
@@ -343,7 +341,7 @@ object IntervalUtils extends SparkIntervalUtils {
                 case -1 => parseSecondNano(s"-${secondAndMicro(value, suffix)}")
               }
             case (_, _) => throwIllegalIntervalFormatException(input, startField, endField,
-              "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+              "day-time", DT(startField, endField).typeName, true)
           }
         }
       case dayTimeIndividualLiteralRegex(firstSign, secondSign, value, suffix, unit) =>
@@ -364,11 +362,11 @@ object IntervalUtils extends SparkIntervalUtils {
                 case -1 => parseSecondNano(s"-${secondAndMicro(value, suffix)}")
               }
             case _ => throwIllegalIntervalFormatException(input, startField, endField,
-              "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+              "day-time", DT(startField, endField).typeName, true)
           }
         }
       case _ => throwIllegalIntervalFormatException(input, startField, endField,
-        "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+        "day-time", DT(startField, endField).typeName, true)
     }
   }
 

@@ -1964,7 +1964,7 @@
       },
       "UNMATCHED_FORMAT_STRING_WITH_NOTICE" : {
         "message" : [
-          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>."
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input>, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
         ]
       },
       "UNSUPPORTED_FROM_TO_EXPRESSION" : {

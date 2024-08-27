@@ -1145,7 +1145,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "20 15:40:32.99899999",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR`",
@@ -1164,7 +1163,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "20 15:40:32.99899999",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE`",
@@ -1183,7 +1181,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "15:40:32.99899999",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE`",
@@ -1202,7 +1199,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "15:40.99899999",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND`",
@@ -1221,7 +1217,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "15:40",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND`",
@@ -1240,7 +1235,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "20 40:32.99899999",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND`",
@@ -2173,7 +2167,6 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22009",
   "messageParameters" : {
-    "fallBackNotice" : ", set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.",
     "input" : "\n-\t10\t 12:34:46.789\t",
     "intervalStr" : "day-time",
     "supportedFormat" : "`[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`",
