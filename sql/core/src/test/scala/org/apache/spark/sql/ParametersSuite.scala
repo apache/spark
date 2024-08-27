@@ -682,6 +682,24 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     }
   }
 
+  test("SPARK-49017: bind named parameters with IDENTIFIER clause in create table as") {
+    withTable("testtab", "testtab1") {
+      // Create table
+      spark.sql("create table testtab (id int, name string)")
+
+      // Insert into table using single param
+      sql("insert into testtab values(1, 'test1')")
+
+      // cache table with parameters in query
+      spark.sql(
+        """create table identifier(:tab) as
+          | select * from testtab where identifier(:col) == 1""".stripMargin,
+        Map("tab" -> "testtab1", "col" -> "id"))
+
+      checkAnswer(sql("select * from testtab1"), Seq(Row(1, "test1")))
+    }
+  }
+
   test("SPARK-46999: bind parameters for nested IDENTIFIER clause") {
     val query = sql(
       """
