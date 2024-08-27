@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import java.util
 
-import scala.annotation.varargs
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -1193,7 +1192,7 @@ class Dataset[T] private[sql](
     unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /** @inheritdoc */
-  @varargs
+  @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
@@ -1219,7 +1218,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.3.0
    */
-  @varargs
+  @scala.annotation.varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
     observation.on(this, expr, exprs: _*)
   }
@@ -1976,22 +1975,9 @@ class Dataset[T] private[sql](
   }
 
   ////////////////////////////////////////////////////////////////////////////
-  // Overrides, these are needed in the following cases:
-  // - The method returns a DataFrame;
-  // - The method is overloaded, and multiple candidates can apply (e.g.
-  //   drop(col), or select(typeCol))
+  // Return type overrides to make sure we return the implementation instead
+  // of the interface.
   ////////////////////////////////////////////////////////////////////////////
-
-  // Check:
-  // - sortWithinPartitions (8)
-  // - sort (8)
-  // - orderBy (8)
-  // - selectExpr (4)
-  // - dropDuplicates (10)
-  // - dropDuplicatesWithinWatermark (8)
-  // - describe (2)
-  // - repartition (8)
-  // - repartitionByRange (8)
 
   /** @inheritdoc */
   override def drop(colName: String): DataFrame = super.drop(colName)

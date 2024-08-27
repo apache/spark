@@ -397,7 +397,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  override def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
+  override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>
       ColumnNodeToProtoConverter(c.sortOrder).getSortOrder
     }
