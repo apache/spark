@@ -953,7 +953,8 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   protected def withColumns(names: Seq[String], values: Seq[Column]): DataFrame = {
-    require(names.size == values.size,
+    require(
+      names.size == values.size,
       s"The size of column names: ${names.size} isn't equal to " +
         s"the size of columns: ${values.size}")
     val aliases = values.zip(names).map { case (value, name) =>
@@ -969,15 +970,16 @@ class Dataset[T] private[sql] (
   override protected def withColumnsRenamed(
       colNames: Seq[String],
       newColNames: Seq[String]): DataFrame = {
-    require(colNames.size == newColNames.size,
+    require(
+      colNames.size == newColNames.size,
       s"The size of existing column names: ${colNames.size} isn't equal to " +
         s"the size of new column names: ${newColNames.size}")
     sparkSession.newDataFrame { builder =>
       val b = builder.getWithColumnsRenamedBuilder
         .setInput(plan.getRoot)
-      colNames.zip(newColNames).foreach {
-        case (colName, newColName) =>
-          b.addRenames(proto.WithColumnsRenamed.Rename
+      colNames.zip(newColNames).foreach { case (colName, newColName) =>
+        b.addRenames(
+          proto.WithColumnsRenamed.Rename
             .newBuilder()
             .setColName(colName)
             .setNewColName(newColName))
@@ -999,10 +1001,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  protected def createTempView(
-      viewName: String,
-      replace: Boolean,
-      global: Boolean): Unit = {
+  protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit = {
     val command = sparkSession.newCommand { builder =>
       builder.getCreateDataframeViewBuilder
         .setInput(plan.getRoot)
@@ -1539,10 +1538,7 @@ class Dataset[T] private[sql] (
     super.join(right, usingColumn, joinType)
 
   /** @inheritdoc */
-  override def join(
-                     right: Dataset[_],
-                     usingColumns: Array[String],
-                     joinType: String): DataFrame =
+  override def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame =
     super.join(right, usingColumns, joinType)
 
   /** @inheritdoc */
@@ -1702,7 +1698,8 @@ class Dataset[T] private[sql] (
     super.sample(withReplacement, fraction)
 
   /** @inheritdoc */
-  override def dropDuplicates(colNames: Array[String]): Dataset[T] = super.dropDuplicates(colNames)
+  override def dropDuplicates(colNames: Array[String]): Dataset[T] =
+    super.dropDuplicates(colNames)
 
   /** @inheritdoc */
   @scala.annotation.varargs
