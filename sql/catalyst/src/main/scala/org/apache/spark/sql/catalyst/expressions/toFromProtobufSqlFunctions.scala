@@ -118,7 +118,7 @@ case class FromProtobuf(
             "representing the Protobuf message name"))
     }
     val descFilePathCheck = descFilePath.dataType match {
-      case _: StringType | BinaryType if descFilePath.foldable => None
+      case _: StringType | BinaryType | NullType if descFilePath.foldable => None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure(
           "The third argument of the FROM_PROTOBUF SQL function must be a constant string " +
@@ -209,6 +209,15 @@ case class ToProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
+
+  def this(data: Expression, messageName: Expression, descFilePath: Expression) = {
+    this(data, messageName, descFilePath, Literal(null))
+  }
+
+  def this(data: Expression, messageName: Expression) = {
+    this(data, messageName, Literal(null), Literal(null))
+  }
+
   override def first: Expression = data
   override def second: Expression = messageName
   override def third: Expression = descFilePath
@@ -231,7 +240,7 @@ case class ToProtobuf(
             "representing the Protobuf message name"))
     }
     val descFilePathCheck = descFilePath.dataType match {
-      case _: StringType | BinaryType if descFilePath.foldable => None
+      case _: StringType | BinaryType | NullType if descFilePath.foldable => None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure(
           "The third argument of the TO_PROTOBUF SQL function must be a constant string " +

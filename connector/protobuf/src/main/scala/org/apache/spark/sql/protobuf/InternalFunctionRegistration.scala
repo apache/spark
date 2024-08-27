@@ -41,6 +41,15 @@ object InternalFunctionRegistration {
         Some(descriptor).asInstanceOf[Option[Array[Byte]]],
         options.asInstanceOf[Map[String, String]])
   }
+
+  registerFunction("to_protobuf") {
+    case Seq(input, StringLiteral(messageName), descriptor, options) =>
+      CatalystDataToProtobuf(
+        input,
+        messageName,
+        Some(descriptor).asInstanceOf[Option[Array[Byte]]],
+        options.asInstanceOf[Map[String, String]])
+  }
 }
 
 class InternalFunctionRegistration extends SparkSessionExtensionsProvider {
