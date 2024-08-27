@@ -81,8 +81,8 @@
       "unresolvedFunction": {
         "functionName": "count",
         "arguments": [{
-          "literal": {
-            "integer": 1
+          "unresolvedStar": {
+            "planId": "0"
           }
         }]
       }

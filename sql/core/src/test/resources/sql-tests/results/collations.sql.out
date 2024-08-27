@@ -489,7 +489,7 @@ struct<>
 
 
 -- !query
-create table t1(s string, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+create table t5(s string, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -497,7 +497,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('Spark', 'Spark', 'SQL')
+insert into t5 values ('Spark', 'Spark', 'SQL')
 -- !query schema
 struct<>
 -- !query output
@@ -505,7 +505,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaAAaA')
+insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaAAaA')
 -- !query schema
 struct<>
 -- !query output
@@ -513,7 +513,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaA')
+insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaA')
 -- !query schema
 struct<>
 -- !query output
@@ -521,7 +521,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
+insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
 -- !query schema
 struct<>
 -- !query output
@@ -529,7 +529,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('bbAbaAbA', 'bbAbAAbA', 'a')
+insert into t5 values ('bbAbaAbA', 'bbAbAAbA', 'a')
 -- !query schema
 struct<>
 -- !query output
@@ -537,7 +537,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('İo', 'İo', 'İo')
+insert into t5 values ('İo', 'İo', 'İo')
 -- !query schema
 struct<>
 -- !query output
@@ -545,7 +545,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('İo', 'İo', 'i̇o')
+insert into t5 values ('İo', 'İo', 'i̇o')
 -- !query schema
 struct<>
 -- !query output
@@ -553,7 +553,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('efd2', 'efd2', 'efd2')
+insert into t5 values ('efd2', 'efd2', 'efd2')
 -- !query schema
 struct<>
 -- !query output
@@ -561,7 +561,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('Hello, world! Nice day.', 'Hello, world! Nice day.', 'Hello, world! Nice day.')
+insert into t5 values ('Hello, world! Nice day.', 'Hello, world! Nice day.', 'Hello, world! Nice day.')
 -- !query schema
 struct<>
 -- !query output
@@ -569,7 +569,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('Something else. Nothing here.', 'Something else. Nothing here.', 'Something else. Nothing here.')
+insert into t5 values ('Something else. Nothing here.', 'Something else. Nothing here.', 'Something else. Nothing here.')
 -- !query schema
 struct<>
 -- !query output
@@ -577,7 +577,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('kitten', 'kitten', 'sitTing')
+insert into t5 values ('kitten', 'kitten', 'sitTing')
 -- !query schema
 struct<>
 -- !query output
@@ -585,7 +585,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('abc', 'abc', 'abc')
+insert into t5 values ('abc', 'abc', 'abc')
 -- !query schema
 struct<>
 -- !query output
@@ -593,7 +593,7 @@ struct<>
 
 
 -- !query
-insert into t1 values ('abcdcba', 'abcdcba', 'aBcDCbA')
+insert into t5 values ('abcdcba', 'abcdcba', 'aBcDCbA')
 -- !query schema
 struct<>
 -- !query output
@@ -601,7 +601,7 @@ struct<>
 
 
 -- !query
-create table t2(ascii long) using parquet
+create table t6(ascii long) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -609,7 +609,7 @@ struct<>
 
 
 -- !query
-insert into t2 values (97)
+insert into t6 values (97)
 -- !query schema
 struct<>
 -- !query output
@@ -617,7 +617,7 @@ struct<>
 
 
 -- !query
-insert into t2 values (66)
+insert into t6 values (66)
 -- !query schema
 struct<>
 -- !query output
@@ -625,7 +625,7 @@ struct<>
 
 
 -- !query
-create table t3(ascii double) using parquet
+create table t7(ascii double) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -633,7 +633,7 @@ struct<>
 
 
 -- !query
-insert into t3 values (97.52143)
+insert into t7 values (97.52143)
 -- !query schema
 struct<>
 -- !query output
@@ -641,7 +641,7 @@ struct<>
 
 
 -- !query
-insert into t3 values (66.421)
+insert into t7 values (66.421)
 -- !query schema
 struct<>
 -- !query output
@@ -649,7 +649,7 @@ struct<>
 
 
 -- !query
-create table t4(format string collate utf8_binary, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+create table t8(format string collate utf8_binary, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -657,7 +657,7 @@ struct<>
 
 
 -- !query
-insert into t4 values ('%s%s', 'abCdE', 'abCdE')
+insert into t8 values ('%s%s', 'abCdE', 'abCdE')
 -- !query schema
 struct<>
 -- !query output
@@ -665,7 +665,7 @@ struct<>
 
 
 -- !query
-create table t5(num long) using parquet
+create table t9(num long) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -673,7 +673,7 @@ struct<>
 
 
 -- !query
-insert into t5 values (97)
+insert into t9 values (97)
 -- !query schema
 struct<>
 -- !query output
@@ -681,7 +681,7 @@ struct<>
 
 
 -- !query
-insert into t5 values (66)
+insert into t9 values (66)
 -- !query schema
 struct<>
 -- !query output
@@ -689,7 +689,7 @@ struct<>
 
 
 -- !query
-create table t6(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
+create table t10(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query schema
 struct<>
 -- !query output
@@ -697,7 +697,7 @@ struct<>
 
 
 -- !query
-insert into t6 values ('aaAaAAaA', 'aaAaaAaA')
+insert into t10 values ('aaAaAAaA', 'aaAaaAaA')
 -- !query schema
 struct<>
 -- !query output
@@ -705,7 +705,7 @@ struct<>
 
 
 -- !query
-insert into t6 values ('efd2', 'efd2')
+insert into t10 values ('efd2', 'efd2')
 -- !query schema
 struct<>
 -- !query output
@@ -713,7 +713,7 @@ struct<>
 
 
 -- !query
-select concat_ws(' ', utf8_lcase, utf8_lcase) from t1
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
 -- !query schema
 struct<concat_ws( , utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -733,7 +733,7 @@ sitTing sitTing
 
 
 -- !query
-select concat_ws(' ', utf8_binary, utf8_lcase) from t1
+select concat_ws(' ', utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -745,7 +745,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select concat_ws(' ' collate utf8_binary, utf8_binary, 'SQL' collate utf8_lcase) from t1
+select concat_ws(' ' collate utf8_binary, utf8_binary, 'SQL' collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -760,7 +760,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select concat_ws(' ' collate utf8_lcase, utf8_binary, 'SQL' collate utf8_lcase) from t1
+select concat_ws(' ' collate utf8_lcase, utf8_binary, 'SQL' collate utf8_lcase) from t5
 -- !query schema
 struct<concat_ws(collate( , utf8_lcase), utf8_binary, collate(SQL, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -780,7 +780,7 @@ kitten SQL
 
 
 -- !query
-select concat_ws(',', utf8_lcase, 'word'), concat_ws(',', utf8_binary, 'word') from t1
+select concat_ws(',', utf8_lcase, 'word'), concat_ws(',', utf8_binary, 'word') from t5
 -- !query schema
 struct<concat_ws(,, utf8_lcase, word):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
 -- !query output
@@ -800,7 +800,7 @@ sitTing,word	kitten,word
 
 
 -- !query
-select concat_ws(',', utf8_lcase, 'word' collate utf8_binary), concat_ws(',', utf8_binary, 'word' collate utf8_lcase) from t1
+select concat_ws(',', utf8_lcase, 'word' collate utf8_binary), concat_ws(',', utf8_binary, 'word' collate utf8_lcase) from t5
 -- !query schema
 struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(,, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -820,7 +820,7 @@ sitTing,word	kitten,word
 
 
 -- !query
-select elt(2, s, utf8_binary) from t1
+select elt(2, s, utf8_binary) from t5
 -- !query schema
 struct<elt(2, s, utf8_binary):string>
 -- !query output
@@ -840,7 +840,7 @@ kitten
 
 
 -- !query
-select elt(2, utf8_binary, utf8_lcase, s) from t1
+select elt(2, utf8_binary, utf8_lcase, s) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -852,7 +852,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t1
+select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -867,7 +867,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t1
+select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<elt(1, collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -887,7 +887,7 @@ kitten
 
 
 -- !query
-select elt(1, utf8_binary collate utf8_binary, utf8_lcase) from t1
+select elt(1, utf8_binary collate utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<elt(1, collate(utf8_binary, utf8_binary), utf8_lcase):string>
 -- !query output
@@ -907,7 +907,7 @@ kitten
 
 
 -- !query
-select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t1
+select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t5
 -- !query schema
 struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
 -- !query output
@@ -927,7 +927,7 @@ kitten	sitTing
 
 
 -- !query
-select elt(1, utf8_binary, 'word' collate utf8_lcase), elt(1, utf8_lcase, 'word' collate utf8_binary) from t1
+select elt(1, utf8_binary, 'word' collate utf8_lcase), elt(1, utf8_lcase, 'word' collate utf8_binary) from t5
 -- !query schema
 struct<elt(1, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE,elt(1, utf8_lcase, collate(word, utf8_binary)):string>
 -- !query output
@@ -947,15 +947,19 @@ kitten	sitTing
 
 
 -- !query
-select split_part(utf8_binary, utf8_lcase, 3) from t1
+select split_part(utf8_binary, utf8_lcase, 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, utf8_lcase, 3):string>
+struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
 
 
 -- !query
-select split_part(s, utf8_binary, 1) from t1
+select split_part(s, utf8_binary, 1) from t5
 -- !query schema
 struct<split_part(s, utf8_binary, 1):string>
 -- !query output
@@ -975,27 +979,22 @@ bbAbaAbA
 
 
 -- !query
-select split_part(utf8_binary collate utf8_binary, s collate utf8_lcase, 1) from t1
+select split_part(utf8_binary collate utf8_binary, s collate utf8_lcase, 1) from t5
 -- !query schema
-struct<split_part(collate(utf8_binary, utf8_binary), collate(s, utf8_lcase), 1):string>
+struct<>
 -- !query output
-
-
-
-
-
-
-
-
-
-
-
-
-bbAbAAbA
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
 
 
 -- !query
-select split_part(utf8_binary, utf8_lcase collate utf8_binary, 2) from t1
+select split_part(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
 struct<split_part(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
@@ -1003,7 +1002,7 @@ struct<split_part(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string>
 
 
 -- !query
-select split_part(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t1
+select split_part(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t5
 -- !query schema
 struct<split_part(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 2):string collate UTF8_LCASE>
 -- !query output
@@ -1023,7 +1022,7 @@ b
 
 
 -- !query
-select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t1
+select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t5
 -- !query schema
 struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
 -- !query output
@@ -1043,9 +1042,9 @@ A
 
 
 -- !query
-select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t1
+select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string,split_part(utf8_lcase, collate(a, utf8_binary), 3):string collate UTF8_LCASE>
+struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string collate UTF8_LCASE,split_part(utf8_lcase, collate(a, utf8_binary), 3):string>
 -- !query output
 	
 	
@@ -1057,13 +1056,13 @@ struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string,split_part(utf8
 	
 	
 	
-A	
-A	
-A
+	A
+	A
+	A
 
 
 -- !query
-select contains(utf8_binary, utf8_lcase) from t1
+select contains(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1075,7 +1074,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select contains(s, utf8_binary) from t1
+select contains(s, utf8_binary) from t5
 -- !query schema
 struct<contains(s, utf8_binary):boolean>
 -- !query output
@@ -1095,7 +1094,7 @@ true
 
 
 -- !query
-select contains(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select contains(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1110,7 +1109,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select contains(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select contains(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<contains(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean>
 -- !query output
@@ -1130,7 +1129,7 @@ true
 
 
 -- !query
-select contains(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select contains(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<contains(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):boolean>
 -- !query output
@@ -1150,7 +1149,7 @@ true
 
 
 -- !query
-select contains(utf8_binary, 'a'), contains(utf8_lcase, 'a') from t1
+select contains(utf8_binary, 'a'), contains(utf8_lcase, 'a') from t5
 -- !query schema
 struct<contains(utf8_binary, a):boolean,contains(utf8_lcase, a):boolean>
 -- !query output
@@ -1170,7 +1169,7 @@ true	true
 
 
 -- !query
-select contains(utf8_binary, 'AaAA' collate utf8_lcase), contains(utf8_lcase, 'AAa' collate utf8_binary) from t1
+select contains(utf8_binary, 'AaAA' collate utf8_lcase), contains(utf8_lcase, 'AAa' collate utf8_binary) from t5
 -- !query schema
 struct<contains(utf8_binary, collate(AaAA, utf8_lcase)):boolean,contains(utf8_lcase, collate(AAa, utf8_binary)):boolean>
 -- !query output
@@ -1190,7 +1189,7 @@ true	true
 
 
 -- !query
-select substring_index(utf8_binary, utf8_lcase, 2) from t1
+select substring_index(utf8_binary, utf8_lcase, 2) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1202,7 +1201,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select substring_index(s, utf8_binary,1) from t1
+select substring_index(s, utf8_binary,1) from t5
 -- !query schema
 struct<substring_index(s, utf8_binary, 1):string>
 -- !query output
@@ -1222,7 +1221,7 @@ bbAbaAbA
 
 
 -- !query
-select substring_index(utf8_binary collate utf8_binary, s collate utf8_lcase, 3) from t1
+select substring_index(utf8_binary collate utf8_binary, s collate utf8_lcase, 3) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1237,7 +1236,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select substring_index(utf8_binary, utf8_lcase collate utf8_binary, 2) from t1
+select substring_index(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
 struct<substring_index(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
@@ -1257,7 +1256,7 @@ kitten
 
 
 -- !query
-select substring_index(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t1
+select substring_index(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t5
 -- !query schema
 struct<substring_index(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 2):string collate UTF8_LCASE>
 -- !query output
@@ -1277,7 +1276,7 @@ kitten
 
 
 -- !query
-select substring_index(utf8_binary, 'a', 2), substring_index(utf8_lcase, 'a', 2) from t1
+select substring_index(utf8_binary, 'a', 2), substring_index(utf8_lcase, 'a', 2) from t5
 -- !query schema
 struct<substring_index(utf8_binary, a, 2):string,substring_index(utf8_lcase, a, 2):string collate UTF8_LCASE>
 -- !query output
@@ -1297,7 +1296,7 @@ kitten	sitTing
 
 
 -- !query
-select substring_index(utf8_binary, 'AaAA' collate utf8_lcase, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t1
+select substring_index(utf8_binary, 'AaAA' collate utf8_lcase, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
 -- !query schema
 struct<substring_index(utf8_binary, collate(AaAA, utf8_lcase), 2):string collate UTF8_LCASE,substring_index(utf8_lcase, collate(AAa, utf8_binary), 2):string>
 -- !query output
@@ -1317,7 +1316,7 @@ kitten	sitTing
 
 
 -- !query
-select instr(utf8_binary, utf8_lcase) from t1
+select instr(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1329,7 +1328,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select instr(s, utf8_binary) from t1
+select instr(s, utf8_binary) from t5
 -- !query schema
 struct<instr(s, utf8_binary):int>
 -- !query output
@@ -1349,7 +1348,7 @@ struct<instr(s, utf8_binary):int>
 
 
 -- !query
-select instr(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select instr(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1364,7 +1363,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select instr(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select instr(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<instr(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -1384,7 +1383,7 @@ struct<instr(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 
 
 -- !query
-select instr(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select instr(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<instr(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):int>
 -- !query output
@@ -1404,7 +1403,7 @@ struct<instr(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):
 
 
 -- !query
-select instr(utf8_binary, 'a'), instr(utf8_lcase, 'a') from t1
+select instr(utf8_binary, 'a'), instr(utf8_lcase, 'a') from t5
 -- !query schema
 struct<instr(utf8_binary, a):int,instr(utf8_lcase, a):int>
 -- !query output
@@ -1424,7 +1423,7 @@ struct<instr(utf8_binary, a):int,instr(utf8_lcase, a):int>
 
 
 -- !query
-select instr(utf8_binary, 'AaAA' collate utf8_lcase), instr(utf8_lcase, 'AAa' collate utf8_binary) from t1
+select instr(utf8_binary, 'AaAA' collate utf8_lcase), instr(utf8_lcase, 'AAa' collate utf8_binary) from t5
 -- !query schema
 struct<instr(utf8_binary, collate(AaAA, utf8_lcase)):int,instr(utf8_lcase, collate(AAa, utf8_binary)):int>
 -- !query output
@@ -1444,7 +1443,7 @@ struct<instr(utf8_binary, collate(AaAA, utf8_lcase)):int,instr(utf8_lcase, colla
 
 
 -- !query
-select find_in_set(utf8_binary, utf8_lcase) from t1
+select find_in_set(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1456,7 +1455,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select find_in_set(s, utf8_binary) from t1
+select find_in_set(s, utf8_binary) from t5
 -- !query schema
 struct<find_in_set(s, utf8_binary):int>
 -- !query output
@@ -1476,7 +1475,7 @@ struct<find_in_set(s, utf8_binary):int>
 
 
 -- !query
-select find_in_set(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select find_in_set(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1491,7 +1490,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select find_in_set(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select find_in_set(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<find_in_set(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -1511,7 +1510,7 @@ struct<find_in_set(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 
 
 -- !query
-select find_in_set(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select find_in_set(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<find_in_set(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):int>
 -- !query output
@@ -1531,7 +1530,7 @@ struct<find_in_set(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 
 
 -- !query
-select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o') from t1
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o') from t5
 -- !query schema
 struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaaAaA,i̇o):int>
 -- !query output
@@ -1551,7 +1550,7 @@ struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaa
 
 
 -- !query
-select find_in_set(utf8_binary, 'aaAaaAaA,i̇o' collate utf8_lcase), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t1
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o' collate utf8_lcase), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t5
 -- !query schema
 struct<find_in_set(utf8_binary, collate(aaAaaAaA,i̇o, utf8_lcase)):int,find_in_set(utf8_lcase, collate(aaAaaAaA,i̇o, utf8_binary)):int>
 -- !query output
@@ -1571,7 +1570,7 @@ struct<find_in_set(utf8_binary, collate(aaAaaAaA,i̇o, utf8_lcase)):int,find_in_
 
 
 -- !query
-select startswith(utf8_binary, utf8_lcase) from t1
+select startswith(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1583,7 +1582,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select startswith(s, utf8_binary) from t1
+select startswith(s, utf8_binary) from t5
 -- !query schema
 struct<startswith(s, utf8_binary):boolean>
 -- !query output
@@ -1603,7 +1602,7 @@ true
 
 
 -- !query
-select startswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select startswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1618,7 +1617,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select startswith(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select startswith(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<startswith(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean>
 -- !query output
@@ -1638,7 +1637,7 @@ true
 
 
 -- !query
-select startswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select startswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<startswith(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):boolean>
 -- !query output
@@ -1658,7 +1657,7 @@ true
 
 
 -- !query
-select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') from t1
+select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') from t5
 -- !query schema
 struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, aaAaaAaA):boolean>
 -- !query output
@@ -1678,7 +1677,7 @@ false	true
 
 
 -- !query
-select startswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t1
+select startswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
 -- !query schema
 struct<startswith(utf8_binary, collate(aaAaaAaA, utf8_lcase)):boolean,startswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
 -- !query output
@@ -1698,7 +1697,7 @@ true	true
 
 
 -- !query
-select translate(utf8_lcase, utf8_lcase, '12345') from t1
+select translate(utf8_lcase, utf8_lcase, '12345') from t5
 -- !query schema
 struct<translate(utf8_lcase, utf8_lcase, 12345):string collate UTF8_LCASE>
 -- !query output
@@ -1718,7 +1717,7 @@ struct<translate(utf8_lcase, utf8_lcase, 12345):string collate UTF8_LCASE>
 
 
 -- !query
-select translate(utf8_binary, utf8_lcase, '12345') from t1
+select translate(utf8_binary, utf8_lcase, '12345') from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1730,7 +1729,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select translate(utf8_binary, 'aBc' collate utf8_lcase, '12345' collate utf8_binary) from t1
+select translate(utf8_binary, 'aBc' collate utf8_lcase, '12345' collate utf8_binary) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1745,7 +1744,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select translate(utf8_binary, 'SQL' collate utf8_lcase, '12345' collate utf8_lcase) from t1
+select translate(utf8_binary, 'SQL' collate utf8_lcase, '12345' collate utf8_lcase) from t5
 -- !query schema
 struct<translate(utf8_binary, collate(SQL, utf8_lcase), collate(12345, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -1765,7 +1764,7 @@ kitten
 
 
 -- !query
-select translate(utf8_lcase, 'aaAaaAaA', '12345'), translate(utf8_binary, 'aaAaaAaA', '12345') from t1
+select translate(utf8_lcase, 'aaAaaAaA', '12345'), translate(utf8_binary, 'aaAaaAaA', '12345') from t5
 -- !query schema
 struct<translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string>
 -- !query output
@@ -1785,7 +1784,7 @@ sitTing	kitten
 
 
 -- !query
-select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t1
+select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query schema
 struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
 -- !query output
@@ -1805,7 +1804,7 @@ sitTing	kitten
 
 
 -- !query
-select replace(utf8_binary, utf8_lcase, 'abc') from t1
+select replace(utf8_binary, utf8_lcase, 'abc') from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1817,7 +1816,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select replace(s, utf8_binary, 'abc') from t1
+select replace(s, utf8_binary, 'abc') from t5
 -- !query schema
 struct<replace(s, utf8_binary, abc):string>
 -- !query output
@@ -1837,7 +1836,7 @@ bbAbaAbA
 
 
 -- !query
-select replace(utf8_binary collate utf8_binary, s collate utf8_lcase, 'abc') from t1
+select replace(utf8_binary collate utf8_binary, s collate utf8_lcase, 'abc') from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1852,7 +1851,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select replace(utf8_binary, utf8_lcase collate utf8_binary, 'abc') from t1
+select replace(utf8_binary, utf8_lcase collate utf8_binary, 'abc') from t5
 -- !query schema
 struct<replace(utf8_binary, collate(utf8_lcase, utf8_binary), abc):string>
 -- !query output
@@ -1872,7 +1871,7 @@ kitten
 
 
 -- !query
-select replace(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 'abc') from t1
+select replace(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 'abc') from t5
 -- !query schema
 struct<replace(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), abc):string collate UTF8_LCASE>
 -- !query output
@@ -1892,7 +1891,7 @@ kitten
 
 
 -- !query
-select replace(utf8_binary, 'aaAaaAaA', 'abc'), replace(utf8_lcase, 'aaAaaAaA', 'abc') from t1
+select replace(utf8_binary, 'aaAaaAaA', 'abc'), replace(utf8_lcase, 'aaAaaAaA', 'abc') from t5
 -- !query schema
 struct<replace(utf8_binary, aaAaaAaA, abc):string,replace(utf8_lcase, aaAaaAaA, abc):string collate UTF8_LCASE>
 -- !query output
@@ -1912,7 +1911,7 @@ kitten	sitTing
 
 
 -- !query
-select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t1
+select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
 struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), abc):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
 -- !query output
@@ -1932,7 +1931,7 @@ kitten	sitTing
 
 
 -- !query
-select endswith(utf8_binary, utf8_lcase) from t1
+select endswith(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1944,7 +1943,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select endswith(s, utf8_binary) from t1
+select endswith(s, utf8_binary) from t5
 -- !query schema
 struct<endswith(s, utf8_binary):boolean>
 -- !query output
@@ -1964,7 +1963,7 @@ true
 
 
 -- !query
-select endswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select endswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -1979,7 +1978,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select endswith(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select endswith(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<endswith(utf8_binary, collate(utf8_lcase, utf8_binary)):boolean>
 -- !query output
@@ -1999,7 +1998,7 @@ true
 
 
 -- !query
-select endswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select endswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<endswith(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):boolean>
 -- !query output
@@ -2019,7 +2018,7 @@ true
 
 
 -- !query
-select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from t1
+select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from t5
 -- !query schema
 struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, aaAaaAaA):boolean>
 -- !query output
@@ -2039,7 +2038,7 @@ false	true
 
 
 -- !query
-select endswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t1
+select endswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
 -- !query schema
 struct<endswith(utf8_binary, collate(aaAaaAaA, utf8_lcase)):boolean,endswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
 -- !query output
@@ -2059,7 +2058,7 @@ true	true
 
 
 -- !query
-select repeat(utf8_binary, 3), repeat(utf8_lcase, 2) from t1
+select repeat(utf8_binary, 3), repeat(utf8_lcase, 2) from t5
 -- !query schema
 struct<repeat(utf8_binary, 3):string,repeat(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
@@ -2079,7 +2078,7 @@ kittenkittenkitten	sitTingsitTing
 
 
 -- !query
-select repeat(utf8_binary collate utf8_lcase, 3), repeat(utf8_lcase collate utf8_binary, 2) from t1
+select repeat(utf8_binary collate utf8_lcase, 3), repeat(utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
 struct<repeat(collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,repeat(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
@@ -2099,7 +2098,7 @@ kittenkittenkitten	sitTingsitTing
 
 
 -- !query
-select ascii(utf8_binary), ascii(utf8_lcase) from t1
+select ascii(utf8_binary), ascii(utf8_lcase) from t5
 -- !query schema
 struct<ascii(utf8_binary):int,ascii(utf8_lcase):int>
 -- !query output
@@ -2119,7 +2118,7 @@ struct<ascii(utf8_binary):int,ascii(utf8_lcase):int>
 
 
 -- !query
-select ascii(utf8_binary collate utf8_lcase), ascii(utf8_lcase collate utf8_binary) from t1
+select ascii(utf8_binary collate utf8_lcase), ascii(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<ascii(collate(utf8_binary, utf8_lcase)):int,ascii(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -2139,7 +2138,7 @@ struct<ascii(collate(utf8_binary, utf8_lcase)):int,ascii(collate(utf8_lcase, utf
 
 
 -- !query
-select unbase64(utf8_binary), unbase64(utf8_lcase) from t6
+select unbase64(utf8_binary), unbase64(utf8_lcase) from t10
 -- !query schema
 struct<unbase64(utf8_binary):binary,unbase64(utf8_lcase):binary>
 -- !query output
@@ -2148,7 +2147,7 @@ y�v	y�v
 
 
 -- !query
-select unbase64(utf8_binary collate utf8_lcase), unbase64(utf8_lcase collate utf8_binary) from t6
+select unbase64(utf8_binary collate utf8_lcase), unbase64(utf8_lcase collate utf8_binary) from t10
 -- !query schema
 struct<unbase64(collate(utf8_binary, utf8_lcase)):binary,unbase64(collate(utf8_lcase, utf8_binary)):binary>
 -- !query output
@@ -2157,7 +2156,7 @@ y�v	y�v
 
 
 -- !query
-select chr(ascii) from t2
+select chr(ascii) from t6
 -- !query schema
 struct<chr(ascii):string>
 -- !query output
@@ -2166,7 +2165,7 @@ a
 
 
 -- !query
-select base64(utf8_binary), base64(utf8_lcase) from t1
+select base64(utf8_binary), base64(utf8_lcase) from t5
 -- !query schema
 struct<base64(utf8_binary):string,base64(utf8_lcase):string>
 -- !query output
@@ -2186,7 +2185,7 @@ xLBv	xLBv
 
 
 -- !query
-select base64(utf8_binary collate utf8_lcase), base64(utf8_lcase collate utf8_binary) from t1
+select base64(utf8_binary collate utf8_lcase), base64(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<base64(collate(utf8_binary, utf8_lcase)):string,base64(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -2206,7 +2205,7 @@ xLBv	xLBv
 
 
 -- !query
-select decode(encode(utf8_binary, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase, 'utf-8'), 'utf-8') from t1
+select decode(encode(utf8_binary, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase, 'utf-8'), 'utf-8') from t5
 -- !query schema
 struct<decode(encode(utf8_binary, utf-8), utf-8):string,decode(encode(utf8_lcase, utf-8), utf-8):string>
 -- !query output
@@ -2226,7 +2225,7 @@ kitten	sitTing
 
 
 -- !query
-select decode(encode(utf8_binary collate utf8_lcase, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase collate utf8_binary, 'utf-8'), 'utf-8') from t1
+select decode(encode(utf8_binary collate utf8_lcase, 'utf-8'), 'utf-8'), decode(encode(utf8_lcase collate utf8_binary, 'utf-8'), 'utf-8') from t5
 -- !query schema
 struct<decode(encode(collate(utf8_binary, utf8_lcase), utf-8), utf-8):string,decode(encode(collate(utf8_lcase, utf8_binary), utf-8), utf-8):string>
 -- !query output
@@ -2246,7 +2245,7 @@ kitten	sitTing
 
 
 -- !query
-select format_number(ascii, '###.###') from t3
+select format_number(ascii, '###.###') from t7
 -- !query schema
 struct<format_number(ascii, ###.###):string>
 -- !query output
@@ -2255,7 +2254,7 @@ struct<format_number(ascii, ###.###):string>
 
 
 -- !query
-select format_number(ascii, '###.###' collate utf8_lcase) from t3
+select format_number(ascii, '###.###' collate utf8_lcase) from t7
 -- !query schema
 struct<format_number(ascii, collate(###.###, utf8_lcase)):string>
 -- !query output
@@ -2264,7 +2263,7 @@ struct<format_number(ascii, collate(###.###, utf8_lcase)):string>
 
 
 -- !query
-select encode(utf8_binary, 'utf-8'), encode(utf8_lcase, 'utf-8') from t1
+select encode(utf8_binary, 'utf-8'), encode(utf8_lcase, 'utf-8') from t5
 -- !query schema
 struct<encode(utf8_binary, utf-8):binary,encode(utf8_lcase, utf-8):binary>
 -- !query output
@@ -2284,7 +2283,7 @@ kitten	sitTing
 
 
 -- !query
-select encode(utf8_binary collate utf8_lcase, 'utf-8'), encode(utf8_lcase collate utf8_binary, 'utf-8') from t1
+select encode(utf8_binary collate utf8_lcase, 'utf-8'), encode(utf8_lcase collate utf8_binary, 'utf-8') from t5
 -- !query schema
 struct<encode(collate(utf8_binary, utf8_lcase), utf-8):binary,encode(collate(utf8_lcase, utf8_binary), utf-8):binary>
 -- !query output
@@ -2304,7 +2303,7 @@ kitten	sitTing
 
 
 -- !query
-select to_binary(utf8_binary, 'utf-8'), to_binary(utf8_lcase, 'utf-8') from t1
+select to_binary(utf8_binary, 'utf-8'), to_binary(utf8_lcase, 'utf-8') from t5
 -- !query schema
 struct<to_binary(utf8_binary, utf-8):binary,to_binary(utf8_lcase, utf-8):binary>
 -- !query output
@@ -2324,7 +2323,7 @@ kitten	sitTing
 
 
 -- !query
-select to_binary(utf8_binary collate utf8_lcase, 'utf-8'), to_binary(utf8_lcase collate utf8_binary, 'utf-8') from t1
+select to_binary(utf8_binary collate utf8_lcase, 'utf-8'), to_binary(utf8_lcase collate utf8_binary, 'utf-8') from t5
 -- !query schema
 struct<to_binary(collate(utf8_binary, utf8_lcase), utf-8):binary,to_binary(collate(utf8_lcase, utf8_binary), utf-8):binary>
 -- !query output
@@ -2344,7 +2343,7 @@ kitten	sitTing
 
 
 -- !query
-select sentences(utf8_binary), sentences(utf8_lcase) from t1
+select sentences(utf8_binary), sentences(utf8_lcase) from t5
 -- !query schema
 struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , ):array<array<string collate UTF8_LCASE>>>
 -- !query output
@@ -2364,7 +2363,7 @@ struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , )
 
 
 -- !query
-select sentences(utf8_binary collate utf8_lcase), sentences(utf8_lcase collate utf8_binary) from t1
+select sentences(utf8_binary collate utf8_lcase), sentences(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collate UTF8_LCASE>>,sentences(collate(utf8_lcase, utf8_binary), , ):array<array<string>>>
 -- !query output
@@ -2384,7 +2383,7 @@ struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collat
 
 
 -- !query
-select upper(utf8_binary), upper(utf8_lcase) from t1
+select upper(utf8_binary), upper(utf8_lcase) from t5
 -- !query schema
 struct<upper(utf8_binary):string,upper(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -2404,7 +2403,7 @@ SPARK	SQL
 
 
 -- !query
-select upper(utf8_binary collate utf8_lcase), upper(utf8_lcase collate utf8_binary) from t1
+select upper(utf8_binary collate utf8_lcase), upper(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<upper(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,upper(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -2424,7 +2423,7 @@ SPARK	SQL
 
 
 -- !query
-select lower(utf8_binary), lower(utf8_lcase) from t1
+select lower(utf8_binary), lower(utf8_lcase) from t5
 -- !query schema
 struct<lower(utf8_binary):string,lower(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -2444,7 +2443,7 @@ spark	sql
 
 
 -- !query
-select lower(utf8_binary collate utf8_lcase), lower(utf8_lcase collate utf8_binary) from t1
+select lower(utf8_binary collate utf8_lcase), lower(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<lower(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lower(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -2464,7 +2463,7 @@ spark	sql
 
 
 -- !query
-select initcap(utf8_binary), initcap(utf8_lcase) from t1
+select initcap(utf8_binary), initcap(utf8_lcase) from t5
 -- !query schema
 struct<initcap(utf8_binary):string,initcap(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -2484,7 +2483,7 @@ Spark	Sql
 
 
 -- !query
-select initcap(utf8_binary collate utf8_lcase), initcap(utf8_lcase collate utf8_binary) from t1
+select initcap(utf8_binary collate utf8_lcase), initcap(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<initcap(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,initcap(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -2504,7 +2503,7 @@ Spark	Sql
 
 
 -- !query
-select overlay(utf8_binary, utf8_lcase, 2) from t1
+select overlay(utf8_binary, utf8_lcase, 2) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -2516,7 +2515,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select overlay(s, utf8_binary,1) from t1
+select overlay(s, utf8_binary,1) from t5
 -- !query schema
 struct<overlay(s, utf8_binary, 1, -1):string>
 -- !query output
@@ -2536,7 +2535,7 @@ kitten
 
 
 -- !query
-select overlay(utf8_binary collate utf8_binary, s collate utf8_lcase, 3) from t1
+select overlay(utf8_binary collate utf8_binary, s collate utf8_lcase, 3) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -2551,7 +2550,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select overlay(utf8_binary, utf8_lcase collate utf8_binary, 2) from t1
+select overlay(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
 struct<overlay(utf8_binary, collate(utf8_lcase, utf8_binary), 2, -1):string>
 -- !query output
@@ -2571,7 +2570,7 @@ ksitTing
 
 
 -- !query
-select overlay(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t1
+select overlay(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t5
 -- !query schema
 struct<overlay(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 2, -1):string collate UTF8_LCASE>
 -- !query output
@@ -2591,7 +2590,7 @@ ksitTing
 
 
 -- !query
-select overlay(utf8_binary, 'a', 2), overlay(utf8_lcase, 'a', 2) from t1
+select overlay(utf8_binary, 'a', 2), overlay(utf8_lcase, 'a', 2) from t5
 -- !query schema
 struct<overlay(utf8_binary, a, 2, -1):string,overlay(utf8_lcase, a, 2, -1):string collate UTF8_LCASE>
 -- !query output
@@ -2611,7 +2610,7 @@ katten	satTing
 
 
 -- !query
-select overlay(utf8_binary, 'AaAA' collate utf8_lcase, 2), overlay(utf8_lcase, 'AAa' collate utf8_binary, 2) from t1
+select overlay(utf8_binary, 'AaAA' collate utf8_lcase, 2), overlay(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
 -- !query schema
 struct<overlay(utf8_binary, collate(AaAA, utf8_lcase), 2, -1):string collate UTF8_LCASE,overlay(utf8_lcase, collate(AAa, utf8_binary), 2, -1):string>
 -- !query output
@@ -2631,7 +2630,7 @@ kAaAAn	sAAaing
 
 
 -- !query
-select format_string(format, utf8_binary, utf8_lcase) from t4
+select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query schema
 struct<format_string(format, utf8_binary, utf8_lcase):string>
 -- !query output
@@ -2639,7 +2638,7 @@ abCdEabCdE
 
 
 -- !query
-select format_string(format collate utf8_lcase, utf8_lcase, utf8_binary collate utf8_lcase, 3), format_string(format, utf8_lcase collate utf8_binary, utf8_binary) from t4
+select format_string(format collate utf8_lcase, utf8_lcase, utf8_binary collate utf8_lcase, 3), format_string(format, utf8_lcase collate utf8_binary, utf8_binary) from t8
 -- !query schema
 struct<format_string(collate(format, utf8_lcase), utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,format_string(format, collate(utf8_lcase, utf8_binary), utf8_binary):string>
 -- !query output
@@ -2647,7 +2646,7 @@ abCdEabCdE	abCdEabCdE
 
 
 -- !query
-select format_string(format, utf8_binary, utf8_lcase) from t4
+select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query schema
 struct<format_string(format, utf8_binary, utf8_lcase):string>
 -- !query output
@@ -2655,7 +2654,7 @@ abCdEabCdE
 
 
 -- !query
-select soundex(utf8_binary), soundex(utf8_lcase) from t1
+select soundex(utf8_binary), soundex(utf8_lcase) from t5
 -- !query schema
 struct<soundex(utf8_binary):string,soundex(utf8_lcase):string>
 -- !query output
@@ -2675,7 +2674,7 @@ S535	S535
 
 
 -- !query
-select soundex(utf8_binary collate utf8_lcase), soundex(utf8_lcase collate utf8_binary) from t1
+select soundex(utf8_binary collate utf8_lcase), soundex(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<soundex(collate(utf8_binary, utf8_lcase)):string,soundex(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -2695,7 +2694,7 @@ S535	S535
 
 
 -- !query
-select length(utf8_binary), length(utf8_lcase) from t1
+select length(utf8_binary), length(utf8_lcase) from t5
 -- !query schema
 struct<length(utf8_binary):int,length(utf8_lcase):int>
 -- !query output
@@ -2715,7 +2714,7 @@ struct<length(utf8_binary):int,length(utf8_lcase):int>
 
 
 -- !query
-select length(utf8_binary collate utf8_lcase), length(utf8_lcase collate utf8_binary) from t1
+select length(utf8_binary collate utf8_lcase), length(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<length(collate(utf8_binary, utf8_lcase)):int,length(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -2735,7 +2734,7 @@ struct<length(collate(utf8_binary, utf8_lcase)):int,length(collate(utf8_lcase, u
 
 
 -- !query
-select bit_length(utf8_binary), bit_length(utf8_lcase) from t1
+select bit_length(utf8_binary), bit_length(utf8_lcase) from t5
 -- !query schema
 struct<bit_length(utf8_binary):int,bit_length(utf8_lcase):int>
 -- !query output
@@ -2755,7 +2754,7 @@ struct<bit_length(utf8_binary):int,bit_length(utf8_lcase):int>
 
 
 -- !query
-select bit_length(utf8_binary collate utf8_lcase), bit_length(utf8_lcase collate utf8_binary) from t1
+select bit_length(utf8_binary collate utf8_lcase), bit_length(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<bit_length(collate(utf8_binary, utf8_lcase)):int,bit_length(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -2775,7 +2774,7 @@ struct<bit_length(collate(utf8_binary, utf8_lcase)):int,bit_length(collate(utf8_
 
 
 -- !query
-select octet_length(utf8_binary), octet_length(utf8_lcase) from t1
+select octet_length(utf8_binary), octet_length(utf8_lcase) from t5
 -- !query schema
 struct<octet_length(utf8_binary):int,octet_length(utf8_lcase):int>
 -- !query output
@@ -2795,7 +2794,7 @@ struct<octet_length(utf8_binary):int,octet_length(utf8_lcase):int>
 
 
 -- !query
-select octet_length(utf8_binary collate utf8_lcase), octet_length(utf8_lcase collate utf8_binary) from t1
+select octet_length(utf8_binary collate utf8_lcase), octet_length(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -2815,7 +2814,7 @@ struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(u
 
 
 -- !query
-select luhn_check(num) from t5
+select luhn_check(num) from t9
 -- !query schema
 struct<luhn_check(num):boolean>
 -- !query output
@@ -2824,27 +2823,19 @@ false
 
 
 -- !query
-select levenshtein(utf8_binary, utf8_lcase) from t1
+select levenshtein(utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<levenshtein(utf8_binary, utf8_lcase):int>
+struct<>
 -- !query output
-0
-0
-0
-0
-0
-0
-1
-16
-2
-4
-4
-4
-8
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
 
 
 -- !query
-select levenshtein(s, utf8_binary) from t1
+select levenshtein(s, utf8_binary) from t5
 -- !query schema
 struct<levenshtein(s, utf8_binary):int>
 -- !query output
@@ -2864,27 +2855,22 @@ struct<levenshtein(s, utf8_binary):int>
 
 
 -- !query
-select levenshtein(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select levenshtein(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
-struct<levenshtein(collate(utf8_binary, utf8_binary), collate(s, utf8_lcase)):int>
+struct<>
 -- !query output
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
-1
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
 
 
 -- !query
-select levenshtein(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select levenshtein(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<levenshtein(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 -- !query output
@@ -2904,7 +2890,7 @@ struct<levenshtein(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 
 
 -- !query
-select levenshtein(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select levenshtein(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<levenshtein(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):int>
 -- !query output
@@ -2924,7 +2910,7 @@ struct<levenshtein(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 
 
 -- !query
-select levenshtein(utf8_binary, 'a'), levenshtein(utf8_lcase, 'a') from t1
+select levenshtein(utf8_binary, 'a'), levenshtein(utf8_lcase, 'a') from t5
 -- !query schema
 struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, a):int>
 -- !query output
@@ -2944,7 +2930,7 @@ struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, a):int>
 
 
 -- !query
-select levenshtein(utf8_binary, 'AaAA' collate utf8_lcase, 3), levenshtein(utf8_lcase, 'AAa' collate utf8_binary, 4) from t1
+select levenshtein(utf8_binary, 'AaAA' collate utf8_lcase, 3), levenshtein(utf8_lcase, 'AAa' collate utf8_binary, 4) from t5
 -- !query schema
 struct<levenshtein(utf8_binary, collate(AaAA, utf8_lcase), 3):int,levenshtein(utf8_lcase, collate(AAa, utf8_binary), 4):int>
 -- !query output
@@ -2964,7 +2950,7 @@ struct<levenshtein(utf8_binary, collate(AaAA, utf8_lcase), 3):int,levenshtein(ut
 
 
 -- !query
-select is_valid_utf8(utf8_binary), is_valid_utf8(utf8_lcase) from t1
+select is_valid_utf8(utf8_binary), is_valid_utf8(utf8_lcase) from t5
 -- !query schema
 struct<is_valid_utf8(utf8_binary):boolean,is_valid_utf8(utf8_lcase):boolean>
 -- !query output
@@ -2984,7 +2970,7 @@ true	true
 
 
 -- !query
-select is_valid_utf8(utf8_binary collate utf8_lcase), is_valid_utf8(utf8_lcase collate utf8_binary) from t1
+select is_valid_utf8(utf8_binary collate utf8_lcase), is_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<is_valid_utf8(collate(utf8_binary, utf8_lcase)):boolean,is_valid_utf8(collate(utf8_lcase, utf8_binary)):boolean>
 -- !query output
@@ -3004,7 +2990,7 @@ true	true
 
 
 -- !query
-select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t1
+select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5
 -- !query schema
 struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -3024,7 +3010,7 @@ kitten	sitTing
 
 
 -- !query
-select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t1
+select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3044,7 +3030,7 @@ kitten	sitTing
 
 
 -- !query
-select validate_utf8(utf8_binary), validate_utf8(utf8_lcase) from t1
+select validate_utf8(utf8_binary), validate_utf8(utf8_lcase) from t5
 -- !query schema
 struct<validate_utf8(utf8_binary):string,validate_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -3064,7 +3050,7 @@ kitten	sitTing
 
 
 -- !query
-select validate_utf8(utf8_binary collate utf8_lcase), validate_utf8(utf8_lcase collate utf8_binary) from t1
+select validate_utf8(utf8_binary collate utf8_lcase), validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,validate_utf8(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3084,7 +3070,7 @@ kitten	sitTing
 
 
 -- !query
-select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t1
+select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5
 -- !query schema
 struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -3104,7 +3090,7 @@ kitten	sitTing
 
 
 -- !query
-select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t1
+select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3124,7 +3110,7 @@ kitten	sitTing
 
 
 -- !query
-select substr(utf8_binary, 2, 2), substr(utf8_lcase, 2, 2) from t1
+select substr(utf8_binary, 2, 2), substr(utf8_lcase, 2, 2) from t5
 -- !query schema
 struct<substr(utf8_binary, 2, 2):string,substr(utf8_lcase, 2, 2):string collate UTF8_LCASE>
 -- !query output
@@ -3144,7 +3130,7 @@ pa	QL
 
 
 -- !query
-select substr(utf8_binary collate utf8_lcase, 2, 2), substr(utf8_lcase collate utf8_binary, 2, 2) from t1
+select substr(utf8_binary collate utf8_lcase, 2, 2), substr(utf8_lcase collate utf8_binary, 2, 2) from t5
 -- !query schema
 struct<substr(collate(utf8_binary, utf8_lcase), 2, 2):string collate UTF8_LCASE,substr(collate(utf8_lcase, utf8_binary), 2, 2):string>
 -- !query output
@@ -3164,7 +3150,7 @@ pa	QL
 
 
 -- !query
-select right(utf8_binary, 2), right(utf8_lcase, 2) from t1
+select right(utf8_binary, 2), right(utf8_lcase, 2) from t5
 -- !query schema
 struct<right(utf8_binary, 2):string,right(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
@@ -3184,7 +3170,7 @@ y.	y.
 
 
 -- !query
-select right(utf8_binary collate utf8_lcase, 2), right(utf8_lcase collate utf8_binary, 2) from t1
+select right(utf8_binary collate utf8_lcase, 2), right(utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
 struct<right(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,right(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
@@ -3204,7 +3190,7 @@ y.	y.
 
 
 -- !query
-select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t1
+select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t5
 -- !query schema
 struct<left(utf8_binary, collate(2, utf8_lcase)):string,left(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
@@ -3224,7 +3210,7 @@ ki	si
 
 
 -- !query
-select left(utf8_binary collate utf8_lcase, 2), left(utf8_lcase collate utf8_binary, 2) from t1
+select left(utf8_binary collate utf8_lcase, 2), left(utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
 struct<left(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,left(collate(utf8_lcase, utf8_binary), 2):string>
 -- !query output
@@ -3244,7 +3230,7 @@ ki	si
 
 
 -- !query
-select rpad(utf8_binary, 8, utf8_lcase) from t1
+select rpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3256,7 +3242,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select rpad(s, 8, utf8_binary) from t1
+select rpad(s, 8, utf8_binary) from t5
 -- !query schema
 struct<rpad(s, 8, utf8_binary):string>
 -- !query output
@@ -3276,7 +3262,7 @@ kittenki
 
 
 -- !query
-select rpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t1
+select rpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3291,7 +3277,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select rpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t1
+select rpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<rpad(utf8_binary, 8, collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3311,7 +3297,7 @@ kittensi
 
 
 -- !query
-select rpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t1
+select rpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<rpad(collate(utf8_binary, utf8_lcase), 8, collate(utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -3331,7 +3317,7 @@ kittensi
 
 
 -- !query
-select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t1
+select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
 struct<rpad(utf8_binary, 8, a):string,rpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
 -- !query output
@@ -3351,7 +3337,7 @@ kittenaa	sitTinga
 
 
 -- !query
-select rpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), rpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t1
+select rpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), rpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5
 -- !query schema
 struct<rpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,rpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string>
 -- !query output
@@ -3371,7 +3357,7 @@ kittenAa	sitTingA
 
 
 -- !query
-select lpad(utf8_binary, 8, utf8_lcase) from t1
+select lpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3383,7 +3369,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select lpad(s, 8, utf8_binary) from t1
+select lpad(s, 8, utf8_binary) from t5
 -- !query schema
 struct<lpad(s, 8, utf8_binary):string>
 -- !query output
@@ -3403,7 +3389,7 @@ kikitten
 
 
 -- !query
-select lpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t1
+select lpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3418,7 +3404,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select lpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t1
+select lpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<lpad(utf8_binary, 8, collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3438,7 +3424,7 @@ sikitten
 
 
 -- !query
-select lpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t1
+select lpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<lpad(collate(utf8_binary, utf8_lcase), 8, collate(utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -3458,7 +3444,7 @@ sikitten
 
 
 -- !query
-select lpad(utf8_binary, 8, 'a'), lpad(utf8_lcase, 8, 'a') from t1
+select lpad(utf8_binary, 8, 'a'), lpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
 struct<lpad(utf8_binary, 8, a):string,lpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
 -- !query output
@@ -3478,7 +3464,7 @@ bbAbAAbA	aaaaaaaa
 
 
 -- !query
-select lpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), lpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t1
+select lpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), lpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5
 -- !query schema
 struct<lpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,lpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string>
 -- !query output
@@ -3498,7 +3484,7 @@ bbAbAAbA	AAaAAaAa
 
 
 -- !query
-select locate(utf8_binary, utf8_lcase) from t1
+select locate(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3510,7 +3496,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select locate(s, utf8_binary) from t1
+select locate(s, utf8_binary) from t5
 -- !query schema
 struct<locate(s, utf8_binary, 1):int>
 -- !query output
@@ -3530,7 +3516,7 @@ struct<locate(s, utf8_binary, 1):int>
 
 
 -- !query
-select locate(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select locate(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3545,7 +3531,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select locate(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select locate(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<locate(utf8_binary, collate(utf8_lcase, utf8_binary), 1):int>
 -- !query output
@@ -3565,7 +3551,7 @@ struct<locate(utf8_binary, collate(utf8_lcase, utf8_binary), 1):int>
 
 
 -- !query
-select locate(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 3) from t1
+select locate(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 3) from t5
 -- !query schema
 struct<locate(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 3):int>
 -- !query output
@@ -3585,7 +3571,7 @@ struct<locate(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase),
 
 
 -- !query
-select locate(utf8_binary, 'a'), locate(utf8_lcase, 'a') from t1
+select locate(utf8_binary, 'a'), locate(utf8_lcase, 'a') from t5
 -- !query schema
 struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, a, 1):int>
 -- !query output
@@ -3605,7 +3591,7 @@ struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, a, 1):int>
 
 
 -- !query
-select locate(utf8_binary, 'AaAA' collate utf8_lcase, 4), locate(utf8_lcase, 'AAa' collate utf8_binary, 4) from t1
+select locate(utf8_binary, 'AaAA' collate utf8_lcase, 4), locate(utf8_lcase, 'AAa' collate utf8_binary, 4) from t5
 -- !query schema
 struct<locate(utf8_binary, collate(AaAA, utf8_lcase), 4):int,locate(utf8_lcase, collate(AAa, utf8_binary), 4):int>
 -- !query output
@@ -3625,7 +3611,7 @@ struct<locate(utf8_binary, collate(AaAA, utf8_lcase), 4):int,locate(utf8_lcase, 
 
 
 -- !query
-select TRIM(utf8_binary, utf8_lcase) from t1
+select TRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3637,7 +3623,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select TRIM(s, utf8_binary) from t1
+select TRIM(s, utf8_binary) from t5
 -- !query schema
 struct<TRIM(BOTH s FROM utf8_binary):string>
 -- !query output
@@ -3645,7 +3631,7 @@ struct<TRIM(BOTH s FROM utf8_binary):string>
 
 
 -- !query
-select TRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select TRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3660,7 +3646,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select TRIM(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select TRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<TRIM(BOTH utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3680,7 +3666,7 @@ sitTing
 
 
 -- !query
-select TRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select TRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<TRIM(BOTH collate(utf8_binary, utf8_lcase) FROM collate(utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -3700,7 +3686,7 @@ sitTing
 
 
 -- !query
-select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t1
+select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -3720,7 +3706,7 @@ kitten	sitTing
 
 
 -- !query
-select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t1
+select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<TRIM(BOTH collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(BOTH collate(AAa, utf8_binary) FROM utf8_lcase):string>
 -- !query output
@@ -3740,7 +3726,7 @@ kitten	sitTing
 
 
 -- !query
-select BTRIM(utf8_binary, utf8_lcase) from t1
+select BTRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3752,7 +3738,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select BTRIM(s, utf8_binary) from t1
+select BTRIM(s, utf8_binary) from t5
 -- !query schema
 struct<btrim(s, utf8_binary):string>
 -- !query output
@@ -3772,7 +3758,7 @@ a
 
 
 -- !query
-select BTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select BTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3787,7 +3773,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select BTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select BTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<btrim(utf8_binary, collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3807,7 +3793,7 @@ park
 
 
 -- !query
-select BTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select BTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<btrim(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -3827,7 +3813,7 @@ park
 
 
 -- !query
-select BTRIM('ABc', utf8_binary), BTRIM('ABc', utf8_lcase) from t1
+select BTRIM('ABc', utf8_binary), BTRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<btrim(ABc, utf8_binary):string,btrim(ABc, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -3847,7 +3833,7 @@ Bc	Bc
 
 
 -- !query
-select BTRIM('ABc' collate utf8_lcase, utf8_binary), BTRIM('AAa' collate utf8_binary, utf8_lcase) from t1
+select BTRIM('ABc' collate utf8_lcase, utf8_binary), BTRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<btrim(collate(ABc, utf8_lcase), utf8_binary):string collate UTF8_LCASE,btrim(collate(AAa, utf8_binary), utf8_lcase):string>
 -- !query output
@@ -3867,7 +3853,7 @@ c	AA
 
 
 -- !query
-select LTRIM(utf8_binary, utf8_lcase) from t1
+select LTRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3879,7 +3865,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select LTRIM(s, utf8_binary) from t1
+select LTRIM(s, utf8_binary) from t5
 -- !query schema
 struct<TRIM(LEADING s FROM utf8_binary):string>
 -- !query output
@@ -3887,7 +3873,7 @@ struct<TRIM(LEADING s FROM utf8_binary):string>
 
 
 -- !query
-select LTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select LTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3902,7 +3888,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select LTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select LTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<TRIM(LEADING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -3922,7 +3908,7 @@ sitTing
 
 
 -- !query
-select LTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select LTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<TRIM(LEADING collate(utf8_binary, utf8_lcase) FROM collate(utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -3942,7 +3928,7 @@ sitTing
 
 
 -- !query
-select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t1
+select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING ABc FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -3962,7 +3948,7 @@ kitten	sitTing
 
 
 -- !query
-select LTRIM('ABc' collate utf8_lcase, utf8_binary), LTRIM('AAa' collate utf8_binary, utf8_lcase) from t1
+select LTRIM('ABc' collate utf8_lcase, utf8_binary), LTRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<TRIM(LEADING collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(LEADING collate(AAa, utf8_binary) FROM utf8_lcase):string>
 -- !query output
@@ -3982,7 +3968,7 @@ kitten	sitTing
 
 
 -- !query
-select RTRIM(utf8_binary, utf8_lcase) from t1
+select RTRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -3994,7 +3980,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select RTRIM(s, utf8_binary) from t1
+select RTRIM(s, utf8_binary) from t5
 -- !query schema
 struct<TRIM(TRAILING s FROM utf8_binary):string>
 -- !query output
@@ -4002,7 +3988,7 @@ struct<TRIM(TRAILING s FROM utf8_binary):string>
 
 
 -- !query
-select RTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t1
+select RTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
@@ -4017,7 +4003,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select RTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t1
+select RTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<TRIM(TRAILING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
 -- !query output
@@ -4037,7 +4023,7 @@ sitTing
 
 
 -- !query
-select RTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t1
+select RTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5
 -- !query schema
 struct<TRIM(TRAILING collate(utf8_binary, utf8_lcase) FROM collate(utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
@@ -4057,7 +4043,7 @@ sitTing
 
 
 -- !query
-select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t1
+select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING ABc FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
@@ -4077,7 +4063,7 @@ kitten	sitTing
 
 
 -- !query
-select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t1
+select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<TRIM(TRAILING collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(TRAILING collate(AAa, utf8_binary) FROM utf8_lcase):string>
 -- !query output
@@ -4097,38 +4083,6 @@ kitten	sitTing
 
 
 -- !query
-drop table t1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-drop table t2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-drop table t3
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-drop table t4
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 drop table t5
 -- !query schema
 struct<>
@@ -4138,6 +4092,38 @@ struct<>
 
 -- !query
 drop table t6
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t7
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t8
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t9
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t10
 -- !query schema
 struct<>
 -- !query output

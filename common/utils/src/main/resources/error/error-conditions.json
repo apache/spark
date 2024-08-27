@@ -3580,6 +3580,29 @@
     ],
     "sqlState" : "42805"
   },
+  "PARQUET_CONVERSION_FAILURE" : {
+    "message" : [
+      "Unable to create a Parquet converter for the data type <dataType> whose Parquet type is <parquetType>."
+    ],
+    "subClass" : {
+      "DECIMAL" : {
+        "message" : [
+          "Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
+        ]
+      },
+      "UNSUPPORTED" : {
+        "message" : [
+          "Please modify the conversion making sure it is supported."
+        ]
+      },
+      "WITHOUT_DECIMAL_METADATA" : {
+        "message" : [
+          "Please read this column/field as Spark BINARY type."
+        ]
+      }
+    },
+    "sqlState" : "42846"
+  },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
       "Illegal Parquet type: <parquetType>."
@@ -5058,6 +5081,43 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SHOW_CREATE_TABLE" : {
+    "message" : [
+      "Unsupported a SHOW CREATE TABLE command."
+    ],
+    "subClass" : {
+      "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
+        "message" : [
+          "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
+        ]
+      },
+      "ON_TEMPORARY_VIEW" : {
+        "message" : [
+          "The command is not supported on a temporary view <tableName>."
+        ]
+      },
+      "ON_TRANSACTIONAL_HIVE_TABLE" : {
+        "message" : [
+          "Failed to execute the command against transactional Hive table <tableName>.",
+          "Please use SHOW CREATE TABLE <tableName> AS SERDE to show Hive DDL instead."
+        ]
+      },
+      "WITH_UNSUPPORTED_FEATURE" : {
+        "message" : [
+          "Failed to execute the command against table/view <tableName> which is created by Hive and uses the following unsupported features",
+          "<unsupportedFeatures>"
+        ]
+      },
+      "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
+        "message" : [
+          "Failed to execute the command against the table <tableName> which is created by Hive and uses the following unsupported serde configuration",
+          "<configs>",
+          "Please use SHOW CREATE TABLE <tableName> AS SERDE to show Hive DDL instead."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
     "message" : [
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
@@ -6279,41 +6339,6 @@
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1270" : {
-    "message" : [
-      "SHOW CREATE TABLE is not supported on a temporary view: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1271" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported feature(s)",
-      "<unsupportedFeatures>",
-      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1272" : {
-    "message" : [
-      "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1273" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
-      "<configs>",
-      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1274" : {
-    "message" : [
-      "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1275" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
-      "<features>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1276" : {
     "message" : [
       "The logical plan that represents the view is not analyzed."
@@ -7319,21 +7344,6 @@
   "_LEGACY_ERROR_TEMP_2237" : {
     "message" : [
       "<className>.getParentLogger is not yet implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2238" : {
-    "message" : [
-      "Unable to create Parquet converter for <typeName> whose Parquet type is <parquetType> without decimal metadata. Please read this column/field as Spark BINARY type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2239" : {
-    "message" : [
-      "Unable to create Parquet converter for decimal type <t> whose Parquet type is <parquetType>.  Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2240" : {
-    "message" : [
-      "Unable to create Parquet converter for data type <t> whose Parquet type is <parquetType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2241" : {

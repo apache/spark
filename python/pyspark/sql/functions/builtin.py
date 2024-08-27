@@ -6339,7 +6339,7 @@ def percentile(
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
@@ -6360,7 +6360,7 @@ def percentile_approx(
         When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
         In this case, returns the approximate percentile array of column col
         at the given percentage array.
-    accuracy : :class:`~pyspark.sql.Column` or float
+    accuracy : :class:`~pyspark.sql.Column` or int
         is a positive numeric literal which controls approximation accuracy
         at the cost of memory. Higher value of accuracy yields better accuracy,
         1.0/accuracy is the relative error of the approximation. (default: 10000).
@@ -6397,7 +6397,7 @@ def percentile_approx(
 def approx_percentile(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
@@ -6414,7 +6414,7 @@ def approx_percentile(
         When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
         In this case, returns the approximate percentile array of column col
         at the given percentage array.
-    accuracy : :class:`~pyspark.sql.Column` or float
+    accuracy : :class:`~pyspark.sql.Column` or int
         is a positive numeric literal which controls approximation accuracy
         at the cost of memory. Higher value of accuracy yields better accuracy,
         1.0/accuracy is the relative error of the approximation. (default: 10000).
@@ -10989,7 +10989,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
 def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
-    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
 
     .. versionadded:: 1.5.0
 
@@ -11027,7 +11027,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
 def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a binary from a string using the provided character set
-    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
 
     .. versionadded:: 1.5.0
 

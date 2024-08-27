@@ -21,16 +21,17 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{SQLConf, ToScalaUDF}
+import org.apache.spark.sql.internal.{SqlApiConf, ToScalaUDF}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -110,7 +111,7 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = withOrigin {
+  def lit(literal: Any): Column = {
     literal match {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
@@ -156,8 +157,8 @@ object functions {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
       case _ =>
-        val dataType = ScalaReflection.schemaFor[T].dataType
-        Column(internal.Literal(literal, Option(dataType)))
+        val dataType = Try(ScalaReflection.schemaFor[T].dataType).toOption
+        Column(internal.Literal(literal, dataType))
     }
   }
 
@@ -1701,7 +1702,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[T](df: Dataset[T]): Dataset[T] = df.hint("broadcast")
+  def broadcast[DS <: api.Dataset[_]](df: DS): DS = df.hint("broadcast").asInstanceOf[DS]
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
@@ -1841,7 +1842,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def rand(): Column = rand(Utils.random.nextLong)
+  def rand(): Column = rand(SparkClassUtils.random.nextLong)
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from
@@ -1863,7 +1864,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def randn(): Column = randn(Utils.random.nextLong)
+  def randn(): Column = randn(SparkClassUtils.random.nextLong)
 
   /**
    * Partition ID.
@@ -3341,7 +3342,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = Column.fn("uuid", lit(Utils.random.nextLong))
+  def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3651,7 +3652,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def random(seed: Column): Column = call_function("random", seed)
+  def random(seed: Column): Column = Column.fn("random", seed)
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly
@@ -3660,7 +3661,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def random(): Column = random(lit(Utils.random.nextLong))
+  def random(): Column = random(lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns the bucket number for the given input column.
@@ -3752,7 +3753,7 @@ object functions {
 
   /**
    * Computes the first argument into a string from a binary using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
    * If either argument is null, the result will also be null.
    *
    * @group string_funcs
@@ -3763,7 +3764,7 @@ object functions {
 
   /**
    * Computes the first argument into a binary from a string using the provided character set
-   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32').
    * If either argument is null, the result will also be null.
    *
    * @group string_funcs
@@ -6606,30 +6607,11 @@ object functions {
     from_json(e, schema, options.asScala.iterator)
   }
 
-  /**
-   * Invoke a function with an options map as its last argument. If there are no options, its
-   * column is dropped.
-   */
-  private def fnWithOptions(
-      name: String,
-      options: Iterator[(String, String)],
-      arguments: Column*): Column = {
-    val augmentedArguments = if (options.hasNext) {
-      val flattenedKeyValueIterator = options.flatMap { case (k, v) =>
-        Iterator(lit(k), lit(v))
-      }
-      arguments :+ map(flattenedKeyValueIterator.toSeq: _*)
-    } else {
-      arguments
-    }
-    Column.fn(name, augmentedArguments: _*)
-  }
-
   private def from_json(
       e: Column,
       schema: Column,
       options: Iterator[(String, String)]): Column = {
-    fnWithOptions("from_json", options, e, schema)
+    Column.fnWithOptions("from_json", options, e, schema)
   }
 
   /**
@@ -6756,7 +6738,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_json(json: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("schema_of_json", options.asScala.iterator, json)
+    Column.fnWithOptions("schema_of_json", options.asScala.iterator, json)
 
   /**
    * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
@@ -6798,7 +6780,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_json(e: Column, options: Map[String, String]): Column =
-    fnWithOptions("to_json", options.iterator, e)
+    Column.fnWithOptions("to_json", options.iterator, e)
 
   // scalastyle:off line.size.limit
   /**
@@ -7018,7 +7000,7 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(Utils.random.nextLong))
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -7167,7 +7149,7 @@ object functions {
     from_csv(e, schema, options.asScala.iterator)
 
   private def from_csv(e: Column, schema: Column, options: Iterator[(String, String)]): Column =
-    fnWithOptions("from_csv", options, e, schema)
+    Column.fnWithOptions("from_csv", options, e, schema)
 
   /**
    * Parses a CSV string and infers its schema in DDL format.
@@ -7207,7 +7189,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("schema_of_csv", options.asScala.iterator, csv)
+    Column.fnWithOptions("schema_of_csv", options.asScala.iterator, csv)
 
   // scalastyle:off line.size.limit
   /**
@@ -7227,7 +7209,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_csv(e: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("to_csv", options.asScala.iterator, e)
+    Column.fnWithOptions("to_csv", options.asScala.iterator, e)
 
   /**
    * Converts a column containing a `StructType` into a CSV string with the specified schema.
@@ -7332,7 +7314,7 @@ object functions {
     from_xml(e, schema, Map.empty[String, String].asJava)
 
   private def from_xml(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
-    fnWithOptions("from_xml", options, e, schema)
+    Column.fnWithOptions("from_xml", options, e, schema)
   }
 
   /**
@@ -7371,7 +7353,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
+    Column.fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
 
   // scalastyle:off line.size.limit
 
@@ -7391,7 +7373,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def to_xml(e: Column, options: java.util.Map[String, String]): Column =
-    fnWithOptions("to_xml", options.asScala.iterator, e)
+    Column.fnWithOptions("to_xml", options.asScala.iterator, e)
 
   /**
    * Converts a column containing a `StructType` into a XML string with the specified schema.
@@ -8292,8 +8274,8 @@ object functions {
   @deprecated("Scala `udf` method with return type parameter is deprecated. " +
     "Please use Scala `udf` method without return type parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
-      throw QueryCompilationErrors.usingUntypedScalaUDFError()
+    if (!SqlApiConf.get.legacyAllowUntypedScalaUDFs) {
+      throw CompilationErrors.usingUntypedScalaUDFError()
     }
     SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
   }

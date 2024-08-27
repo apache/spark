@@ -19,7 +19,7 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.internal.{ColumnNode, SortOrder, Window => EvalWindow, WindowFrame, WindowSpec => InternalWindowSpec}
 
 /**
@@ -120,14 +120,14 @@ class WindowSpec private[sql](
       case 0 => WindowFrame.CurrentRow
       case Long.MinValue => WindowFrame.UnboundedPreceding
       case x if Int.MinValue <= x && x <= Int.MaxValue => WindowFrame.value(x.toInt)
-      case x => throw QueryCompilationErrors.invalidBoundaryStartError(x)
+      case x => throw CompilationErrors.invalidBoundaryStartError(x)
     }
 
     val boundaryEnd = end match {
       case 0 => WindowFrame.CurrentRow
       case Long.MaxValue => WindowFrame.UnboundedFollowing
       case x if Int.MinValue <= x && x <= Int.MaxValue => WindowFrame.value(x.toInt)
-      case x => throw QueryCompilationErrors.invalidBoundaryEndError(x)
+      case x => throw CompilationErrors.invalidBoundaryEndError(x)
     }
 
     withFrame(WindowFrame.Row, boundaryStart, boundaryEnd)
