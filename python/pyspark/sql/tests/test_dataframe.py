@@ -979,8 +979,8 @@ class DataFrameTestsMixin:
         # enforce transpose max values
         with self.sql_conf({"spark.sql.transposeMaxValues": 0}):
             with self.assertRaisesRegex(
-                IllegalArgumentException,
-                "Transposing the DataFrame exceeds the maximum allowed number of values",
+                AnalysisException,
+                r"\[EXCEED_ROW_LIMIT\] Number of rows exceeds the allowed limit of",
             ):
                 df.transpose().collect()
 
@@ -1000,13 +1000,17 @@ class DataFrameTestsMixin:
         # enforce AtomicType Attribute for index column values
         df = self.spark.createDataFrame([{"a": ["x", "x"], "b": "y", "c": "z"}])
         with self.assertRaisesRegex(
-            IllegalArgumentException, "Index column must be of atomic type"
+            AnalysisException,
+            r"\[INVALID_INDEX_COLUMN\] Invalid index column because: Index column must be of atomic type",
         ):
             df.transpose().collect()
 
         # enforce least common type for non-index columns
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": 1}])
-        with self.assertRaisesRegex(IllegalArgumentException, "No common type found"):
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[TRANSPOSE_NO_LEAST_COMMON_TYPE\] Transpose requires non-index columns to share a least common type",
+        ):
             df.transpose().collect()
 
 

@@ -1198,6 +1198,12 @@
     ],
     "sqlState" : "54006"
   },
+  "EXCEED_ROW_LIMIT" : {
+    "message" : [
+      "Number of rows exceeds the allowed limit of <maxValues>. If this was intended, set <config> to at least the current row count."
+    ],
+    "sqlState" : "54006"
+  },
   "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
     "message" : [
       "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
@@ -2327,6 +2333,12 @@
       "Different data sources and meta stores may impose additional restrictions on valid identifiers."
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_INDEX_COLUMN" : {
+    "message" : [
+      "Invalid index column because: <reason>"
+    ],
+    "sqlState" : "42804"
   },
   "INVALID_INDEX_OF_ZERO" : {
     "message" : [
@@ -4325,6 +4337,12 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TRANSPOSE_NO_LEAST_COMMON_TYPE" : {
+    "message" : [
+      "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
+    ],
+    "sqlState" : "42K09"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [

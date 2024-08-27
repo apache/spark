@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -35,7 +37,12 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     } else {
       dataTypes.reduce { (dt1, dt2) =>
         TypeCoercion.findTightestCommonType(dt1, dt2).getOrElse {
-          throw new IllegalArgumentException(s"No common type found for $dt1 and $dt2")
+          throw new AnalysisException(
+            errorClass = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
+            messageParameters = Map(
+              "dt1" -> dt1.toString,
+              "dt2" -> dt2.toString)
+          )
         }
       }
     }
@@ -92,11 +99,17 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case attr: Attribute if attr.dataType.isInstanceOf[AtomicType] =>
           Alias(Cast(attr, StringType), attr.name)()
         case attr: Attribute =>
-          throw new IllegalArgumentException(
-            s"Index column must be of atomic type, but found: ${attr.dataType}")
+          throw new AnalysisException(
+            errorClass = "INVALID_INDEX_COLUMN",
+            messageParameters = Map(
+              "reason" -> s"Index column must be of atomic type, but found: ${attr.dataType}")
+          )
         case _ =>
-          throw new IllegalArgumentException(
-            s"Index column must be an atomic attribute")
+          throw new AnalysisException(
+            errorClass = "INVALID_INDEX_COLUMN",
+            messageParameters = Map(
+              "reason" -> s"Index column must be an atomic attribute")
+          )
       }
 
       // Cast non-index columns to the least common type
@@ -131,11 +144,13 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
         LocalRelation(Seq(keyAttr), keyRows)
       } else {
-        if (fullCollectedRows.length > maxValues) {
-          throw new IllegalArgumentException(
-            s"Transposing the DataFrame exceeds the maximum allowed number of " +
-            s"values: $maxValues. Actual number of values: ${fullCollectedRows.length}."
-          )
+        val rowCount = fullCollectedRows.length
+        if (rowCount > maxValues) {
+          throw new AnalysisException(
+            errorClass = "EXCEED_ROW_LIMIT",
+            messageParameters = Map(
+              "maxValues" -> maxValues.toString,
+              "config" -> SQLConf.DATAFRAME_TRANSPOSE_MAX_VALUES.key))
         }
 
         // Transpose the matrix
