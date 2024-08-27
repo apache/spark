@@ -826,11 +826,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).orNull
 
-  /** Set the UUID of the Spark session that starts the current job. */
-  def setSparkSessionUUID(uuid: String): Unit = {
-    setLocalProperty(SparkContext.SPARK_SESSION_UUID, uuid)
-  }
-
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
@@ -3153,7 +3148,6 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
   private[spark] val SPARK_JOB_TAGS = "spark.job.tags"
   private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
-  private[spark] val SPARK_SESSION_UUID = "spark.sparkSession.uuid"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
 

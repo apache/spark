@@ -58,6 +58,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.SparkSession.SPARK_SESSION_UUID_PROPERTY_KEY
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -882,7 +883,8 @@ class SparkSession private(
    * @since 4.0.0
    */
   def interruptAll(): Seq[String] = {
-    val cancelledIds = sparkContext.cancelAllJobs(_.getSparkSessionUUID.contains(sessionUUID))
+    val cancelledIds = sparkContext.cancelAllJobs(
+      _.properties.getProperty(SPARK_SESSION_UUID_PROPERTY_KEY) == sessionUUID)
     ThreadUtils.awaitResult(cancelledIds, 60.seconds).map(_.toString).toSeq
   }
 
@@ -918,7 +920,8 @@ class SparkSession private(
         val cancelledIds = sparkContext.cancelJob(
           jobIdToBeCancelled,
           "Interrupted by user",
-          shouldCancelJob = _.getSparkSessionUUID.contains(sessionUUID))
+          shouldCancelJob = _.properties.getProperty(SPARK_SESSION_UUID_PROPERTY_KEY) == sessionUUID
+        )
         ThreadUtils.awaitResult(cancelledIds, 60.seconds).map(_.toString).toSeq
       case None =>
         throw new IllegalArgumentException("jobId must be a number in string form.")
@@ -1083,6 +1086,8 @@ class SparkSession private(
 
 @Stable
 object SparkSession extends Logging {
+
+  private val SPARK_SESSION_UUID_PROPERTY_KEY = "spark.sparkSession.uuid"
 
   /**
    * Builder for [[SparkSession]].
@@ -1309,7 +1314,7 @@ object SparkSession extends Logging {
     clearActiveSession()
     activeThreadSession.set(session)
     if (session != null) {
-      session.sparkContext.setSparkSessionUUID(session.sessionUUID)
+      session.sparkContext.setLocalProperty(SPARK_SESSION_UUID_PROPERTY_KEY, session.sessionUUID)
       session.userDefinedToRealTagsMap.values().asScala.foreach(session.sparkContext.addJobTag)
     }
   }
@@ -1324,7 +1329,7 @@ object SparkSession extends Logging {
     getActiveSession match {
       case Some(session) =>
         if (session != null) {
-          session.sparkContext.setSparkSessionUUID(null)
+          session.sparkContext.setLocalProperty(SPARK_SESSION_UUID_PROPERTY_KEY, null)
           session.userDefinedToRealTagsMap.values().asScala.foreach(session.sparkContext.addJobTag)
         }
         activeThreadSession.remove()
