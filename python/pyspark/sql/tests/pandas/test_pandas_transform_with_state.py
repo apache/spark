@@ -16,6 +16,7 @@
 #
 
 import os
+import shutil
 import time
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
@@ -268,38 +269,41 @@ class TransformWithStateInPandasTestsMixin:
             if batch_id == 0 or batch_id == 1:
                 time.sleep(6)
 
-        input_path = tempfile.mkdtemp()
-        df = self._build_test_df(input_path)
-        self._prepare_input_data(input_path + "/batch1.txt", [1, 0], [0, 0])
-        self._prepare_input_data(input_path + "/batch2.txt", [1, 0], [0, 0])
-        self._prepare_input_data(input_path + "/batch3.txt", [1, 0], [0, 0])
-        for q in self.spark.streams.active:
-            q.stop()
-        output_schema = StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField("count", IntegerType(), True),
-            ]
-        )
-
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
-                statefulProcessor=TTLStatefulProcessor(),
-                outputStructType=output_schema,
-                outputMode="Update",
-                timeMode="processingTime",
+        input_dir = tempfile.TemporaryDirectory()
+        input_path = input_dir.name
+        try:
+            df = self._build_test_df(input_path)
+            self._prepare_input_data(input_path + "/batch1.txt", [1, 0], [0, 0])
+            self._prepare_input_data(input_path + "/batch2.txt", [1, 0], [0, 0])
+            self._prepare_input_data(input_path + "/batch3.txt", [1, 0], [0, 0])
+            for q in self.spark.streams.active:
+                q.stop()
+            output_schema = StructType(
+                [
+                    StructField("id", StringType(), True),
+                    StructField("count", IntegerType(), True),
+                ]
             )
-            .writeStream.foreachBatch(check_results)
-            .outputMode("update")
-            .start()
-        )
-        self.assertTrue(q.isActive)
-        q.processAllAvailable()
-        q.stop()
-        q.awaitTermination()
-        self.assertTrue(q.exception() is None)
 
+            q = (
+                df.groupBy("id")
+                .transformWithStateInPandas(
+                    statefulProcessor=TTLStatefulProcessor(),
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="processingTime",
+                )
+                .writeStream.foreachBatch(check_results)
+                .outputMode("update")
+                .start()
+            )
+            self.assertTrue(q.isActive)
+            q.processAllAvailable()
+            q.stop()
+            q.awaitTermination()
+            self.assertTrue(q.exception() is None)
+        finally:
+            input_dir.cleanup()
 
 class SimpleStatefulProcessor(StatefulProcessor):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}

@@ -102,7 +102,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
 
     def get_value_state(
-        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: Optional[int]
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
@@ -112,8 +112,8 @@ class StatefulProcessorApiClient:
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
         state_call_command.schema = schema.json()
-        if ttlDurationMs is not None:
-            state_call_command.ttl.durationMs = ttlDurationMs
+        if ttl_duration_ms is not None:
+            state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getValueState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 

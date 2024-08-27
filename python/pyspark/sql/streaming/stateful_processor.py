@@ -89,7 +89,7 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client = stateful_processor_api_client
 
     def getValueState(
-        self, state_name: str, schema: Union[StructType, str], ttlDurationMs: Optional[int] = None
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int] = None
     ) -> ValueState:
         """
         Function to create new or return existing single value state variable of given type.
@@ -109,7 +109,7 @@ class StatefulProcessorHandle:
             resets the expiration time to current processing time plus ttlDuration.
             If ttl is not specified the state will never expire.
         """
-        self.stateful_processor_api_client.get_value_state(state_name, schema, ttlDurationMs)
+        self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
 
