@@ -67,6 +67,25 @@ private[spark] object Column {
     fn(name, isDistinct = false, isInternal = true, inputs)
   }
 
+  /**
+   * `fnWithOptions` corresponding for `internalFn`. If there are no options, its
+   * column is dropped.
+   */
+  private[sql] def internalFnWithOptions(
+      name: String,
+      options: Iterator[(String, String)],
+      arguments: Column*): Column = {
+    val augmentedArguments = if (options.hasNext) {
+      val flattenedKeyValueIterator = options.flatMap { case (k, v) =>
+        Iterator(lit(k), lit(v))
+      }
+      arguments :+ map(flattenedKeyValueIterator.toSeq: _*)
+    } else {
+      arguments
+    }
+    Column.internalFn(name, augmentedArguments: _*)
+  }
+
   private def fn(
       name: String,
       isDistinct: Boolean,

@@ -919,6 +919,8 @@ object FunctionRegistry {
   registerInternalExpression[EWM]("ewm")
   registerInternalExpression[NullIndex]("null_index")
   registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
+  registerInternalExpression[FromProtobuf]("from_protobuf")
+  registerInternalExpression[ToProtobuf]("to_protobuf")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

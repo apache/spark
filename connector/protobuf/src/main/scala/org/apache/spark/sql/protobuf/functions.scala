@@ -20,6 +20,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 
@@ -71,7 +72,13 @@ object functions {
       messageName: String,
       binaryFileDescriptorSet: Array[Byte],
       options: java.util.Map[String, String]): Column = {
-    ProtobufDataToCatalyst(data, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap)
+    Column.internalFnWithOptions(
+      "from_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageName),
+      lit(binaryFileDescriptorSet)
+    )
   }
 
   /**
@@ -90,7 +97,7 @@ object functions {
   @Experimental
   def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
     val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
-    ProtobufDataToCatalyst(data, messageName, Some(fileContent))
+    from_protobuf(data, messageName, fileContent)
   }
 
   /**
@@ -109,7 +116,12 @@ object functions {
   @Experimental
   def from_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    ProtobufDataToCatalyst(data, messageName, Some(binaryFileDescriptorSet))
+    Column.internalFn(
+      "from_protobuf",
+      data,
+      lit(messageName),
+      lit(binaryFileDescriptorSet)
+    )
   }
 
   /**
@@ -129,7 +141,11 @@ object functions {
    */
   @Experimental
   def from_protobuf(data: Column, messageClassName: String): Column = {
-    ProtobufDataToCatalyst(data, messageClassName)
+    Column.internalFn(
+      "from_protobuf",
+      data,
+      lit(messageClassName)
+    )
   }
 
   /**
@@ -153,7 +169,7 @@ object functions {
     data: Column,
     messageClassName: String,
     options: java.util.Map[String, String]): Column = {
-    ProtobufDataToCatalyst(data, messageClassName, None, options.asScala.toMap)
+    from_protobuf(data, messageClassName, "", options)
   }
 
   /**

@@ -2115,7 +2115,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         parameters = Map(
           "sqlExpr" -> "\"toprotobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
           "msg" -> ("The third argument of the TO_PROTOBUF SQL function must be a constant " +
-            "string representing the Protobuf descriptor file path"),
+            "string or binary data representing the Protobuf descriptor file path"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment = "to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())",
@@ -2173,7 +2173,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         parameters = Map(
           "sqlExpr" -> "\"fromprotobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
           "msg" -> ("The third argument of the FROM_PROTOBUF SQL function must be a constant " +
-            "string representing the Protobuf descriptor file path"),
+            "string or binary data representing the Protobuf descriptor file path"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment = "from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())",
