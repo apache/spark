@@ -22,8 +22,9 @@ import java.io.ByteArrayOutputStream
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
-import org.apache.avro.io.EncoderFactory
+import org.apache.avro.file.SeekableByteArrayInput
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -31,7 +32,7 @@ import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType, StructType}
 
 class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -369,6 +370,190 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           fragment = s"from_avro(s, '$jsonFormatSchema', 42)",
           start = 8,
           stop = 138)))
+    }
+  }
+
+  private def serialize(record: GenericRecord, avroSchema: String): Array[Byte] = {
+    val schema = new Schema.Parser().parse(avroSchema)
+    val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+    var outputStream: ByteArrayOutputStream = null
+    var bytes: Array[Byte] = null
+    try {
+      outputStream = new ByteArrayOutputStream()
+      val encoder = EncoderFactory.get.binaryEncoder(outputStream, null)
+      datumWriter.write(record, encoder)
+      encoder.flush()
+      bytes = outputStream.toByteArray
+    } finally {
+      if (outputStream != null) {
+        outputStream.close()
+      }
+    }
+    bytes
+  }
+
+  private def deserialize(bytes: Array[Byte], avroSchema: String): GenericRecord = {
+    val schema = new Schema.Parser().parse(avroSchema)
+    val datumReader = new GenericDatumReader[GenericRecord](schema)
+    var inputStream: SeekableByteArrayInput = null
+    var record: GenericRecord = null
+    try {
+      inputStream = new SeekableByteArrayInput(bytes)
+      val decoder = DecoderFactory.get.binaryDecoder(inputStream, null)
+      record = datumReader.read(null, decoder)
+    } finally {
+      if (inputStream != null) {
+        inputStream.close()
+      }
+    }
+    record
+  }
+
+  test("GenericRecord serialize/deserialize") {
+    val avroSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "person",
+        |  "fields": [
+        |    {"name": "name", "type": "string"},
+        |    {"name": "age", "type": "int"},
+        |    {"name": "country", "type": "string"}
+        |  ]
+        |}
+        |""".stripMargin
+    val schema = new Schema.Parser().parse(avroSchema)
+    val person = new GenericRecordBuilder(schema)
+      .set("name", "spark")
+      .set("age", 18)
+      .set("country", "usa")
+      .build()
+    val bytes = serialize(person, avroSchema)
+    val readback = deserialize(bytes, avroSchema)
+    assert(person.get("name").toString === readback.get("name").toString)
+    assert(person.get("age") === readback.get("age"))
+    assert(person.get("country").toString === readback.get("country").toString)
+  }
+
+  test("use `from_avro` to read GenericRecord(stored in `array[Byte]` datatype)") {
+    // write: Person (avro `GenericRecord`) -> binary (serialize) -> dataframe
+    // read: dataframe -> from_avro -> struct -> Person (avro `GenericRecord`)
+    val avroSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "person",
+        |  "fields": [
+        |    {"name": "name", "type": "string"},
+        |    {"name": "age", "type": "int"},
+        |    {"name": "country", "type": "string"}
+        |  ]
+        |}
+        |""".stripMargin
+    val testTable = "test_avro"
+    withTable(testTable) {
+      val schema = new Schema.Parser().parse(avroSchema)
+      val person1 = new GenericRecordBuilder(schema)
+        .set("name", "sparkA")
+        .set("age", 18)
+        .set("country", "usa")
+        .build()
+      val person2 = new GenericRecordBuilder(schema)
+        .set("name", "sparkB")
+        .set("age", 19)
+        .set("country", "usb")
+        .build()
+      Seq(person1, person2)
+        .map(p => serialize(p, avroSchema))
+        .toDF("data")
+        .repartition(1)
+        .writeTo(testTable)
+        .create()
+
+      val expectedSchema = new StructType().add("data", BinaryType)
+      assert(spark.table(testTable).schema === expectedSchema)
+
+      val avroDF = sql(s"SELECT from_avro(data, '$avroSchema', map()) FROM $testTable")
+      val readbacks = avroDF
+        .collect()
+        .map(row =>
+          new GenericRecordBuilder(schema)
+            .set("name", row.getStruct(0).getString(0))
+            .set("age", row.getStruct(0).getInt(1))
+            .set("country", row.getStruct(0).getString(2))
+            .build())
+
+      val readbackPerson1 = readbacks.head
+      assert(readbackPerson1.get(0) === person1.get(0))
+      assert(readbackPerson1.get(1).asInstanceOf[Int] === person1.get(1).asInstanceOf[Int])
+      assert(readbackPerson1.get(2).toString === person1.get(2))
+
+      val readbackPerson2 = readbacks(1)
+      assert(readbackPerson2.get(0).toString === person2.get(0))
+      assert(readbackPerson2.get(1).asInstanceOf[Int] === person2.get(1).asInstanceOf[Int])
+      assert(readbackPerson2.get(2).toString === person2.get(2))
+    }
+  }
+
+  test("use `to_avro` to read GenericRecord(stored in `struct` datatype)") {
+    // write: Person (avro `GenericRecord`) -> struct -> dataframe
+    // read: dataframe -> to_avro -> binary (deserialize) -> Person (avro `GenericRecord`)
+    val avroSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "person",
+        |  "fields": [
+        |    {"name": "name", "type": "string"},
+        |    {"name": "age", "type": "int"},
+        |    {"name": "country", "type": "string"}
+        |  ]
+        |}
+        |""".stripMargin
+    val testTable = "test_avro"
+    withTable(testTable) {
+      val schema = new Schema.Parser().parse(avroSchema)
+      val person1 = new GenericRecordBuilder(schema)
+        .set("name", "sparkA")
+        .set("age", 18)
+        .set("country", "usa")
+        .build()
+      val person2 = new GenericRecordBuilder(schema)
+        .set("name", "sparkB")
+        .set("age", 19)
+        .set("country", "usb")
+        .build()
+      Seq(person1, person2)
+        .map(p => (p.get(0).toString, p.get(1).asInstanceOf[Int], p.get(2).toString))
+        .toDF("name", "age", "country")
+        .select(struct($"name", $"age", $"country").as("data"))
+        .repartition(1)
+        .writeTo(testTable)
+        .create()
+
+      val expectedSchema = new StructType().add("data",
+        new StructType().
+          add("name", StringType).
+          add("age", IntegerType).
+          add("country", StringType)
+      )
+      assert(spark.table(testTable).schema === expectedSchema)
+
+      val avroDF = sql(s"select to_avro(data, '$avroSchema') from $testTable")
+      val readbacks = avroDF
+        .collect()
+        .map(row => row.get(0).asInstanceOf[Array[Byte]])
+        .map(bytes => deserialize(bytes, avroSchema))
+
+      val readbackPerson1 = readbacks.head
+      assert(readbackPerson1.get(0).toString === person1.get(0).toString)
+      assert(readbackPerson1.get(1).asInstanceOf[Int] === person1.get(1).asInstanceOf[Int])
+      assert(readbackPerson1.get(2).toString === person1.get(2).toString)
+
+      val readbackPerson2 = readbacks(1)
+      assert(readbackPerson2.get(0).toString === person2.get(0).toString)
+      assert(readbackPerson2.get(1).asInstanceOf[Int] === person2.get(1).asInstanceOf[Int])
+      assert(readbackPerson2.get(2).toString === person2.get(2).toString)
     }
   }
 }
