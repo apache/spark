@@ -592,18 +592,6 @@ queryTerm
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
-setOperationLegacy
-    : operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
-    ;
-
-setOperationNonLegacyIntersect
-    : operator=INTERSECT setQuantifier? right=queryTerm
-    ;
-
-setOperationNonLegacyUnionExceptMinus
-    : operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
-    ;
-
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
     | fromStatement                                                         #fromStmt
