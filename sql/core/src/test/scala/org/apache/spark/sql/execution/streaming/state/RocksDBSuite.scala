@@ -1845,7 +1845,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         new File(remoteDir).delete() // to make sure that the directory gets created
         withDB(remoteDir, conf = conf) { db =>
           // A second DB is opened to simulate another executor that runs some batches that
-	  // skipped in the current DB.
+          // skipped in the current DB.
           withDB(remoteDir, conf = conf) { db2 =>
             val random = new Random(random_seed)
             var curVer: Int = 0
