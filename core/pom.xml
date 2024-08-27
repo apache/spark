@@ -651,7 +651,7 @@
         <dependency>
           <groupId>com.squareup.okhttp3</groupId>
           <artifactId>okhttp</artifactId>
-          <version>3.13.0</version>
+          <version>3.12.12</version>
           <scope>test</scope>
         </dependency>
       </dependencies>
