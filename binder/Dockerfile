@@ -38,7 +38,7 @@ USER root
 RUN chown -R ${NB_UID} ${HOME}
 
 # To solve add-apt-repository : command not found
-RUN apt-get update && apt-get install -y software-properties-common
+RUN apt-get update && apt-get install -y software-properties-common python3-launchpadlib
 RUN add-apt-repository ppa:openjdk-r/ppa
 RUN apt-get update && apt-get install -y openjdk-8-jre git coreutils
 USER ${NB_USER}
