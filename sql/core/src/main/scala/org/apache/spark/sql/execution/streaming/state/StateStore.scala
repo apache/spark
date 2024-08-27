@@ -190,6 +190,11 @@ trait StateStore extends ReadStateStore {
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
 
+  /** Return information on recently generated checkpoints */
+  def getCheckpointInfo: StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(-1, -1, None, None)
+  }
+
   /**
    * Whether all updates have been committed
    */
@@ -232,6 +237,12 @@ case class StateStoreMetrics(
     numKeys: Long,
     memoryUsedBytes: Long,
     customMetrics: Map[StateStoreCustomMetric, Long])
+
+case class StateStoreCheckpointInfo(
+    partitionId: Int,
+    batchVersion: Long,
+    checkpointId: Option[String],
+    baseCheckpointId: Option[String])
 
 object StateStoreMetrics {
   def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
@@ -395,7 +406,9 @@ trait StateStoreProvider {
   def close(): Unit
 
   /** Return an instance of [[StateStore]] representing state data of the given version */
-  def getStore(version: Long): StateStore
+  def getStore(
+      version: Long,
+      checkpointUniqueId: Option[String] = None): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
@@ -403,8 +416,8 @@ trait StateStoreProvider {
    * modification. Providers can override and return optimized version of [[ReadStateStore]]
    * based on the fact the instance will be only used for reading.
    */
-  def getReadStore(version: Long): ReadStateStore =
-    new WrappedReadStateStore(getStore(version))
+  def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore =
+    new WrappedReadStateStore(getStore(version, uniqueId))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -704,6 +717,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
+      checkpointUniqueId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -713,7 +727,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getReadStore(version)
+    storeProvider.getReadStore(version, checkpointUniqueId)
   }
 
   /** Get or create a store associated with the id. */
@@ -723,6 +737,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
+      checkpointUniqueId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -732,7 +747,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getStore(version)
+    storeProvider.getStore(version, checkpointUniqueId)
   }
 
   private def getStateStoreProvider(

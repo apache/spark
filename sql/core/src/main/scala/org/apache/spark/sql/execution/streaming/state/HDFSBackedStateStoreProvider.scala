@@ -222,6 +222,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
     }
 
+    override def getCheckpointInfo: StateStoreCheckpointInfo = {
+      StateStoreCheckpointInfo(id.partitionId, newVersion, None, None)
+    }
+
     /**
      * Whether all updates have been committed
      */
@@ -255,7 +259,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
-  override def getStore(version: Long): StateStore = {
+  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
       log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
@@ -263,7 +267,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadStore(version: Long): ReadStateStore = {
+  override def getReadStore(version: Long, checkpointUniqueId: Option[String]): ReadStateStore = {
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for readonly")

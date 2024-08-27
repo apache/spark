@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,7 +45,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
+import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIterator, Utils}
 
 
 /** Used to identify the state store for a given operator. */
@@ -53,10 +54,17 @@ case class StatefulOperatorStateInfo(
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
-    numPartitions: Int) {
+    numPartitions: Int,
+    checkpointUniqueIds: Option[Array[String]] = None) {
+
+  def getCheckpointUniqueId(partitionId: Int): Option[String] = {
+    checkpointUniqueIds.map(_(partitionId))
+  }
+
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
-      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
+      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions] " +
+      s"checkpointUniqueIds = $checkpointUniqueIds"
   }
 }
 
@@ -108,13 +116,14 @@ case class StatefulOperatorCustomSumMetric(name: String, desc: String)
 }
 
 /** An operator that reads from a StateStore. */
-trait StateStoreReader extends StatefulOperator {
+trait StateStoreReader extends StatefulOperator with Logging {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 }
 
 /** An operator that writes to a StateStore. */
-trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: SparkPlan =>
+trait StateStoreWriter
+  extends StatefulOperator with PythonSQLMetrics with Logging { self: SparkPlan =>
 
   /**
    * Produce the output watermark for given input watermark (ms).
@@ -182,6 +191,27 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     }
   }
 
+  val checkpointInfoAccumulator: CollectionAccumulator[StateStoreCheckpointInfo] = {
+    SparkContext.getActive.map(_.collectionAccumulator[StateStoreCheckpointInfo]).get
+  }
+
+  def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
+    assert(conf.stateStoreCheckpointFormatVersion >= 2)
+    val ret = checkpointInfoAccumulator
+      .value
+      .asScala
+      .toSeq
+      .groupBy(_.partitionId)
+      .map {
+        case (key, values) => key -> values.head
+      }
+      .toSeq
+      .sortBy(_._1)
+      .map(_._2)
+      .toArray
+    ret
+  }
+
   /**
    * Get the progress made by this stateful operator after execution. This should be called in
    * the driver after this SparkPlan has been executed and metrics have been updated.
@@ -242,6 +272,10 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
     storeMetrics.customMetrics.foreach { case (metric, value) =>
       longMetric(metric.name) += value
+    }
+    if (conf.stateStoreCheckpointFormatVersion >= 2) {
+      val checkpointInfo = store.getCheckpointInfo
+      checkpointInfoAccumulator.add(checkpointInfo)
     }
   }
 
