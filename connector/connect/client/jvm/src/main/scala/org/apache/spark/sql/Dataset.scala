@@ -20,7 +20,6 @@ import java.util
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -135,7 +134,7 @@ class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
-    extends api.Dataset[T] {
+    extends api.Dataset[T, Dataset] {
 
   import sparkSession.RichColumn
 
@@ -248,14 +247,7 @@ class Dataset[T] private[sql] (
     result.length == 0
   }
 
-  /**
-   * Returns true if this Dataset contains one or more sources that continuously return data as it
-   * arrives. A Dataset that reads data from a streaming source must be executed as a
-   * `StreamingQuery` using the `start()` method in `DataStreamWriter`.
-   *
-   * @group streaming
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def isStreaming: Boolean = sparkSession
     .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING)
     .getIsStreaming
@@ -340,51 +332,12 @@ class Dataset[T] private[sql] (
     }
   }
 
-  /**
-   * Join with another `DataFrame`.
-   *
-   * Behaves as an INNER JOIN and requires a subsequent join predicate.
-   *
-   * @param right
-   *   Right side of the join operation.
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def join(right: Dataset[_]): DataFrame = buildJoin(right) { builder =>
     builder.setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
   }
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_]): DataFrame =
-    join(castToImpl(right))
-
-  /**
-   * (Scala-specific) Equi-join with another `DataFrame` using the given columns. A cross join
-   * with a predicate is specified as an inner join. If you would explicitly like to perform a
-   * cross join use the `crossJoin` method.
-   *
-   * Different from other join functions, the join columns will only appear once in the output,
-   * i.e. similar to SQL's `JOIN USING` syntax.
-   *
-   * @param right
-   *   Right side of the join operation.
-   * @param usingColumns
-   *   Names of the columns to join on. This columns must exist on both sides.
-   * @param joinType
-   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `outer`,
-   *   `full`, `fullouter`, `full_outer`, `left`, `leftouter`, `left_outer`, `right`,
-   *   `rightouter`, `right_outer`, `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`,
-   *   `left_anti`.
-   *
-   * @note
-   *   If you perform a self-join using this function without aliasing the input `DataFrame`s, you
-   *   will NOT be able to reference any columns after the join, since there is no way to
-   *   disambiguate which side of the join you would like to reference.
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
   def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
     buildJoin(right) { builder =>
       builder
@@ -394,36 +347,6 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame =
-    join(castToImpl(right), usingColumns, joinType)
-
-  /**
-   * Join with another `DataFrame`, using the given join expression. The following performs a full
-   * outer join between `df1` and `df2`.
-   *
-   * {{{
-   *   // Scala:
-   *   import org.apache.spark.sql.functions._
-   *   df1.join(df2, $"df1Key" === $"df2Key", "outer")
-   *
-   *   // Java:
-   *   import static org.apache.spark.sql.functions.*;
-   *   df1.join(df2, col("df1Key").equalTo(col("df2Key")), "outer");
-   * }}}
-   *
-   * @param right
-   *   Right side of the join.
-   * @param joinExprs
-   *   Join expression.
-   * @param joinType
-   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `outer`,
-   *   `full`, `fullouter`, `full_outer`, `left`, `leftouter`, `left_outer`, `right`,
-   *   `rightouter`, `right_outer`, `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`,
-   *   `left_anti`.
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
   def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     buildJoin(right) { builder =>
       builder
@@ -433,51 +356,11 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_], joinExprs: Column, joinType: String): DataFrame =
-    join(castToImpl(right), joinExprs, joinType)
-
-  /**
-   * Explicit cartesian join with another `DataFrame`.
-   *
-   * @param right
-   *   Right side of the join operation.
-   *
-   * @note
-   *   Cartesian joins are very expensive without an extra filter that can be pushed down.
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
   def crossJoin(right: Dataset[_]): DataFrame = buildJoin(right) { builder =>
     builder.setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS)
   }
 
   /** @inheritdoc */
-  override def crossJoin(right: api.Dataset[_]): DataFrame =
-    crossJoin(castToImpl(right))
-
-  /**
-   * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
-   *
-   * This is similar to the relation `join` function with one important difference in the result
-   * schema. Since `joinWith` preserves objects present on either side of the join, the result
-   * schema is similarly nested into a tuple under the column names `_1` and `_2`.
-   *
-   * This type of join can be useful both for preserving type-safety with the original object
-   * types as well as working with relational data where either side of the join has column names
-   * in common.
-   *
-   * @param other
-   *   Right side of the join.
-   * @param condition
-   *   Join expression.
-   * @param joinType
-   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `outer`,
-   *   `full`, `fullouter`,`full_outer`, `left`, `leftouter`, `left_outer`, `right`, `rightouter`,
-   *   `right_outer`.
-   * @group typedrel
-   * @since 3.5.0
-   */
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
     val (leftNullable, rightNullable) = joinTypeValue match {
@@ -513,13 +396,6 @@ class Dataset[T] private[sql] (
           .setIsRightStruct(other.agnosticEncoder.isStruct))
     }
   }
-
-  /** @inheritdoc */
-  override def joinWith[U](
-      other: api.Dataset[U],
-      condition: Column,
-      joinType: String): Dataset[(T, U)] =
-    joinWith(castToImpl(other), condition, joinType)
 
   override def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>
@@ -570,15 +446,7 @@ class Dataset[T] private[sql] (
       .setAlias(alias)
   }
 
-  /**
-   * Selects a set of column based expressions.
-   * {{{
-   *   ds.select($"colA", $"colB" + 1)
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame =
     selectUntyped(UnboundRowEncoder, cols).asInstanceOf[DataFrame]
@@ -982,36 +850,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  /**
-   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   *
-   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
-   * deduplication of elements), use this function followed by a [[distinct]].
-   *
-   * Also as standard in SQL, this function resolves columns by position (not by name):
-   *
-   * {{{
-   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
-   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col2", "col0")
-   *   df1.union(df2).show
-   *
-   *   // output:
-   *   // +----+----+----+
-   *   // |col0|col1|col2|
-   *   // +----+----+----+
-   *   // |   1|   2|   3|
-   *   // |   4|   5|   6|
-   *   // +----+----+----+
-   * }}}
-   *
-   * Notice that the column positions in the schema aren't necessarily matched with the fields in
-   * the strongly typed objects in a Dataset. This function resolves columns by their positions in
-   * the schema, not the fields in the strongly typed objects. Use [[unionByName]] to resolve
-   * columns by field name in the typed objects.
-   *
-   * @group typedrel
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def union(other: Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_UNION) { builder =>
       builder.setIsAll(true)
@@ -1019,50 +858,6 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def union(other: api.Dataset[T]): Dataset[T] = union(castToImpl(other))
-
-  /**
-   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   *
-   * The difference between this function and [[union]] is that this function resolves columns by
-   * name (not by position).
-   *
-   * When the parameter `allowMissingColumns` is `true`, the set of column names in this and other
-   * `Dataset` can differ; missing columns will be filled with null. Further, the missing columns
-   * of this `Dataset` will be added at the end in the schema of the union result:
-   *
-   * {{{
-   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
-   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col0", "col3")
-   *   df1.unionByName(df2, true).show
-   *
-   *   // output: "col3" is missing at left df1 and added at the end of schema.
-   *   // +----+----+----+----+
-   *   // |col0|col1|col2|col3|
-   *   // +----+----+----+----+
-   *   // |   1|   2|   3|null|
-   *   // |   5|   4|null|   6|
-   *   // +----+----+----+----+
-   *
-   *   df2.unionByName(df1, true).show
-   *
-   *   // output: "col2" is missing at left df2 and added at the end of schema.
-   *   // +----+----+----+----+
-   *   // |col1|col0|col3|col2|
-   *   // +----+----+----+----+
-   *   // |   4|   5|   6|null|
-   *   // |   2|   1|null|   3|
-   *   // +----+----+----+----+
-   * }}}
-   *
-   * Note that this supports nested columns in struct and array types. With `allowMissingColumns`,
-   * missing nested columns of struct columns with the same name will also be filled with null
-   * values and added to the end of struct. Nested columns in map types are not currently
-   * supported.
-   *
-   * @group typedrel
-   * @since 3.4.0
-   */
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_UNION) { builder =>
       builder.setByName(true).setIsAll(true).setAllowMissingColumns(allowMissingColumns)
@@ -1070,20 +865,6 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def unionByName(other: api.Dataset[T], allowMissingColumns: Boolean): Dataset[T] =
-    unionByName(castToImpl(other), allowMissingColumns)
-
-  /**
-   * Returns a new Dataset containing rows only in both this Dataset and another Dataset. This is
-   * equivalent to `INTERSECT` in SQL.
-   *
-   * @note
-   *   Equality checking is performed directly on the encoded representation of the data and thus
-   *   is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
-   * @since 3.4.0
-   */
   def intersect(other: Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT) { builder =>
       builder.setIsAll(false)
@@ -1091,21 +872,6 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def intersect(other: api.Dataset[T]): Dataset[T] =
-    intersect(castToImpl(other))
-
-  /**
-   * Returns a new Dataset containing rows only in both this Dataset and another Dataset while
-   * preserving the duplicates. This is equivalent to `INTERSECT ALL` in SQL.
-   *
-   * @note
-   *   Equality checking is performed directly on the encoded representation of the data and thus
-   *   is not affected by a custom `equals` function defined on `T`. Also as standard in SQL, this
-   *   function resolves columns by position (not by name).
-   *
-   * @group typedrel
-   * @since 3.4.0
-   */
   def intersectAll(other: Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT) { builder =>
       builder.setIsAll(true)
@@ -1113,20 +879,6 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def intersectAll(other: api.Dataset[T]): Dataset[T] =
-    intersectAll(castToImpl(other))
-
-  /**
-   * Returns a new Dataset containing rows in this Dataset but not in another Dataset. This is
-   * equivalent to `EXCEPT DISTINCT` in SQL.
-   *
-   * @note
-   *   Equality checking is performed directly on the encoded representation of the data and thus
-   *   is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
-   * @since 3.4.0
-   */
   def except(other: Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT) { builder =>
       builder.setIsAll(false)
@@ -1134,30 +886,11 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def except(other: api.Dataset[T]): Dataset[T] =
-    except(castToImpl(other))
-
-  /**
-   * Returns a new Dataset containing rows in this Dataset but not in another Dataset while
-   * preserving the duplicates. This is equivalent to `EXCEPT ALL` in SQL.
-   *
-   * @note
-   *   Equality checking is performed directly on the encoded representation of the data and thus
-   *   is not affected by a custom `equals` function defined on `T`. Also as standard in SQL, this
-   *   function resolves columns by position (not by name).
-   *
-   * @group typedrel
-   * @since 3.4.0
-   */
   def exceptAll(other: Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT) { builder =>
       builder.setIsAll(true)
     }
   }
-
-  /** @inheritdoc */
-  override def exceptAll(other: api.Dataset[T]): Dataset[T] =
-    exceptAll(castToImpl(other))
 
   /** @inheritdoc */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
@@ -1211,7 +944,18 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  override def randomSplitAsList(weights: Array[Double], seed: Long): util.List[Dataset[T]] =
+    util.Arrays.asList(randomSplit(weights, seed): _*)
+
+  /** @inheritdoc */
+  override def randomSplit(weights: Array[Double]): Array[Dataset[T]] =
+    randomSplit(weights, SparkClassUtils.random.nextLong())
+
+  /** @inheritdoc */
   protected def withColumns(names: Seq[String], values: Seq[Column]): DataFrame = {
+    require(names.size == values.size,
+      s"The size of column names: ${names.size} isn't equal to " +
+        s"the size of columns: ${values.size}")
     val aliases = values.zip(names).map { case (value, name) =>
       value.name(name).expr.getAlias
     }
@@ -1656,32 +1400,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  /**
-   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
-   * that returns the same result as the input, with the following guarantees: <ul> <li>It will
-   * compute the defined aggregates (metrics) on all the data that is flowing through the Dataset
-   * at that point.</li> <li>It will report the value of the defined aggregate columns as soon as
-   * we reach a completion point. A completion point is currently defined as the end of a
-   * query.</li> </ul> Please note that continuous execution is currently not supported.
-   *
-   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
-   * more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
-   * contain references to the input Dataset's columns must always be wrapped in an aggregate
-   * function.
-   *
-   * A user can retrieve the metrics by calling
-   * `org.apache.spark.sql.Dataset.collectResult().getObservedMetrics`.
-   *
-   * {{{
-   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
-   *   val observed_ds = ds.observe("my_metrics", count(lit(1)).as("rows"), max($"id").as("maxid"))
-   *   observed_ds.write.parquet("ds.parquet")
-   *   val metrics = observed_ds.collectResult().getObservedMetrics
-   * }}}
-   *
-   * @group typedrel
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder) { builder =>
@@ -1748,20 +1467,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  /**
-   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and therefore
-   * return same results.
-   *
-   * @note
-   *   The equality comparison here is simplified by tolerating the cosmetic differences such as
-   *   attribute names.
-   * @note
-   *   This API can compare both [[Dataset]]s but can still return `false` on the [[Dataset]] that
-   *   return the same results, for instance, from different plans. Such false negative semantic
-   *   can be useful when caching as an example. This comparison may not be fast because it will
-   *   execute a RPC call.
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def sameSemantics(other: Dataset[T]): Boolean = {
     sparkSession.sameSemantics(this.plan, other.plan)
@@ -1769,14 +1475,11 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   @DeveloperApi
-  override def sameSemantics(other: api.Dataset[T]): Boolean = sameSemantics(castToImpl(other))
-
-  /** @inheritdoc */
-  @DeveloperApi
   def semanticHash(): Int = {
     sparkSession.semanticHash(this.plan)
   }
 
+  /** @inheritdoc */
   def toJSON: Dataset[String] = {
     select(to_json(struct(col("*")))).as(StringEncoder)
   }
@@ -1807,104 +1510,39 @@ class Dataset[T] private[sql] (
   // of the interface.
   ////////////////////////////////////////////////////////////////////////////
 
-  private implicit def castToImpl[E](ds: api.Dataset[E]): Dataset[E] =
-    ds.asInstanceOf[Dataset[E]]
+  /** @inheritdoc */
+  override def drop(colName: String): DataFrame = super.drop(colName)
 
   /** @inheritdoc */
-  override def checkpoint(): Dataset[T] = super.checkpoint()
+  override def drop(col: Column): DataFrame = super.drop(col)
 
   /** @inheritdoc */
-  override def checkpoint(eager: Boolean): Dataset[T] = super.checkpoint(eager)
-
-  /** @inheritdoc */
-  override def localCheckpoint(): Dataset[T] = super.localCheckpoint()
-
-  /** @inheritdoc */
-  override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
-
-  /** @inheritdoc */
-  override def drop(colName: String): Dataset[Row] = super.drop(colName)
-
-  /** @inheritdoc */
-  override def drop(col: Column): Dataset[Row] = super.drop(col)
-
-  /** @inheritdoc */
-  override def join(right: api.Dataset[_], usingColumn: String): DataFrame =
+  override def join(right: Dataset[_], usingColumn: String): DataFrame =
     super.join(right, usingColumn)
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_], usingColumns: Array[String]): DataFrame =
+  override def join(right: Dataset[_], usingColumns: Array[String]): DataFrame =
     super.join(right, usingColumns)
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_], usingColumns: Seq[String]): DataFrame =
+  override def join(right: Dataset[_], usingColumns: Seq[String]): DataFrame =
     super.join(right, usingColumns)
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_], usingColumn: String, joinType: String): DataFrame =
+  override def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame =
     super.join(right, usingColumn, joinType)
 
   /** @inheritdoc */
-  override def join(
-      right: api.Dataset[_],
-      usingColumns: Array[String],
-      joinType: String): DataFrame =
+  override def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame =
     super.join(right, usingColumns, joinType)
 
   /** @inheritdoc */
-  override def join(right: api.Dataset[_], joinExprs: Column): DataFrame =
+  override def join(right: Dataset[_], joinExprs: Column): DataFrame =
     super.join(right, joinExprs)
 
   /** @inheritdoc */
-  override def joinWith[U](other: api.Dataset[U], condition: Column): Dataset[(T, U)] =
-    super.joinWith(other, condition)
-
-  /** @inheritdoc */
   @scala.annotation.varargs
-  override def sortWithinPartitions(sortCol: String, sortCols: String*): Dataset[T] =
-    super.sortWithinPartitions(sortCol, sortCols: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def sortWithinPartitions(sortExprs: Column*): Dataset[T] =
-    super.sortWithinPartitions(sortExprs: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def sort(sortCol: String, sortCols: String*): Dataset[T] =
-    super.sort(sortCol, sortCols: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def sort(sortExprs: Column*): Dataset[T] = super.sort(sortExprs: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def orderBy(sortCol: String, sortCols: String*): Dataset[T] =
-    super.orderBy(sortCol, sortCols: _*)
-
-  /** @inheritdoc */
-  override def orderBy(sortExprs: Column*): Dataset[T] = super.orderBy(sortExprs: _*)
-
-  /** @inheritdoc */
-  override def apply(colName: String): Column = super.apply(colName)
-
-  /** @inheritdoc */
-  override def as(alias: Symbol): Dataset[T] = super.as(alias)
-
-  /** @inheritdoc */
-  override def alias(alias: String): Dataset[T] = super.alias(alias)
-
-  /** @inheritdoc */
-  override def alias(alias: Symbol): Dataset[T] = super.alias(alias)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def select(col: String, cols: String*): Dataset[Row] = super.select(col, cols: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def selectExpr(exprs: String*): Dataset[Row] = super.selectExpr(exprs: _*)
+  override def select(col: String, cols: String*): DataFrame = super.select(col, cols: _*)
 
   /** @inheritdoc */
   override def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
@@ -1914,14 +1552,16 @@ class Dataset[T] private[sql] (
   override def select[U1, U2, U3](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
-      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] = super.select(c1, c2, c3)
+      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] =
+    super.select(c1, c2, c3)
 
   /** @inheritdoc */
   override def select[U1, U2, U3, U4](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
       c3: TypedColumn[T, U3],
-      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] = super.select(c1, c2, c3, c4)
+      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] =
+    super.select(c1, c2, c3, c4)
 
   /** @inheritdoc */
   override def select[U1, U2, U3, U4, U5](
@@ -1929,61 +1569,30 @@ class Dataset[T] private[sql] (
       c2: TypedColumn[T, U2],
       c3: TypedColumn[T, U3],
       c4: TypedColumn[T, U4],
-      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] = super.select(c1, c2, c3, c4, c5)
+      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
+    super.select(c1, c2, c3, c4, c5)
 
-  /** @inheritdoc */
-  override def filter(conditionExpr: String): Dataset[T] = super.filter(conditionExpr)
-
-  /** @inheritdoc */
-  override def where(condition: Column): Dataset[T] = super.where(condition)
-
-  /** @inheritdoc */
-  override def where(conditionExpr: String): Dataset[T] = super.where(conditionExpr)
-
-  /** @inheritdoc */
   override def melt(
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row] =
+      valueColumnName: String): DataFrame =
     super.melt(ids, values, variableColumnName, valueColumnName)
 
   /** @inheritdoc */
   override def melt(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row] =
+      valueColumnName: String): DataFrame =
     super.melt(ids, variableColumnName, valueColumnName)
 
   /** @inheritdoc */
-  override def unionAll(other: api.Dataset[T]): Dataset[T] = super.unionAll(other)
+  override def withColumn(colName: String, col: Column): DataFrame =
+    super.withColumn(colName, col)
 
   /** @inheritdoc */
-  override def unionByName(other: api.Dataset[T]): Dataset[T] = super.unionByName(other)
-
-  /** @inheritdoc */
-  override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)
-
-  /** @inheritdoc */
-  override def sample(fraction: Double): Dataset[T] = super.sample(fraction)
-
-  /** @inheritdoc */
-  override def sample(withReplacement: Boolean, fraction: Double): Dataset[T] =
-    super.sample(withReplacement, fraction)
-
-  /** @inheritdoc */
-  override def randomSplitAsList(weights: Array[Double], seed: Long): util.List[Dataset[T]] =
-    super.randomSplitAsList(weights, seed).asInstanceOf[util.List[Dataset[T]]]
-
-  /** @inheritdoc */
-  override def randomSplit(weights: Array[Double]): Array[Dataset[T]] =
-    super.randomSplit(weights).asInstanceOf[Array[Dataset[T]]]
-
-  /** @inheritdoc */
-  override def withColumn(colName: String, col: Column): DataFrame = super.withColumn(colName, col)
-
-  /** @inheritdoc */
-  override def withColumns(colsMap: Map[String, Column]): DataFrame = super.withColumns(colsMap)
+  override def withColumns(colsMap: Map[String, Column]): DataFrame =
+    super.withColumns(colsMap)
 
   /** @inheritdoc */
   override def withColumns(colsMap: util.Map[String, Column]): DataFrame =
@@ -2000,47 +1609,4 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   override def withColumnsRenamed(colsMap: util.Map[String, String]): DataFrame =
     super.withColumnsRenamed(colsMap)
-
-  /** @inheritdoc */
-  override def dropDuplicates(colNames: Array[String]): Dataset[T] = super.dropDuplicates(colNames)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def dropDuplicates(col1: String, cols: String*): Dataset[T] =
-    super.dropDuplicates(col1, cols: _*)
-
-  /** @inheritdoc */
-  override def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] =
-    super.dropDuplicatesWithinWatermark(colNames)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] =
-    super.dropDuplicatesWithinWatermark(col1, cols: _*)
-
-  /** @inheritdoc */
-  override def transform[U](f: api.Dataset[T] => api.Dataset[U]): Dataset[U] = f(this)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] =
-    super.repartition(numPartitions, partitionExprs: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def repartition(partitionExprs: Column*): Dataset[T] =
-    super.repartition(partitionExprs: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] =
-    super.repartitionByRange(numPartitions, partitionExprs: _*)
-
-  /** @inheritdoc */
-  @scala.annotation.varargs
-  override def repartitionByRange(partitionExprs: Column*): Dataset[T] =
-    super.repartitionByRange(partitionExprs: _*)
-
-  /** @inheritdoc */
-  override def distinct(): Dataset[T] = super.distinct()
 }

@@ -117,7 +117,7 @@ import org.apache.spark.util.SparkClassUtils
  * @since 1.6.0
  */
 @Stable
-abstract class Dataset[T] extends Serializable {
+abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
 
   val encoder: Encoder[T]
 
@@ -131,7 +131,7 @@ abstract class Dataset[T] extends Serializable {
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): Dataset[Row]
+  def toDF(): DS[Row]
 
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The
@@ -155,7 +155,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def as[U: Encoder]: Dataset[U]
+  def as[U: Encoder]: DS[U]
 
   /**
    * Returns a new DataFrame where each row is reconciled to match the specified schema. Spark will:
@@ -176,7 +176,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 3.4.0
    */
-  def to(schema: StructType): Dataset[Row]
+  def to(schema: StructType): DS[Row]
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
@@ -192,7 +192,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def toDF(colNames: String*): Dataset[Row]
+  def toDF(colNames: String*): DS[Row]
 
   /**
    * Returns the schema of this Dataset.
@@ -318,7 +318,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.1.0
    */
-  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
+  def checkpoint(): DS[T] = checkpoint(eager = true, reliableCheckpoint = true)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -335,7 +335,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.1.0
    */
-  def checkpoint(eager: Boolean): Dataset[T] = checkpoint(eager = eager, reliableCheckpoint = true)
+  def checkpoint(eager: Boolean): DS[T] = checkpoint(eager = eager, reliableCheckpoint = true)
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be
@@ -346,7 +346,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.3.0
    */
-  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
+  def localCheckpoint(): DS[T] = checkpoint(eager = true, reliableCheckpoint = false)
 
   /**
    * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to truncate
@@ -363,7 +363,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.3.0
    */
-  def localCheckpoint(eager: Boolean): Dataset[T] = checkpoint(
+  def localCheckpoint(eager: Boolean): DS[T] = checkpoint(
     eager = eager,
     reliableCheckpoint = false
   )
@@ -376,7 +376,7 @@ abstract class Dataset[T] extends Serializable {
    *                           checkpoint directory. If false creates a local checkpoint using
    *                           the caching subsystem
    */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T]
+  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): DS[T]
 
   /**
    * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
@@ -404,7 +404,7 @@ abstract class Dataset[T] extends Serializable {
    */
   // We only accept an existing column name, not a derived column here as a watermark that is
   // defined on a derived column cannot referenced elsewhere in the plan.
-  def withWatermark(eventTime: String, delayThreshold: String): Dataset[T]
+  def withWatermark(eventTime: String, delayThreshold: String): DS[T]
 
     /**
    * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,
@@ -544,7 +544,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_]): Dataset[Row]
+  def join(right: DS[_]): DS[Row]
 
     /**
    * Inner equi-join with another `DataFrame` using the given column.
@@ -567,7 +567,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], usingColumn: String): Dataset[Row] = {
+  def join(right: DS[_], usingColumn: String): DS[Row] = {
     join(right, Seq(usingColumn))
   }
 
@@ -581,7 +581,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: Dataset[_], usingColumns: Array[String]): Dataset[Row] = {
+  def join(right: DS[_], usingColumns: Array[String]): DS[Row] = {
     join(right, usingColumns.toImmutableArraySeq)
   }
 
@@ -606,7 +606,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], usingColumns: Seq[String]): Dataset[Row] = {
+  def join(right: DS[_], usingColumns: Seq[String]): DS[Row] = {
     join(right, usingColumns, "inner")
   }
 
@@ -632,7 +632,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: Dataset[_], usingColumn: String, joinType: String): Dataset[Row] = {
+  def join(right: DS[_], usingColumn: String, joinType: String): DS[Row] = {
     join(right, Seq(usingColumn), joinType)
   }
 
@@ -650,7 +650,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: Dataset[_], usingColumns: Array[String], joinType: String): Dataset[Row] = {
+  def join(right: DS[_], usingColumns: Array[String], joinType: String): DS[Row] = {
     join(right, usingColumns.toImmutableArraySeq, joinType)
   }
 
@@ -676,7 +676,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): Dataset[Row]
+  def join(right: DS[_], usingColumns: Seq[String], joinType: String): DS[Row]
 
   /**
    * Inner join with another `DataFrame`, using the given join expression.
@@ -690,7 +690,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], joinExprs: Column): Dataset[Row] =
+  def join(right: DS[_], joinExprs: Column): DS[Row] =
     join(right, joinExprs, "inner")
 
   /**
@@ -717,7 +717,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], joinExprs: Column, joinType: String): Dataset[Row]
+  def join(right: DS[_], joinExprs: Column, joinType: String): DS[Row]
 
   /**
    * Explicit cartesian join with another `DataFrame`.
@@ -727,7 +727,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.1.0
    */
-  def crossJoin(right: Dataset[_]): Dataset[Row]
+  def crossJoin(right: DS[_]): DS[Row]
 
   /**
    * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to
@@ -749,7 +749,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)]
+  def joinWith[U](other: DS[U], condition: Column, joinType: String): DS[(T, U)]
 
   /**
    * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair
@@ -760,11 +760,11 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+  def joinWith[U](other: DS[U], condition: Column): DS[(T, U)] = {
     joinWith(other, condition, "inner")
   }
 
-  protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T]
+  protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): DS[T]
 
   /**
    * Returns a new Dataset with each partition sorted by the given expressions.
@@ -775,7 +775,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def sortWithinPartitions(sortCol: String, sortCols: String*): Dataset[T] = {
+  def sortWithinPartitions(sortCol: String, sortCols: String*): DS[T] = {
     sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
@@ -788,7 +788,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def sortWithinPartitions(sortExprs: Column*): Dataset[T] = {
+  def sortWithinPartitions(sortExprs: Column*): DS[T] = {
     sortInternal(global = false, sortExprs)
   }
 
@@ -805,7 +805,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def sort(sortCol: String, sortCols: String*): Dataset[T] = {
+  def sort(sortCol: String, sortCols: String*): DS[T] = {
     sort((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
@@ -819,7 +819,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def sort(sortExprs: Column*): Dataset[T] = {
+  def sort(sortExprs: Column*): DS[T] = {
     sortInternal(global = true, sortExprs)
   }
 
@@ -831,7 +831,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def orderBy(sortCol: String, sortCols: String*): Dataset[T] = sort(sortCol, sortCols : _*)
+  def orderBy(sortCol: String, sortCols: String*): DS[T] = sort(sortCol, sortCols : _*)
 
   /**
    * Returns a new Dataset sorted by the given expressions.
@@ -841,7 +841,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def orderBy(sortExprs: Column*): Dataset[T] = sort(sortExprs : _*)
+  def orderBy(sortExprs: Column*): DS[T] = sort(sortExprs : _*)
 
   /**
    * Specifies some hint on the current Dataset. As an example, the following code specifies
@@ -865,7 +865,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.2.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: Any*): Dataset[T]
+  def hint(name: String, parameters: Any*): DS[T]
 
   /**
    * Selects column based on the column name and returns it as a [[Column]].
@@ -910,7 +910,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T]
+  def as(alias: String): DS[T]
 
   /**
    * (Scala-specific) Returns a new Dataset with an alias set.
@@ -918,7 +918,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def as(alias: Symbol): Dataset[T] = as(alias.name)
+  def as(alias: Symbol): DS[T] = as(alias.name)
 
   /**
    * Returns a new Dataset with an alias set. Same as `as`.
@@ -926,7 +926,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def alias(alias: String): Dataset[T] = as(alias)
+  def alias(alias: String): DS[T] = as(alias)
 
   /**
    * (Scala-specific) Returns a new Dataset with an alias set. Same as `as`.
@@ -934,7 +934,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def alias(alias: Symbol): Dataset[T] = as(alias)
+  def alias(alias: Symbol): DS[T] = as(alias)
 
   /**
    * Selects a set of column based expressions.
@@ -946,7 +946,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): Dataset[Row]
+  def select(cols: Column*): DS[Row]
 
   /**
    * Selects a set of columns. This is a variant of `select` that can only select
@@ -962,7 +962,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): Dataset[Row] = select((col +: cols).map(Column(_)): _*)
+  def select(col: String, cols: String*): DS[Row] = select((col +: cols).map(Column(_)): _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -978,7 +978,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def selectExpr(exprs: String*): Dataset[Row] = select(exprs.map(functions.expr): _*)
+  def selectExpr(exprs: String*): DS[Row] = select(exprs.map(functions.expr): _*)
 
   /**
    * Returns a new Dataset by computing the given [[Column]] expression for each element.
@@ -991,14 +991,14 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1]
+  def select[U1](c1: TypedColumn[T, U1]): DS[U1]
 
   /**
    * Internal helper function for building typed selects that return tuples. For simplicity and
    * code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
    */
-  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_]
+  protected def selectUntyped(columns: TypedColumn[_, _]*): DS[_]
 
   /**
    * Returns a new Dataset by computing the given [[Column]] expressions for each element.
@@ -1006,8 +1006,8 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
-    selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
+  def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): DS[(U1, U2)] =
+    selectUntyped(c1, c2).asInstanceOf[DS[(U1, U2)]]
 
   /**
    * Returns a new Dataset by computing the given [[Column]] expressions for each element.
@@ -1018,8 +1018,8 @@ abstract class Dataset[T] extends Serializable {
   def select[U1, U2, U3](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
-      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] =
-    selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
+      c3: TypedColumn[T, U3]): DS[(U1, U2, U3)] =
+    selectUntyped(c1, c2, c3).asInstanceOf[DS[(U1, U2, U3)]]
 
   /**
    * Returns a new Dataset by computing the given [[Column]] expressions for each element.
@@ -1031,8 +1031,8 @@ abstract class Dataset[T] extends Serializable {
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
       c3: TypedColumn[T, U3],
-      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] =
-    selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
+      c4: TypedColumn[T, U4]): DS[(U1, U2, U3, U4)] =
+    selectUntyped(c1, c2, c3, c4).asInstanceOf[DS[(U1, U2, U3, U4)]]
 
   /**
    * Returns a new Dataset by computing the given [[Column]] expressions for each element.
@@ -1045,8 +1045,8 @@ abstract class Dataset[T] extends Serializable {
       c2: TypedColumn[T, U2],
       c3: TypedColumn[T, U3],
       c4: TypedColumn[T, U4],
-      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
-    selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
+      c5: TypedColumn[T, U5]): DS[(U1, U2, U3, U4, U5)] =
+    selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[DS[(U1, U2, U3, U4, U5)]]
 
   /**
    * Filters rows using the given condition.
@@ -1059,7 +1059,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(condition: Column): Dataset[T]
+  def filter(condition: Column): DS[T]
 
   /**
    * Filters rows using the given SQL expression.
@@ -1070,7 +1070,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(conditionExpr: String): Dataset[T] =
+  def filter(conditionExpr: String): DS[T] =
     filter(functions.expr(conditionExpr))
 
   /**
@@ -1080,7 +1080,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(func: T => Boolean): Dataset[T]
+  def filter(func: T => Boolean): DS[T]
 
   /**
    * (Java-specific)
@@ -1089,7 +1089,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(func: FilterFunction[T]): Dataset[T]
+  def filter(func: FilterFunction[T]): DS[T]
 
   /**
    * Filters rows using the given condition. This is an alias for `filter`.
@@ -1102,7 +1102,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def where(condition: Column): Dataset[T] = filter(condition)
+  def where(condition: Column): DS[T] = filter(condition)
 
   /**
    * Filters rows using the given SQL expression.
@@ -1113,7 +1113,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def where(conditionExpr: String): Dataset[T] = filter(conditionExpr)
+  def where(conditionExpr: String): DS[T] = filter(conditionExpr)
 
   /**
    * (Scala-specific)
@@ -1192,7 +1192,7 @@ abstract class Dataset[T] extends Serializable {
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row]
+      valueColumnName: String): DS[Row]
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -1214,7 +1214,7 @@ abstract class Dataset[T] extends Serializable {
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row]
+      valueColumnName: String): DS[Row]
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -1233,7 +1233,7 @@ abstract class Dataset[T] extends Serializable {
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row] =
+      valueColumnName: String): DS[Row] =
     unpivot(ids, values, variableColumnName, valueColumnName)
 
   /**
@@ -1254,7 +1254,7 @@ abstract class Dataset[T] extends Serializable {
   def melt(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row] =
+      valueColumnName: String): DS[Row] =
     unpivot(ids, variableColumnName, valueColumnName)
 
  /**
@@ -1279,7 +1279,7 @@ abstract class Dataset[T] extends Serializable {
   * @since 3.0.0
   */
   @varargs
-  def observe(name: String, expr: Column, exprs: Column*): Dataset[T]
+  def observe(name: String, expr: Column, exprs: Column*): DS[T]
 
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function
@@ -1289,7 +1289,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def limit(n: Int): Dataset[T]
+  def limit(n: Int): DS[T]
 
   /**
    * Returns a new Dataset by skipping the first `n` rows.
@@ -1297,7 +1297,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 3.4.0
    */
-  def offset(n: Int): Dataset[T]
+  def offset(n: Int): DS[T]
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1329,7 +1329,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def union(other: Dataset[T]): Dataset[T]
+  def union(other: DS[T]): DS[T]
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1343,7 +1343,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
+  def unionAll(other: DS[T]): DS[T] = union(other)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1374,7 +1374,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.3.0
    */
-  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, allowMissingColumns = false)
+  def unionByName(other: DS[T]): DS[T] = unionByName(other, allowMissingColumns = false)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1419,7 +1419,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 3.1.0
    */
-  def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T]
+  def unionByName(other: DS[T], allowMissingColumns: Boolean): DS[T]
 
   /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset.
@@ -1430,7 +1430,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def intersect(other: Dataset[T]): Dataset[T]
+  def intersect(other: DS[T]): DS[T]
 
   /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset while
@@ -1443,7 +1443,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.4.0
    */
-  def intersectAll(other: Dataset[T]): Dataset[T]
+  def intersectAll(other: DS[T]): DS[T]
 
   /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
@@ -1454,7 +1454,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def except(other: Dataset[T]): Dataset[T]
+  def except(other: DS[T]): DS[T]
 
   /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset while
@@ -1467,7 +1467,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.4.0
    */
-  def exceptAll(other: Dataset[T]): Dataset[T]
+  def exceptAll(other: DS[T]): DS[T]
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement),
@@ -1480,7 +1480,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.3.0
    */
-  def sample(fraction: Double, seed: Long): Dataset[T] = {
+  def sample(fraction: Double, seed: Long): DS[T] = {
     sample(withReplacement = false, fraction = fraction, seed = seed)
   }
 
@@ -1494,7 +1494,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.3.0
    */
-  def sample(fraction: Double): Dataset[T] = {
+  def sample(fraction: Double): DS[T] = {
     sample(withReplacement = false, fraction = fraction)
   }
 
@@ -1509,7 +1509,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T]
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): DS[T]
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows, using a random seed.
@@ -1523,7 +1523,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
+  def sample(withReplacement: Boolean, fraction: Double): DS[T] = {
     sample(withReplacement, fraction, SparkClassUtils.random.nextLong)
   }
 
@@ -1538,7 +1538,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplit(weights: Array[Double], seed: Long): Array[_ <: Dataset[T]]
+  def randomSplit(weights: Array[Double], seed: Long): Array[_ <: DS[T]]
 
   /**
    * Returns a Java list that contains randomly split Dataset with the provided weights.
@@ -1548,10 +1548,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplitAsList(weights: Array[Double], seed: Long): util.List[_ <: Dataset[T]] = {
-    val values = randomSplit(weights, seed)
-    util.Arrays.asList(values: _*)
-  }
+  def randomSplitAsList(weights: Array[Double], seed: Long): util.List[_ <: DS[T]]
 
   /**
    * Randomly splits this Dataset with the provided weights.
@@ -1560,9 +1557,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplit(weights: Array[Double]): Array[_ <: Dataset[T]] = {
-    randomSplit(weights, SparkClassUtils.random.nextLong)
-  }
+  def randomSplit(weights: Array[Double]): Array[_ <: DS[T]]
 
   /**
    * (Scala-specific) Returns a new Dataset where each row has been expanded to zero or more
@@ -1575,7 +1570,7 @@ abstract class Dataset[T] extends Serializable {
    *
    * {{{
    *   case class Book(title: String, words: String)
-   *   val ds: Dataset[Book]
+   *   val ds: DS[Book]
    *
    *   val allWords = ds.select($"title", explode(split($"words", " ")).as("word"))
    *
@@ -1592,7 +1587,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A <: Product : TypeTag](input: Column*)(f: Row => IterableOnce[A]): Dataset[Row]
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => IterableOnce[A]): DS[Row]
 
   /**
    * (Scala-specific) Returns a new Dataset where a single column has been expanded to zero
@@ -1617,7 +1612,7 @@ abstract class Dataset[T] extends Serializable {
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => IterableOnce[B])
-    : Dataset[Row]
+    : DS[Row]
 
   /**
    * Returns a new Dataset by adding a column or replacing the existing column that has
@@ -1633,7 +1628,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): Dataset[Row] = withColumns(Seq(colName), Seq(col))
+  def withColumn(colName: String, col: Column): DS[Row] = withColumns(Seq(colName), Seq(col))
 
   /**
    * (Scala-specific) Returns a new Dataset by adding columns or replacing the existing columns
@@ -1645,7 +1640,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.3.0
    */
-  def withColumns(colsMap: Map[String, Column]): Dataset[Row] = {
+  def withColumns(colsMap: Map[String, Column]): DS[Row] = {
     val (colNames, newCols) = colsMap.toSeq.unzip
     withColumns(colNames, newCols)
   }
@@ -1660,7 +1655,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.3.0
    */
-  def withColumns(colsMap: util.Map[String, Column]): Dataset[Row] = withColumns(
+  def withColumns(colsMap: util.Map[String, Column]): DS[Row] = withColumns(
     colsMap.asScala.toMap
   )
 
@@ -1668,7 +1663,7 @@ abstract class Dataset[T] extends Serializable {
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
    */
-  protected def withColumns(colNames: Seq[String], cols: Seq[Column]): Dataset[Row]
+  protected def withColumns(colNames: Seq[String], cols: Seq[Column]): DS[Row]
 
   /**
    * Returns a new Dataset with a column renamed.
@@ -1677,7 +1672,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumnRenamed(existingName: String, newName: String): Dataset[Row] =
+  def withColumnRenamed(existingName: String, newName: String): DS[Row] =
     withColumnsRenamed(Seq(existingName), Seq(newName))
 
   /**
@@ -1692,7 +1687,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.4.0
    */
   @throws[AnalysisException]
-  def withColumnsRenamed(colsMap: Map[String, String]): Dataset[Row] = {
+  def withColumnsRenamed(colsMap: Map[String, String]): DS[Row] = {
     val (colNames, newColNames) = colsMap.toSeq.unzip
     withColumnsRenamed(colNames, newColNames)
   }
@@ -1707,12 +1702,12 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def withColumnsRenamed(colsMap: util.Map[String, String]): Dataset[Row] =
+  def withColumnsRenamed(colsMap: util.Map[String, String]): DS[Row] =
     withColumnsRenamed(colsMap.asScala.toMap)
 
   protected def withColumnsRenamed(
       colNames: Seq[String],
-      newColNames: Seq[String]): Dataset[Row]
+      newColNames: Seq[String]): DS[Row]
 
   /**
    * Returns a new Dataset by updating an existing column with metadata.
@@ -1720,7 +1715,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.3.0
    */
-  def withMetadata(columnName: String, metadata: Metadata): Dataset[Row]
+  def withMetadata(columnName: String, metadata: Metadata): DS[Row]
 
   /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
@@ -1793,7 +1788,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def drop(colName: String): Dataset[Row] = drop(colName :: Nil : _*)
+  def drop(colName: String): DS[Row] = drop(colName :: Nil : _*)
 
   /**
    * Returns a new Dataset with columns dropped.
@@ -1806,7 +1801,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def drop(colNames: String*): Dataset[Row]
+  def drop(colNames: String*): DS[Row]
 
   /**
    * Returns a new Dataset with column dropped.
@@ -1822,7 +1817,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def drop(col: Column): Dataset[Row] = drop(col, Nil : _*)
+  def drop(col: Column): DS[Row] = drop(col, Nil : _*)
 
   /**
    * Returns a new Dataset with columns dropped.
@@ -1835,7 +1830,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): Dataset[Row]
+  def drop(col: Column, cols: Column*): DS[Row]
 
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
@@ -1850,7 +1845,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(): Dataset[T]
+  def dropDuplicates(): DS[T]
 
   /**
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only
@@ -1865,7 +1860,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T]
+  def dropDuplicates(colNames: Seq[String]): DS[T]
 
   /**
    * Returns a new Dataset with duplicate rows removed, considering only
@@ -1880,7 +1875,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(colNames: Array[String]): Dataset[T] =
+  def dropDuplicates(colNames: Array[String]): DS[T] =
     dropDuplicates(colNames.toImmutableArraySeq)
 
   /**
@@ -1897,7 +1892,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def dropDuplicates(col1: String, cols: String*): Dataset[T] = {
+  def dropDuplicates(col1: String, cols: String*): DS[T] = {
     val colNames: Seq[String] = col1 +: cols
     dropDuplicates(colNames)
   }
@@ -1919,7 +1914,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 3.5.0
    */
-  def dropDuplicatesWithinWatermark(): Dataset[T]
+  def dropDuplicatesWithinWatermark(): DS[T]
 
   /**
    * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
@@ -1939,7 +1934,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 3.5.0
    */
-  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T]
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): DS[T]
 
   /**
    * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
@@ -1959,7 +1954,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 3.5.0
    */
-  def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
+  def dropDuplicatesWithinWatermark(colNames: Array[String]): DS[T] = {
     dropDuplicatesWithinWatermark(colNames.toImmutableArraySeq)
   }
 
@@ -1982,7 +1977,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.5.0
    */
   @scala.annotation.varargs
-  def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
+  def dropDuplicatesWithinWatermark(col1: String, cols: String*): DS[T] = {
     val colNames: Seq[String] = col1 +: cols
     dropDuplicatesWithinWatermark(colNames)
   }
@@ -2015,8 +2010,8 @@ abstract class Dataset[T] extends Serializable {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): Dataset[Row] = {
-    val selected = if (cols.isEmpty) this else select(cols.head, cols.tail: _*)
+  def describe(cols: String*): DS[Row] = {
+    val selected = if (cols.isEmpty) this.toDF() else select(cols.head, cols.tail: _*)
     selected.summary("count", "mean", "stddev", "min", "max")
   }
 
@@ -2094,7 +2089,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def summary(statistics: String*): Dataset[Row]
+  def summary(statistics: String*): DS[Row]
 
   /**
    * Returns the first `n` rows.
@@ -2125,7 +2120,7 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Concise syntax for chaining custom transformations.
    * {{{
-   *   def featurize(ds: Dataset[T]): Dataset[U] = ...
+   *   def featurize(ds: DS[T]): DS[U] = ...
    *
    *   ds
    *     .transform(featurize)
@@ -2135,7 +2130,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
+  def transform[U](t: DS[T] => DS[U]): DS[U] = t(this.asInstanceOf[DS[T]])
 
   /**
    * (Scala-specific)
@@ -2144,7 +2139,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def map[U: Encoder](func: T => U): Dataset[U]
+  def map[U: Encoder](func: T => U): DS[U]
 
   /**
    * (Java-specific)
@@ -2153,7 +2148,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U]
+  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): DS[U]
 
   /**
    * (Scala-specific)
@@ -2162,7 +2157,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U]
+  def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): DS[U]
 
   /**
    * (Java-specific)
@@ -2171,7 +2166,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U]
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): DS[U]
 
   /**
    * (Scala-specific)
@@ -2181,7 +2176,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] =
+  def flatMap[U: Encoder](func: T => IterableOnce[U]): DS[U] =
     mapPartitions(_.flatMap(func))
 
   /**
@@ -2192,7 +2187,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): DS[U] = {
     val func: T => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
   }
@@ -2317,11 +2312,11 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def repartition(numPartitions: Int): Dataset[T]
+  def repartition(numPartitions: Int): DS[T]
 
   protected def repartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T]
+      partitionExprs: Seq[Column]): DS[T]
 
   /**
    * Returns a new Dataset partitioned by the given partitioning expressions into
@@ -2333,7 +2328,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+  def repartition(numPartitions: Int, partitionExprs: Column*): DS[T] = {
     repartitionByExpression(Some(numPartitions), partitionExprs)
   }
 
@@ -2348,13 +2343,13 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def repartition(partitionExprs: Column*): Dataset[T] = {
+  def repartition(partitionExprs: Column*): DS[T] = {
     repartitionByExpression(None, partitionExprs)
   }
 
   protected def repartitionByRange(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T]
+      partitionExprs: Seq[Column]): DS[T]
 
 
   /**
@@ -2375,7 +2370,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+  def repartitionByRange(numPartitions: Int, partitionExprs: Column*): DS[T] = {
     repartitionByRange(Some(numPartitions), partitionExprs)
   }
 
@@ -2397,7 +2392,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
+  def repartitionByRange(partitionExprs: Column*): DS[T] = {
     repartitionByRange(None, partitionExprs)
   }
 
@@ -2418,7 +2413,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def coalesce(numPartitions: Int): Dataset[T]
+  def coalesce(numPartitions: Int): DS[T]
 
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
@@ -2433,7 +2428,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def distinct(): Dataset[T] = dropDuplicates()
+  def distinct(): DS[T] = dropDuplicates()
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
@@ -2572,7 +2567,7 @@ abstract class Dataset[T] extends Serializable {
    *
    * @since 2.0.0
    */
-  def toJSON: Dataset[String]
+  def toJSON: DS[String]
 
   /**
    * Returns a best-effort snapshot of the files that compose this Dataset. This method simply
@@ -2596,7 +2591,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.1.0
    */
   @DeveloperApi
-  def sameSemantics(other: Dataset[T]): Boolean
+  def sameSemantics(other: DS[T]): Boolean
 
   /**
    * Returns a `hashCode` of the logical query plan against this [[Dataset]].
