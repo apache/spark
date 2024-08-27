@@ -2329,6 +2329,27 @@ public class CollationSupportSuite {
     assertStringLocate("b", "a🙃x🙃b", 4, "UTF8_LCASE", 5);
     assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE", 5);
     assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE_CI", 5);
+    // Out of bounds test cases.
+    assertStringLocate("a", "asd", 4, "UTF8_BINARY", 0);
+    assertStringLocate("a", "asd", 4, "UTF8_LCASE", 0);
+    assertStringLocate("a", "asd", 4, "UNICODE", 0);
+    assertStringLocate("a", "asd", 4, "UNICODE_CI", 0);
+    assertStringLocate("a", "asd", 100, "UTF8_BINARY", 0);
+    assertStringLocate("a", "asd", 100, "UTF8_LCASE", 0);
+    assertStringLocate("a", "asd", 100, "UNICODE", 0);
+    assertStringLocate("a", "asd", 100, "UNICODE_CI", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UTF8_BINARY", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UTF8_LCASE", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UNICODE", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UNICODE_CI", 0);
+    assertStringLocate("", "asd", 100, "UTF8_BINARY", 1);
+    assertStringLocate("", "asd", 100, "UTF8_LCASE", 1);
+    assertStringLocate("", "asd", 100, "UNICODE", 1);
+    assertStringLocate("", "asd", 100, "UNICODE_CI", 1);
+    assertStringLocate("asd", "", 100, "UTF8_BINARY", 0);
+    assertStringLocate("asd", "", 100, "UTF8_LCASE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE_CI", 0);
   }
 
   /**
