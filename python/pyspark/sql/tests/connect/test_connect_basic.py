@@ -1434,6 +1434,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
         self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
 
+        cdf3 = cdf1.select("a" * 4096)
+        for _ in range(64):
+            cdf3 = cdf3.select("a" * 4096)
+        plan3 = cdf3._plan.to_proto(self.connect._client)
+
+        proto_string_3 = self.connect._client._proto_to_string(plan3, False)
+        self.assertTrue(len(proto_string_3) > 128000, len(proto_string_3))
+        proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
+        self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod
