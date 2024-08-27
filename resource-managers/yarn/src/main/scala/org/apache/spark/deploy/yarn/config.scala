@@ -342,7 +342,7 @@ package object config extends Logging {
   private[spark] val EXECUTOR_BIND_ADDRESS =
     ConfigBuilder("spark.yarn.executor.bindAddress")
       .doc("Address where to bind network listen sockets on the executor.")
-      .version("4.0.0")
+      .version("3.5.3")
       .stringConf
       .createOptional
 

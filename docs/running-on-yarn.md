@@ -519,7 +519,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <br />It also allows a different address from the local one to be advertised to other
   executors or external systems.
   </td>
-  <td>4.0.0</td>
+  <td>3.5.3</td>
 </tr>
 <tr>
   <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
