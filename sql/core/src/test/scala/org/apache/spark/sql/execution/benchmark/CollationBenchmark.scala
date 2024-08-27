@@ -49,7 +49,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relative_time = true)
   }
 
   def benchmarkUTFStringCompare(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
@@ -73,7 +73,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relative_time = true)
   }
 
   def benchmarkUTFStringHashFunction(
@@ -99,7 +99,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relative_time = true)
   }
 
   def benchmarkContains(
@@ -127,7 +127,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relative_time = true)
   }
 
   def benchmarkStartsWith(
@@ -155,7 +155,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relative_time = true)
   }
 
   def benchmarkEndsWith(
@@ -183,7 +183,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relative_time = true)
   }
 }
 
