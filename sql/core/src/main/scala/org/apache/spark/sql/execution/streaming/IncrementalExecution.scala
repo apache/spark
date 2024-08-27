@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.{Map => MutableMap}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
@@ -57,7 +59,9 @@ class IncrementalExecution(
     val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
     val offsetSeqMetadata: OffsetSeqMetadata,
     val watermarkPropagator: WatermarkPropagator,
-    val isFirstBatch: Boolean)
+    val isFirstBatch: Boolean,
+    val currentCheckpointUniqueId:
+      MutableMap[Long, Array[String]] = MutableMap[Long, Array[String]]())
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
@@ -126,12 +130,15 @@ class IncrementalExecution(
 
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
-    StatefulOperatorStateInfo(
+    val operatorId = statefulOperatorId.getAndIncrement()
+    val ret = StatefulOperatorStateInfo(
       checkpointLocation,
       runId,
-      statefulOperatorId.getAndIncrement(),
+      operatorId,
       currentBatchId,
-      numStateStores)
+      numStateStores,
+      currentCheckpointUniqueId.get(operatorId))
+    ret
   }
 
   sealed trait SparkPlanPartialRule {

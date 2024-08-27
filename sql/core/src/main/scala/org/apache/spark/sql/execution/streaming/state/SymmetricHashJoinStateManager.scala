@@ -485,7 +485,8 @@ class SymmetricHashJoinStateManager(
           "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
+          stateInfo.get.storeVersion, stateInfo.get.getCheckpointUniqueId(partitionId),
+          useColumnFamilies = false, storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
@@ -500,7 +501,9 @@ class SymmetricHashJoinStateManager(
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
             .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
         } else {
-          stateStoreProvider.getStore(stateInfo.get.storeVersion)
+          stateStoreProvider.getStore(
+            stateInfo.get.storeVersion,
+            stateInfo.get.getCheckpointUniqueId(partitionId))
         }
       }
       logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")

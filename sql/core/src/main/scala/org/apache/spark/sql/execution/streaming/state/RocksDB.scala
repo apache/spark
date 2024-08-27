@@ -72,7 +72,8 @@ class RocksDB(
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
-    useColumnFamilies: Boolean = false) extends Logging {
+    useColumnFamilies: Boolean = false,
+    checkpointFormatVersion: Int = 1) extends Logging {
 
   case class RocksDBSnapshot(
       checkpointDir: File,
@@ -158,6 +159,10 @@ class RocksDB(
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+  @volatile private var LastCommitBasedCheckpointId: Option[String] = None
+  @volatile private var lastCommittedCheckpointId: Option[String] = None
+  @volatile private var loadedCheckpointId: Option[String] = None
+  @volatile private var sessionCheckpointId: Option[String] = None
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
@@ -256,13 +261,18 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long, readOnly: Boolean = false): RocksDB = {
+  def load(
+      version: Long,
+      checkpointUniqueId: Option[String] = None,
+      readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
-      if (loadedVersion != version) {
+      if (loadedVersion != version ||
+        (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
+        (!loadedCheckpointId.isDefined || checkpointUniqueId.get != loadedCheckpointId.get))) {
         closeDB()
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
@@ -312,6 +322,13 @@ class RocksDB(
         numKeysOnLoadedVersion = numKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
+      if (checkpointFormatVersion >= 2) {
+        LastCommitBasedCheckpointId = None
+        lastCommittedCheckpointId = None
+        loadedCheckpointId = checkpointUniqueId
+        sessionCheckpointId = Some(java.util.UUID.randomUUID.toString)
+      }
+      lastCommittedCheckpointId = None
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
@@ -319,6 +336,8 @@ class RocksDB(
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
+        LastCommitBasedCheckpointId = None
+        lastCommittedCheckpointId = None
         throw t
     }
     if (enableChangelogCheckpointing && !readOnly) {
@@ -667,6 +686,11 @@ class RocksDB(
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
+      if (checkpointFormatVersion >= 2) {
+        LastCommitBasedCheckpointId = loadedCheckpointId
+        lastCommittedCheckpointId = sessionCheckpointId
+        loadedCheckpointId = sessionCheckpointId
+      }
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
         "compact" -> compactTimeMs,
@@ -799,6 +823,14 @@ class RocksDB(
 
   /** Get the write buffer manager and cache */
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
+
+  def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(
+      partitionId,
+      loadedVersion,
+      lastCommittedCheckpointId,
+      LastCommitBasedCheckpointId)
+  }
 
   /** Get current instantaneous statistics */
   private def metrics: RocksDBMetrics = {

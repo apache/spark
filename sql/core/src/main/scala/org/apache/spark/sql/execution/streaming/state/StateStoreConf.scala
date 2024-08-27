@@ -83,6 +83,11 @@ class StateStoreConf(
   val maintenanceInterval = sqlConf.streamingMaintenanceInterval
 
   /**
+   * When creating new state store checkpoint, which format version to use.
+   */
+  val stateStoreCheckpointFormatVersion = sqlConf.stateStoreCheckpointFormatVersion
+
+  /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.`
    */

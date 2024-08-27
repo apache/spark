@@ -21,14 +21,163 @@ import java.io.File
 
 import scala.jdk.CollectionConverters.SetHasAsScala
 
+import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.{Minute, Span}
 
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
+
+object TestStateStoreWrapper {
+  // Internal list to hold checkpoint IDs (strings)
+  private var checkpointInfos: List[StateStoreCheckpointInfo] = List.empty
+
+  // Method to add a string (checkpoint ID) to the list in a synchronized way
+  def addCheckpointInfo(checkpointID: StateStoreCheckpointInfo): Unit = synchronized {
+    checkpointInfos = checkpointID :: checkpointInfos
+  }
+
+  // Method to read the list of checkpoint IDs in a synchronized way
+  def getCheckpointInfos: List[StateStoreCheckpointInfo] = synchronized {
+    checkpointInfos
+  }
+}
+
+case class TestStateStoreWrapper(innerStore: StateStore) extends StateStore {
+
+  // Implement methods from ReadStateStore (parent trait)
+
+  override def id: StateStoreId = innerStore.id
+  override def version: Long = innerStore.version
+
+  override def get(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = {
+    innerStore.get(key, colFamilyName)
+  }
+
+  override def valuesIterator(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow] = {
+    innerStore.valuesIterator(key, colFamilyName)
+  }
+
+  override def prefixScan(
+      prefixKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] = {
+    innerStore.prefixScan(prefixKey, colFamilyName)
+  }
+
+  override def iterator(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] = {
+    innerStore.iterator(colFamilyName)
+  }
+
+  override def abort(): Unit = innerStore.abort()
+
+  // Implement methods from StateStore (current trait)
+
+  override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+    innerStore.removeColFamilyIfExists(colFamilyName)
+  }
+
+  override def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
+    innerStore.createColFamilyIfAbsent(
+      colFamilyName,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useMultipleValuesPerKey,
+      isInternal
+    )
+  }
+
+  override def put(
+      key: UnsafeRow,
+      value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.put(key, value, colFamilyName)
+  }
+
+  override def remove(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.remove(key, colFamilyName)
+  }
+
+  override def merge(
+      key: UnsafeRow,
+      value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.merge(key, value, colFamilyName)
+  }
+
+  override def commit(): Long = innerStore.commit()
+  override def metrics: StateStoreMetrics = innerStore.metrics
+  override def getCheckpointInfo: StateStoreCheckpointInfo = {
+    val ret = innerStore.getCheckpointInfo
+    TestStateStoreWrapper.addCheckpointInfo(ret)
+    ret
+  }
+  override def hasCommitted: Boolean = innerStore.hasCommitted
+}
+
+// Wrapper class implementing StateStoreProvider
+class TestStateStoreProviderWrapper extends StateStoreProvider {
+
+  val innerProvider = new RocksDBStateStoreProvider()
+
+  // Now, delegate all methods in the wrapper class to the inner object
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
+    innerProvider.init(
+      stateStoreId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      storeConfs,
+      hadoopConf,
+      useMultipleValuesPerKey
+    )
+  }
+
+  override def stateStoreId: StateStoreId = innerProvider.stateStoreId
+
+  override def close(): Unit = innerProvider.close()
+
+  override def getStore(version: Long, checkpointUniqueId: Option[String] = None): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, checkpointUniqueId)
+    TestStateStoreWrapper(innerStateStore)
+  }
+
+  override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
+    new WrappedReadStateStore(TestStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
+  }
+
+  override def doMaintenance(): Unit = innerProvider.doMaintenance()
+
+  override def supportedCustomMetrics: Seq[StateStoreCustomMetric] =
+    innerProvider.supportedCustomMetrics
+}
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithChangelogCheckpointingEnabled {
@@ -219,6 +368,122 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           query.stop()
         }
       }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(s"checkpointFormatVersion2") {
+    withSQLConf((SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")) {
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      checkpointDir.delete()
+
+      val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      // Run the stream with changelog checkpointing disabled.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        AddData(inputData, 3, 2),
+        CheckLastBatch((3, 2), (2, 1)),
+        StopStream
+      )
+
+      // Run the stream with changelog checkpointing enabled.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3, 2, 1),
+        CheckLastBatch((3, 3), (2, 2), (1, 1)),
+        // By default we run in new tuple mode.
+        AddData(inputData, 4, 4, 4, 4),
+        CheckLastBatch((4, 4)),
+        AddData(inputData, 5, 5),
+        CheckLastBatch((5, 2))
+      )
+
+      // Run the stream with changelog checkpointing disabled.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4),
+        CheckLastBatch((4, 5))
+      )
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(s"checkpointFormatVersion2 validate ID") {
+    val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+    withSQLConf(
+      (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
+      (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
+      (SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      checkpointDir.delete()
+
+      val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      // Run the stream with changelog checkpointing disabled.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        AddData(inputData, 3, 2),
+        CheckLastBatch((3, 2), (2, 1)),
+        StopStream
+      )
+
+      // Run the stream with changelog checkpointing enabled.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3, 2, 1),
+        CheckLastBatch((3, 3), (2, 2), (1, 1)),
+        // By default we run in new tuple mode.
+        AddData(inputData, 4, 4, 4, 4),
+        CheckLastBatch((4, 4)),
+        AddData(inputData, 5, 5),
+        CheckLastBatch((5, 2))
+      )
+
+      // Run the stream with changelog checkpointing disabled.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4),
+        CheckLastBatch((4, 5))
+      )
+    }
+    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    assert(checkpointInfoList.size == 12)
+    print(checkpointInfoList)
+    checkpointInfoList.foreach { l =>
+      assert(l.checkpointId.isDefined)
+      if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 5) {
+        assert(l.baseCheckpointId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == 6)
+    assert(checkpointInfoList.count(_.partitionId == 1) == 6)
+    for (i <- 1 to 6) {
+      assert(checkpointInfoList.count(_.batchVersion == i) == 2)
+    }
+    for {
+      a <- checkpointInfoList
+      b <- checkpointInfoList
+      if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
+    } {
+      // Check if checkpointId of 'a' matches baseCheckpointId of 'b'
+      assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
     }
   }
 

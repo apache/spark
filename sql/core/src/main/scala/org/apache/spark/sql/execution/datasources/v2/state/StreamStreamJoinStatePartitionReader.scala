@@ -105,7 +105,7 @@ class StreamStreamJoinStatePartitionReader(
       val stateInfo = StatefulOperatorStateInfo(
         partition.sourceOptions.stateCheckpointLocation.toString,
         partition.queryId, partition.sourceOptions.operatorId,
-        partition.sourceOptions.batchId + 1, -1)
+        partition.sourceOptions.batchId + 1, -1, None)
       joinStateManager = new SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
