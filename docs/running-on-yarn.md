@@ -522,15 +522,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>4.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
-  <td>(none)</td>
-  <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
-  </td>
-  <td>2.0.0</td>
-</tr>
-<tr>
   <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
   <td>(none)</td>
   <td>
