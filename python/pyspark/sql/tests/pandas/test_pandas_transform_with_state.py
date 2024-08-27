@@ -305,6 +305,7 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
+
 class SimpleStatefulProcessor(StatefulProcessor):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
     batch_id = 0
