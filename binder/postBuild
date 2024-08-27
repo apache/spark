@@ -21,7 +21,7 @@
 # Jupyter notebook.
 
 VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
-TAG=$(git describe --tags --exact-match 2>/dev/null)
+TAG=$(git describe --tags --exact-match 2> /dev/null || true)
 
 # If a commit is tagged, exactly specified version of pyspark should be installed to avoid
 # a kind of accident that an old version of pyspark is installed in the live notebook environment.
