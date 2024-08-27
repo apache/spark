@@ -1421,6 +1421,7 @@ trait SharedUnidocSettings {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
+        "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree"
       )
     },

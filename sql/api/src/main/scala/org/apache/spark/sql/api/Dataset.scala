@@ -33,7 +33,7 @@ import org.apache.spark.util.SparkClassUtils
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed
  * in parallel using functional or relational operations. Each Dataset also has an untyped view
- * called a `DataFrame`, which is a Dataset of [[Row]].
+ * called a `DataFrame`, which is a Dataset of [[org.apache.spark.sql.Row]].
  *
  * Operations available on Datasets are divided into transformations and actions. Transformations
  * are the ones that produce new Datasets, and actions are the ones that trigger computation and
@@ -46,13 +46,13 @@ import org.apache.spark.util.SparkClassUtils
  * physical plan for efficient execution in a parallel and distributed manner. To explore the
  * logical plan as well as optimized physical plan, use the `explain` function.
  *
- * To efficiently support domain-specific objects, an [[Encoder]] is required. The encoder maps
- * the domain specific type `T` to Spark's internal type system. For example, given a class `Person`
- * with two fields, `name` (string) and `age` (int), an encoder is used to tell Spark to generate
- * code at runtime to serialize the `Person` object into a binary structure. This binary structure
- * often has much lower memory footprint as well as are optimized for efficiency in data processing
- * (e.g. in a columnar format). To understand the internal binary representation for data, use the
- * `schema` function.
+ * To efficiently support domain-specific objects, an [[org.apache.spark.sql.Encoder]] is required.
+ * The encoder maps the domain specific type `T` to Spark's internal type system. For example, given
+ * a class `Person` with two fields, `name` (string) and `age` (int), an encoder is used to tell
+ * Spark to generate code at runtime to serialize the `Person` object into a binary structure. This
+ * binary structure often has much lower memory footprint as well as are optimized for efficiency
+ * in data processing (e.g. in a columnar format). To understand the internal binary representation
+ * for data, use the `schema` function.
  *
  * There are typically two ways to create a Dataset. The most common way is by pointing Spark
  * to some files on storage systems, using the `read` function available on a `SparkSession`.
@@ -70,8 +70,9 @@ import org.apache.spark.util.SparkClassUtils
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
- * functions defined in: Dataset (this class), [[Column]], and [[functions]]. These operations
- * are very similar to the operations available in the data frame abstraction in R or Python.
+ * functions defined in: Dataset (this class), [[org.apache.spark.sql.Column]], and
+ * [[org.apache.spark.sql.functions]]. These operations are very similar to the operations available
+ * in the data frame abstraction in R or Python.
  *
  * To select a column from the Dataset, use `apply` method in Scala and `col` in Java.
  * {{{
@@ -79,7 +80,8 @@ import org.apache.spark.util.SparkClassUtils
  *   Column ageCol = people.col("age"); // in Java
  * }}}
  *
- * Note that the [[Column]] type can also be manipulated through its various functions.
+ * Note that the [[org.apache.spark.sql.Column]] type can also be manipulated through its various
+ * functions.
  * {{{
  *   // The following creates a new column that increases everybody's age by 10.
  *   people("age") + 10  // in Scala
@@ -123,8 +125,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe. In contrast to the
-   * strongly typed objects that Dataset operations work on, a Dataframe returns generic [[Row]]
-   * objects that allow fields to be accessed by ordinal or name.
+   * strongly typed objects that Dataset operations work on, a Dataframe returns generic
+   * [[org.apache.spark.sql.Row]] objects that allow fields to be accessed by ordinal or name.
    *
    * @group basic
    * @since 1.6.0
@@ -868,7 +870,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   def hint(name: String, parameters: Any*): DS[T]
 
   /**
-   * Selects column based on the column name and returns it as a [[Column]].
+   * Selects column based on the column name and returns it as a [[org.apache.spark.sql.Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
    * @group untypedrel
@@ -877,7 +879,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   def apply(colName: String): Column = col(colName)
 
   /**
-   * Selects column based on the column name and returns it as a [[Column]].
+   * Selects column based on the column name and returns it as a [[org.apache.spark.sql.Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
    * @group untypedrel
@@ -886,7 +888,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   def col(colName: String): Column
 
   /**
-   * Selects a metadata column based on its logical column name, and returns it as a [[Column]].
+   * Selects a metadata column based on its logical column name, and returns it as a
+   * [[org.apache.spark.sql.Column]].
    *
    * A metadata column can be accessed this way even if the underlying data source defines a data
    * column with a conflicting name.
@@ -897,7 +900,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   def metadataColumn(colName: String): Column
 
   /**
-   * Selects column based on the column name specified as a regex and returns it as [[Column]].
+   * Selects column based on the column name specified as a regex and returns it as
+   * [[org.apache.spark.sql.Column]].
    *
    * @group untypedrel
    * @since 2.3.0
@@ -981,7 +985,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   def selectExpr(exprs: String*): DS[Row] = select(exprs.map(functions.expr): _*)
 
   /**
-   * Returns a new Dataset by computing the given [[Column]] expression for each element.
+   * Returns a new Dataset by computing the given [[org.apache.spark.sql.Column]] expression for
+   * each element.
    *
    * {{{
    *   val ds = Seq(1, 2, 3).toDS()
@@ -1001,7 +1006,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   protected def selectUntyped(columns: TypedColumn[_, _]*): DS[_]
 
   /**
-   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[org.apache.spark.sql.Column]] expressions for
+   * each element.
    *
    * @group typedrel
    * @since 1.6.0
@@ -1010,7 +1016,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
     selectUntyped(c1, c2).asInstanceOf[DS[(U1, U2)]]
 
   /**
-   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[org.apache.spark.sql.Column]] expressions for
+   * each element.
    *
    * @group typedrel
    * @since 1.6.0
@@ -1022,7 +1029,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
     selectUntyped(c1, c2, c3).asInstanceOf[DS[(U1, U2, U3)]]
 
   /**
-   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[org.apache.spark.sql.Column]] expressions for
+   * each element.
    *
    * @group typedrel
    * @since 1.6.0
@@ -1035,7 +1043,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
     selectUntyped(c1, c2, c3, c4).asInstanceOf[DS[(U1, U2, U3, U4)]]
 
   /**
-   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[org.apache.spark.sql.Column]] expressions for
+   * each element.
    *
    * @group typedrel
    * @since 1.6.0
@@ -1682,7 +1691,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    *
    * `colsMap` is a map of existing column name and new column name.
    *
-   * @throws AnalysisException if there are duplicate names in resulting projection
+   * @throws org.apache.spark.sql.AnalysisException if there are duplicate names in resulting
+   *                                                projection
    * @group untypedrel
    * @since 3.4.0
    */
@@ -1807,7 +1817,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * Returns a new Dataset with column dropped.
    *
    * This method can only be used to drop top level column.
-   * This version of drop accepts a [[Column]] rather than a name.
+   * This version of drop accepts a [[org.apache.spark.sql.Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
    *
@@ -2484,7 +2494,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
 
   /**
    * Registers this Dataset as a temporary table using the given name. The lifetime of this
-   * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
+   * temporary table is tied to the `SparkSession` that was used to create this Dataset.
    *
    * @group basic
    * @since 1.6.0
@@ -2496,13 +2506,13 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
 
   /**
    * Creates a local temporary view using the given name. The lifetime of this
-   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   * temporary view is tied to the `SparkSession` that was used to create this Dataset.
    *
    * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
    * created it, i.e. it will be automatically dropped when the session terminates. It's not
    * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
-   * @throws AnalysisException if the view name is invalid or already exists
+   * @throws org.apache.spark.sql.AnalysisException if the view name is invalid or already exists
    * @group basic
    * @since 2.0.0
    */
@@ -2514,7 +2524,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
 
   /**
    * Creates a local temporary view using the given name. The lifetime of this
-   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   * temporary view is tied to the `SparkSession` that was used to create this Dataset.
    *
    * @group basic
    * @since 2.0.0
@@ -2532,7 +2542,7 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    * preserved database `global_temp`, and we must use the qualified name to refer a global temp
    * view, e.g. `SELECT * FROM global_temp.view1`.
    *
-   * @throws AnalysisException if the view name is invalid or already exists
+   * @throws org.apache.spark.sql.AnalysisException if the view name is invalid or already exists
    * @group basic
    * @since 2.1.0
    */
