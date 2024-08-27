@@ -183,6 +183,8 @@ class StateSchemaCompatibilityChecker(
         schema.colFamilyName -> schema
       }.toMap
       var hasEvolvedSchema = false
+      // For each new state variable, we want to compare it to the old state variable
+      // schema with the same name
       newStateSchemaList.foreach { newSchema =>
         existingSchemaMap.get(newSchema.colFamilyName).foreach { existingStateSchema =>
           if (check(existingStateSchema, newSchema, ignoreValueSchema)) {
