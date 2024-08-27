@@ -209,8 +209,8 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     **kwargs,
                 )
             )
-        fig["layout"]["yaxis"]["title"] = "value"
 
+    fig["layout"]["yaxis"]["title"] = "value"
     return fig
 
 
