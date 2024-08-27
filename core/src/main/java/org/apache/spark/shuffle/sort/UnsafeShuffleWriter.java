@@ -87,7 +87,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
   private final int initialSortBufferSize;
-  private final int inputBufferSizeInBytes;
+  private final int mergeBufferSizeInBytes;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
@@ -140,8 +140,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.transferToEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_MERGE_PREFER_NIO());
     this.initialSortBufferSize =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
-    this.inputBufferSizeInBytes =
-      (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
+    this.mergeBufferSizeInBytes =
+      (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_MERGE_BUFFER_SIZE()) * 1024;
     open();
   }
 
@@ -372,7 +372,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       for (int i = 0; i < spills.length; i++) {
         spillInputStreams[i] = new NioBufferedFileInputStream(
           spills[i].file,
-          inputBufferSizeInBytes);
+          mergeBufferSizeInBytes);
         // Only convert the partitionLengths when debug level is enabled.
         if (logger.isDebugEnabled()) {
           logger.debug("Partition lengths for mapId {} in Spill {}: {}", mapId, i,

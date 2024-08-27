@@ -61,7 +61,7 @@ class SeriesPlotTestsMixin:
             stats, fences = BoxPlotBase.compute_stats(psdf["a"], "a", whis=k, precision=0.01)
             outliers = BoxPlotBase.outliers(psdf["a"], "a", *fences)
             whiskers = BoxPlotBase.calc_whiskers("a", outliers)
-            fliers = BoxPlotBase.get_fliers("a", outliers, whiskers[0])
+            fliers = BoxPlotBase.get_fliers("a", outliers, *fences)
 
             expected_mean = pdf["a"].mean()
             expected_median = pdf["a"].median()

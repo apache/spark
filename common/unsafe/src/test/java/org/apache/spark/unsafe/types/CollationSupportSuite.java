@@ -2329,6 +2329,27 @@ public class CollationSupportSuite {
     assertStringLocate("b", "a🙃x🙃b", 4, "UTF8_LCASE", 5);
     assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE", 5);
     assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE_CI", 5);
+    // Out of bounds test cases.
+    assertStringLocate("a", "asd", 4, "UTF8_BINARY", 0);
+    assertStringLocate("a", "asd", 4, "UTF8_LCASE", 0);
+    assertStringLocate("a", "asd", 4, "UNICODE", 0);
+    assertStringLocate("a", "asd", 4, "UNICODE_CI", 0);
+    assertStringLocate("a", "asd", 100, "UTF8_BINARY", 0);
+    assertStringLocate("a", "asd", 100, "UTF8_LCASE", 0);
+    assertStringLocate("a", "asd", 100, "UNICODE", 0);
+    assertStringLocate("a", "asd", 100, "UNICODE_CI", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UTF8_BINARY", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UTF8_LCASE", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UNICODE", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UNICODE_CI", 0);
+    assertStringLocate("", "asd", 100, "UTF8_BINARY", 1);
+    assertStringLocate("", "asd", 100, "UTF8_LCASE", 1);
+    assertStringLocate("", "asd", 100, "UNICODE", 1);
+    assertStringLocate("", "asd", 100, "UNICODE_CI", 1);
+    assertStringLocate("asd", "", 100, "UTF8_BINARY", 0);
+    assertStringLocate("asd", "", 100, "UTF8_LCASE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE_CI", 0);
   }
 
   /**
@@ -2741,6 +2762,10 @@ public class CollationSupportSuite {
     assertStringTrim("UTF8_BINARY", "ixi", "i", "x");
     assertStringTrim("UTF8_BINARY", "i", "İ", "i");
     assertStringTrim("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
+    assertStringTrim("UTF8_BINARY", "ii\u0307", "İi", "\u0307");
+    assertStringTrim("UTF8_BINARY", "iii\u0307", "İi", "\u0307");
+    assertStringTrim("UTF8_BINARY", "iiii\u0307", "iİ", "\u0307");
+    assertStringTrim("UTF8_BINARY", "ii\u0307ii\u0307", "iİ", "\u0307ii\u0307");
     assertStringTrim("UTF8_BINARY", "i\u0307", "i", "\u0307");
     assertStringTrim("UTF8_BINARY", "i\u0307", "\u0307", "i");
     assertStringTrim("UTF8_BINARY", "i\u0307", "i\u0307", "");
@@ -2766,6 +2791,10 @@ public class CollationSupportSuite {
     assertStringTrim("UTF8_LCASE", "ixi", "i", "x");
     assertStringTrim("UTF8_LCASE", "i", "İ", "i");
     assertStringTrim("UTF8_LCASE", "i\u0307", "İ", "");
+    assertStringTrim("UTF8_LCASE", "ii\u0307", "İi", "");
+    assertStringTrim("UTF8_LCASE", "iii\u0307", "İi", "");
+    assertStringTrim("UTF8_LCASE", "iiii\u0307", "iİ", "");
+    assertStringTrim("UTF8_LCASE", "ii\u0307ii\u0307", "iİ", "");
     assertStringTrim("UTF8_LCASE", "i\u0307", "i", "\u0307");
     assertStringTrim("UTF8_LCASE", "i\u0307", "\u0307", "i");
     assertStringTrim("UTF8_LCASE", "i\u0307", "i\u0307", "");
@@ -2791,6 +2820,10 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE", "ixi", "i", "x");
     assertStringTrim("UNICODE", "i", "İ", "i");
     assertStringTrim("UNICODE", "i\u0307", "İ", "i\u0307");
+    assertStringTrim("UNICODE", "ii\u0307", "İi", "i\u0307");
+    assertStringTrim("UNICODE", "iii\u0307", "İi", "i\u0307");
+    assertStringTrim("UNICODE", "iiii\u0307", "iİ", "i\u0307");
+    assertStringTrim("UNICODE", "ii\u0307ii\u0307", "iİ", "i\u0307ii\u0307");
     assertStringTrim("UNICODE", "i\u0307", "i", "i\u0307");
     assertStringTrim("UNICODE", "i\u0307", "\u0307", "i\u0307");
     assertStringTrim("UNICODE", "i\u0307", "i\u0307", "i\u0307");
@@ -2817,6 +2850,10 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE_CI", "ixi", "i", "x");
     assertStringTrim("UNICODE_CI", "i", "İ", "i");
     assertStringTrim("UNICODE_CI", "i\u0307", "İ", "");
+    assertStringTrim("UNICODE_CI", "ii\u0307", "İi", "");
+    assertStringTrim("UNICODE_CI", "iii\u0307", "İi", "");
+    assertStringTrim("UNICODE_CI", "iiii\u0307", "iİ", "");
+    assertStringTrim("UNICODE_CI", "ii\u0307ii\u0307", "iİ", "");
     assertStringTrim("UNICODE_CI", "i\u0307", "i", "i\u0307");
     assertStringTrim("UNICODE_CI", "i\u0307", "\u0307", "i\u0307");
     assertStringTrim("UNICODE_CI", "i\u0307", "i\u0307", "i\u0307");
@@ -3021,6 +3058,10 @@ public class CollationSupportSuite {
     assertStringTrimLeft("UTF8_BINARY", "ixi", "i", "xi");
     assertStringTrimLeft("UTF8_BINARY", "i", "İ", "i");
     assertStringTrimLeft("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "ii\u0307", "İi", "\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "iii\u0307", "İi", "\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "iiii\u0307", "iİ", "\u0307");
+    assertStringTrimLeft("UTF8_BINARY", "ii\u0307ii\u0307", "iİ", "\u0307ii\u0307");
     assertStringTrimLeft("UTF8_BINARY", "i\u0307", "i", "\u0307");
     assertStringTrimLeft("UTF8_BINARY", "i\u0307", "\u0307", "i\u0307");
     assertStringTrimLeft("UTF8_BINARY", "i\u0307", "i\u0307", "");
@@ -3046,6 +3087,10 @@ public class CollationSupportSuite {
     assertStringTrimLeft("UTF8_LCASE", "ixi", "i", "xi");
     assertStringTrimLeft("UTF8_LCASE", "i", "İ", "i");
     assertStringTrimLeft("UTF8_LCASE", "i\u0307", "İ", "");
+    assertStringTrimLeft("UTF8_LCASE", "ii\u0307", "İi", "");
+    assertStringTrimLeft("UTF8_LCASE", "iii\u0307", "İi", "");
+    assertStringTrimLeft("UTF8_LCASE", "iiii\u0307", "iİ", "");
+    assertStringTrimLeft("UTF8_LCASE", "ii\u0307ii\u0307", "iİ", "");
     assertStringTrimLeft("UTF8_LCASE", "i\u0307", "i", "\u0307");
     assertStringTrimLeft("UTF8_LCASE", "i\u0307", "\u0307", "i\u0307");
     assertStringTrimLeft("UTF8_LCASE", "i\u0307", "i\u0307", "");
@@ -3071,6 +3116,10 @@ public class CollationSupportSuite {
     assertStringTrimLeft("UNICODE", "ixi", "i", "xi");
     assertStringTrimLeft("UNICODE", "i", "İ", "i");
     assertStringTrimLeft("UNICODE", "i\u0307", "İ", "i\u0307");
+    assertStringTrimLeft("UNICODE", "ii\u0307", "İi", "i\u0307");
+    assertStringTrimLeft("UNICODE", "iii\u0307", "İi", "i\u0307");
+    assertStringTrimLeft("UNICODE", "iiii\u0307", "iİ", "i\u0307");
+    assertStringTrimLeft("UNICODE", "ii\u0307ii\u0307", "iİ", "i\u0307ii\u0307");
     assertStringTrimLeft("UNICODE", "i\u0307", "i", "i\u0307");
     assertStringTrimLeft("UNICODE", "i\u0307", "\u0307", "i\u0307");
     assertStringTrimLeft("UNICODE", "i\u0307", "i\u0307", "i\u0307");
@@ -3097,6 +3146,10 @@ public class CollationSupportSuite {
     assertStringTrimLeft("UNICODE_CI", "ixi", "i", "xi");
     assertStringTrimLeft("UNICODE_CI", "i", "İ", "i");
     assertStringTrimLeft("UNICODE_CI", "i\u0307", "İ", "");
+    assertStringTrimLeft("UNICODE_CI", "ii\u0307", "İi", "");
+    assertStringTrimLeft("UNICODE_CI", "iii\u0307", "İi", "");
+    assertStringTrimLeft("UNICODE_CI", "iiii\u0307", "iİ", "");
+    assertStringTrimLeft("UNICODE_CI", "ii\u0307ii\u0307", "iİ", "");
     assertStringTrimLeft("UNICODE_CI", "i\u0307", "i", "i\u0307");
     assertStringTrimLeft("UNICODE_CI", "i\u0307", "\u0307", "i\u0307");
     assertStringTrimLeft("UNICODE_CI", "i\u0307", "i\u0307", "i\u0307");
@@ -3302,6 +3355,10 @@ public class CollationSupportSuite {
     assertStringTrimRight("UTF8_BINARY", "ixi", "i", "ix");
     assertStringTrimRight("UTF8_BINARY", "i", "İ", "i");
     assertStringTrimRight("UTF8_BINARY", "i\u0307", "İ", "i\u0307");
+    assertStringTrimRight("UTF8_BINARY", "ii\u0307", "İi", "ii\u0307");
+    assertStringTrimRight("UTF8_BINARY", "iii\u0307", "İi", "iii\u0307");
+    assertStringTrimRight("UTF8_BINARY", "iiii\u0307", "iİ", "iiii\u0307");
+    assertStringTrimRight("UTF8_BINARY", "ii\u0307ii\u0307", "iİ", "ii\u0307ii\u0307");
     assertStringTrimRight("UTF8_BINARY", "i\u0307", "i", "i\u0307");
     assertStringTrimRight("UTF8_BINARY", "i\u0307", "\u0307", "i");
     assertStringTrimRight("UTF8_BINARY", "i\u0307", "i\u0307", "");
@@ -3327,6 +3384,10 @@ public class CollationSupportSuite {
     assertStringTrimRight("UTF8_LCASE", "ixi", "i", "ix");
     assertStringTrimRight("UTF8_LCASE", "i", "İ", "i");
     assertStringTrimRight("UTF8_LCASE", "i\u0307", "İ", "");
+    assertStringTrimRight("UTF8_LCASE", "ii\u0307", "İi", "");
+    assertStringTrimRight("UTF8_LCASE", "iii\u0307", "İi", "");
+    assertStringTrimRight("UTF8_LCASE", "iiii\u0307", "iİ", "");
+    assertStringTrimRight("UTF8_LCASE", "ii\u0307ii\u0307", "iİ", "");
     assertStringTrimRight("UTF8_LCASE", "i\u0307", "i", "i\u0307");
     assertStringTrimRight("UTF8_LCASE", "i\u0307", "\u0307", "i");
     assertStringTrimRight("UTF8_LCASE", "i\u0307", "i\u0307", "");
@@ -3352,6 +3413,10 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE", "ixi", "i", "ix");
     assertStringTrimRight("UNICODE", "i", "İ", "i");
     assertStringTrimRight("UNICODE", "i\u0307", "İ", "i\u0307");
+    assertStringTrimRight("UTF8_BINARY", "ii\u0307", "İi", "ii\u0307");
+    assertStringTrimRight("UTF8_BINARY", "iii\u0307", "İi", "iii\u0307");
+    assertStringTrimRight("UTF8_BINARY", "iiii\u0307", "iİ", "iiii\u0307");
+    assertStringTrimRight("UTF8_BINARY", "ii\u0307ii\u0307", "iİ", "ii\u0307ii\u0307");
     assertStringTrimRight("UNICODE", "i\u0307", "i", "i\u0307");
     assertStringTrimRight("UNICODE", "i\u0307", "\u0307", "i\u0307");
     assertStringTrimRight("UNICODE", "i\u0307", "i\u0307", "i\u0307");
@@ -3378,6 +3443,10 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE_CI", "ixi", "i", "ix");
     assertStringTrimRight("UNICODE_CI", "i", "İ", "i");
     assertStringTrimRight("UNICODE_CI", "i\u0307", "İ", "");
+    assertStringTrimRight("UNICODE_CI", "ii\u0307", "İi", "");
+    assertStringTrimRight("UNICODE_CI", "iii\u0307", "İi", "");
+    assertStringTrimRight("UNICODE_CI", "iiii\u0307", "iİ", "");
+    assertStringTrimRight("UNICODE_CI", "ii\u0307ii\u0307", "iİ", "");
     assertStringTrimRight("UNICODE_CI", "i\u0307", "i", "i\u0307");
     assertStringTrimRight("UNICODE_CI", "i\u0307", "\u0307", "i\u0307");
     assertStringTrimRight("UNICODE_CI", "i\u0307", "i\u0307", "i\u0307");

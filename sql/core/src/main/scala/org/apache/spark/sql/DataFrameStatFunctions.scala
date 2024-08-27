@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Encoders.BINARY
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.{col, count_min_sketch, lit}
 import org.apache.spark.util.ArrayImplicits._
