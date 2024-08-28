@@ -26,7 +26,6 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, 
 import org.apache.spark.util.ArrayImplicits._
 
 object SchemaUtil {
-
   def getSchemaAsDataType(schema: StructType, fieldName: String): DataType = {
     schema.getFieldIndex(fieldName) match {
       case Some(idx) => schema(idx).dataType
@@ -35,34 +34,6 @@ object SchemaUtil {
         messageParameters = Map(
           "fieldName" -> fieldName,
           "schema" -> schema.toString()))
-    }
-  }
-
-  private def generateSchemaForStateVar(
-      stateVarInfo: TransformWithStateVariableInfo,
-      stateStoreColFamilySchema: StateStoreColFamilySchema): StructType = {
-    val stateVarType = stateVarInfo.stateVariableType
-    val hasTTLEnabled = stateVarInfo.ttlEnabled
-
-    stateVarType match {
-      case StateVariableType.ValueState =>
-        if (hasTTLEnabled) {
-          val ttlValueSchema = SchemaUtil.getSchemaAsDataType(
-            stateStoreColFamilySchema.valueSchema, "value").asInstanceOf[StructType]
-          new StructType()
-            .add("key", stateStoreColFamilySchema.keySchema)
-            .add("value", ttlValueSchema)
-            .add("expiration_timestamp", LongType)
-            .add("partition_id", IntegerType)
-        } else {
-          new StructType()
-            .add("key", stateStoreColFamilySchema.keySchema)
-            .add("value", stateStoreColFamilySchema.valueSchema)
-            .add("partition_id", IntegerType)
-        }
-
-      case _ =>
-        throw StateDataSourceErrors.internalError(s"Unsupported state variable type $stateVarType")
     }
   }
 
@@ -111,7 +82,11 @@ object SchemaUtil {
     row
   }
 
-  private val expectedTypes = Map(
+  def isValidSchema(
+      sourceOptions: StateSourceOptions,
+      schema: StructType,
+      transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
+  val expectedTypes = Map(
       "batch_id" -> classOf[LongType],
       "change_type" -> classOf[StringType],
       "key" -> classOf[StructType],
@@ -119,10 +94,6 @@ object SchemaUtil {
       "partition_id" -> classOf[IntegerType],
       "expiration_timestamp" -> classOf[LongType])
 
-  def isValidSchema(
-      sourceOptions: StateSourceOptions,
-      schema: StructType,
-      transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
     val expectedFieldNames = if (sourceOptions.readChangeFeed) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
     } else if (transformWithStateVariableInfoOpt.isDefined) {
@@ -153,6 +124,34 @@ object SchemaUtil {
         expectedTypes(fieldName).isAssignableFrom(
           SchemaUtil.getSchemaAsDataType(schema, fieldName).getClass)
       }
+    }
+  }
+
+  private def generateSchemaForStateVar(
+      stateVarInfo: TransformWithStateVariableInfo,
+      stateStoreColFamilySchema: StateStoreColFamilySchema): StructType = {
+    val stateVarType = stateVarInfo.stateVariableType
+    val hasTTLEnabled = stateVarInfo.ttlEnabled
+
+    stateVarType match {
+      case StateVariableType.ValueState =>
+        if (hasTTLEnabled) {
+          val ttlValueSchema = SchemaUtil.getSchemaAsDataType(
+            stateStoreColFamilySchema.valueSchema, "value").asInstanceOf[StructType]
+          new StructType()
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", ttlValueSchema)
+            .add("expiration_timestamp", LongType)
+            .add("partition_id", IntegerType)
+        } else {
+          new StructType()
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        }
+
+      case _ =>
+        throw StateDataSourceErrors.internalError(s"Unsupported state variable type $stateVarType")
     }
   }
 }

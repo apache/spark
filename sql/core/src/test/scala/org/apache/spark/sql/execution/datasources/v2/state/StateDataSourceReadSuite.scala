@@ -270,7 +270,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
   }
 
   test("ERROR: trying to specify state variable name with " +
-    s"non-transformWithState operator") {
+    "non-transformWithState operator") {
     withTempDir { tempDir =>
       runDropDuplicatesQuery(tempDir.getAbsolutePath)
 
