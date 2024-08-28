@@ -1,2 +1,2 @@
-Project [transform_keys(f#0, lambdafunction(concat(lambda x#0, cast(lambda y#0.id as string)), lambda x#0, lambda y#0, false)) AS transform_keys(f, lambdafunction(concat(namedlambdavariable(), namedlambdavariable().id), namedlambdavariable(), namedlambdavariable()))#0]
+Project [transform_keys(f#0, lambdafunction(concat(lambda x_1#0, cast(lambda y_2#0.id as string)), lambda x_1#0, lambda y_2#0, false)) AS transform_keys(f, lambdafunction(concat(namedlambdavariable(), namedlambdavariable().id), namedlambdavariable(), namedlambdavariable()))#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

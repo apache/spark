@@ -22,11 +22,10 @@ import java.{lang => jl, util => ju}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.{BloomFilterAggregate, CountMinSketchAgg}
+import org.apache.spark.sql.Encoders.BINARY
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.execution.stat._
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.functions.{col, count_min_sketch, lit}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
@@ -503,16 +502,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       eps: Double,
       confidence: Double,
       seed: Int): CountMinSketch = withOrigin {
-    val countMinSketchAgg = new CountMinSketchAgg(
-      col.expr,
-      Literal(eps, DoubleType),
-      Literal(confidence, DoubleType),
-      Literal(seed, IntegerType)
-    )
-    val bytes = df.select(
-      Column(countMinSketchAgg.toAggregateExpression(false))
-    ).head().getAs[Array[Byte]](0)
-    countMinSketchAgg.deserialize(bytes)
+    val cms = count_min_sketch(col, lit(eps), lit(confidence), lit(seed))
+    val bytes = df.select(cms).as(BINARY).head()
+    CountMinSketch.readFrom(bytes)
   }
 
   /**
@@ -561,14 +553,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = withOrigin {
-    val bloomFilterAgg = new BloomFilterAggregate(
-      col.expr,
-      Literal(expectedNumItems, LongType),
-      Literal(numBits, LongType)
-    )
-    val bytes = df.select(
-      Column(bloomFilterAgg.toAggregateExpression(false))
-    ).head().getAs[Array[Byte]](0)
-    bloomFilterAgg.deserialize(bytes)
+    val bf = Column.internalFn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits))
+    val bytes = df.select(bf).as(BINARY).head()
+    BloomFilter.readFrom(bytes)
   }
 }

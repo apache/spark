@@ -1420,6 +1420,22 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-49125: write CSV files with duplicated field names") {
+    withTempPath { path =>
+      sql("SELECT 's1' a, 's2' a").write.csv(path.getCanonicalPath)
+      val df = spark.read.csv(path.getCanonicalPath)
+      assert(df.columns === Array("_c0", "_c1"))
+      checkAnswer(df, Row("s1", "s2"))
+    }
+
+    withTempPath { path =>
+      sql(s"INSERT OVERWRITE DIRECTORY '${path.getCanonicalPath}' USING csv SELECT 's1' a, 's2' a")
+      val df = spark.read.csv(path.getCanonicalPath)
+      assert(df.columns === Array("_c0", "_c1"))
+      checkAnswer(df, Row("s1", "s2"))
+    }
+  }
+
   test("load null when the schema is larger than parsed tokens ") {
     withTempPath { path =>
       Seq("1").toDF().write.text(path.getAbsolutePath)
@@ -1763,6 +1779,32 @@ abstract class CSVSuite
 
       checkAnswer(df, Seq(Row(1, "a", "A", null)))
     }
+  }
+
+  test("SPARK-49016: Queries from raw CSV files are disallowed when the referenced columns only" +
+    " include the internal corrupt record column") {
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", DateType)
+      .add("_corrupt_record", StringType)
+
+    // negative cases
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).csv(testFile(valueMalformedFile))
+          .select("_corrupt_record").collect()
+      },
+      errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
+      parameters = Map.empty
+    )
+    // workaround
+    val df2 = spark.read.schema(schema).csv(testFile(valueMalformedFile)).cache()
+    assert(df2.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(df2.filter($"_corrupt_record".isNull).count() == 1)
+    checkAnswer(
+      df2.select("_corrupt_record"),
+      Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil
+    )
   }
 
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {

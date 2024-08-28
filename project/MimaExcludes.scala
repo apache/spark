@@ -108,6 +108,18 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.cancel"),
     // SPARK-48901: Add clusterBy() to DataStreamWriter.
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.DataStreamWriter.clusterBy"),
+    // SPARK-49027: A shared Column API
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ColumnName"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.TypedColumn"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.functions$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Aggregator"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedAggregateFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Window"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Window$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.WindowSpec"),
     // SPARK-48906: Add listCollations(...) to Catalog
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCollations")
   )

@@ -15,15 +15,18 @@
 # limitations under the License.
 #
 
+import bisect
 import importlib
+import math
 
 import pandas as pd
 import numpy as np
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.sql import functions as F
-from pyspark.sql.utils import is_remote
+from pyspark.sql import functions as F, Column
+from pyspark.sql.types import DoubleType
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -146,10 +149,9 @@ class HistogramPlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_hist(psdf, bins):
-        from pyspark.ml.feature import Bucketizer
-
         # 'data' is a Spark DataFrame that selects one column.
         assert isinstance(bins, (np.ndarray, np.generic))
+        assert len(bins) > 2, "the number of buckets must be higher than 2."
 
         sdf = psdf._internal.spark_frame
         scols = []
@@ -180,25 +182,35 @@ class HistogramPlotBase(NumericPlotBase):
         colnames = sdf.columns
         bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
-        output_df = None
-        for group_id, (colname, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            # creates a Bucketizer to get corresponding bin of each value
-            bucketizer = Bucketizer(
-                splits=bins, inputCol=colname, outputCol=bucket_name, handleInvalid="skip"
-            )
+        # TODO(SPARK-49202): register this function in scala side
+        @F.udf(returnType=DoubleType())
+        def binary_search_for_buckets(value):
+            # Given bins = [1.0, 2.0, 3.0, 4.0]
+            # the intervals are:
+            #   [1.0, 2.0) -> 0.0
+            #   [2.0, 3.0) -> 1.0
+            #   [3.0, 4.0] -> 2.0 (the last bucket is a closed interval)
+            if value < bins[0] or value > bins[-1]:
+                raise ValueError(f"value {value} out of the bins bounds: [{bins[0]}, {bins[-1]}]")
 
-            bucket_df = bucketizer.transform(sdf)
-
-            if output_df is None:
-                output_df = bucket_df.select(
-                    F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
-                )
+            if value == bins[-1]:
+                idx = len(bins) - 2
             else:
-                output_df = output_df.union(
-                    bucket_df.select(
-                        F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
-                    )
-                )
+                idx = bisect.bisect(bins, value) - 1
+            return float(idx)
+
+        output_df = (
+            sdf.select(
+                F.posexplode(
+                    F.array([F.col(colname).cast("double") for colname in colnames])
+                ).alias("__group_id", "__value")
+            )
+            # to match handleInvalid="skip" in Bucketizer
+            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN()).select(
+                F.col("__group_id"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
+            )
+        )
 
         # 2. Calculate the count based on each group and bucket.
         #     +----------+-------+------+
@@ -273,158 +285,76 @@ class HistogramPlotBase(NumericPlotBase):
 
 class BoxPlotBase:
     @staticmethod
-    def compute_multicol_stats(data, colnames, whis, precision):
-        # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-        scol = []
-        for colname in colnames:
-            scol.append(
-                F.percentile_approx(
-                    "`%s`" % colname, [0.25, 0.50, 0.75], int(1.0 / precision)
-                ).alias("{}_percentiles%".format(colname))
-            )
-            scol.append(F.mean("`%s`" % colname).alias("{}_mean".format(colname)))
+    def compute_box(sdf, colnames, whis, precision, showfliers):
+        assert len(colnames) > 0
+        formatted_colnames = ["`{}`".format(colname) for colname in colnames]
 
-        #      a_percentiles  a_mean    b_percentiles  b_mean
-        # 0  [3.0, 3.2, 3.2]    3.18  [5.1, 5.9, 6.4]    5.86
-        pdf = data._internal.resolved_copy.spark_frame.select(*scol).toPandas()
-
-        i = 0
-        multicol_stats = {}
-        for colname in colnames:
-            q1, med, q3 = pdf.iloc[0, i]
+        stats_scols = []
+        for i, colname in enumerate(formatted_colnames):
+            percentiles = F.percentile_approx(colname, [0.25, 0.50, 0.75], int(1.0 / precision))
+            q1 = F.get(percentiles, 0)
+            med = F.get(percentiles, 1)
+            q3 = F.get(percentiles, 2)
             iqr = q3 - q1
-            lfence = q1 - whis * iqr
-            ufence = q3 + whis * iqr
-            i += 1
+            lfence = q1 - F.lit(whis) * iqr
+            ufence = q3 + F.lit(whis) * iqr
 
-            mean = pdf.iloc[0, i]
-            i += 1
-
-            multicol_stats[colname] = {
-                "mean": mean,
-                "med": med,
-                "q1": q1,
-                "q3": q3,
-                "lfence": lfence,
-                "ufence": ufence,
-            }
-
-        return multicol_stats
-
-    @staticmethod
-    def compute_stats(data, colname, whis, precision):
-        # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-        pdf = data._psdf._internal.resolved_copy.spark_frame.agg(
-            *[
-                F.expr(
-                    "approx_percentile(`{}`, {}, {})".format(colname, q, int(1.0 / precision))
-                ).alias("{}_{}%".format(colname, int(q * 100)))
-                for q in [0.25, 0.50, 0.75]
-            ],
-            F.mean("`%s`" % colname).alias("{}_mean".format(colname)),
-        ).toPandas()
-
-        # Computes IQR and Tukey's fences
-        iqr = "{}_iqr".format(colname)
-        p75 = "{}_75%".format(colname)
-        p25 = "{}_25%".format(colname)
-        pdf.loc[:, iqr] = pdf.loc[:, p75] - pdf.loc[:, p25]
-        pdf.loc[:, "{}_lfence".format(colname)] = pdf.loc[:, p25] - whis * pdf.loc[:, iqr]
-        pdf.loc[:, "{}_ufence".format(colname)] = pdf.loc[:, p75] + whis * pdf.loc[:, iqr]
-
-        qnames = ["25%", "50%", "75%", "mean", "lfence", "ufence"]
-        col_summ = pdf[["{}_{}".format(colname, q) for q in qnames]]
-        col_summ.columns = qnames
-        lfence, ufence = col_summ["lfence"], col_summ["ufence"]
-
-        stats = {
-            "mean": col_summ["mean"].values[0],
-            "med": col_summ["50%"].values[0],
-            "q1": col_summ["25%"].values[0],
-            "q3": col_summ["75%"].values[0],
-        }
-
-        return stats, (lfence.values[0], ufence.values[0])
-
-    @staticmethod
-    def multicol_outliers(data, multicol_stats):
-        scols = {}
-        for colname, stats in multicol_stats.items():
-            scols["__{}_outlier".format(colname)] = ~F.col("`%s`" % colname).between(
-                stats["lfence"], stats["ufence"]
-            )
-        return data._internal.resolved_copy.spark_frame.withColumns(scols)
-
-    @staticmethod
-    def outliers(data, colname, lfence, ufence):
-        # Builds expression to identify outliers
-        expression = F.col("`%s`" % colname).between(lfence, ufence)
-        # Creates a column to flag rows as outliers or not
-        return data._psdf._internal.resolved_copy.spark_frame.withColumn(
-            "__{}_outlier".format(colname), ~expression
-        )
-
-    @staticmethod
-    def calc_multicol_whiskers(colnames, multicol_outliers):
-        # Computes min and max values of non-outliers - the whiskers
-        scols = []
-        for colname in colnames:
-            outlier_colname = "__{}_outlier".format(colname)
-            scols.append(
-                F.min(F.when(~F.col(outlier_colname), F.col(colname)).otherwise(F.lit(None))).alias(
-                    "__{}_min".format(colname)
-                )
-            )
-            scols.append(
-                F.max(F.when(~F.col(outlier_colname), F.col(colname)).otherwise(F.lit(None))).alias(
-                    "__{}_max".format(colname)
-                )
+            stats_scols.append(
+                F.struct(
+                    F.mean(colname).alias("mean"),
+                    med.alias("med"),
+                    q1.alias("q1"),
+                    q3.alias("q3"),
+                    lfence.alias("lfence"),
+                    ufence.alias("ufence"),
+                ).alias(f"_box_plot_stats_{i}")
             )
 
-        pdf = multicol_outliers.select(*scols).toPandas()
+        sdf_stats = sdf.select(*stats_scols)
 
-        i = 0
-        whiskers = {}
-        for colname in colnames:
-            min = pdf.iloc[0, i]
-            i += 1
-            max = pdf.iloc[0, i]
-            i += 1
-            whiskers[colname] = {
-                "min": min,
-                "max": max,
-            }
+        result_scols = []
+        for i, colname in enumerate(formatted_colnames):
+            value = F.col(colname)
 
-        return whiskers
+            lfence = F.col(f"_box_plot_stats_{i}.lfence")
+            ufence = F.col(f"_box_plot_stats_{i}.ufence")
+            mean = F.col(f"_box_plot_stats_{i}.mean")
+            med = F.col(f"_box_plot_stats_{i}.med")
+            q1 = F.col(f"_box_plot_stats_{i}.q1")
+            q3 = F.col(f"_box_plot_stats_{i}.q3")
 
-    @staticmethod
-    def calc_whiskers(colname, outliers):
-        # Computes min and max values of non-outliers - the whiskers
-        minmax = (
-            outliers.filter("not `__{}_outlier`".format(colname))
-            .agg(F.min("`%s`" % colname).alias("min"), F.max(colname).alias("max"))
-            .toPandas()
-        )
-        return minmax.iloc[0][["min", "max"]].values
+            outlier = ~value.between(lfence, ufence)
 
-    @staticmethod
-    def get_fliers(colname, outliers, min_val):
-        # Filters only the outliers, should "showfliers" be True
-        fliers_df = outliers.filter("`__{}_outlier`".format(colname))
+            # Computes min and max values of non-outliers - the whiskers
+            upper_whisker = F.max(F.when(~outlier, value).otherwise(F.lit(None)))
+            lower_whisker = F.min(F.when(~outlier, value).otherwise(F.lit(None)))
 
-        # If it shows fliers, take the top 1k with highest absolute values
-        # Here we normalize the values by subtracting the minimum value from
-        # each, and use absolute values.
-        order_col = F.abs(F.col("`{}`".format(colname)) - min_val.item())
-        fliers = (
-            fliers_df.select(F.col("`{}`".format(colname)))
-            .orderBy(order_col)
-            .limit(1001)
-            .toPandas()[colname]
-            .values
-        )
+            # If it shows fliers, take the top 1k with the highest absolute values
+            # Here we normalize the values by subtracting the median.
+            if showfliers:
+                pair = F.when(
+                    outlier,
+                    F.struct(F.abs(value - med), value.alias("val")),
+                ).otherwise(F.lit(None))
+                topk = SF.collect_top_k(pair, 1001, False)
+                fliers = F.when(F.size(topk) > 0, topk["val"]).otherwise(F.lit(None))
+            else:
+                fliers = F.lit(None)
 
-        return fliers
+            result_scols.append(
+                F.struct(
+                    F.first(mean).alias("mean"),
+                    F.first(med).alias("med"),
+                    F.first(q1).alias("q1"),
+                    F.first(q3).alias("q3"),
+                    upper_whisker.alias("upper_whisker"),
+                    lower_whisker.alias("lower_whisker"),
+                    fliers.alias("fliers"),
+                ).alias(f"_box_plot_results_{i}")
+            )
+
+        sdf_result = sdf.join(sdf_stats.hint("broadcast")).select(*result_scols)
+        return sdf_result.first()
 
 
 class KdePlotBase(NumericPlotBase):
@@ -463,23 +393,49 @@ class KdePlotBase(NumericPlotBase):
         return ind
 
     @staticmethod
+    def compute_kde_col(input_col, bw_method=None, ind=None):
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
+
+        assert ind is not None, "'ind' must be a scalar array."
+
+        bandwidth = float(bw_method)
+        points = [float(i) for i in ind]
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
+
+        def norm_pdf(
+            mean: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
+
+        return F.array(
+            [
+                F.avg(
+                    norm_pdf(
+                        input_col.cast("double"),
+                        F.lit(bandwidth),
+                        F.lit(log_std_plus_half_log2_pi),
+                        F.lit(point),
+                    )
+                )
+                for point in points
+            ]
+        )
+
+    @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
-        from pyspark.mllib.stat import KernelDensity
-
-        # 'sdf' is a Spark DataFrame that selects one column.
-
-        # Using RDD is slow so we might have to change it to Dataset based implementation
-        # once Spark has that implementation.
-        sample = sdf.rdd.map(lambda x: float(x[0]))
-        kd = KernelDensity()
-        kd.setSample(sample)
-
-        assert isinstance(bw_method, (int, float)), "'bw_method' must be set as a scalar number."
-
-        if bw_method is not None:
-            # Match the bandwidth with Spark.
-            kd.setBandwidth(float(bw_method))
-        return kd.estimate(list(map(float, ind)))
+        input_col = F.col(sdf.columns[0])
+        kde_col = KdePlotBase.compute_kde_col(input_col, bw_method, ind).alias("kde")
+        row = sdf.select(kde_col).first()
+        return row[0]
 
 
 class PandasOnSparkPlotAccessor(PandasObject):
@@ -572,11 +528,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
-        kind = {"density": "kde"}.get(kind, kind)
-
-        if is_remote() and kind in ["hist", "kde"]:
-            return unsupported_function(class_name="pd.DataFrame", method_name=kind)()
-
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
@@ -953,9 +904,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.from_pandas(df)
             >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
         """
-        if is_remote():
-            return unsupported_function(class_name="pd.DataFrame", method_name="hist")()
-
         return self(kind="hist", bins=bins, **kwds)
 
     def kde(self, bw_method=None, ind=None, **kwargs):
@@ -1031,9 +979,6 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ... })
             >>> df.plot.kde(ind=[1, 2, 3, 4, 5, 6], bw_method=0.3)  # doctest: +SKIP
         """
-        if is_remote():
-            return unsupported_function(class_name="pd.DataFrame", method_name="kde")()
-
         return self(kind="kde", bw_method=bw_method, ind=ind, **kwargs)
 
     density = kde

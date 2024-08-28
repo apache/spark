@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
+  import testImplicits.toRichColumn
 
   private val EnsureRequirements = new EnsureRequirements()
 

@@ -122,6 +122,81 @@ struct<CASE WHEN (1 > 2) THEN (1 / 0) ELSE 1 END:double>
 
 
 -- !query
+SELECT nullifzero(0),
+  nullifzero(cast(0 as tinyint)),
+  nullifzero(cast(0 as bigint)),
+  nullifzero('0'),
+  nullifzero(0.0),
+  nullifzero(1),
+  nullifzero(null)
+-- !query schema
+struct<nullifzero(0):int,nullifzero(CAST(0 AS TINYINT)):tinyint,nullifzero(CAST(0 AS BIGINT)):bigint,nullifzero(0):string,nullifzero(0.0):decimal(1,1),nullifzero(1):int,nullifzero(NULL):void>
+-- !query output
+NULL	NULL	NULL	NULL	NULL	1	NULL
+
+
+-- !query
+SELECT nullifzero('abc')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'abc'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "nullifzero('abc')"
+  } ]
+}
+
+
+-- !query
+SELECT zeroifnull(null),
+  zeroifnull(1),
+  zeroifnull(cast(1 as tinyint)),
+  zeroifnull(cast(1 as bigint))
+-- !query schema
+struct<zeroifnull(NULL):int,zeroifnull(1):int,zeroifnull(CAST(1 AS TINYINT)):int,zeroifnull(CAST(1 AS BIGINT)):bigint>
+-- !query output
+0	1	1	1
+
+
+-- !query
+SELECT zeroifnull('abc')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'abc'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "zeroifnull('abc')"
+  } ]
+}
+
+
+-- !query
 DROP TABLE conditional_t
 -- !query schema
 struct<>

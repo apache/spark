@@ -1110,13 +1110,6 @@ package object config {
     .stringConf
     .createOptional
 
-  // To limit how many applications are shown in the History Server summary ui
-  private[spark] val HISTORY_UI_MAX_APPS =
-    ConfigBuilder("spark.history.ui.maxApplications")
-      .version("2.0.1")
-      .intConf
-      .createWithDefault(Integer.MAX_VALUE)
-
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .version("2.1.0")
     .booleanConf
@@ -1472,6 +1465,14 @@ package object config {
         s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_FILE_MERGE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.merge.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file input stream, in KiB unless " +
+        "otherwise specified. These buffers use off-heap buffers and are related to the number " +
+        "of files in the shuffle file. Too large buffers should be avoided.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_FILE_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")

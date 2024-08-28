@@ -1319,4 +1319,38 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(2) :: Nil
     )
   }
+
+  test("LCA internal error should have lower priority") {
+    // in this query, the 'order by Freq DESC' error should be the top error surfaced to users
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |WITH group_counts AS (
+            |  SELECT id, count(*) as Freq, CASE WHEN Freq <= 10 THEN "1" ELSE "2" END AS Group
+            |  FROM values (123) as data(id)
+            |  GROUP BY id
+            |)
+            |SELECT Group, count(*) * 100.0 / (select count(*) from group_counts) AS Percentage
+            |FROM group_counts
+            |Group BY Group
+            |ORDER BY Freq DESC;
+            |""".stripMargin
+        )
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map(
+        "objectName" -> "`Freq`",
+        "proposal" -> "`Percentage`, `group_counts`.`Group`"
+      ),
+      context = ExpectedContext(
+        fragment = "Freq",
+        start = 280,
+        stop = 283)
+    )
+
+    // the states are cleared - a subsequent correct query should succeed
+    sql("select 1 as a, a").queryExecution.assertAnalyzed()
+  }
 }

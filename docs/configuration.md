@@ -1030,6 +1030,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.file.merge.buffer</code></td>
+  <td>32k</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file input stream, in KiB unless otherwise
+    specified. These buffers use off-heap buffers and are related to the number of files in
+    the shuffle file. Too large buffers should be avoided.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.unsafe.file.output.buffer</code></td>
   <td>32k</td>
   <td>
@@ -1666,7 +1676,7 @@ Apart from these, the following properties are also available, and may be useful
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
-    For now, only YARN mode supports this configuration
+    For now, only YARN and K8s cluster manager supports this configuration
   </td>
   <td>3.0.0</td>
 </tr>
@@ -3566,7 +3576,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### SparkR
+### SparkR (deprecated)
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

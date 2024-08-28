@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -61,23 +61,49 @@ trait BroadcastExchangeLike extends Exchange {
    */
   def relationFuture: Future[broadcast.Broadcast[Any]]
 
-  /**
-   * The asynchronous job that materializes the broadcast. It's used for registering callbacks on
-   * `relationFuture`. Note that calling this method may not start the execution of broadcast job.
-   * It also does the preparations work, such as waiting for the subqueries.
-   */
-  final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
-    materializationStarted.set(true)
-    completionFuture
+  @transient
+  private lazy val promise = Promise[Unit]()
+
+  @transient
+  private lazy val scalaFuture: scala.concurrent.Future[Unit] = promise.future
+
+  @transient
+  private lazy val triggerFuture: Future[Any] = {
+    SQLExecution.withThreadLocalCaptured(session, BroadcastExchangeExec.executionContext) {
+      try {
+        // Trigger broadcast preparation which can involve expensive operations like waiting on
+        // subqueries and file listing.
+        executeQuery(null)
+        promise.trySuccess(())
+      } catch {
+        case e: Throwable =>
+          promise.tryFailure(e)
+          throw e
+      }
+    }
   }
 
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
 
   /**
+   * The asynchronous job that materializes the broadcast. It's used for registering callbacks on
+   * `relationFuture`. Note that calling this method may not start the execution of broadcast job.
+   * It also does the preparations work, such as waiting for the subqueries.
+   */
+  final def submitBroadcastJob(): scala.concurrent.Future[broadcast.Broadcast[Any]] = {
+    triggerFuture
+    scalaFuture.flatMap { _ =>
+      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+        completionFuture
+      }
+    }(BroadcastExchangeExec.executionContext)
+  }
+
+  /**
    * Cancels broadcast job with an optional reason.
    */
   final def cancelBroadcastJob(reason: Option[String]): Unit = {
-    if (isMaterializationStarted() && !this.relationFuture.isDone) {
+    if (!this.relationFuture.isDone) {
       reason match {
         case Some(r) => sparkContext.cancelJobsWithTag(this.jobTag, r)
         case None => sparkContext.cancelJobsWithTag(this.jobTag)

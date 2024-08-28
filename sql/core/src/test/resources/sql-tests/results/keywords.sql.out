@@ -99,6 +99,7 @@ DIRECTORY	false
 DISTINCT	false
 DISTRIBUTE	false
 DIV	false
+DO	false
 DOUBLE	false
 DROP	false
 ELSE	false
@@ -351,6 +352,7 @@ WEEK	false
 WEEKS	false
 WHEN	false
 WHERE	false
+WHILE	false
 WINDOW	false
 WITH	false
 WITHIN	false

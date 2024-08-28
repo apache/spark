@@ -31,7 +31,7 @@
                   "unresolvedExtractValue": {
                     "child": {
                       "unresolvedNamedLambdaVariable": {
-                        "nameParts": ["y"]
+                        "nameParts": ["y_2"]
                       }
                     },
                     "extraction": {
@@ -44,7 +44,7 @@
                   "unresolvedExtractValue": {
                     "child": {
                       "unresolvedNamedLambdaVariable": {
-                        "nameParts": ["z"]
+                        "nameParts": ["z_3"]
                       }
                     },
                     "extraction": {
@@ -57,11 +57,11 @@
               }
             },
             "arguments": [{
-              "nameParts": ["x"]
+              "nameParts": ["x_1"]
             }, {
-              "nameParts": ["y"]
+              "nameParts": ["y_2"]
             }, {
-              "nameParts": ["z"]
+              "nameParts": ["z_3"]
             }]
           }
         }]

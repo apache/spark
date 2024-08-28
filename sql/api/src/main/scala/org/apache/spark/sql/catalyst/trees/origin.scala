@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.trees
 
+import java.util.regex.Pattern
+
 import org.apache.spark.QueryContext
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -83,6 +86,49 @@ object CurrentOrigin {
     set(o)
     val ret = try f finally { set(previous) }
     ret
+  }
+
+  /**
+   * This helper function captures the Spark API and its call site in the user code from the current
+   * stacktrace.
+   *
+   * As adding `withOrigin` explicitly to all Spark API definition would be a huge change,
+   * `withOrigin` is used only at certain places where all API implementation surely pass through
+   * and the current stacktrace is filtered to the point where first Spark API code is invoked from
+   * the user code.
+   *
+   * As there might be multiple nested `withOrigin` calls (e.g. any Spark API implementations can
+   * invoke other APIs) only the first `withOrigin` is captured because that is closer to the user
+   * code.
+   *
+   * @param f The function that can use the origin.
+   * @return The result of `f`.
+   */
+  private[sql] def withOrigin[T](f: => T): T = {
+    if (CurrentOrigin.get.stackTrace.isDefined) {
+      f
+    } else {
+      val st = Thread.currentThread().getStackTrace
+      var i = 0
+      // Find the beginning of Spark code traces
+      while (i < st.length && !sparkCode(st(i))) i += 1
+      // Stop at the end of the first Spark code traces
+      while (i < st.length && sparkCode(st(i))) i += 1
+      val origin = Origin(stackTrace = Some(st.slice(
+        from = i - 1,
+        until = i + SqlApiConf.get.stackTracesInDataFrameContext)),
+        pysparkErrorContext = PySparkCurrentOrigin.get())
+      CurrentOrigin.withOrigin(origin)(f)
+    }
+  }
+
+  private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
+    "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
+    "(?:|\\..*|\\$.*))" +
+    "|(scala\\.collection\\..*)")
+
+  private def sparkCode(ste: StackTraceElement): Boolean = {
+    sparkCodePattern.matcher(ste.getClassName).matches()
   }
 }
 

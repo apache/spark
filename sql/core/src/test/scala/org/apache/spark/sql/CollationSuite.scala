@@ -34,7 +34,8 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
-import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -157,6 +158,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable bucketing on collated string column") {
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(bucketColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
@@ -579,6 +581,42 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-49138: ArrayAppend and CreateMap coercion testing") {
+    val df_array_append = sql(s"SELECT array_append(array('a', 'b'), 'c' COLLATE UNICODE)")
+    // array_append expression
+    checkAnswer(df_array_append, Seq(Row(Seq("a", "b", "c"))))
+    assert(df_array_append.schema.head.dataType == ArrayType(StringType("UNICODE"), true))
+
+    // make sure we fail this query even when collations are in
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c')")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map("functionName" -> "`map`", "expectedNum" -> "2n (n > 0)",
+        "actualNum" -> "3", "docroot" -> "https://spark.apache.org/docs/latest")
+    )
+
+    // make sure we fail this query even when collations are in
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c' COLLATE UNICODE, 'c')")
+      },
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
+      parameters = Map(
+        "explicitTypes" ->
+          s"`string collate UTF8_LCASE`, `string collate UNICODE`"
+      )
+    )
+
+    // map creation keys respects proper collation
+    val df_create_map = sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c', 'c')")
+    checkAnswer(df_create_map, Seq(Row(Map("a" -> "b", "c" -> "c"))))
+    assert(df_create_map.schema.head.dataType ==
+      MapType(StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), false))
+  }
+
   test("SPARK-47692: Parameter marker with EXECUTE IMMEDIATE implicit casting") {
     sql(s"DECLARE stmtStr1 = 'SELECT collation(:var1 || :var2)';")
     sql(s"DECLARE stmtStr2 = 'SELECT collation(:var1 || (\\\'a\\\' COLLATE UNICODE))';")
@@ -722,6 +760,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable partition on collated string column") {
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(partitionColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
@@ -986,6 +1025,123 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
            |select $tableLeft.s.fld from $tableLeft
            |join $tableRight on $tableLeft.s = $tableRight.s
            |""".stripMargin), Seq(Row("aaa")))
+    }
+  }
+
+  for (collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "")) {
+    for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      val collationSetup = if (collation.isEmpty) "" else " COLLATE " + collation
+      val supportsBinaryEquality = collation.isEmpty || collation == "UNICODE" ||
+        CollationFactory.fetchCollation(collation).supportsBinaryEquality
+
+      test(s"Group by on map containing$collationSetup strings ($codeGen)") {
+        val tableName = "t"
+
+        withTable(tableName) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $tableName" +
+              s" (m map<string$collationSetup, string$collationSetup>)")
+            sql(s"insert into $tableName values (map('aaa', 'AAA'))")
+            sql(s"insert into $tableName values (map('AAA', 'aaa'))")
+            sql(s"insert into $tableName values (map('aaa', 'AAA'))")
+            sql(s"insert into $tableName values (map('bbb', 'BBB'))")
+            sql(s"insert into $tableName values (map('aAA', 'AaA'))")
+            sql(s"insert into $tableName values (map('BBb', 'bBB'))")
+            sql(s"insert into $tableName values (map('aaaa', 'AAA'))")
+
+            val df = sql(s"select count(*) from $tableName group by m")
+            if (supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(2), Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4), Row(2), Row(1)))
+            }
+          }
+        }
+      }
+
+      test(s"Group by on map containing structs with $collationSetup strings ($codeGen)") {
+        val tableName = "t"
+
+        withTable(tableName) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $tableName" +
+              s" (m map<struct<fld1: string$collationSetup, fld2: string$collationSetup>, " +
+              s"struct<fld1: string$collationSetup, fld2: string$collationSetup>>)")
+            sql(s"insert into $tableName values " +
+              s"(map(struct('aaa', 'bbb'), struct('ccc', 'ddd')))")
+            sql(s"insert into $tableName values " +
+              s"(map(struct('Aaa', 'BBB'), struct('cCC', 'dDd')))")
+            sql(s"insert into $tableName values " +
+              s"(map(struct('AAA', 'BBb'), struct('cCc', 'DDD')))")
+            sql(s"insert into $tableName values " +
+              s"(map(struct('aaa', 'bbB'), struct('CCC', 'DDD')))")
+
+            val df = sql(s"select count(*) from $tableName group by m")
+            if (supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4)))
+            }
+          }
+        }
+      }
+
+      test(s"Group by on map containing arrays with$collationSetup strings ($codeGen)") {
+        val tableName = "t"
+
+        withTable(tableName) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $tableName " +
+              s"(m map<array<string$collationSetup>, array<string$collationSetup>>)")
+            sql(s"insert into $tableName values (map(array('aaa', 'bbb'), array('ccc', 'ddd')))")
+            sql(s"insert into $tableName values (map(array('AAA', 'BbB'), array('Ccc', 'ddD')))")
+            sql(s"insert into $tableName values (map(array('AAA', 'BbB', 'Ccc'), array('ddD')))")
+            sql(s"insert into $tableName values (map(array('aAa', 'Bbb'), array('CCC', 'DDD')))")
+            sql(s"insert into $tableName values (map(array('AAa', 'BBb'), array('cCC', 'DDd')))")
+            sql(s"insert into $tableName values (map(array('AAA', 'BBB', 'CCC'), array('DDD')))")
+
+            val df = sql(s"select count(*) from $tableName group by m")
+            if (supportsBinaryEquality) {
+              checkAnswer(df, Seq(Row(1), Row(1), Row(1), Row(1), Row(1), Row(1)))
+            } else {
+              checkAnswer(df, Seq(Row(4), Row(2)))
+            }
+          }
+        }
+      }
+
+      test(s"Check that order by on map with$collationSetup strings fails ($codeGen)") {
+        val tableName = "t"
+        withTable(tableName) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+            sql(s"create table $tableName" +
+              s" (m map<string$collationSetup, string$collationSetup>, " +
+              s"  c integer)")
+            sql(s"insert into $tableName values (map('aaa', 'AAA'), 1)")
+            sql(s"insert into $tableName values (map('BBb', 'bBB'), 2)")
+
+            // `collationSetupError` is created because "COLLATE UTF8_BINARY" is omitted in data
+            // type in checkError
+            val collationSetupError = if (collation != "UTF8_BINARY") collationSetup else ""
+            val query = s"select c from $tableName order by m"
+            val ctx = "m"
+            checkError(
+              exception = intercept[AnalysisException](sql(query)),
+              errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+              parameters = Map(
+                "functionName" -> "`sortorder`",
+                "dataType" -> s"\"MAP<STRING$collationSetupError, STRING$collationSetupError>\"",
+                "sqlExpr" -> "\"m ASC NULLS FIRST\""
+              ),
+              context = ExpectedContext(
+                fragment = ctx,
+                start = query.length - ctx.length,
+                stop = query.length - 1
+              )
+            )
+          }
+        }
+      }
     }
   }
 
@@ -1482,14 +1638,5 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
-
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SHOW COLLATIONS")
-        },
-        errorClass = "UNSUPPORTED_FEATURE.COLLATION"
-      )
-    }
   }
 }

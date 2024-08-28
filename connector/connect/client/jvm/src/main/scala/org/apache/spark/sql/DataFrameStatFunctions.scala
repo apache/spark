@@ -34,6 +34,7 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  * @since 3.4.0
  */
 final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, root: Relation) {
+  import sparkSession.RichColumn
 
   /**
    * Calculates the approximate quantiles of a numerical column of a DataFrame.
