@@ -492,7 +492,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'b'", "hint" -> ""))
+      parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
   }
 
   test("limit") {
@@ -1376,13 +1376,13 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'BAR'", "hint" -> ""))
+      parameters = Map("error" -> "'BAR'", "hint" -> ": missing ')'"))
 
     val sql2 = "SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))"
     checkError(
       exception = parseException(sql2),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'INTO'", "hint" -> ""))
+      parameters = Map("error" -> "'IN'", "hint" -> ""))
   }
 
   test("relation in v2 catalog") {

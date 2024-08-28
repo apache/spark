@@ -5644,23 +5644,14 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   override def visitOperatorPipeStatement(ctx: OperatorPipeStatementContext): LogicalPlan = {
-    Option(ctx.query).map {
-      // If 'ctx.query' is populated, this is the 'query' base case of the recursive
-      // 'operatorPipeStatement' grammar rule.
-      visitQuery
-    }.getOrElse {
-      // Otherwise, 'ctx.operatorPipeStatement' should be populated along with exactly one of the
-      // SQL clauses in the supported list.
-      if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
-        operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
-      }
-      val left: LogicalPlan = visitOperatorPipeStatement(ctx.operatorPipeStatement())
-      visitOperatorPipeRightSide(ctx.operatorPipeRightSide(), left)
-    }
+    visitOperatorPipeRightSide(ctx.operatorPipeRightSide(), plan(ctx.left))
   }
 
   private def visitOperatorPipeRightSide(
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+    if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
+      operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
+    }
     Option(ctx.selectClause).map { c =>
       withSelectQuerySpecification(
         ctx = ctx,

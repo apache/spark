@@ -276,7 +276,6 @@ statement
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
-    | operatorPipeStatement                                            #operatorPipeSequence
     ;
 
 setResetStatement
@@ -590,6 +589,7 @@ queryTerm
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
+    | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -1446,11 +1446,6 @@ comment
 version
     : INTEGER_VALUE
     | stringLit
-    ;
-
-operatorPipeStatement
-    : operatorPipeStatement OPERATOR_PIPE operatorPipeRightSide
-    | query
     ;
 
 operatorPipeRightSide

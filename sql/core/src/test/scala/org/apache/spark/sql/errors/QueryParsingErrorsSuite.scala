@@ -490,19 +490,19 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("select * from a left join_ b on a.id = b.id"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'join_'", "hint" -> ""))
+      parameters = Map("error" -> "'join_'", "hint" -> ": missing 'JOIN'"))
 
     checkError(
       exception = parseException("select * from test where test.t is like 'test'"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'like'", "hint" -> ""))
+      parameters = Map("error" -> "'is'", "hint" -> ""))
 
     checkError(
       exception = parseException("SELECT * FROM test WHERE x NOT NULL"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'NULL'", "hint" -> ""))
+      parameters = Map("error" -> "'NOT'", "hint" -> ""))
   }
 
   test("INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE: show table partition key must set value") {
@@ -680,7 +680,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT<INT>)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'>'", "hint" -> ""))
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
     // Create column of struct type without specifying field type in lowercase
     checkError(
       exception = parseException("CREATE TABLE tbl_120691 (col1 struct)"),
@@ -707,7 +707,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT CAST(map('1',2) AS MAP<STRING>)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'>'", "hint" -> ""))
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
     // Create column of map type without specifying key/value types in lowercase
     checkError(
       exception = parseException("SELECT CAST(map('1',2) AS map)"),
