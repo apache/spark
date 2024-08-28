@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.StructType
  *     .getOrCreate()
  * }}}
  */
-abstract class SparkSession[DS[_] <: Dataset[_, DS]] extends Serializable with Closeable {
+abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with Closeable {
   /**
    * The version of Spark on which this application is running.
    *
