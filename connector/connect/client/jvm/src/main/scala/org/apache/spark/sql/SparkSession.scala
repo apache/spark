@@ -836,7 +836,7 @@ object SparkSession extends Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
-  private[sql] val initOptions = sys.props.filter { p =>
+  private[sql] val sparkOptions = sys.props.filter { p =>
     p._1.startsWith("spark.") && p._2.nonEmpty
   }.toMap
 
@@ -876,7 +876,7 @@ object SparkSession extends Logging {
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
     synchronized {
-      val remoteString = initOptions
+      val remoteString = sparkOptions
         .get("spark.remote")
         .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
         .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
@@ -887,7 +887,7 @@ object SparkSession extends Logging {
           val args = Seq(
             Paths.get(sparkHome, "sbin", "start-connect-server.sh").toString,
             "--master",
-            remoteString.get) ++ initOptions
+            remoteString.get) ++ sparkOptions
             .filter(p => !p._1.startsWith("spark.remote"))
             .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
           val pb = new ProcessBuilder(args: _*)
@@ -1059,7 +1059,7 @@ object SparkSession extends Logging {
       // Only attempts to set Spark SQL configurations.
       // If the configurations are static, it might throw an exception so
       // simply ignore it for now.
-      initOptions
+      sparkOptions
         .filter { case (k, _) =>
           k.startsWith("spark.sql.")
         }
