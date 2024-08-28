@@ -446,8 +446,19 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
+    val progressTitle = s"$completed / $total" + {
+      if (started > 0) s" ($started running)" else ""
+    } + {
+      if (failed > 0) s" ($failed failed)" else ""
+    } + {
+      if (skipped > 0) s" ($skipped skipped)" else ""
+    } +
+      reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) => s" ($count killed: $reason)"
+      }.mkString
+
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
+      <span style="text-align:center; position:absolute; width:100%;" title={progressTitle}>
         {completed}/{total}
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
