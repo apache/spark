@@ -3872,27 +3872,11 @@ class ReadOnlyCatalog extends InMemoryCatalog {
 class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
   override def stageCreate(
       ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
-  }
-
-  override def stageCreate(
-      ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     super.createTable(ident, columns, partitions, properties)
     null
-  }
-
-  override def stageReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
   }
 
   override def stageReplace(
@@ -3903,14 +3887,6 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
     super.dropTable(ident)
     super.createTable(ident, columns, partitions, properties)
     null
-  }
-
-  override def stageCreateOrReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
   }
 
   override def stageCreateOrReplace(
