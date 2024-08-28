@@ -5667,8 +5667,10 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, ctx.operator.getType)
+    }.getOrElse(Option(ctx.sample).map { c =>
+      withSample(c, left)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-    }.get)))
+    }.get))))
   }
 }

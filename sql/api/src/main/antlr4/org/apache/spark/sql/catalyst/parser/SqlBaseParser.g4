@@ -1457,9 +1457,9 @@ operatorPipeRightSide
           operator=INTERSECT setQuantifier? right=queryTerm
       | {!legacy_setops_precedence_enabled}?
           operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
+      | sample
       | queryOrganization
     ;
-
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:

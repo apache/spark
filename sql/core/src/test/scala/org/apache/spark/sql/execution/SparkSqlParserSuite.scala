@@ -901,6 +901,10 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("SELECT 1 AS X |> MINUS ALL SELECT 1")
       parser.parsePlan("SELECT 1 AS X |> MINUS DISTINCT SELECT 1")
       parser.parsePlan("SELECT 1 AS X |> UNION ALL (SELECT 1 AS Y |> LIMIT 1)")
+      // Sampling operations
+      parser.parsePlan("SELECT 1 AS X |> LIMIT 1 |> TABLESAMPLE (50 PERCENT)")
+      parser.parsePlan("SELECT 1 AS X |> TABLESAMPLE (5 ROWS) |> LIMIT 1")
+      parser.parsePlan("SELECT 1 AS X |> LIMIT 1 |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
     }
   }
 }
