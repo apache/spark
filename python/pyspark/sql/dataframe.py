@@ -6326,9 +6326,9 @@ class DataFrame:
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         """
-        Returns a QueryExecution object after the query was executed.
+        Returns a ExecutionInfo object after the query was executed.
 
-        The queryExecution method allows to introspect information about the actual
+        The executionInfo method allows to introspect information about the actual
         query execution after the successful execution. Accessing this member before
         the query execution will return None.
 
@@ -6339,7 +6339,7 @@ class DataFrame:
 
         Returns
         -------
-        An instance of QueryExecution or None when the value is not set yet.
+        An instance of ExecutionInfo or None when the value is not set yet.
 
         Notes
         -----

@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
   enable(SparkUnidoc.settings)(spark)
 
   /* Enable unidoc only for the root spark connect client project */
-  enable(SparkConnectClientUnidoc.settings)(connectClient)
+  // enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -431,6 +431,10 @@ object SparkBuild extends PomBuild {
 
   if (profiles.contains("sparkr")) {
     enable(SparkR.settings)(core)
+  }
+
+  if (!profiles.contains("opentelemetry")) {
+    enable(OpenTelemetry.settings)(core)
   }
 
   /**
@@ -1329,6 +1333,13 @@ object Volcano {
   )
 }
 
+object OpenTelemetry {
+  // Exclude all OpenTelemetry files for Compile and Test
+  lazy val settings = Seq(
+    unmanagedSources / excludeFilter := HiddenFileFilter || "OpenTelemetry*.scala"
+  )
+}
+
 trait SharedUnidocSettings {
 
   import BuildCommons._
@@ -1486,8 +1497,8 @@ object SparkConnectClientUnidoc extends SharedUnidocSettings {
   }
 
   lazy val settings = baseSettings ++ Seq(
-    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
-    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
   )
 }
 

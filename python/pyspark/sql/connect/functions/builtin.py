@@ -1223,7 +1223,7 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
@@ -1235,7 +1235,7 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 def approx_percentile(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))

@@ -50,7 +50,7 @@ import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -87,11 +87,6 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
   override def loadTable(ident: Identifier): Table = {
     throw new NoSuchTableException(ident.asMultipartIdentifier)
   }
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = fail()
   override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
@@ -1331,8 +1326,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 cachedConnectRelation
               }.getOrElse(cachedRelation)
             }.orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
-              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
+              val writePrivilegesString =
+                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
+              val table = CatalogV2Util.loadTable(
+                catalog, ident, finalTimeTravelSpec, writePrivilegesString)
+              val loaded = createRelation(
+                catalog, ident, table, u.clearWritePrivileges.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
                 loaded.map { loadedRelation =>
@@ -1600,6 +1599,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
+      case c: CollectMetrics if containsStar(c.metrics) =>
+        c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
@@ -1908,8 +1909,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } catch {
           case e: AnalysisException =>
             AnalysisContext.get.outerPlan.map {
-              // Only Project and Aggregate can host star expressions.
-              case u @ (_: Project | _: Aggregate) =>
+              // Only Project, Aggregate, CollectMetrics can host star expressions.
+              case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
                 Try(s.expand(u.children.head, resolver)) match {
                   case Success(expanded) => expanded.map(wrapOuterReference)
                   case Failure(_) => throw e
@@ -1947,6 +1948,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
       exprs.flatMap(_.collect { case s: Star => s })
 
+    private def isCountStarExpansionAllowed(arguments: Seq[Expression]): Boolean = arguments match {
+      case Seq(UnresolvedStar(None)) => true
+      case Seq(_: ResolvedStar) => true
+      case _ => false
+    }
+
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
@@ -1954,7 +1961,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
           f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
-          f0.arguments == Seq(UnresolvedStar(None)) =>
+          isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
           f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>

@@ -432,6 +432,80 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - lazy iterators can properly get/set keyed state") {
+    class ProcessorWithLazyIterators
+      extends StatefulProcessor[Long, Long, Long] {
+      @transient protected var _myValueState: ValueState[Long] = _
+      var hasSetTimer = false
+
+      override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+        _myValueState = getHandle.getValueState[Long](
+          "myValueState",
+          Encoders.scalaLong
+        )
+      }
+
+      override def handleInputRows(
+          key: Long,
+          inputRows: Iterator[Long],
+          timerValues: TimerValues,
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
+        // Eagerly get/set a state variable
+        _myValueState.get()
+        _myValueState.update(1)
+
+        // Create a timer (but only once) so that we can test timers have their implicit key set
+        if (!hasSetTimer) {
+            getHandle.registerTimer(0)
+            hasSetTimer = true
+        }
+
+        // In both of these cases, we return a lazy iterator that gets/sets state variables.
+        // This is to test that the stateful processor can handle lazy iterators.
+        //
+        // The timer uses a Seq(42L) since when the timer fires, inputRows is empty.
+        if (expiredTimerInfo.isValid()) {
+          Seq(42L).iterator.map { r =>
+            _myValueState.get()
+            _myValueState.update(r)
+            r
+          }
+        } else {
+          inputRows.map { r =>
+            _myValueState.get()
+            _myValueState.update(r)
+            r
+          }
+        }
+      }
+    }
+
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
+    ) {
+      val inputData = MemoryStream[Int]
+      val result = inputData
+        .toDS()
+        .select(timestamp_seconds($"value").as("timestamp"))
+        .withWatermark("timestamp", "10 seconds")
+        .as[Long]
+        .groupByKey(x => x)
+        .transformWithState(
+          new ProcessorWithLazyIterators(), TimeMode.EventTime(), OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(),
+        // Use 12 so that the watermark advances to 2 seconds and causes the timer to fire
+        AddData(inputData, 12),
+        // The 12 is from the input data; the 42 is from the timer
+        CheckAnswer(12, 42)
+      )
+    }
+  }
+
   test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -651,8 +725,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
   }
 
-  // TODO SPARK-48796 after restart state id will not be the same
-  ignore("transformWithState - test deleteIfExists operator") {
+  test("transformWithState - test deleteIfExists operator") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1228,6 +1301,87 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               )
             )
           }
+        )
+      }
+    }
+  }
+
+  test("test query restart with new state variable succeeds") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val clock = new StreamManualClock
+
+        val inputData1 = MemoryStream[String]
+        val result1 = inputData1.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData1, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val result2 = inputData1.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData1, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("test query restart succeeds") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream
         )
       }
     }

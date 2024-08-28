@@ -206,6 +206,7 @@ core = Module(
     sbt_test_goals=[
         "core/test",
     ],
+    build_profile_flags=["-Popentelemetry"],
 )
 
 api = Module(

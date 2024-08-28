@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, CreateArray, CreateNamed
 import org.apache.spark.sql.catalyst.expressions.variant.{ParseJson, ToVariantObject, VariantExpressionEvalUtils}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -35,7 +36,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
   test("parse_json/to_json round-trip") {
     def check(input: String, output: String = null): Unit = {
       val df = Seq(input).toDF("v")
-      val variantDF = df.select(Column(StructsToJson(Map.empty, ParseJson(Column("v").expr))))
+      val variantDF = df.select(to_json(parse_json(col("v"))))
       val expected = if (output != null) output else input
       checkAnswer(variantDF, Seq(Row(expected)))
     }
@@ -65,8 +66,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
   test("from_json/to_json round-trip") {
     def check(input: String, output: String = null): Unit = {
       val df = Seq(input).toDF("v")
-      val variantDF = df.select(Column(StructsToJson(Map.empty,
-        JsonToStructs(VariantType, Map.empty, Column("v").expr))))
+      val variantDF = df.select(to_json(from_json(col("v"), VariantType)))
       val expected = if (output != null) output else input
       checkAnswer(variantDF, Seq(Row(expected)))
     }
@@ -130,22 +130,24 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("to_json with nested variant") {
     val df = Seq(1).toDF("v")
-    val variantDF1 = df.select(
-      Column(StructsToJson(Map.empty, CreateArray(Seq(
-        ParseJson(Literal("{}")), ParseJson(Literal("\"\"")), ParseJson(Literal("[1, 2, 3]")))))))
+    val variantDF1 = df.select(to_json(array(
+      parse_json(lit("{}")),
+      parse_json(lit("\"\"")),
+      parse_json(lit("[1, 2, 3]")))))
     checkAnswer(variantDF1, Seq(Row("[{},\"\",[1,2,3]]")))
 
     val variantDF2 = df.select(
-      Column(StructsToJson(Map.empty, CreateNamedStruct(Seq(
-        Literal("a"), ParseJson(Literal("""{ "x": 1, "y": null, "z": "str" }""")),
-        Literal("b"), ParseJson(Literal("[[]]")),
-        Literal("c"), ParseJson(Literal("false")))))))
+      to_json(named_struct(
+        lit("a"), parse_json(lit("""{ "x": 1, "y": null, "z": "str" }""")),
+        lit("b"), parse_json(lit("[[]]")),
+        lit("c"), parse_json(lit("false"))
+      )))
     checkAnswer(variantDF2, Seq(Row("""{"a":{"x":1,"y":null,"z":"str"},"b":[[]],"c":false}""")))
   }
 
   test("parse_json - Codegen Support") {
     val df = Seq(("1", """{"a": 1}""")).toDF("key", "v").toDF()
-    val variantDF = df.select(Column(ParseJson(Column("v").expr)))
+    val variantDF = df.select(parse_json(col("v")))
     val plan = variantDF.queryExecution.executedPlan
     assert(plan.isInstanceOf[WholeStageCodegenExec])
     val v = VariantBuilder.parseJson("""{"a":1}""")
