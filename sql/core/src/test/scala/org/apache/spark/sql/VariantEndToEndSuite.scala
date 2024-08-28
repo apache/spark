@@ -18,8 +18,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
-import org.apache.spark.sql.catalyst.expressions.variant.{ParseJson, ToVariantObject, VariantExpressionEvalUtils}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.variant.{ToVariantObject, VariantExpressionEvalUtils}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -163,7 +163,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         ))
         val data = Seq(Row(Row(1)), Row(Row(2)), Row(Row(3)), Row(null))
         val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
-        val variantDF = df.select(Column(ToVariantObject(Column("v").expr)))
+        val variantDF = df.select(to_variant_object(col("v")))
         val plan = variantDF.queryExecution.executedPlan
         assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
         val v1 = VariantExpressionEvalUtils.castToVariant(InternalRow(1),

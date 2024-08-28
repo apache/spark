@@ -427,10 +427,6 @@ object Cast extends QueryErrorsBase {
     }
   }
 
-  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
-  // in parameter list, because the returned code will be put in null safe evaluation region.
-  type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
-
   def apply(
       child: Expression,
       dataType: DataType,
@@ -1202,10 +1198,14 @@ case class Cast(
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
+  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
+  // in parameter list, because the returned code will be put in null safe evaluation region.
+  protected[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
+
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
-      ctx: CodegenContext): Cast.CastFunction = to match {
+      ctx: CodegenContext): CastFunction = to match {
 
     case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
@@ -1257,14 +1257,8 @@ case class Cast(
 
   // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
   // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
-  protected[this] def castCode(
-      ctx: CodegenContext,
-      input: ExprValue,
-      inputIsNull: ExprValue,
-      result: ExprValue,
-      resultIsNull: ExprValue,
-      resultType: DataType,
-      cast: Cast.CastFunction): Block = {
+  protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
+    result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
     val castCodeWithTryCatchIfNeeded = if (!isTryCast || canUseLegacyCastForTryCast) {
       s"${cast(input, result, resultIsNull)}"
@@ -1286,7 +1280,7 @@ case class Cast(
     """
   }
 
-  private[this] def castToBinaryCode(from: DataType): Cast.CastFunction = from match {
+  private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
     case _: StringType =>
       (c, evPrim, evNull) =>
         code"$evPrim = $c.getBytes();"
@@ -1297,7 +1291,7 @@ case class Cast(
 
   private[this] def castToDateCode(
       from: DataType,
-      ctx: CodegenContext): Cast.CastFunction = {
+      ctx: CodegenContext): CastFunction = {
     from match {
       case _: StringType =>
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
@@ -1379,7 +1373,7 @@ case class Cast(
   private[this] def castToDecimalCode(
       from: DataType,
       target: DecimalType,
-      ctx: CodegenContext): Cast.CastFunction = {
+      ctx: CodegenContext): CastFunction = {
     val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
     val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
     from match {
@@ -1462,7 +1456,7 @@ case class Cast(
 
   private[this] def castToTimestampCode(
       from: DataType,
-      ctx: CodegenContext): Cast.CastFunction = from match {
+      ctx: CodegenContext): CastFunction = from match {
     case _: StringType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
@@ -1539,7 +1533,7 @@ case class Cast(
 
   private[this] def castToTimestampNTZCode(
       from: DataType,
-      ctx: CodegenContext): Cast.CastFunction = from match {
+      ctx: CodegenContext): CastFunction = from match {
     case _: StringType =>
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
@@ -1570,7 +1564,7 @@ case class Cast(
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, java.time.ZoneOffset.UTC, $zid);"
   }
 
-  private[this] def castToIntervalCode(from: DataType): Cast.CastFunction = from match {
+  private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case _: StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
@@ -1584,7 +1578,7 @@ case class Cast(
 
   private[this] def castToDayTimeIntervalCode(
       from: DataType,
-      it: DayTimeIntervalType): Cast.CastFunction = from match {
+      it: DayTimeIntervalType): CastFunction = from match {
     case _: StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) =>
@@ -1621,7 +1615,7 @@ case class Cast(
 
   private[this] def castToYearMonthIntervalCode(
       from: DataType,
-      it: YearMonthIntervalType): Cast.CastFunction = from match {
+      it: YearMonthIntervalType): CastFunction = from match {
     case _: StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) =>
@@ -1669,7 +1663,7 @@ case class Cast(
 
   private[this] def castToBooleanCode(
       from: DataType,
-      ctx: CodegenContext): Cast.CastFunction = from match {
+      ctx: CodegenContext): CastFunction = from match {
     case _: StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
@@ -1703,7 +1697,7 @@ case class Cast(
       ctx: CodegenContext,
       integralType: String,
       from: DataType,
-      to: DataType): Cast.CastFunction = {
+      to: DataType): CastFunction = {
 
     val longValue = ctx.freshName("longValue")
     val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
@@ -1729,7 +1723,7 @@ case class Cast(
   private[this] def castDayTimeIntervalToIntegralTypeCode(
       startField: Byte,
       endField: Byte,
-      integralType: String): Cast.CastFunction = {
+      integralType: String): CastFunction = {
     val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
     (c, evPrim, _) =>
       code"""
@@ -1740,7 +1734,7 @@ case class Cast(
   private[this] def castYearMonthIntervalToIntegralTypeCode(
       startField: Byte,
       endField: Byte,
-      integralType: String): Cast.CastFunction = {
+      integralType: String): CastFunction = {
     val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
     (c, evPrim, _) =>
       code"""
@@ -1748,7 +1742,7 @@ case class Cast(
       """
   }
 
-  private[this] def castDecimalToIntegralTypeCode(integralType: String): Cast.CastFunction = {
+  private[this] def castDecimalToIntegralTypeCode(integralType: String): CastFunction = {
     if (ansiEnabled) {
       (c, evPrim, _) => code"$evPrim = $c.roundTo${integralType.capitalize}();"
     } else {
@@ -1760,7 +1754,7 @@ case class Cast(
       ctx: CodegenContext,
       integralType: String,
       from: DataType,
-      to: DataType): Cast.CastFunction = {
+      to: DataType): CastFunction = {
     assert(ansiEnabled)
     val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
     val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
@@ -1789,7 +1783,7 @@ case class Cast(
       ctx: CodegenContext,
       integralType: String,
       from: DataType,
-      to: DataType): Cast.CastFunction = {
+      to: DataType): CastFunction = {
     assert(ansiEnabled)
     val (min, max) = lowerAndUpperBound(integralType)
     val mathClass = classOf[Math].getName
@@ -1810,8 +1804,7 @@ case class Cast(
       """
   }
 
-  private[this] def castToByteCode(from: DataType, ctx: CodegenContext): Cast.CastFunction =
-    from match {
+  private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case _: StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
@@ -1848,7 +1841,7 @@ case class Cast(
 
   private[this] def castToShortCode(
       from: DataType,
-      ctx: CodegenContext): Cast.CastFunction = from match {
+      ctx: CodegenContext): CastFunction = from match {
     case _: StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
@@ -1883,8 +1876,7 @@ case class Cast(
       castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Short")
   }
 
-  private[this] def castToIntCode(from: DataType, ctx: CodegenContext): Cast.CastFunction =
-    from match {
+  private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case _: StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
@@ -1919,8 +1911,7 @@ case class Cast(
       castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Int")
   }
 
-  private[this] def castToLongCode(from: DataType, ctx: CodegenContext): Cast.CastFunction =
-    from match {
+  private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case _: StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
@@ -1954,7 +1945,7 @@ case class Cast(
       castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Int")
   }
 
-  private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): Cast.CastFunction = {
+  private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case _: StringType =>
         val floatStr = ctx.freshVariable("floatStr", StringType)
@@ -1992,7 +1983,7 @@ case class Cast(
     }
   }
 
-  private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): Cast.CastFunction = {
+  private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case _: StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
@@ -2031,7 +2022,7 @@ case class Cast(
   }
 
   private[this] def castArrayCode(
-      fromType: DataType, toType: DataType, ctx: CodegenContext): Cast.CastFunction = {
+      fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(fromType, toType, ctx)
     val arrayClass = JavaCode.javaType(classOf[GenericArrayData])
     val fromElementNull = ctx.freshVariable("feNull", BooleanType)
@@ -2067,10 +2058,7 @@ case class Cast(
       """
   }
 
-  private[this] def castMapCode(
-      from: MapType,
-      to: MapType,
-      ctx: CodegenContext): Cast.CastFunction = {
+  private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext): CastFunction = {
     val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
     val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
 
@@ -2098,7 +2086,7 @@ case class Cast(
   }
 
   private[this] def castStructCode(
-      from: StructType, to: StructType, ctx: CodegenContext): Cast.CastFunction = {
+      from: StructType, to: StructType, ctx: CodegenContext): CastFunction = {
 
     val fieldsCasts = from.fields.zip(to.fields).map {
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)

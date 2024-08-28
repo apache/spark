@@ -179,8 +179,6 @@ case class ToVariantObject(child: Expression)
     val childCode = child.genCode(ctx)
     val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
     val fromArg = ctx.addReferenceObj("from", child.dataType)
-    val castFunction: Cast.CastFunction = (c, evPrim, evNull) =>
-      code"$evPrim = $cls.castToVariant($c, $fromArg);"
     val javaType = JavaCode.javaType(VariantType)
     val code =
       code"""
@@ -188,7 +186,7 @@ case class ToVariantObject(child: Expression)
         boolean ${ev.isNull} = ${childCode.isNull};
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
         if (!${childCode.isNull}) {
-          ${castFunction(childCode.value, ev.value, ev.isNull)}
+          ${ev.value} = $cls.castToVariant(${childCode.value}, $fromArg);
         }
       """
     ev.copy(code = code)
