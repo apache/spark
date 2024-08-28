@@ -2777,7 +2777,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int): Unit = {
-    dagScheduler.cancelJob(jobId, reason = None)
+    dagScheduler.cancelJob(jobId, None)
   }
 
   /**

@@ -1080,8 +1080,6 @@ class SparkSession private(
 @Stable
 object SparkSession extends Logging {
 
-  private val SPARK_SESSION_UUID_PROPERTY_KEY = "spark.sparkSession.uuid"
-
   /**
    * Builder for [[SparkSession]].
    */
@@ -1304,12 +1302,7 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def setActiveSession(session: SparkSession): Unit = {
-    clearActiveSession()
     activeThreadSession.set(session)
-    if (session != null) {
-      session.sparkContext.setLocalProperty(SPARK_SESSION_UUID_PROPERTY_KEY, session.sessionUUID)
-      session.managedJobTags.values().asScala.foreach(session.sparkContext.addJobTag)
-    }
   }
 
   /**
@@ -1319,15 +1312,7 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def clearActiveSession(): Unit = {
-    getActiveSession match {
-      case Some(session) =>
-        if (session != null) {
-          session.sparkContext.setLocalProperty(SPARK_SESSION_UUID_PROPERTY_KEY, null)
-          session.managedJobTags.values().asScala.foreach(session.sparkContext.addJobTag)
-        }
-        activeThreadSession.remove()
-      case None => // do nothing
-    }
+    activeThreadSession.remove()
   }
 
   /**
