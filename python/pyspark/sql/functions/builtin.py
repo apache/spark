@@ -20699,7 +20699,7 @@ def nullifzero(col: "ColumnOrName") -> Column:
     +------+
     |result|
     +------+
-    |  None|
+    |  NULL|
     |     1|
     +------+
     """
