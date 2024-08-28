@@ -1731,10 +1731,10 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  override def cache(): this.type = persist()
+  def persist(): this.type = persist(sparkSession.sessionState.conf.defaultCacheStorageLevel)
 
   /** @inheritdoc */
-  def persist(): this.type = persist(sparkSession.sessionState.conf.defaultCacheStorageLevel)
+  override def cache(): this.type = persist()
 
   /** @inheritdoc */
   def persist(newLevel: StorageLevel): this.type = {
@@ -1976,7 +1976,15 @@ class Dataset[T] private[sql](
 
   ////////////////////////////////////////////////////////////////////////////
   // Return type overrides to make sure we return the implementation instead
-  // of the interface.
+  // of the interface. This is done for a couple of reasons:
+  // - Retain the old signatures for binary compatibility;
+  // - Java compatibility . The java compiler uses the byte code signatures,
+  //   and those would point to api.Dataset being returned instead of Dataset.
+  //   This causes issues when the java code tries to materialize results, or
+  //   tries to use functionality that is implementation specfic.
+  // - Scala method resolution runs into problems when the ambiguous methods are
+  //   scattered across the interface and implementation. `drop` and `select`
+  //   suffered from this.
   ////////////////////////////////////////////////////////////////////////////
 
   /** @inheritdoc */
