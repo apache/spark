@@ -16309,6 +16309,54 @@ def try_parse_json(
 
 
 @_try_remote_functions
+def to_variant_object(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Converts a column containing nested inputs (array/map/struct) into a variants where maps and
+    structs are converted to variant objects which are unordered unlike SQL structs. Input maps can
+    only have string keys.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column with a nested schema or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, \
+    ... MapType
+    >>> from pyspark.sql.functions.builtin import to_variant_object
+    >>> schema = StructType([ \
+    ...     StructField("i", IntegerType(), True), \
+    ...     StructField("v", ArrayType(StructType([ \
+    ...         StructField("a", MapType(StringType(), IntegerType()), True) \
+    ...     ]), True)) \
+    ... ])
+    >>> data = [(1, [{"a": {"b": 2}}])]
+    >>> df = spark.createDataFrame(data, schema)
+    >>> df.select(to_variant_object(df.v))
+    DataFrame[to_variant_object(v): variant]
+    >>> df.select(to_variant_object(df.v)).show(truncate=False)
+    +--------------------+
+    |to_variant_object(v)|
+    +--------------------+
+    |[{"a":{"b":2}}]     |
+    +--------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("to_variant_object", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:

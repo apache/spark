@@ -114,6 +114,87 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
     copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Convert a nested input (array/map/struct) into a variant where maps and structs are converted to variant objects which are unordered unlike SQL structs. Input maps can only have string keys.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       {"a":1,"b":2}
+      > SELECT _FUNC_(array(1, 2, 3));
+       [1, 2, 3]
+      > SELECT _FUNC_(array(named_struct('a', 1)));
+       [{"a":1}]
+      > SELECT _FUNC_(array(map("a", 2)));
+       [{"a":2}]
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class ToVariantObject(child: Expression)
+    extends UnaryExpression
+    with NullIntolerant
+    with QueryErrorsBase {
+
+  override val dataType: DataType = VariantType
+
+  // Only accept nested types at the root but any types can be nested inside.
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val checkResult: Boolean = child.dataType match {
+      case ArrayType(elementType, _) =>
+        VariantGet.checkDataType(elementType, allowStructsAndMaps = true)
+      case MapType(_: StringType, valueType, _) =>
+        VariantGet.checkDataType(valueType, allowStructsAndMaps = true)
+      case StructType(fields) =>
+        fields.forall(f => VariantGet.checkDataType(f.dataType, allowStructsAndMaps = true))
+      case _ => false
+    }
+    if (!checkResult) {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters =
+          Map("srcType" -> toSQLType(child.dataType), "targetType" -> toSQLType(VariantType)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def prettyName: String = "to_variant_object"
+
+  override protected def withNewChildInternal(newChild: Expression): ToVariantObject =
+    copy(child = newChild)
+
+  override def genCode(ctx: CodegenContext): ExprCode = {
+    if (DataType.equalsStructurally(child.dataType, VariantType)) {
+      child.genCode(ctx)
+    } else {
+      super.genCode(ctx)
+    }
+  }
+
+  protected override def nullSafeEval(input: Any): Any =
+    VariantExpressionEvalUtils.castToVariant(input, child.dataType)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val fromArg = ctx.addReferenceObj("from", child.dataType)
+    val castFunction: Cast.CastFunction = (c, evPrim, evNull) =>
+      code"$evPrim = $cls.castToVariant($c, $fromArg);"
+    val javaType = JavaCode.javaType(VariantType)
+    val code =
+      code"""
+        ${childCode.code}
+        boolean ${ev.isNull} = ${childCode.isNull};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
+        if (!${childCode.isNull}) {
+          ${castFunction(childCode.value, ev.value, ev.isNull)}
+        }
+      """
+    ev.copy(code = code)
+  }
+}
+
 object VariantPathParser extends RegexParsers {
   // A path segment in the `VariantGet` expression represents either an object key access or an
   // array index access.
@@ -257,13 +338,16 @@ case object VariantGet {
    * Returns whether a data type can be cast into/from variant. For scalar types, we allow a subset
    * of them. For nested types, we reject map types with a non-string key type.
    */
-  def checkDataType(dataType: DataType): Boolean = dataType match {
+  def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
+    dataType match {
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType | _: DayTimeIntervalType | _: YearMonthIntervalType =>
       true
-    case ArrayType(elementType, _) => checkDataType(elementType)
-    case MapType(_: StringType, valueType, _) => checkDataType(valueType)
-    case StructType(fields) => fields.forall(f => checkDataType(f.dataType))
+    case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
+    case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
+        checkDataType(valueType, allowStructsAndMaps)
+    case StructType(fields) if allowStructsAndMaps =>
+        fields.forall(f => checkDataType(f.dataType, allowStructsAndMaps))
     case _ => false
   }
 

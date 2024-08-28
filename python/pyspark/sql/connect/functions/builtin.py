@@ -2071,6 +2071,13 @@ def try_parse_json(col: "ColumnOrName") -> Column:
 try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
 
 
+def to_variant_object(col: "ColumnOrName") -> Column:
+    return _invoke_function("to_variant_object", _to_col(col))
+
+
+to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 

@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql
 
+import org.apache.spark.sql.QueryTest.sameRows
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
-import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
+import org.apache.spark.sql.catalyst.expressions.variant.{ParseJson, ToVariantObject, VariantExpressionEvalUtils}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
@@ -150,6 +153,34 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     checkAnswer(variantDF, Seq(Row(expected)))
   }
 
+  test("to_variant_object - Codegen Support") {
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val schema = StructType(Array(
+          StructField("v", StructType(Array(StructField("a", IntegerType))))
+        ))
+        val data = Seq(Row(Row(1)), Row(Row(2)), Row(Row(3)), Row(null))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val variantDF = df.select(Column(ToVariantObject(Column("v").expr)))
+        val plan = variantDF.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+        val v1 = VariantExpressionEvalUtils.castToVariant(InternalRow(1),
+          StructType(Array(StructField("a", IntegerType))))
+        val v2 = VariantExpressionEvalUtils.castToVariant(InternalRow(2),
+          StructType(Array(StructField("a", IntegerType))))
+        val v3 = VariantExpressionEvalUtils.castToVariant(InternalRow(3),
+          StructType(Array(StructField("a", IntegerType))))
+        val v4 = VariantExpressionEvalUtils.castToVariant(null,
+          StructType(Array(StructField("a", IntegerType))))
+        val expected = Seq(Row(new VariantVal(v1.getValue, v1.getMetadata)),
+          Row(new VariantVal(v2.getValue, v2.getMetadata)),
+          Row(new VariantVal(v3.getValue, v3.getMetadata)),
+          Row(new VariantVal(v4.getValue, v4.getMetadata)))
+        sameRows(variantDF.collect().toSeq, expected)
+      }
+    }
+  }
+
   test("schema_of_variant") {
     def check(json: String, expected: String): Unit = {
       val df = Seq(json).toDF("j").selectExpr("schema_of_variant(parse_json(j))")
@@ -271,22 +302,30 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     dataVector.appendLong(456)
     val array = new ColumnarArray(dataVector, 0, 4)
     val variant = Cast(Literal(array, ArrayType(LongType)), VariantType).eval()
+    val variant2 = ToVariantObject(Literal(array, ArrayType(LongType))).eval()
     assert(variant.toString == "[null,123,null,456]")
+    assert(variant2.toString == "[null,123,null,456]")
     dataVector.close()
   }
 
-  test("cast to variant with scan input") {
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      val input = Seq(Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")))
-      val schema = StructType.fromDDL(
-        "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
-      spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
-      val df = spark.read.parquet(path).selectExpr(
-        s"cast(cast(a as variant) as ${schema(0).dataType.sql})",
-        s"cast(cast(m as variant) as ${schema(1).dataType.sql})",
-        s"cast(cast(s as variant) as ${schema(2).dataType.sql})")
-      checkAnswer(df, input)
+  test("cast to variant/to_variant_object with scan input") {
+    Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        withTempPath { dir =>
+          val path = dir.getAbsolutePath
+          val input = Seq(Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")))
+          val schema = StructType.fromDDL(
+            "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
+          spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
+          val df = spark.read.parquet(path).selectExpr(
+            s"cast(cast(a as variant) as ${schema(0).dataType.sql})",
+            s"cast(to_variant_object(m) as ${schema(1).dataType.sql})",
+            s"cast(to_variant_object(s) as ${schema(2).dataType.sql})")
+          checkAnswer(df, input)
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+        }
+      }
     }
   }
 }
