@@ -207,8 +207,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.Dataset$" // private[sql]
       ),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
       // TODO (SPARK-49096):
       // Mima check might complain the following Dataset rules does not filter any problem.
       // This is due to a potential bug in Mima that all methods in `class Dataset` are not being
