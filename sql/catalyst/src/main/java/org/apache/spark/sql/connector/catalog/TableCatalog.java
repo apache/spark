@@ -111,6 +111,26 @@ public interface TableCatalog extends CatalogPlugin {
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
+   * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
+   * into this table later.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param writePrivileges
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   *
+   * @since 3.5.3
+   */
+  default Table loadTable(
+      Identifier ident,
+      Set<TableWritePrivilege> writePrivileges) throws NoSuchTableException {
+    return loadTable(ident);
+  }
+
+  /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
    * <p>
    * If the catalog supports views and contains a view for the identifier and not a table, this
@@ -175,11 +195,13 @@ public interface TableCatalog extends CatalogPlugin {
    * {@link #createTable(Identifier, Column[], Transform[], Map)} instead.
    */
   @Deprecated(since = "3.4.0")
-  Table createTable(
+  default Table createTable(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("createTable");
+  }
 
   /**
    * Create a table in the catalog.

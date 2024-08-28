@@ -376,6 +376,7 @@ object FunctionRegistry {
     expression[Least]("least"),
     expression[NaNvl]("nanvl"),
     expression[NullIf]("nullif"),
+    expression[NullIfZero]("nullifzero"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
     expression[PosExplode]("posexplode"),
@@ -384,6 +385,7 @@ object FunctionRegistry {
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
+    expression[ZeroIfNull]("zeroifnull"),
     CaseWhen.registryEntry,
 
     // math functions
@@ -869,7 +871,11 @@ object FunctionRegistry {
 
     // Avro
     expression[FromAvro]("from_avro"),
-    expression[ToAvro]("to_avro")
+    expression[ToAvro]("to_avro"),
+
+    // Protobuf
+    expression[FromProtobuf]("from_protobuf"),
+    expression[ToProtobuf]("to_protobuf")
   )
 
   val builtin: SimpleFunctionRegistry = {

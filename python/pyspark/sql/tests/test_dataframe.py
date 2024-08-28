@@ -130,6 +130,20 @@ class DataFrameTestsMixin:
         self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
         self.assertTrue(df3.count() == 2)
 
+    def test_self_join_III(self):
+        df1 = self.spark.range(10).withColumn("value", lit(1))
+        df2 = df1.union(df1)
+        df3 = df1.join(df2, df1.id == df2.id, "left")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_self_join_IV(self):
+        df1 = self.spark.range(10).withColumn("value", lit(1))
+        df2 = df1.withColumn("value", lit(2)).union(df1.withColumn("value", lit(3)))
+        df3 = df1.join(df2, df1.id == df2.id, "right")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
         row = df.select("*").first()

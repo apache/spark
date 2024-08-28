@@ -135,6 +135,13 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
+  val LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH =
+    buildStaticConf("spark.sql.extensions.test.loadFromCp")
+      .doc("Flag that determines if we should load extensions from the classpath using the " +
+        "SparkSessionExtensionsProvider mechanism. This is a test only flag.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
     .doc("The name of a class that implements " +
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +

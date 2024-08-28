@@ -671,6 +671,11 @@ public class CollationAwareUTF8String {
     // Initialize the string search with respect to the specified ICU collation.
     String targetStr = target.toValidString();
     String patternStr = pattern.toValidString();
+    // Check if `start` is out of bounds. The provided offset `start` is given in number of
+    // codepoints, so a simple `targetStr.length` check is not sufficient here. This check is
+    // needed because `String.offsetByCodePoints` throws an `IndexOutOfBoundsException`
+    // exception when the offset is out of bounds.
+    if (targetStr.codePointCount(0, targetStr.length()) <= start) return MATCH_NOT_FOUND;
     StringSearch stringSearch =
       CollationFactory.getStringSearch(targetStr, patternStr, collationId);
     stringSearch.setOverlapping(true);
@@ -990,20 +995,29 @@ public class CollationAwareUTF8String {
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the left to find the first character that is not in the set.
-    int searchIndex = 0, codePoint;
+    int searchIndex = 0, codePoint, codePointBuffer = -1;
     Iterator<Integer> srcIter = srcString.codePointIterator();
     while (srcIter.hasNext()) {
-      codePoint = getLowercaseCodePoint(srcIter.next());
+      // Get the next code point from either the buffer or the iterator.
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      }
+      else {
+        codePoint = getLowercaseCodePoint(srcIter.next());
+      }
       // Special handling for Turkish dotted uppercase letter I.
       if (codePoint == CODE_POINT_LOWERCASE_I && srcIter.hasNext() &&
           trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
-        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
-        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == CODE_POINT_COMBINING_DOT) {
+        codePointBuffer = codePoint;
+        codePoint = getLowercaseCodePoint(srcIter.next());
+        if (codePoint == CODE_POINT_COMBINING_DOT) {
           searchIndex += 2;
-        }
-        else {
-          if (trimChars.contains(codePoint)) ++searchIndex;
+          codePointBuffer = -1;
+        } else if (trimChars.contains(codePointBuffer)) {
+          ++searchIndex;
+          codePointBuffer = codePoint;
+        } else {
           break;
         }
       } else if (trimChars.contains(codePoint)) {
@@ -1100,20 +1114,28 @@ public class CollationAwareUTF8String {
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the right to find the first character that is not in the set.
-    int searchIndex = srcString.numChars(), codePoint;
+    int searchIndex = srcString.numChars(), codePoint, codePointBuffer = -1;
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
     while (srcIter.hasNext()) {
-      codePoint = getLowercaseCodePoint(srcIter.next());
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      }
+      else {
+        codePoint = getLowercaseCodePoint(srcIter.next());
+      }
       // Special handling for Turkish dotted uppercase letter I.
       if (codePoint == CODE_POINT_COMBINING_DOT && srcIter.hasNext() &&
           trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
-        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
-        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == CODE_POINT_LOWERCASE_I) {
+        codePointBuffer = codePoint;
+        codePoint = getLowercaseCodePoint(srcIter.next());
+        if (codePoint == CODE_POINT_LOWERCASE_I) {
           searchIndex -= 2;
-        }
-        else {
-          if (trimChars.contains(codePoint)) --searchIndex;
+          codePointBuffer = -1;
+        } else if (trimChars.contains(codePointBuffer)) {
+          --searchIndex;
+          codePointBuffer = codePoint;
+        } else {
           break;
         }
       } else if (trimChars.contains(codePoint)) {

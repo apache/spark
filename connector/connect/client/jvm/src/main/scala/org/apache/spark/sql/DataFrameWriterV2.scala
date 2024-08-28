@@ -32,6 +32,7 @@ import org.apache.spark.connect.proto
 @Experimental
 final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     extends CreateTableWriter[T] {
+  import ds.sparkSession.RichColumn
 
   private var provider: Option[String] = None
 

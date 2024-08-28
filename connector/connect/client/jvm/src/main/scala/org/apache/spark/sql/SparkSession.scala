@@ -43,6 +43,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -825,6 +826,11 @@ class SparkSession private[sql] (
     if (observationOrNull != null) {
       observationOrNull.setMetricsAndNotify(Some(metrics))
     }
+  }
+
+  implicit class RichColumn(c: Column) {
+    def expr: proto.Expression = toExpr(c)
+    def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
   }
 }
 

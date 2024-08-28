@@ -1968,7 +1968,7 @@ class ConfigRequest(google.protobuf.message.Message):
         def pairs(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
-            """(Required) The config key-value paris to get. The value will be used as the default value."""
+            """(Required) The config key-value pairs to get. The value will be used as the default value."""
         def __init__(
             self,
             *,
