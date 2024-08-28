@@ -108,8 +108,8 @@ object IntervalUtils extends SparkIntervalUtils {
       fallBackNotice: Boolean = false) = {
     throw new SparkIllegalArgumentException(
       errorClass = {
-        if (fallBackNotice) "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE"
-        else "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING"
+        if (fallBackNotice) "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE"
+        else "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING"
       },
       messageParameters = Map(
         "intervalStr" -> intervalStr,
@@ -528,8 +528,10 @@ object IntervalUtils extends SparkIntervalUtils {
     } catch {
       case e: Exception =>
         throw new SparkIllegalArgumentException(
-          errorClass = "INTERVAL_ERROR.DAY_TIME_PARSING",
-          messageParameters = Map("msg" -> e.getMessage),
+          errorClass = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+          messageParameters = Map(
+            "msg" -> e.getMessage,
+            "input" -> input),
           cause = e)
     }
   }

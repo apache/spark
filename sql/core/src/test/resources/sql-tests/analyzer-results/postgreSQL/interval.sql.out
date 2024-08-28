@@ -88,8 +88,8 @@ SELECT interval '1 2:03' day to hour
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -104,8 +104,8 @@ SELECT interval '1 2:03:04' day to hour
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -127,8 +127,8 @@ SELECT interval '1 2:03:04' day to minute
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -143,8 +143,8 @@ SELECT interval '1 2:03' day to second
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -166,8 +166,8 @@ SELECT interval '1 2:03' hour to minute
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -182,8 +182,8 @@ SELECT interval '1 2:03:04' hour to minute
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -198,8 +198,8 @@ SELECT interval '1 2:03' hour to second
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -214,8 +214,8 @@ SELECT interval '1 2:03:04' hour to second
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -230,8 +230,8 @@ SELECT interval '1 2:03' minute to second
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -246,8 +246,8 @@ SELECT interval '1 2:03:04' minute to second
 -- !query analysis
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",

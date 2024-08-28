@@ -102,8 +102,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -120,8 +120,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -146,8 +146,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -164,8 +164,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -190,8 +190,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -208,8 +208,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -226,8 +226,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -244,8 +244,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",
@@ -262,8 +262,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
     "intervalStr" : "day-time",
@@ -280,8 +280,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
-  "sqlState" : "22009",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
     "intervalStr" : "day-time",

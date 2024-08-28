@@ -342,9 +342,11 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SparkIllegalArgumentException] {
           fromDayTimeString("5 30:12:20")
         },
-        parameters = Map("msg" -> "requirement failed: hour 30 outside range [0, 23]"),
-        errorClass = "INTERVAL_ERROR.DAY_TIME_PARSING",
-        sqlState = Some("22009")
+        parameters = Map(
+          "msg" -> "requirement failed: hour 30 outside range [0, 23]",
+          "input" -> "5 30:12:20"),
+        errorClass = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+        sqlState = Some("22006")
       )
 
       failFuncWithInvalidInput("5 30:12:20", "hour 30 outside range", fromDayTimeString)
