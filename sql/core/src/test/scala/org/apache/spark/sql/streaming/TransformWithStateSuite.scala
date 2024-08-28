@@ -1426,6 +1426,70 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       }
     }
   }
+
+  private def getOperatorStateMetadataFileManager(
+      checkpointPath: Path,
+      stateCheckpointPath: Path,
+      stateSchemaPath: Path): OperatorStateMetadataV2FileManager = {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    new OperatorStateMetadataV2FileManager(
+      stateCheckpointPath,
+      stateSchemaPath,
+      new CommitLog(
+        spark.cloneSession(),
+        new Path(checkpointPath, "commit").toString
+      ),
+      hadoopConf)
+  }
+
+  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+    new Path(stateCheckpointPath, "default/_metadata/schema")
+  }
+
+  test("transformWithState - verify that metadata and schema logs are purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream,
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream,
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(),
+          StopStream
+        )
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val fm = getOperatorStateMetadataFileManager(
+          new Path(chkptDir.getCanonicalPath),
+          stateOpIdPath,
+          stateSchemaPath)
+        // by the end of the test, there have been 3 batches,
+        // so the metadata and schema logs, and commitLog has been purged
+        // for batch 0, so metadata and schema files should only exist for
+        // batches 1 and 2
+        assert(fm.listSchemaFiles().length == 2)
+        assert(fm.listMetadataFiles().length == 2)
+      }
+    }
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
