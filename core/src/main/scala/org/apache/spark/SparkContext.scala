@@ -912,7 +912,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def addJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    val existingTags = getJobTags()
+    val existingTags = getJobTags() ++ getInternalJobTags()
     val newTags = (existingTags + tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
@@ -934,7 +934,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def removeJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    val existingTags = getJobTags()
+    val existingTags = getJobTags() ++ getInternalJobTags()
     val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     if (newTags.isEmpty) {
       clearJobTags()
@@ -942,6 +942,12 @@ class SparkContext(config: SparkConf) extends Logging {
       setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
     }
   }
+
+  /**
+   * Remove an internal tag previously added to be assigned to all the jobs started by this thread.
+   */
+  private[spark] def removeInternalJobTag(tag: String): Unit =
+    removeJobTag(s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}$tag")
 
   /**
    * Get the tags that are currently set to be assigned to all the jobs started by this thread.
@@ -3140,7 +3146,7 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_TAGS_SEP = ","
 
   /** Prefix to mark a tag to be visible internally, not by users */
-  private[spark] val SPARK_JOB_TAGS_INTERNAL_PREFIX = "__internal_tag__"
+  private[spark] val SPARK_JOB_TAGS_INTERNAL_PREFIX = "~~spark~internal~tag~~"
 
   // Same rules apply to Spark Connect execution tags, see ExecuteHolder.throwIfInvalidTag
   private[spark] def throwIfInvalidTag(tag: String) = {

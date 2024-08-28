@@ -170,17 +170,19 @@ class SparkSessionJobTaggingAndCancellationSuite
       // Tags are applied
       val threeJobs = sc.dagScheduler.activeJobs
       assert(threeJobs.size == 3)
-      for(ss <- Seq(sessionA, sessionB, sessionC)) {
-        val job = threeJobs.filter(_.properties.get("spark.sparkSession.uuid") == ss.sessionUUID)
+      for (ss <- Seq(sessionA, sessionB, sessionC)) {
+        val job = threeJobs.filter(_.properties.get(SparkContext.SPARK_JOB_TAGS)
+          .asInstanceOf[String].contains(ss.sessionUUID))
         assert(job.size == 1)
         val tags = job.head.properties.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
           .split(SparkContext.SPARK_JOB_TAGS_SEP)
-        assert(tags.forall(_.contains(s"spark-session-${ss.sessionUUID}-")))
+        assert(tags.forall(_.contains(s"spark-session-${ss.sessionUUID}")))
         val userTags = tags.map(_.replace(s"spark-session-${ss.sessionUUID}-", ""))
+        val sessionTag = s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}${ss.sessionJobTag}"
         ss match {
-          case s if s == sessionA => assert(userTags.toSet == Set("one"))
-          case s if s == sessionB => assert(userTags.toSet == Set("one", "two"))
-          case s if s == sessionC => assert(userTags.toSet == Set("boo"))
+          case s if s == sessionA => assert(userTags.toSet == Set(sessionTag, "one"))
+          case s if s == sessionB => assert(userTags.toSet == Set(sessionTag, "one", "two"))
+          case s if s == sessionC => assert(userTags.toSet == Set(sessionTag, "boo"))
         }
       }
 

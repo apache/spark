@@ -131,14 +131,14 @@ class SparkSession private(
   })
 
   /** Tag to mark all jobs owned by this session. */
-  private lazy val sessionJobTag = s"spark-session-$sessionUUID"
+  private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
 
   /**
    * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
    * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
    */
   @transient
-  private lazy val managedJobTags: ConcurrentHashMap[String, String] =
+  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] =
     new ConcurrentHashMap(parentManagedJobTags.asJava)
 
   /**
