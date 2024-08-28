@@ -76,10 +76,32 @@ object CommitLog {
   private val EMPTY_JSON = "{}"
 }
 
-
+/**
+ * In Checkpoint V2, for a stateful query, the checkpoint structure looks like below:
+ * 0 (operator ID)
+ *     +----+
+ *          | 0 (partitionID)
+ *     +----+
+ *          |     ……
+ *          | 1 (partitionID)
+ *          +----+
+ *          |    |- default (storeName)
+ *          |     +-----+
+ *          |           |  20_unique_id_1.zip
+ *          |           |  21_unique_id_2.delta
+ *          |           |  22_unique_id_3.delta
+ *          |           +  23_unique_id_4.delta
+ *          | 2 (partitionID)
+ *          +--- ……
+ * In the commit log, in addition to nextBatchWatermarkMs, we also store the unique ids of the
+ * state store files.
+ * @param nextBatchWatermarkMs The watermark of the next batch.
+ * @param stateUniqueIds Map[String, Map[String, Map[String, Seq[String]]]] of map
+ *                       OperatorId -> PartitionId -> StoreName -> Seq[uniqueId]
+ */
 case class CommitMetadata(
     nextBatchWatermarkMs: Long = 0,
-    stateUniqueIds: Map[String, Map[String, Seq[String]]] = Map.Empty
+    stateUniqueIds: Map[String, Map[String, Map[String, Seq[String]]]] = Map.Empty
 ) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
