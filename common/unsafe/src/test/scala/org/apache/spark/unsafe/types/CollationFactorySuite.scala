@@ -47,12 +47,12 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
-    assert(unicode.collationName == "UNICODE")
+    assert(unicode.collationName == "UNICODE_CS_AS")
     assert(!unicode.supportsBinaryEquality)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
-    assert(unicodeCi.collationName == "UNICODE_CI")
+    assert(unicodeCi.collationName == "UNICODE_CI_AS")
     assert(!unicodeCi.supportsBinaryEquality)
   }
 
@@ -61,9 +61,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     Seq(
       "UTF8_BINARY",
       "UTF8_LCASE",
-      "UNICODE",
-      "UNICODE_CI",
-      "UNICODE_AI",
+      "UNICODE_CS_AS",
+      "UNICODE_CI_AS",
+      "UNICODE_CS_AI",
       "UNICODE_CI_AI"
     ).foreach(collationName => {
       val col = fetchCollation(collationName)
@@ -72,16 +72,16 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     // Collation name normalization.
     Seq(
       // ICU root locale.
-      ("UNICODE_CS", "UNICODE"),
-      ("UNICODE_CS_AS", "UNICODE"),
-      ("UNICODE_CI_AS", "UNICODE_CI"),
-      ("UNICODE_AI_CS", "UNICODE_AI"),
+      ("UNICODE_CS", "UNICODE_CS_AS"),
+      ("UNICODE_CS_AS", "UNICODE_CS_AS"),
+      ("UNICODE_CI_AS", "UNICODE_CI_AS"),
+      ("UNICODE_AI_CS", "UNICODE_CS_AI"),
       ("UNICODE_AI_CI", "UNICODE_CI_AI"),
       // Randomized case collation names.
       ("utf8_binary", "UTF8_BINARY"),
       ("UtF8_LcasE", "UTF8_LCASE"),
-      ("unicode", "UNICODE"),
-      ("UnICoDe_cs_aI", "UNICODE_AI")
+      ("unicode", "UNICODE_CS_AS"),
+      ("UnICoDe_cs_aI", "UNICODE_CS_AI")
     ).foreach{
       case (name, normalized) =>
         val col = fetchCollation(name)
@@ -320,25 +320,25 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("collations name normalization for ICU non-root localization") {
     Seq(
-      ("en_USA", "en_USA"),
-      ("en_CS", "en"),
-      ("en_AS", "en"),
-      ("en_CS_AS", "en"),
-      ("en_AS_CS", "en"),
-      ("en_CI", "en_CI"),
-      ("en_AI", "en_AI"),
+      ("en_USA", "en_USA_CS_AS"),
+      ("en_CS", "en_CS_AS"),
+      ("en_AS", "en_CS_AS"),
+      ("en_CS_AS", "en_CS_AS"),
+      ("en_AS_CS", "en_CS_AS"),
+      ("en_CI", "en_CI_AS"),
+      ("en_AI", "en_CS_AI"),
       ("en_AI_CI", "en_CI_AI"),
       ("en_CI_AI", "en_CI_AI"),
-      ("en_CS_AI", "en_AI"),
-      ("en_AI_CS", "en_AI"),
-      ("en_CI_AS", "en_CI"),
-      ("en_AS_CI", "en_CI"),
+      ("en_CS_AI", "en_CS_AI"),
+      ("en_AI_CS", "en_CS_AI"),
+      ("en_CI_AS", "en_CI_AS"),
+      ("en_AS_CI", "en_CI_AS"),
       ("en_USA_AI_CI", "en_USA_CI_AI"),
       // Randomized case.
-      ("EN_USA", "en_USA"),
-      ("SR_CYRL", "sr_Cyrl"),
-      ("sr_cyrl_srb", "sr_Cyrl_SRB"),
-      ("sR_cYRl_sRb", "sr_Cyrl_SRB")
+      ("EN_USA", "en_USA_CS_AS"),
+      ("SR_CYRL", "sr_Cyrl_CS_AS"),
+      ("sr_cyrl_srb", "sr_Cyrl_SRB_CS_AS"),
+      ("sR_cYRl_sRb", "sr_Cyrl_SRB_CS_AS")
     ).foreach {
       case (name, normalized) =>
         val col = fetchCollation(name)

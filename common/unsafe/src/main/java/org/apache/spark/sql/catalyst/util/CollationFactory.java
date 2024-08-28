@@ -687,22 +687,12 @@ public final class CollationFactory {
       /**
        * Compute normalized collation name. Components of collation name are given in order:
        * - Locale name
-       * - Optional case sensitivity when non-default preceded by underscore
-       * - Optional accent sensitivity when non-default preceded by underscore
-       * Examples: en, en_USA_CI_AI, sr_Cyrl_SRB_AI.
+       * - Case sensitivity preceded by underscore
+       * - Accent sensitivity preceded by underscore
+       * Examples: en_CS_AS, en_USA_CI_AI, sr_Cyrl_SRB_CS_AI.
        */
       private String collationName() {
-        StringBuilder builder = new StringBuilder();
-        builder.append(locale);
-        if (caseSensitivity != CaseSensitivity.CS) {
-          builder.append('_');
-          builder.append(caseSensitivity.toString());
-        }
-        if (accentSensitivity != AccentSensitivity.AS) {
-          builder.append('_');
-          builder.append(accentSensitivity.toString());
-        }
-        return builder.toString();
+          return locale + '_' + caseSensitivity.toString() + '_' + accentSensitivity.toString();
       }
     }
 
