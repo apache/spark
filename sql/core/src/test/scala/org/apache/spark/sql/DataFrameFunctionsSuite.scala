@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
@@ -350,9 +350,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "right" -> "\"INT\"",
         "sqlExpr" -> "\"(map(1, a) = 0)\""),
       context = ExpectedContext(
-        fragment = s"$expr",
-        start = 0,
-        stop = 10))
+        contextType = QueryContextType.DataFrame,
+        fragment = "nullifzero",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
     expr = nullifzero(array(lit(1), lit(2)))
     checkError(
       intercept[AnalysisException](df.select(expr)),
@@ -362,21 +366,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "right" -> "\"INT\"",
         "sqlExpr" -> "\"(array(1, 2) = 0)\""),
       context = ExpectedContext(
-        fragment = s"$expr",
-        start = 0,
-        stop = 10))
-    expr = nullifzero(Literal.create("2020-12-31", DateType))
+        contextType = QueryContextType.DataFrame,
+        fragment = "nullifzero",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = nullifzero(Literal.create(20201231, DateType))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = Map(
         "left" -> "\"DATE\"",
         "right" -> "\"INT\"",
-        "sqlExpr" -> "\"(DATE '2020-12-31' = 0)\""),
+        "sqlExpr" ->  "\"(DATE '+57279-02-03' = 0)\""),
       context = ExpectedContext(
-        fragment = s"$expr",
-        start = 0,
-        stop = 10))
+        contextType = QueryContextType.DataFrame,
+        fragment = "nullifzero",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
   }
 
   test("nvl") {
@@ -403,46 +415,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sql("create table t(col int not null) using csv")
       sql("insert into t values (0)")
       val df = sql("select col from t")
-      checkAnswer(df.selectExpr("zeroifnull(col)"), Seq(Row(0)))
+      checkAnswer(df.select(zeroifnull($"col")), Seq(Row(0)))
     }
     // Here we exercise invalid cases including types that do not support ordering.
     val df = Seq((0)).toDF("a")
-    var expr = "zeroifnull(map(1, 'a'))"
+    var expr = zeroifnull(map(lit(1), lit("a")))
     checkError(
-      intercept[AnalysisException](df.selectExpr(expr)),
+      intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
         "functionName" -> "`coalesce`",
-        "dataType" ->"(\"MAP<INT, STRING>\" or \"INT\")",
+        "dataType" -> "(\"MAP<INT, STRING>\" or \"INT\")",
         "sqlExpr" -> "\"coalesce(map(1, a), 0)\""),
       context = ExpectedContext(
-        fragment = s"$expr",
-        start = 0,
-        stop = expr.length - 1))
-    expr = "zeroifnull(array(1, 2))"
+        contextType = QueryContextType.DataFrame,
+        fragment = "zeroifnull",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = zeroifnull(array(lit(1), lit(2)))
     checkError(
-      intercept[AnalysisException](df.selectExpr(expr)),
+      intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
         "functionName" -> "`coalesce`",
-        "dataType" ->"(\"ARRAY<INT>\" or \"INT\")",
+        "dataType" -> "(\"ARRAY<INT>\" or \"INT\")",
         "sqlExpr" -> "\"coalesce(array(1, 2), 0)\""),
       context = ExpectedContext(
-        fragment = s"$expr",
-        start = 0,
-        stop = expr.length - 1))
-    expr = "zeroifnull(date'2020-12-31')"
+        contextType = QueryContextType.DataFrame,
+        fragment = "zeroifnull",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = zeroifnull(Literal.create(20201231, DateType))
     checkError(
-      intercept[AnalysisException](df.selectExpr(expr)),
+      intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
         "functionName" -> "`coalesce`",
-        "dataType" ->"(\"DATE\" or \"INT\")",
-        "sqlExpr" -> "\"coalesce(DATE '2020-12-31', 0)\""),
+        "dataType" -> "(\"DATE\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(DATE '+57279-02-03', 0)\""),
       context = ExpectedContext(
-        fragment = s"$expr",
-        start = 0,
-        stop = expr.length - 1))
+        contextType = QueryContextType.DataFrame,
+        fragment = "zeroifnull",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
   }
 
   test("misc md5 function") {
