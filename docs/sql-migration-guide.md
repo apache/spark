@@ -40,6 +40,7 @@ license: |
   - `spark.sql.avro.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.avro.datetimeRebaseModeInWrite`
   - `spark.sql.avro.datetimeRebaseModeInRead` instead of `spark.sql.legacy.avro.datetimeRebaseModeInRead`
 - Since Spark 4.0, the default value of `spark.sql.orc.compression.codec` is changed from `snappy` to `zstd`. To restore the previous behavior, set `spark.sql.orc.compression.codec` to `snappy`.
+- Since Spark 4.0, `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` has been disabled by default once again. To restore the previous behavior, set `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` to `true`.
 - Since Spark 4.0, the SQL config `spark.sql.legacy.allowZeroIndexInFormatString` is deprecated. Consider to change `strfmt` of the `format_string` function to use 1-based indexes. The first argument must be referenced by `1$`, the second by `2$`, etc.
 - Since Spark 4.0, Postgres JDBC datasource will read JDBC read TIMESTAMP WITH TIME ZONE as TimestampType regardless of the JDBC read option `preferTimestampNTZ`, while in 3.5 and previous, TimestampNTZType when `preferTimestampNTZ=true`. To restore the previous behavior, set `spark.sql.legacy.postgres.datetimeMapping.enabled` to `true`.
 - Since Spark 4.0, Postgres JDBC datasource will write TimestampType as TIMESTAMP WITH TIME ZONE, while in 3.5 and previous, it wrote as TIMESTAMP a.k.a. TIMESTAMP WITHOUT TIME ZONE. To restore the previous behavior, set `spark.sql.legacy.postgres.datetimeMapping.enabled` to `true`.
