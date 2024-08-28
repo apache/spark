@@ -136,4 +136,38 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     )
     assertResult(Array("key", "test"))(transposedDf.columns)
   }
+
+  test("transpose frame with duplicates in index column") {
+    val df = Seq(
+      ("A", 1, 2),
+      ("B", 3, 4),
+      ("A", 5, 6)
+    ).toDF("id", "val1", "val2")
+    val transposedDf = df.transpose()
+    checkAnswer(
+      transposedDf,
+      Seq(
+        Row("val1", 1, 5, 3),
+        Row("val2", 2, 6, 4)
+      )
+    )
+    assertResult(Array("key", "A", "A", "B"))(transposedDf.columns)
+  }
+
+  test("transpose frame with nulls in index column") {
+    val df = Seq(
+      ("A", 1, 2),
+      ("B", 3, 4),
+      (null, 5, 6)
+    ).toDF("id", "val1", "val2")
+    val transposedDf = df.transpose()
+    checkAnswer(
+      transposedDf,
+      Seq(
+        Row("val1", 1, 3),
+        Row("val2", 2, 4)
+      )
+    )
+    assertResult(Array("key", "A", "B"))(transposedDf.columns)
+  }
 }

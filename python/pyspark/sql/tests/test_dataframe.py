@@ -968,7 +968,7 @@ class DataFrameTestsMixin:
         self.assertEqual(transposed_df.collect(), expected_data)
 
         # specified index column
-        transposed_df = df.transpose(df.c)
+        transposed_df = df.transpose("c")
         expected_schema = StructType(
             [StructField("key", StringType(), False), StructField("z", StringType(), True)]
         )
@@ -1001,7 +1001,8 @@ class DataFrameTestsMixin:
         df = self.spark.createDataFrame([{"a": ["x", "x"], "b": "y", "c": "z"}])
         with self.assertRaisesRegex(
             AnalysisException,
-            r"\[INVALID_INDEX_COLUMN\] Invalid index column because: Index column must be of atomic type",
+            r"\[INVALID_INDEX_COLUMN\] Invalid index column because:"
+            " Index column must be of atomic type",
         ):
             df.transpose().collect()
 
@@ -1009,7 +1010,8 @@ class DataFrameTestsMixin:
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": 1}])
         with self.assertRaisesRegex(
             AnalysisException,
-            r"\[TRANSPOSE_NO_LEAST_COMMON_TYPE\] Transpose requires non-index columns to share a least common type",
+            r"\[TRANSPOSE_NO_LEAST_COMMON_TYPE\] Transpose requires non-index"
+            " columns to share a least common type",
         ):
             df.transpose().collect()
 

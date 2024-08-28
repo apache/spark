@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation, LogicalPlan, Project, Sort, Transpose}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, IsNotNull, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.internal.SQLConf
@@ -121,12 +121,13 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         Alias(Cast(attr, commonType), attr.name)()
       }
 
-      // Sort by index column values, and collect the casted frame
+      // Exclude nulls and sort index column values, and collect the casted frame
       val allCastCols = indexColumnAsString +: nonIndexColumnsAsLCT
+      val nonNullChild = Filter(IsNotNull(indexColumn), child)
       val sortedChild = Sort(
         Seq(SortOrder(indexColumn.asInstanceOf[Attribute], Ascending)),
         global = true,
-        child
+        nonNullChild
       )
       val projectAllCastCols = Project(allCastCols, sortedChild)
       val maxValues = sparkSession.sessionState.conf.dataFrameTransposeMaxValues
@@ -175,6 +176,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         val hasNonIndexColumns = nonIndexColumnsAttr.nonEmpty
         val transposeOutput = (keyAttr +: valueAttrs).toIndexedSeq
         val transposeData = transposedInternalRows.toIndexedSeq
+        println("are we here 2")
         Transpose(transposeOutput, transposeData, hasNonIndexColumns)
       }
   }
