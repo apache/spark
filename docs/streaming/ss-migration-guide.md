@@ -24,7 +24,7 @@ license: |
 
 Note that this migration guide describes the items specific to Structured Streaming.
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
-Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
+Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
 ## Upgrading from Structured Streaming 3.5 to 4.0
 

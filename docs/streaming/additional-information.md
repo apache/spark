@@ -55,4 +55,4 @@ license: |
 
 # Migration Guide
 
-The migration guide is now archived [on this page](/streaming/ss-migration-guide.html).
+The migration guide is now archived [on this page](ss-migration-guide.html).

@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Structured Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
+redirect: ./streaming/structured-streaming-kafka-integration.html
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -18,4 +19,4 @@ license: |
   limitations under the License.
 ---
 
-The Structured Streaming integration for Kafka documentation has moved. You can find it [here](./streaming/structured-streaming-kafka-integration.md).
+This page has moved [here](./streaming/structured-streaming-kafka-integration.html).

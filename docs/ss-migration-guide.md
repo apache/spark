@@ -2,6 +2,7 @@
 layout: global
 title: "Migration Guide: Structured Streaming"
 displayTitle: "Migration Guide: Structured Streaming"
+redirect: ./streaming/ss-migration-guide.html
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
