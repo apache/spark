@@ -1,42 +1,42 @@
 - text: Overview 
-  url: /streaming/index.html
+  url: streaming/index.html
 - text: Getting Started
-  url: /streaming/getting-started.html
+  url: streaming/getting-started.html
   subitems:
     - text: Quick Example
-      url: /streaming/getting-started.html#quick-example
+      url: streaming/getting-started.html#quick-example
     - text: Programming Model 
-      url: /streaming/getting-started.html#programming-model
+      url: streaming/getting-started.html#programming-model
 - text: APIs on DataFrames and Datasets
-  url: /streaming/apis-on-dataframes-and-datasets.html
+  url: streaming/apis-on-dataframes-and-datasets.html
   subitems:
     - text: Creating Streaming DataFrames and Streaming Datasets
-      url: /streaming/apis-on-dataframes-and-datasets.html#creating-streaming-dataframes-and-streaming-datasets
+      url: streaming/apis-on-dataframes-and-datasets.html#creating-streaming-dataframes-and-streaming-datasets
     - text: Operations on Streaming DataFrames/Datasets
-      url: /streaming/apis-on-dataframes-and-datasets.html#operations-on-streaming-dataframesdatasets
+      url: streaming/apis-on-dataframes-and-datasets.html#operations-on-streaming-dataframesdatasets
     - text: Starting Streaming Queries
-      url: /streaming/apis-on-dataframes-and-datasets.html#starting-streaming-queries
+      url: streaming/apis-on-dataframes-and-datasets.html#starting-streaming-queries
     - text: Managing Streaming Queries
-      url: /streaming/apis-on-dataframes-and-datasets.html#managing-streaming-queries
+      url: streaming/apis-on-dataframes-and-datasets.html#managing-streaming-queries
     - text: Monitoring Streaming Queries
-      url: /streaming/apis-on-dataframes-and-datasets.html#monitoring-streaming-queries
+      url: streaming/apis-on-dataframes-and-datasets.html#monitoring-streaming-queries
     - text: Recovering from Failures with Checkpointing
-      url: /streaming/apis-on-dataframes-and-datasets.html#recovering-from-failures-with-checkpointing
+      url: streaming/apis-on-dataframes-and-datasets.html#recovering-from-failures-with-checkpointing
     - text: Recovery Semantics after Changes in a Streaming Query
-      url: /streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query
+      url: streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query
 - text: Performance Tips
-  url: /streaming/performance-tips.html
+  url: streaming/performance-tips.html
   subitems:
     - text: Asynchronous Progress Tracking
-      url: /streaming/performance-tips.html#asynchronous-progress-tracking
+      url: streaming/performance-tips.html#asynchronous-progress-tracking
     - text: Continuous Processing
-      url: /streaming/performance-tips.html#continuous-processing
+      url: streaming/performance-tips.html#continuous-processing
 - text: Additional Information
-  url: /streaming/additional-information.html
+  url: streaming/additional-information.html
   subitems:
     - text: Miscellaneous Notes
-      url: /streaming/additional-information.html#miscellaneous-notes
+      url: streaming/additional-information.html#miscellaneous-notes
     - text: Related Resources
-      url: /streaming/additional-information.html#related-resources
+      url: streaming/additional-information.html#related-resources
     - text: Migration Guide
-      url: /streaming/additional-information.html#migration-guide
+      url: streaming/additional-information.html#migration-guide

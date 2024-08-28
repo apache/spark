@@ -24,7 +24,7 @@ for users to migrate effectively.
 
 * [Spark Core](core-migration-guide.html)
 * [SQL, Datasets, and DataFrame](sql-migration-guide.html)
-* [Structured Streaming](/streaming/ss-migration-guide.html)
+* [Structured Streaming](./streaming/ss-migration-guide.html)
 * [MLlib (Machine Learning)](ml-migration-guide.html)
 * [PySpark (Python on Spark)](pyspark-migration-guide.html)
 * [SparkR (R on Spark)](sparkr-migration-guide.html)

@@ -10,7 +10,7 @@ This include expects the following arguments:
 <ul>
 {% for item in include.nav %}
     <li>
-        <a href="{{ item.url }}">
+        <a href="{{ rel_path_to_root }}{{ item.url }}">
             {% if navurl contains item.url %}
                 <b>{{ item.text }}</b>
             {% else %}
