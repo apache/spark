@@ -94,11 +94,11 @@ private[spark] class Benchmark(
   /**
    * Runs the benchmark and outputs the results to stdout. This should be copied and added as
    * a comment with the benchmark. Although the results vary from machine to machine, it should
-   * provide some baseline. If `relative_time` is set to `true`, the `Relative` column will be
+   * provide some baseline. If `relativeTime` is set to `true`, the `Relative` column will be
    * the relative time of each case relative to the first case (less is better). Otherwise, it
    * will be the relative execution speed of each case relative to the first case (more is better).
    */
-  def run(relative_time: Boolean = false): Unit = {
+  def run(relativeTime: Boolean = false): Unit = {
     require(benchmarks.nonEmpty)
     // scalastyle:off
     println("Running benchmark: " + name)
@@ -118,7 +118,7 @@ private[spark] class Benchmark(
       name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", "Relative")
     out.println("-" * (nameLen + 80))
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      val relative = if (relative_time) result.bestMs / firstBest else firstBest / result.bestMs
+      val relative = if (relativeTime) result.bestMs / firstBest else firstBest / result.bestMs
       out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
         benchmark.name,
         "%5.0f" format result.bestMs,
