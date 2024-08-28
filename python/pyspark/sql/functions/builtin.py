@@ -20696,7 +20696,6 @@ def nullifzero(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
     >>> df.select(nullifzero(df.a).alias("result")).show()
-    [Row(r=None), Row(r=1)]
     +------+
     |result|
     +------+
