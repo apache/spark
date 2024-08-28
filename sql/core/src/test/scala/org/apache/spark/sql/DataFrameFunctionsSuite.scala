@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -337,13 +337,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sql("create table t(col int not null) using csv")
       sql("insert into t values (0)")
       val df = sql("select col from t")
-      checkAnswer(df.selectExpr("nullifzero(col)"), Seq(Row(null)))
+      checkAnswer(df.select(nullifzero($"col")), Seq(Row(null)))
     }
     // Here we exercise invalid cases including types that do not support ordering.
     val df = Seq((0)).toDF("a")
-    var expr = "nullifzero(map(1, 'a'))"
+    var expr = nullifzero(map(lit(1), lit("a")))
     checkError(
-      intercept[AnalysisException](df.selectExpr(expr)),
+      intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = Map(
         "left" -> "\"MAP<INT, STRING>\"",
@@ -352,10 +352,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = s"$expr",
         start = 0,
-        stop = expr.length - 1))
-    expr = "nullifzero(array(1, 2))"
+        stop = 10))
+    expr = nullifzero(array(lit(1), lit(2)))
     checkError(
-      intercept[AnalysisException](df.selectExpr(expr)),
+      intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = Map(
         "left" -> "\"ARRAY<INT>\"",
@@ -364,10 +364,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = s"$expr",
         start = 0,
-        stop = expr.length - 1))
-    expr = "nullifzero(date'2020-12-31')"
+        stop = 10))
+    expr = nullifzero(Literal.create("2020-12-31", DateType))
     checkError(
-      intercept[AnalysisException](df.selectExpr(expr)),
+      intercept[AnalysisException](df.select(expr)),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = Map(
         "left" -> "\"DATE\"",
@@ -376,7 +376,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = s"$expr",
         start = 0,
-        stop = expr.length - 1))
+        stop = 10))
   }
 
   test("nvl") {
