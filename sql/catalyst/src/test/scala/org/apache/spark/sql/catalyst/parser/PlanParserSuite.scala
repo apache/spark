@@ -382,10 +382,11 @@ class PlanParserSuite extends AnalysisTest {
     }
 
     val sql1 = s"$baseSql order by a sort by a"
+    val parameters = Map("clauses" -> "ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY")
     checkError(
       exception = parseException(sql1),
       errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "order by a sort by a",
         start = 16,
@@ -395,7 +396,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql2),
       errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "cluster by a distribute by a",
         start = 16,
@@ -405,7 +406,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql3),
       errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "order by a cluster by a",
         start = 16,
@@ -415,7 +416,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql4),
       errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "order by a distribute by a",
         start = 16,
@@ -491,7 +492,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
+      parameters = Map("error" -> "'b'", "hint" -> ""))
   }
 
   test("limit") {
@@ -1375,13 +1376,13 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'BAR'", "hint" -> ": missing ')'"))
+      parameters = Map("error" -> "'BAR'", "hint" -> ""))
 
     val sql2 = "SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))"
     checkError(
       exception = parseException(sql2),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'IN'", "hint" -> ""))
+      parameters = Map("error" -> "'INTO'", "hint" -> ""))
   }
 
   test("relation in v2 catalog") {

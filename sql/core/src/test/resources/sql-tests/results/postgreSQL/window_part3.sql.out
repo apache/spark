@@ -425,7 +425,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
-    "hint" : ": extra input 'BY'"
+    "hint" : ""
   }
 }
 

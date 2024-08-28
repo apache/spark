@@ -35,7 +35,7 @@ class ErrorParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("select *\nfrom r\norder by q\ncluster by q"),
       errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = Map("clauses" -> "ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY"),
       context = ExpectedContext(fragment = "order by q\ncluster by q", start = 16, stop = 38))
   }
 
