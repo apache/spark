@@ -1774,7 +1774,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled("reloading the same version") {
     // Keep executing the same batch for two or more times. Some queries with ForEachBatch
     // will cause this behavior.
-    // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
+    // The test was accidentally fixed by SPARK-48586 (https://github.com/apache/spark/pull/47130)
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
