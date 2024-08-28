@@ -427,41 +427,6 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
-<<<<<<< HEAD
-        res._cached_schema = self._cached_schema
-        return res
-
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
-        if not subset:
-            res = DataFrame(
-                plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
-            )
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            item = subset[0]
-            for c in item:
-                if not isinstance(c, str):
-                    raise PySparkTypeError(
-                        errorClass="NOT_STR",
-                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
-                    )
-            res = DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=item),
-                session=self._session,
-            )
-        else:
-            for c in subset:  # type: ignore[assignment]
-                if not isinstance(c, str):
-                    raise PySparkTypeError(
-                        errorClass="NOT_STR",
-                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
-                    )
-            res = DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
-                session=self._session,
-=======
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
@@ -470,13 +435,12 @@ class DataFrame(ParentDataFrame):
             )
 
         if subset is None:
-            return DataFrame(
+            res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         else:
-            return DataFrame(
+            res = DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
->>>>>>> parent of 560c08332b3 ([SPARK-48482][PYTHON] dropDuplicates and dropDuplicatesWIthinWatermark should accept variable length args)
             )
 
         res._cached_schema = self._cached_schema

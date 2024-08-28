@@ -1222,23 +1222,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
-<<<<<<< HEAD
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
-        if not subset:
-            jdf = self._jdf.dropDuplicates()
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            item = subset[0]
-            for c in item:
-                if not isinstance(c, str):
-                    raise PySparkTypeError(
-                        errorClass="NOT_STR",
-                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
-                    )
-            jdf = self._jdf.dropDuplicates(self._jseq(item))
-=======
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
             raise PySparkTypeError(
@@ -1248,14 +1231,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         if subset is None:
             jdf = self._jdf.dropDuplicates()
->>>>>>> parent of 560c08332b3 ([SPARK-48482][PYTHON] dropDuplicates and dropDuplicatesWIthinWatermark should accept variable length args)
         else:
-            for c in subset:  # type: ignore[assignment]
-                if not isinstance(c, str):
-                    raise PySparkTypeError(
-                        errorClass="NOT_STR",
-                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
-                    )
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
