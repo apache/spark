@@ -5652,21 +5652,29 @@ class AstBuilder extends DataTypeAstBuilder
         operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
       }
       val left: LogicalPlan = visitOperatorPipeStatement(ctx.operatorPipeStatement())
-      Option(ctx.selectClause).map { c =>
-        withSelectQuerySpecification(
-          ctx = ctx,
-          selectClause = c,
-          lateralView = new java.util.ArrayList[LateralViewContext](),
-          whereClause = null,
-          aggregationClause = null,
-          havingClause = null,
-          windowClause = null,
-          left)
-      }.getOrElse(Option(ctx.whereClause).map { c =>
-        withWhereClause(c, left)
-      }.getOrElse(Option(ctx.queryOrganization).map { c =>
-        withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-      }.get))
+      visitOperatorPipeRightSide(ctx.operatorPipeRightSide(), left)
     }
+  }
+
+  private def visitOperatorPipeRightSide(
+      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+    Option(ctx.selectClause).map { c =>
+      withSelectQuerySpecification(
+        ctx = ctx,
+        selectClause = c,
+        lateralView = new java.util.ArrayList[LateralViewContext](),
+        whereClause = null,
+        aggregationClause = null,
+        havingClause = null,
+        windowClause = null,
+        left)
+    }.getOrElse(Option(ctx.whereClause).map { c =>
+      withWhereClause(c, left)
+    }.getOrElse(Option(ctx.operator).map { c =>
+      // TODO: parse the UNION ALL here
+      withWhereClause(c, left)
+    }.getOrElse(Option(ctx.queryOrganization).map { c =>
+      withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
+    }.get)))
   }
 }

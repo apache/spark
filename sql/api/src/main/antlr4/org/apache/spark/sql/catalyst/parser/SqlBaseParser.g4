@@ -1449,12 +1449,19 @@ version
     ;
 
 operatorPipeStatement
-    : operatorPipeStatement OPERATOR_PIPE (
-        selectClause
-      | whereClause
-      | queryOrganization)
+    : operatorPipeStatement OPERATOR_PIPE operatorPipeRightSide
     | query
     ;
+
+operatorPipeRightSide
+    : selectClause
+      | whereClause
+      | left=queryTerm {legacy_setops_precedence_enabled}?
+          operator=(INTERSECT | UNION | EXCEPT | SETMINUS)
+          setQuantifier? right=queryTerm
+      | queryOrganization
+    ;
+
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
