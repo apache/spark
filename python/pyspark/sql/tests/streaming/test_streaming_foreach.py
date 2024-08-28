@@ -225,7 +225,6 @@ class StreamingTestsForeachMixin:
             self.assertTrue("test error" in err_msg)
             self.assertTrue("FOREACH_USER_FUNCTION_ERROR" in err_msg)
 
-
         self.assertEqual(len(tester.process_events()), 0)  # no row was processed
         close_events = tester.close_events()
         self.assertEqual(len(close_events), 1)
