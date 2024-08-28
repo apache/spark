@@ -120,7 +120,7 @@ import org.apache.spark.util.SparkClassUtils
  */
 @Stable
 abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
-  def sparkSession: SparkSession
+  def sparkSession: SparkSession[DS]
 
   val encoder: Encoder[T]
 

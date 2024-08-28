@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.StructType
  *     .getOrCreate()
  * }}}
  */
-abstract class SparkSession extends Serializable with Closeable {
+abstract class SparkSession[DS[_] <: Dataset[_, DS]] extends Serializable with Closeable {
   /**
    * The version of Spark on which this application is running.
    *
@@ -88,7 +88,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *       implementation is Hive, this will initialize the metastore, which may take some time.
    * @since 2.0.0
    */
-  def newSession(): SparkSession
+  def newSession(): SparkSession[DS]
 
   /* --------------------------------- *
    |  Methods for creating DataFrames  |
@@ -100,14 +100,14 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   @transient
-  def emptyDataFrame: Dataset[Row]
+  def emptyDataFrame: DS[Row]
 
   /**
    * Creates a `DataFrame` from a local Seq of Product.
    *
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): Dataset[Row]
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DS[Row]
 
   /**
    * :: DeveloperApi ::
@@ -119,7 +119,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rows: util.List[Row], schema: StructType): Dataset[Row]
+  def createDataFrame(rows: util.List[Row], schema: StructType): DS[Row]
 
   /**
    * Applies a schema to a List of Java Beans.
@@ -129,7 +129,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 1.6.0
    */
-  def createDataFrame(data: util.List[_], beanClass: Class[_]): Dataset[Row]
+  def createDataFrame(data: util.List[_], beanClass: Class[_]): DS[Row]
 
   /* ------------------------------- *
    |  Methods for creating DataSets  |
@@ -140,7 +140,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def emptyDataset[T: Encoder]: Dataset[T]
+  def emptyDataset[T: Encoder]: DS[T]
 
   /**
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
@@ -169,7 +169,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def createDataset[T: Encoder](data: Seq[T]): Dataset[T]
+  def createDataset[T: Encoder](data: Seq[T]): DS[T]
 
   /**
    * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
@@ -186,7 +186,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def createDataset[T: Encoder](data: util.List[T]): Dataset[T]
+  def createDataset[T: Encoder](data: util.List[T]): DS[T]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
@@ -194,7 +194,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def range(end: Long): Dataset[lang.Long]
+  def range(end: Long): DS[lang.Long]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
@@ -202,7 +202,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def range(start: Long, end: Long): Dataset[lang.Long]
+  def range(start: Long, end: Long): DS[lang.Long]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
@@ -210,7 +210,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def range(start: Long, end: Long, step: Long): Dataset[lang.Long]
+  def range(start: Long, end: Long, step: Long): DS[lang.Long]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
@@ -219,7 +219,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[lang.Long]
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): DS[lang.Long]
 
   /* ------------------------- *
    |  Catalog-related methods  |
@@ -238,7 +238,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *                  Note that, the global temporary view database is also valid here.
    * @since 2.0.0
    */
-  def table(tableName: String): Dataset[Row]
+  def table(tableName: String): DS[Row]
 
   /* ----------------- *
    |  Everything else  |
@@ -260,7 +260,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Array[_]): Dataset[Row]
+  def sql(sqlText: String, args: Array[_]): DS[Row]
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments,
@@ -280,7 +280,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): Dataset[Row]
+  def sql(sqlText: String, args: Map[String, Any]): DS[Row]
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments,
@@ -300,7 +300,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: util.Map[String, Any]): Dataset[Row] = {
+  def sql(sqlText: String, args: util.Map[String, Any]): DS[Row] = {
     sql(sqlText, args.asScala.toMap)
   }
 
@@ -310,7 +310,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): Dataset[Row] = sql(sqlText, Map.empty[String, Any])
+  def sql(sqlText: String): DS[Row] = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
@@ -333,5 +333,5 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  final def stop(): Unit = close()
+  def stop(): Unit = close()
 }
