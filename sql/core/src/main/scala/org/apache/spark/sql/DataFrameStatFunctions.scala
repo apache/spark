@@ -22,7 +22,6 @@ import java.{lang => jl, util => ju}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.Encoders.BINARY
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
@@ -35,7 +34,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 final class DataFrameStatFunctions private[sql](protected val df: DataFrame)
-  extends api.DataFrameStatFunctions[DataFrame] {
+  extends api.DataFrameStatFunctions[Dataset] {
 
   /** @inheritdoc */
   def approxQuantile(
@@ -83,6 +82,16 @@ final class DataFrameStatFunctions private[sql](protected val df: DataFrame)
   }
 
   /** @inheritdoc */
+  override def freqItems(cols: Array[String], support: Double): DataFrame =
+    super.freqItems(cols, support)
+
+  /** @inheritdoc */
+  override def freqItems(cols: Array[String]): DataFrame = super.freqItems(cols)
+
+  /** @inheritdoc */
+  override def freqItems(cols: Seq[String]): DataFrame = super.freqItems(cols)
+
+  /** @inheritdoc */
   override def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DataFrame = {
     super.sampleBy(col, fractions, seed)
   }
@@ -108,6 +117,4 @@ final class DataFrameStatFunctions private[sql](protected val df: DataFrame)
   override def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     super.sampleBy(col, fractions, seed)
   }
-
-  override protected def executeAgg(c: Column): Array[Byte] = df.select(c).as(BINARY).head()
 }

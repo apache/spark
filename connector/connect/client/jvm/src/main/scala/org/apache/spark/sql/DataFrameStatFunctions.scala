@@ -21,7 +21,7 @@ import java.{lang => jl, util => ju}
 
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql.DataFrameStatFunctions.approxQuantileResultEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, PrimitiveDoubleEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, PrimitiveDoubleEncoder}
 import org.apache.spark.sql.functions.lit
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.sql.functions.lit
  * @since 3.4.0
  */
 final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
-  extends api.DataFrameStatFunctions[DataFrame] {
+  extends api.DataFrameStatFunctions[Dataset] {
   private def root: Relation = df.plan.getRoot
   private val sparkSession: SparkSession = df.sparkSession
 
@@ -115,6 +115,7 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
   override def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame =
     super.sampleBy(col, fractions, seed)
 
+
   /** @inheritdoc */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
     import sparkSession.RichColumn
@@ -135,8 +136,6 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
       }
     }
   }
-
-  override protected def executeAgg(c: Column): Array[Byte] = df.select(c).as(BinaryEncoder).head()
 }
 
 private object DataFrameStatFunctions {

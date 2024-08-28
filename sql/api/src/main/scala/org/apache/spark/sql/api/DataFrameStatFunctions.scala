@@ -22,6 +22,7 @@ import _root_.java.{lang => jl, util => ju}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BinaryEncoder
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.functions.{count_min_sketch, lit}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
@@ -33,8 +34,8 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  * @since 1.4.0
  */
 @Stable
-abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
-  protected def df: DF
+abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
+  protected def df: DS[Row]
 
   /**
    * Calculates the approximate quantiles of a numerical column of a DataFrame.
@@ -183,7 +184,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    *
    * @since 1.4.0
    */
-  def crosstab(col1: String, col2: String): DF
+  def crosstab(col1: String, col2: String): DS[Row]
 
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
@@ -227,7 +228,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    * }}}
    * @since 1.4.0
    */
-  def freqItems(cols: Array[String], support: Double): DF =
+  def freqItems(cols: Array[String], support: Double): DS[Row] =
     freqItems(cols.toImmutableArraySeq, support)
 
   /**
@@ -244,7 +245,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    * @return A Local DataFrame with the Array of frequent items for each column.
    * @since 1.4.0
    */
-  def freqItems(cols: Array[String]): DF = freqItems(cols, 0.01)
+  def freqItems(cols: Array[String]): DS[Row] = freqItems(cols, 0.01)
 
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
@@ -286,7 +287,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    *
    * @since 1.4.0
    */
-  def freqItems(cols: Seq[String], support: Double): DF
+  def freqItems(cols: Seq[String], support: Double): DS[Row]
 
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
@@ -302,7 +303,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    * @return A Local DataFrame with the Array of frequent items for each column.
    * @since 1.4.0
    */
-  def freqItems(cols: Seq[String]): DF = freqItems(cols, 0.01)
+  def freqItems(cols: Seq[String]): DS[Row] = freqItems(cols, 0.01)
 
   /**
    * Returns a stratified sample without replacement based on the fraction given on each stratum.
@@ -329,7 +330,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    *
    * @since 1.5.0
    */
-  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DF = {
+  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DS[Row] = {
     sampleBy(Column(col), fractions, seed)
   }
 
@@ -344,7 +345,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    *
    * @since 1.5.0
    */
-  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DF = {
+  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DS[Row] = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 
@@ -376,7 +377,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    *
    * @since 3.0.0
    */
-  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DF
+  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DS[Row]
 
 
   /**
@@ -391,7 +392,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    * @return a new `DataFrame` that represents the stratified sample
    * @since 3.0.0
    */
-  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DF = {
+  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DS[Row] = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 
@@ -456,7 +457,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
       confidence: Double,
       seed: Int): CountMinSketch = withOrigin {
     val cms = count_min_sketch(col, lit(eps), lit(confidence), lit(seed))
-    val bytes: Array[Byte] = executeAgg(cms)
+    val bytes: Array[Byte] = df.select(cms).as(BinaryEncoder).head()
     CountMinSketch.readFrom(bytes)
   }
 
@@ -507,11 +508,7 @@ abstract class DataFrameStatFunctions[DF <: Dataset[Row]] {
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = withOrigin {
     val bf = Column.internalFn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits))
-    val bytes: Array[Byte] = executeAgg(bf)
+    val bytes: Array[Byte] = df.select(bf).as(BinaryEncoder).head()
     BloomFilter.readFrom(bytes)
   }
-
-  // TODO replace me after DF API has been merged
-  // df.select(agg).as(BinaryEncoder).head()
-  protected def executeAgg(c: Column): Array[Byte]
 }
