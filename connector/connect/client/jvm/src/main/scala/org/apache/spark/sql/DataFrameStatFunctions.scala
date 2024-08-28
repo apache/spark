@@ -30,7 +30,7 @@ import org.apache.spark.sql.functions.lit
  * @since 3.4.0
  */
 final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
-  extends api.DataFrameStatFunctions[Dataset] {
+    extends api.DataFrameStatFunctions[Dataset] {
   private def root: Relation = df.plan.getRoot
   private val sparkSession: SparkSession = df.sparkSession
 
@@ -114,7 +114,6 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
   /** @inheritdoc */
   override def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame =
     super.sampleBy(col, fractions, seed)
-
 
   /** @inheritdoc */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
