@@ -430,8 +430,8 @@ class DataFrame(ParentDataFrame):
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+                errorClass="NOT_LIST_OR_TUPLE",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
         if subset is None:
@@ -451,8 +451,8 @@ class DataFrame(ParentDataFrame):
     def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+                errorClass="NOT_LIST_OR_TUPLE",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
         if subset is None:
