@@ -3833,7 +3833,7 @@
   },
   "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
     "message" : [
-      "SHOW COLUMNS with conflicting namespace: <namespaceA> != <namespaceB>."
+      "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
     ],
     "sqlState" : "42K05"
   },
