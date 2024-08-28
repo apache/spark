@@ -363,7 +363,7 @@ class OperatorStateMetadataV2Reader(
  * A helper class to manage the metadata files for the operator state checkpoint.
  * This class is used to manage the metadata files for OperatorStateMetadataV2, and
  * provides utils to purge the oldest files such that we only keep the metadata files
- * from the latest N runs
+ * for which a commit log is present
  * @param stateCheckpointPath The root path of the state checkpoint directory
  * @param stateSchemaPath The path where the schema files are stored
  * @param hadoopConf The Hadoop configuration to create the file manager
@@ -377,7 +377,7 @@ class OperatorStateMetadataV2FileManager(
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
-  protected def isBatchFile(path: Path) = {
+  protected def isBatchFile(path: Path): Boolean = {
     try {
       path.getName.toLong
       true
@@ -389,9 +389,7 @@ class OperatorStateMetadataV2FileManager(
   /**
    * A `PathFilter` to filter only batch files
    */
-  protected val batchFilesFilter = new PathFilter {
-    override def accept(path: Path): Boolean = isBatchFile(path)
-  }
+  protected val batchFilesFilter: PathFilter = (path: Path) => isBatchFile(path)
 
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
@@ -416,6 +414,9 @@ class OperatorStateMetadataV2FileManager(
     }
   }
 
+  // We only want to keep the metadata and schema files for which the commit
+  // log is present, so we will delete any file that precedes the batch for the oldest
+  // commit log
   private def findThresholdBatchId(): Long = {
     commitLog.listBatchesOnDisk.headOption.getOrElse(0L) - 1L
   }
