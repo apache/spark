@@ -1443,7 +1443,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
-    new Path(stateCheckpointPath, "default/_metadata/schema")
+    new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
   test("transformWithState - verify that metadata and schema logs are purged") {

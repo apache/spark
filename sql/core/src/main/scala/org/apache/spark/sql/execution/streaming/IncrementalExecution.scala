@@ -98,10 +98,9 @@ class IncrementalExecution(
         s"${stateInfo.operatorId.toString}")
     storeName match {
       case Some(storeName) =>
-        val storeNamePath = new Path(stateCheckpointPath, storeName)
-        new Path(new Path(storeNamePath, "_metadata"), "schema")
+        new Path(new Path(stateCheckpointPath, "_stateSchema"), storeName)
       case None =>
-        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+        new Path(new Path(stateCheckpointPath, "_stateSchema"), "default")
     }
   }
 
