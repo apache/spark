@@ -1290,10 +1290,8 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   def observe(name: String, expr: Column, exprs: Column*): DS[T]
 
   /**
-   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance.
-   * This is equivalent to calling `observe(String, Column, Column*)` but does not require
-   * adding `org.apache.spark.sql.util.QueryExecutionListener` to the spark session.
-   * This method does not support streaming datasets.
+   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance. This method
+   * does not support streaming datasets.
    *
    * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
    *
