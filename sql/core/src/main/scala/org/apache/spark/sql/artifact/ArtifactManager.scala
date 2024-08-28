@@ -28,10 +28,10 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkUnsupportedOperationException}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Artifact, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{CacheId, StorageLevel}
@@ -192,6 +192,38 @@ class ArtifactManager(session: SparkSession) extends Logging {
         session.sparkContext.addArchive(canonicalUri.toString)
       } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
         session.sparkContext.addFile(uri)
+      }
+    }
+  }
+
+  /**
+   * Add locally-stored artifacts to the session. These artifacts are from a user-provided
+   * permanent path which are accessible by the driver directly.
+   *
+   * Different from the [[addArtifact]] method, this method will not delete staged artifacts since
+   * they are from a permanent location.
+   */
+  private[sql] def addLocalArtifacts(artifacts: Seq[Artifact]): Unit = {
+    artifacts.foreach { artifact =>
+      artifact.storage match {
+        case d: Artifact.LocalFile =>
+          addArtifact(
+            artifact.path,
+            d.path,
+            fragment = None,
+            deleteStagedFile = false)
+        case d: Artifact.InMemory =>
+          val tempDir = Utils.createTempDir().toPath
+          val tempFile = tempDir.resolve(artifact.path.getFileName)
+          val outStream = Files.newOutputStream(tempFile)
+          Utils.tryWithSafeFinallyAndFailureCallbacks {
+            d.stream.transferTo(outStream)
+            addArtifact(artifact.path, tempFile, fragment = None)
+          }(finallyBlock = {
+            outStream.close()
+          })
+        case _ =>
+          throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
       }
     }
   }

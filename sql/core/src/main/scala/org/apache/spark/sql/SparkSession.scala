@@ -813,7 +813,7 @@ class SparkSession private(
    * @since 4.0.0
    */
   @Experimental
-  def addArtifact(uri: URI): Unit = addArtifactsInternal(Artifact.parseArtifacts(uri))
+  def addArtifact(uri: URI): Unit = artifactManager.addLocalArtifacts(Artifact.parseArtifacts(uri))
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
@@ -840,7 +840,7 @@ class SparkSession private(
       targetPath.getFileName.toString,
       targetPath,
       new Artifact.InMemory(bytes))
-    addArtifactsInternal(artifact :: Nil)
+    artifactManager.addLocalArtifacts(artifact :: Nil)
   }
 
   /**
@@ -867,7 +867,7 @@ class SparkSession private(
       targetPath.getFileName.toString,
       targetPath,
       new Artifact.LocalFile(Paths.get(source)))
-    addArtifactsInternal(artifact :: Nil)
+    artifactManager.addLocalArtifacts(artifact :: Nil)
   }
 
   /**
@@ -879,7 +879,9 @@ class SparkSession private(
    */
   @Experimental
   @scala.annotation.varargs
-  def addArtifacts(uri: URI*): Unit = addArtifactsInternal(uri.flatMap(Artifact.parseArtifacts))
+  def addArtifacts(uri: URI*): Unit = {
+    artifactManager.addLocalArtifacts(uri.flatMap(Artifact.parseArtifacts))
+  }
 
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
@@ -986,29 +988,6 @@ class SparkSession private(
       iter.map(r => fromJava(r).asInstanceOf[InternalRow])
     }
     internalCreateDataFrame(rowRdd, schema)
-  }
-
-  private def addArtifactsInternal(artifacts: Seq[Artifact]): Unit = artifacts.foreach { artifact =>
-    artifact.storage match {
-      case d: Artifact.LocalFile =>
-        artifactManager.addArtifact(
-          artifact.path,
-          d.path,
-          fragment = None,
-          deleteStagedFile = false)
-      case d: Artifact.InMemory =>
-        val tempDir = Utils.createTempDir().toPath
-        val tempFile = tempDir.resolve(artifact.path.getFileName)
-        val outStream = Files.newOutputStream(tempFile)
-        Utils.tryWithSafeFinallyAndFailureCallbacks {
-          d.stream.transferTo(outStream)
-          artifactManager.addArtifact(artifact.path, tempFile, fragment = None)
-        }(finallyBlock = {
-          outStream.close()
-        })
-      case _ =>
-        throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
-    }
   }
 
   /**
