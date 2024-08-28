@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
-import java.nio.file.{Files, Paths}
+import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
