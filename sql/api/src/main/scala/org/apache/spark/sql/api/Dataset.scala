@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.api
 
-import scala.annotation.varargs
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -24,7 +23,7 @@ import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
-import org.apache.spark.sql.{functions, AnalysisException, Column, Encoder, Row, TypedColumn}
+import org.apache.spark.sql.{functions, AnalysisException, Column, Encoder, Observation, Row, TypedColumn}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -1287,8 +1286,32 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
   * @group typedrel
   * @since 3.0.0
   */
-  @varargs
+  @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): DS[T]
+
+  /**
+   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance.
+   * This is equivalent to calling `observe(String, Column, Column*)` but does not require
+   * adding `org.apache.spark.sql.util.QueryExecutionListener` to the spark session.
+   * This method does not support streaming datasets.
+   *
+   * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
+   *
+   * {{{
+   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
+   *   val observation = Observation("my_metrics")
+   *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
+   *   observed_ds.write.parquet("ds.parquet")
+   *   val metrics = observation.get
+   * }}}
+   *
+   * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
+   *
+   * @group typedrel
+   * @since 3.3.0
+   */
+  @scala.annotation.varargs
+  def observe(observation: Observation, expr: Column, exprs: Column*): DS[T]
 
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function

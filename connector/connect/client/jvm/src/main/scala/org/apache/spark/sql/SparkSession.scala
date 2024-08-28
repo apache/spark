@@ -813,12 +813,10 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def setMetricsAndUnregisterObservation(
-      planId: Long,
-      metrics: Map[String, Any]): Unit = {
+  private[sql] def setMetricsAndUnregisterObservation(planId: Long, metrics: Row): Unit = {
     val observationOrNull = observationRegistry.remove(planId)
     if (observationOrNull != null) {
-      observationOrNull.setMetricsAndNotify(Some(metrics))
+      observationOrNull.setMetricsAndNotify(metrics)
     }
   }
 

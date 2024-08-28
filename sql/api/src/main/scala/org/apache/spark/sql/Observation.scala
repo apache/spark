@@ -17,7 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.util.UUID
+
+import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.{Duration, DurationInt}
 import scala.jdk.CollectionConverters.MapHasAsJava
+import scala.util.Try
+
+import org.apache.spark.util.SparkThreadUtils
 
 /**
  * Helper class to simplify usage of `Dataset.observe(String, Column, Column*)`:
@@ -39,11 +46,20 @@ import scala.jdk.CollectionConverters.MapHasAsJava
  * @param name name of the metric
  * @since 3.3.0
  */
-abstract class ObservationBase(val name: String) {
+class Observation(val name: String) {
+  require(name.nonEmpty, "Name must not be empty")
 
-  if (name.isEmpty) throw new IllegalArgumentException("Name must not be empty")
+  /**
+   * Create an Observation with a random name.
+   */
+  def this() = this(UUID.randomUUID().toString)
 
-  @volatile protected var metrics: Option[Map[String, Any]] = None
+  private val promise = Promise[Map[String, Any]]()
+
+  /**
+   * Future holding the (yet to be completed) observation.
+   */
+  val future: Future[Map[String, Any]] = promise.future
 
   /**
    * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish
@@ -54,17 +70,7 @@ abstract class ObservationBase(val name: String) {
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
-  def get: Map[String, _] = {
-    synchronized {
-      // we need to loop as wait might return without us calling notify
-      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
-      while (this.metrics.isEmpty) {
-        wait()
-      }
-    }
-
-    this.metrics.get
-  }
+  def get: Map[String, Any] = SparkThreadUtils.awaitResult(future, Duration.Inf)
 
   /**
    * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish
@@ -75,9 +81,7 @@ abstract class ObservationBase(val name: String) {
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
-  def getAsJava: java.util.Map[String, AnyRef] = {
-    get.map { case (key, value) => (key, value.asInstanceOf[Object]) }.asJava
-  }
+  def getAsJava: java.util.Map[String, Any] = get.asJava
 
   /**
    * Get the observed metrics. This returns the metrics if they are available, otherwise an empty.
@@ -85,13 +89,8 @@ abstract class ObservationBase(val name: String) {
    * @return the observed metrics as a `Map[String, Any]`
    */
   @throws[InterruptedException]
-  private[sql] def getOrEmpty: Map[String, _] = {
-    synchronized {
-      if (metrics.isEmpty) {
-        wait(100) // Wait for 100ms to see if metrics are available
-      }
-      metrics.getOrElse(Map.empty)
-    }
+  private[sql] def getOrEmpty: Map[String, Any] = {
+    Try(SparkThreadUtils.awaitResult(future, 100.millis)).getOrElse(Map.empty)
   }
 
   /**
@@ -99,15 +98,25 @@ abstract class ObservationBase(val name: String) {
    *
    * @return `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[spark] def setMetricsAndNotify(metrics: Option[Map[String, Any]]): Boolean = {
-    synchronized {
-      this.metrics = metrics
-      if(metrics.isDefined) {
-        notifyAll()
-        true
-      } else {
-        false
-      }
-    }
+  private[spark] def setMetricsAndNotify(metrics: Row): Boolean = {
+    val metricsMap = metrics.getValuesMap(metrics.schema.map(_.name))
+    promise.trySuccess(metricsMap)
   }
+}
+
+/**
+ * (Scala-specific) Create instances of Observation via Scala `apply`.
+ * @since 3.3.0
+ */
+object Observation {
+
+  /**
+   * Observation constructor for creating an anonymous observation.
+   */
+  def apply(): Observation = new Observation()
+
+  /**
+   * Observation constructor for creating a named observation.
+   */
+  def apply(name: String): Observation = new Observation(name)
 }

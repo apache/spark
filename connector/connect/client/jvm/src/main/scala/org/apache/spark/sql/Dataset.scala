@@ -1416,28 +1416,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  /**
-   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance. This is
-   * equivalent to calling `observe(String, Column, Column*)` but does not require to collect all
-   * results before returning the metrics - the metrics are filled during iterating the results,
-   * as soon as they are available. This method does not support streaming datasets.
-   *
-   * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
-   *
-   * {{{
-   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
-   *   val observation = Observation("my_metrics")
-   *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
-   *   observed_ds.write.parquet("ds.parquet")
-   *   val metrics = observation.get
-   * }}}
-   *
-   * @throws IllegalArgumentException
-   *   If this is a streaming Dataset (this.isStreaming == true)
-   *
-   * @group typedrel
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
     val df = observe(observation.name, expr, exprs: _*)
