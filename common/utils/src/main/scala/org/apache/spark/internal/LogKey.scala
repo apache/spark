@@ -160,7 +160,6 @@ private[spark] object LogKeys {
   case object CONFIG_KEY_UPDATED extends LogKey
   case object CONFIG_VERSION extends LogKey
   case object CONSUMER extends LogKey
-
   case object CONTAINER_ID extends LogKey
   case object CONTAINER_STATE extends LogKey
   case object CONTEXT extends LogKey
@@ -276,7 +275,6 @@ private[spark] object LogKeys {
   case object FILE_NAME extends LogKey
   case object FILE_NAME2 extends LogKey
   case object FILE_NAME3 extends LogKey
-
   case object FILE_START_OFFSET extends LogKey
   case object FILE_SYSTEM extends LogKey
   case object FILE_VERSION extends LogKey
@@ -289,10 +287,8 @@ private[spark] object LogKeys {
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
-
   case object FUNCTION_NAME extends LogKey
   case object FUNCTION_PARAM extends LogKey
-
   case object GLOBAL_WATERMARK extends LogKey
   case object GROUP_BY_EXPRS extends LogKey
   case object GROUP_ID extends LogKey
@@ -301,11 +297,8 @@ private[spark] object LogKeys {
   case object HASH_MAP_SIZE extends LogKey
   case object HEARTBEAT extends LogKey
   case object HEARTBEAT_INTERVAL extends LogKey
-
   case object HIVE_CLIENT_VERSION extends LogKey
   case object HIVE_METASTORE_VERSION extends LogKey
-
-
   case object HOST extends LogKey
   case object HOSTS extends LogKey
   case object HOST_LOCAL_BLOCKS_SIZE extends LogKey
@@ -345,7 +338,6 @@ private[spark] object LogKeys {
   case object KEY extends LogKey
   case object KEY2 extends LogKey
   case object KEYTAB extends LogKey
-
   case object KILL_EXECUTORS extends LogKey
   case object LABEL_COLUMN extends LogKey
   case object LARGEST_CLUSTER_INDEX extends LogKey
@@ -365,7 +357,6 @@ private[spark] object LogKeys {
   case object LOAD_TIME extends LogKey
   case object LOCALE extends LogKey
   case object LOCAL_BLOCKS_SIZE extends LogKey
-
   case object LOCATION extends LogKey
   case object LOGICAL_PLAN extends LogKey
   case object LOGICAL_PLAN_COLUMNS extends LogKey
@@ -415,7 +406,6 @@ private[spark] object LogKeys {
   case object METHOD_NAME extends LogKey
   case object METHOD_PARAM_TYPES extends LogKey
   case object METRICS_JSON extends LogKey
-
   case object MINI_BATCH_FRACTION extends LogKey
   case object MIN_COMPACTION_BATCH_ID extends LogKey
   case object MIN_NUM_FREQUENT_PATTERN extends LogKey
@@ -561,7 +551,6 @@ private[spark] object LogKeys {
   case object OLD_GENERATION_GC extends LogKey
   case object OLD_VALUE extends LogKey
   case object OPEN_COST_IN_BYTES extends LogKey
-
   case object OPERATION_HANDLE_ID extends LogKey
   case object OPERATION_ID extends LogKey
   case object OPTIMIZED_PLAN_COLUMNS extends LogKey
@@ -652,7 +641,6 @@ private[spark] object LogKeys {
   case object RECEIVER_IDS extends LogKey
   case object RECORDS extends LogKey
   case object RECOVERY_STATE extends LogKey
-
   case object REDUCE_ID extends LogKey
   case object REGEX extends LogKey
   case object REGISTERED_EXECUTOR_FILE extends LogKey
@@ -679,7 +667,6 @@ private[spark] object LogKeys {
   case object RESULT extends LogKey
   case object RESULT_SIZE_BYTES extends LogKey
   case object RESULT_SIZE_BYTES_MAX extends LogKey
-
   case object RETRY_WAIT_TIME extends LogKey
   case object RIGHT_EXPR extends LogKey
   case object RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES extends LogKey
@@ -702,12 +689,8 @@ private[spark] object LogKeys {
   case object SERVER_NAME extends LogKey
   case object SERVICE_NAME extends LogKey
   case object SERVLET_CONTEXT_HANDLER_PATH extends LogKey
-
   case object SESSION_HOLD_INFO extends LogKey
   case object SESSION_ID extends LogKey
-
-
-
   case object SHORTER_SERVICE_NAME extends LogKey
   case object SHORT_USER_NAME extends LogKey
   case object SHUFFLE_BLOCK_INFO extends LogKey
@@ -748,7 +731,6 @@ private[spark] object LogKeys {
   case object STAGE_NAME extends LogKey
   case object START_INDEX extends LogKey
   case object START_TIME extends LogKey
-
   case object STATE_NAME extends LogKey
   case object STATE_STORE_ID extends LogKey
   case object STATE_STORE_PROVIDER extends LogKey
@@ -774,13 +756,10 @@ private[spark] object LogKeys {
   case object STREAMING_WRITE extends LogKey
   case object STREAM_CHUNK_ID extends LogKey
   case object STREAM_ID extends LogKey
-
   case object SUBMISSION_ID extends LogKey
   case object SUBSAMPLING_RATE extends LogKey
   case object SUB_QUERY extends LogKey
   case object TABLE_NAME extends LogKey
-
-
   case object TAG extends LogKey
   case object TARGET_NUM_EXECUTOR extends LogKey
   case object TARGET_NUM_EXECUTOR_DELTA extends LogKey
@@ -804,9 +783,6 @@ private[spark] object LogKeys {
   case object THREAD extends LogKey
   case object THREAD_ID extends LogKey
   case object THREAD_NAME extends LogKey
-
-
-
   case object THRESHOLD extends LogKey
   case object THRESH_TIME extends LogKey
   case object TIME extends LogKey
