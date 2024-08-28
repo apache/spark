@@ -1286,10 +1286,13 @@ class AstBuilder extends DataTypeAstBuilder
    * - INTERSECT [DISTINCT | ALL]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
-    val left = plan(ctx.left)
-    val right = plan(ctx.right)
     val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
-    ctx.operator.getType match {
+    visitSetOperationImpl(plan(ctx.left), plan(ctx.right), all, ctx.operator.getType)
+  }
+
+  private def visitSetOperationImpl(
+      left: LogicalPlan, right: LogicalPlan, all: Boolean, operatorType: Int): LogicalPlan = {
+    operatorType match {
       case SqlBaseParser.UNION if all =>
         Union(left, right)
       case SqlBaseParser.UNION =>
@@ -5670,8 +5673,11 @@ class AstBuilder extends DataTypeAstBuilder
         left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       withWhereClause(c, left)
+    }.getOrElse(Option(ctx.operator).map { c =>
+      val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
+      visitSetOperationImpl(left, plan(ctx.right), all, ctx.operator.getType)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-    }.get))
+    }.get)))
   }
 }

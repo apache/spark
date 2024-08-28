@@ -1456,6 +1456,12 @@ operatorPipeStatement
 operatorPipeRightSide
     : selectClause
       | whereClause
+      | {legacy_setops_precedence_enabled}?
+          operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
+      | {!legacy_setops_precedence_enabled}?
+          operator=INTERSECT setQuantifier? right=queryTerm
+      | {!legacy_setops_precedence_enabled}?
+          operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
       | queryOrganization
     ;
 
