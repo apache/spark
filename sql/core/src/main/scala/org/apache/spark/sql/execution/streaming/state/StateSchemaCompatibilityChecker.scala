@@ -133,12 +133,11 @@ class StateSchemaCompatibilityChecker(
    * @param oldSchema - old state schema
    * @param newSchema - new state schema
    * @param ignoreValueSchema - whether to ignore value schema or not
-   * @return whether schema has evolved or not
    */
   private def check(
       oldSchema: StateStoreColFamilySchema,
       newSchema: StateStoreColFamilySchema,
-      ignoreValueSchema: Boolean) : Boolean = {
+      ignoreValueSchema: Boolean) : Unit = {
     val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
       oldSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
@@ -146,7 +145,6 @@ class StateSchemaCompatibilityChecker(
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
-      false
     } else if (!schemasCompatible(storedKeySchema, keySchema)) {
       throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
         keySchema.toString)
@@ -155,7 +153,6 @@ class StateSchemaCompatibilityChecker(
         valueSchema.toString)
     } else {
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
-      true
     }
   }
 
@@ -182,17 +179,15 @@ class StateSchemaCompatibilityChecker(
       val existingSchemaMap = existingStateSchemaList.map { schema =>
         schema.colFamilyName -> schema
       }.toMap
-      var hasEvolvedSchema = false
       // For each new state variable, we want to compare it to the old state variable
       // schema with the same name
       newStateSchemaList.foreach { newSchema =>
         existingSchemaMap.get(newSchema.colFamilyName).foreach { existingStateSchema =>
-          if (check(existingStateSchema, newSchema, ignoreValueSchema)) {
-            hasEvolvedSchema = true
+          check(existingStateSchema, newSchema, ignoreValueSchema)
           }
         }
       }
-      hasEvolvedSchema
+      false
     }
   }
 
