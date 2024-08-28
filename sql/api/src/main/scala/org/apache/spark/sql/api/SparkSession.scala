@@ -333,5 +333,5 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def stop(): Unit = close()
+  final def stop(): Unit = close()
 }

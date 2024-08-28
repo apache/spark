@@ -838,7 +838,9 @@ class SparkSession private(
    *
    * @since 2.1.0
    */
-  override def close(): Unit = stop()
+  override def close(): Unit = {
+    sparkContext.stop()
+  }
 
   /**
    * Parses the data type in our internal string representation. The data type string should
