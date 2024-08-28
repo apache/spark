@@ -918,6 +918,13 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Add a tag to be assigned to all the jobs started by this thread. The tag will be prefixed with
+   * an internal prefix to avoid conflicts with user tags.
+   */
+  private[spark] def addInternalJobTag(tag: String): Unit =
+    addJobTag(s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}$tag")
+
+  /**
    * Remove a tag previously added to be assigned to all the jobs started by this thread.
    * Noop if such a tag was not added earlier.
    *
@@ -938,6 +945,16 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Get the tags that are currently set to be assigned to all the jobs started by this thread.
+   */
+  private[spark] def getInternalJobTags(): Set[String] = {
+    Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
+      .filter(_.startsWith(SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX)) // only internal tags
+  }
+
+  /**
+   * Get the tags that are currently set to be assigned to all the jobs started by this thread.
    *
    * @since 3.5.0
    */
@@ -945,7 +962,8 @@ class SparkContext(config: SparkConf) extends Logging {
     Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
-      .filter(!_.isEmpty) // empty string tag should not happen, but be defensive
+      .filterNot(_.startsWith(SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX)) // exclude internal tags
+      .filter(_.nonEmpty) // empty string tag should not happen, but be defensive
   }
 
   /**
@@ -954,7 +972,14 @@ class SparkContext(config: SparkConf) extends Logging {
    * @since 3.5.0
    */
   def clearJobTags(): Unit = {
-    setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
+    val internalTags = getInternalJobTags()
+    if (internalTags.isEmpty) {
+      setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
+    } else {
+      setLocalProperty(
+        SparkContext.SPARK_JOB_TAGS,
+        internalTags.mkString(SparkContext.SPARK_JOB_TAGS_SEP))
+    }
   }
 
   /**
@@ -2690,19 +2715,14 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @param reason reason for cancellation
-   * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
-   *    the given tag. If the function returns true, the job will be cancelled.
    * @return A future that will be completed with the set of job IDs that were cancelled.
    */
-  private[spark] def cancelJobsWithTag(
-      tag: String,
-      reason: String,
-      shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {
+  private[spark] def cancelJobsWithTagWithFuture(tag: String, reason: String): Future[Set[Int]] = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
 
     val cancelledJobs = Promise[Set[Int]]()
-    dagScheduler.cancelJobsWithTag(tag, Option(reason), Some(shouldCancelJob), Some(cancelledJobs))
+    dagScheduler.cancelJobsWithTag(tag, Option(reason), Some(cancelledJobs))
     cancelledJobs.future
   }
 
@@ -2717,11 +2737,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobsWithTag(tag: String, reason: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(
-      tag,
-      Option(reason),
-      shouldCancelJob = None,
-      jobsToBeCancelled = None)
+    dagScheduler.cancelJobsWithTag(tag, Option(reason), jobsToBeCancelled = None)
   }
 
   /**
@@ -2734,51 +2750,13 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(
-      tag,
-      reason = None,
-      shouldCancelJob = None,
-      jobsToBeCancelled = None)
-  }
-
-  /**
-   * Cancel all jobs that have been scheduled or are running.
-   *
-   * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
-   *    the given tag. If the function returns true, the job will be cancelled.
-   * @return A future that will be completed with the set of job IDs that were cancelled.
-   */
-  private[spark] def cancelAllJobs(shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {
-    assertNotStopped()
-
-    val cancelledJobs = Promise[Set[Int]]()
-    dagScheduler.cancelAllJobs(Some(shouldCancelJob), Some(cancelledJobs))
-    cancelledJobs.future
+    dagScheduler.cancelJobsWithTag(tag, reason = None, jobsToBeCancelled = None)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
   def cancelAllJobs(): Unit = {
     assertNotStopped()
-    dagScheduler.cancelAllJobs(shouldCancelJob = None, jobsToBeCancelled = None)
-  }
-
-  /**
-   * Cancel a given job if it's scheduled or running.
-   *
-   * @param jobId the job ID to cancel
-   * @param reason reason for cancellation
-   * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
-   *    the given tag. If the function returns true, the job will be cancelled.
-   * @return A future that will be completed with the set of job IDs that were cancelled.
-   * @note Throws `InterruptedException` if the cancel message cannot be sent
-   */
-  private[spark] def cancelJob(
-      jobId: Int,
-      reason: String,
-      shouldCancelJob: ActiveJob => Boolean): Future[Set[Int]] = {
-    val cancelledJobs = Promise[Set[Int]]()
-    dagScheduler.cancelJob(jobId, Option(reason), Some(shouldCancelJob), Some(cancelledJobs))
-    cancelledJobs.future
+    dagScheduler.cancelAllJobs()
   }
 
   /**
@@ -2789,7 +2767,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int, reason: String): Unit = {
-    dagScheduler.cancelJob(jobId, Option(reason), shouldCancelJob = None, jobsToBeCancelled = None)
+    dagScheduler.cancelJob(jobId, Option(reason))
   }
 
   /**
@@ -2799,7 +2777,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int): Unit = {
-    dagScheduler.cancelJob(jobId, reason = None, shouldCancelJob = None, jobsToBeCancelled = None)
+    dagScheduler.cancelJob(jobId, reason = None)
   }
 
   /**
@@ -3160,6 +3138,9 @@ object SparkContext extends Logging {
 
   /** Separator of tags in SPARK_JOB_TAGS property */
   private[spark] val SPARK_JOB_TAGS_SEP = ","
+
+  /** Prefix to mark a tag to be visible internally, not by users */
+  private[spark] val SPARK_JOB_TAGS_INTERNAL_PREFIX = "__internal_tag__"
 
   // Same rules apply to Spark Connect execution tags, see ExecuteHolder.throwIfInvalidTag
   private[spark] def throwIfInvalidTag(tag: String) = {

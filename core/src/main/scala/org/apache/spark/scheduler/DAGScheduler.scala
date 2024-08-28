@@ -1100,13 +1100,9 @@ private[spark] class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(
-      jobId: Int,
-      reason: Option[String],
-      shouldCancelJob: Option[ActiveJob => Boolean],
-      jobsToBeCancelled: Option[Promise[Set[Int]]]): Unit = {
+  def cancelJob(jobId: Int, reason: Option[String]): Unit = {
     logInfo(log"Asked to cancel job ${MDC(JOB_ID, jobId)}")
-    eventProcessLoop.post(JobCancelled(jobId, reason, shouldCancelJob, jobsToBeCancelled))
+    eventProcessLoop.post(JobCancelled(jobId, reason))
   }
 
   /**
@@ -1123,36 +1119,31 @@ private[spark] class DAGScheduler(
    * Cancel all jobs with a given tag.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
-   * @param reason reason for cancellation
-   * @param shouldCancelJob Callback function to be called with the job ID of each job that matches
-   *    the given tag. If the function returns true, the job will be cancelled.
+   * @param reason reason for cancellation.
+   * @param jobsToBeCancelled a promise to be completed with the set of job ids that are cancelled.
    */
   def cancelJobsWithTag(
       tag: String,
       reason: Option[String],
-      shouldCancelJob: Option[ActiveJob => Boolean],
       jobsToBeCancelled: Option[Promise[Set[Int]]]): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     logInfo(log"Asked to cancel jobs with tag ${MDC(TAG, tag)}")
-    eventProcessLoop.post(JobTagCancelled(tag, reason, shouldCancelJob, jobsToBeCancelled))
+    eventProcessLoop.post(JobTagCancelled(tag, reason, jobsToBeCancelled))
   }
 
   /**
    * Cancel all jobs that are running or waiting in the queue.
    */
-  def cancelAllJobs(
-      shouldCancelJob: Option[ActiveJob => Boolean],
-      jobsToBeCancelled: Option[Promise[Set[Int]]]): Unit = {
-    eventProcessLoop.post(AllJobsCancelled(shouldCancelJob, jobsToBeCancelled))
+  def cancelAllJobs(): Unit = {
+    eventProcessLoop.post(AllJobsCancelled)
   }
 
-  def doCancelAllJobs(
-      shouldCancelJob: Option[ActiveJob => Boolean],
-      jobsToBeCancelled: Option[Promise[Set[Int]]]): Unit = {
+  private[scheduler] def doCancelAllJobs(): Unit = {
     // Cancel all running jobs.
-    val jobIds = runningStages.map(_.firstJobId).filter(shouldCancelJobId(_, shouldCancelJob))
-    jobsToBeCancelled.foreach(_.success(jobIds.toSet))
-    jobIds.foreach(doJobCancellation(_, Option("as part of cancellation of all jobs")))
+    runningStages.map(_.firstJobId).foreach(handleJobCancellation(_,
+      Option("as part of cancellation of all jobs")))
+    activeJobs.clear() // These should already be empty by this point,
+    jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
   }
 
   /**
@@ -1248,13 +1239,12 @@ private[spark] class DAGScheduler(
     }
     val jobIds = activeInGroup.map(_.jobId)
     val updatedReason = reason.getOrElse("part of cancelled job group %s".format(groupId))
-    jobIds.foreach(doJobCancellation(_, Option(updatedReason)))
+    jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
   }
 
   private[scheduler] def handleJobTagCancelled(
       tag: String,
       reason: Option[String],
-      shouldCancelJob: Option[ActiveJob => Boolean],
       jobsToBeCancelled: Option[Promise[Set[Int]]]): Unit = {
     // Cancel all jobs belonging that have this tag.
     // First finds all active jobs with this group id, and then kill stages for them.
@@ -1264,10 +1254,10 @@ private[spark] class DAGScheduler(
           .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
       }
     }.map(_.jobId)
+    jobsToBeCancelled.foreach(_.success(jobIds.toSet))
+
     val updatedReason = reason.getOrElse("part of cancelled job tag %s".format(tag))
-    val idsToBeCancelled = jobIds.filter(shouldCancelJobId(_, shouldCancelJob))
-    jobsToBeCancelled.foreach(_.success(idsToBeCancelled.toSet))
-    idsToBeCancelled.foreach(doJobCancellation(_, Option(updatedReason)))
+    jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
@@ -2824,40 +2814,19 @@ private[spark] class DAGScheduler(
             case None =>
               s"because Stage $stageId was cancelled"
           }
-          doJobCancellation(jobId, Option(reasonStr))
+          handleJobCancellation(jobId, Option(reasonStr))
         }
       case None =>
         logInfo(log"No active jobs to kill for Stage ${MDC(STAGE_ID, stageId)}")
     }
   }
 
-  private[scheduler] def handleJobCancellation(
-      jobId: Int,
-      reason: Option[String],
-      shouldCancelJob: Option[ActiveJob => Boolean],
-      jobsToBeCancelled: Option[Promise[Set[Int]]]): Unit = {
-    val shouldCancel = shouldCancelJobId(jobId, shouldCancelJob)
-    if (shouldCancel) {
-      jobsToBeCancelled.foreach(_.success(Set(jobId)))
-      doJobCancellation(jobId, reason)
-    } else {
-      jobsToBeCancelled.foreach(_.success(Set.empty))
-    }
-  }
-  
-  private def shouldCancelJobId(
-      jobId: Int,
-      shouldCancelJob: Option[ActiveJob => Boolean]): Boolean = {
-    shouldCancelJob.forall(_(jobIdToActiveJob(jobId)))
-  }
-
-  private def doJobCancellation(jobId: Int, reason: Option[String]): Unit = {
+  private[scheduler] def handleJobCancellation(jobId: Int, reason: Option[String]): Unit = {
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
-      val activeJob = jobIdToActiveJob(jobId)
       failJobAndIndependentStages(
-        job = activeJob,
+        job = jobIdToActiveJob(jobId),
         error = SparkCoreErrors.sparkJobCancelled(jobId, reason.getOrElse(""), null)
       )
     }
@@ -3151,17 +3120,17 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case StageCancelled(stageId, reason) =>
       dagScheduler.handleStageCancellation(stageId, reason)
 
-    case JobCancelled(jobId, reason, shouldCancelJob, jobsToBeCancelled) =>
-      dagScheduler.handleJobCancellation(jobId, reason, shouldCancelJob, jobsToBeCancelled)
+    case JobCancelled(jobId, reason) =>
+      dagScheduler.handleJobCancellation(jobId, reason)
 
     case JobGroupCancelled(groupId, cancelFutureJobs, reason) =>
       dagScheduler.handleJobGroupCancelled(groupId, cancelFutureJobs, reason)
 
-    case JobTagCancelled(tag, reason, shouldCancelJob, jobsToBeCancelled) =>
-      dagScheduler.handleJobTagCancelled(tag, reason, shouldCancelJob, jobsToBeCancelled)
+    case JobTagCancelled(tag, reason, jobsToBeCancelled) =>
+      dagScheduler.handleJobTagCancelled(tag, reason, jobsToBeCancelled)
 
-    case AllJobsCancelled(shouldCancelJob, jobsToBeCancelled) =>
-      dagScheduler.doCancelAllJobs(shouldCancelJob, jobsToBeCancelled)
+    case AllJobsCancelled =>
+      dagScheduler.doCancelAllJobs()
 
     case ExecutorAdded(execId, host) =>
       dagScheduler.handleExecutorAdded(execId, host)
@@ -3217,7 +3186,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   override def onError(e: Throwable): Unit = {
     logError("DAGSchedulerEventProcessLoop failed; shutting down SparkContext", e)
     try {
-      dagScheduler.doCancelAllJobs(shouldCancelJob = None, jobsToBeCancelled = None)
+      dagScheduler.doCancelAllJobs()
     } catch {
       case t: Throwable => logError("DAGScheduler failed to cancel all jobs.", t)
     }

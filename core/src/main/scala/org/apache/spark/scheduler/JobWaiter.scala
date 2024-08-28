@@ -50,7 +50,7 @@ private[spark] class JobWaiter[T](
    * all the tasks belonging to this job, it will fail this job with a SparkException.
    */
   def cancel(reason: Option[String]): Unit = {
-    dagScheduler.cancelJob(jobId, reason, shouldCancelJob = None, jobsToBeCancelled = None)
+    dagScheduler.cancelJob(jobId, reason)
   }
 
   /**
