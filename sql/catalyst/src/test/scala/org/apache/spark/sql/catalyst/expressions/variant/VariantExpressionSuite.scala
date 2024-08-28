@@ -1135,7 +1135,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val results = mutable.HashMap.empty[(Literal, Literal), String]
     for (i <- inputs) {
-      val inputType = if (i.value == null) "VOID" else i.dataType.sql
+      val inputType = if (i.value == null) "VOID" else SchemaOfVariant.printSchema(i.dataType)
       results.put((nul, i), inputType)
       results.put((i, i), inputType)
     }
@@ -1149,7 +1149,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     results.put((timestamp, timestampNtz), "TIMESTAMP")
     results.put((float, decimal), "DOUBLE")
     results.put((array1, array2), "ARRAY<DOUBLE>")
-    results.put((struct1, struct2), "STRUCT<a: VARIANT, b: BIGINT>")
+    results.put((struct1, struct2), "OBJECT<a: VARIANT, b: BIGINT>")
     results.put((dtInterval1, dtInterval2), "INTERVAL DAY TO SECOND")
     results.put((ymInterval1, ymInterval2), "INTERVAL YEAR TO MONTH")
 

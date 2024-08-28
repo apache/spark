@@ -204,8 +204,8 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("1E0", "DOUBLE")
     check("true", "BOOLEAN")
     check("\"2000-01-01\"", "STRING")
-    check("""{"a":0}""", "STRUCT<a: BIGINT>")
-    check("""{"b": {"c": "c"}, "a":["a"]}""", "STRUCT<a: ARRAY<STRING>, b: STRUCT<c: STRING>>")
+    check("""{"a":0}""", "OBJECT<a: BIGINT>")
+    check("""{"b": {"c": "c"}, "a":["a"]}""", "OBJECT<a: ARRAY<STRING>, b: OBJECT<c: STRING>>")
     check("[]", "ARRAY<VOID>")
     check("[false]", "ARRAY<BOOLEAN>")
     check("[null, 1, 1.0]", "ARRAY<DECIMAL(20,0)>")
@@ -215,11 +215,11 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("[1.1, 11111111111111111111111111111111111111]", "ARRAY<DOUBLE>")
     check("[1, \"1\"]", "ARRAY<VARIANT>")
     check("[{}, true]", "ARRAY<VARIANT>")
-    check("""[{"c": ""}, {"a": null}, {"b": 1}]""", "ARRAY<STRUCT<a: VOID, b: BIGINT, c: STRING>>")
-    check("""[{"a": ""}, {"a": null}, {"b": 1}]""", "ARRAY<STRUCT<a: STRING, b: BIGINT>>")
+    check("""[{"c": ""}, {"a": null}, {"b": 1}]""", "ARRAY<OBJECT<a: VOID, b: BIGINT, c: STRING>>")
+    check("""[{"a": ""}, {"a": null}, {"b": 1}]""", "ARRAY<OBJECT<a: STRING, b: BIGINT>>")
     check(
       """[{"a": 1, "b": null}, {"b": true, "a": 1E0}]""",
-      "ARRAY<STRUCT<a: DOUBLE, b: BOOLEAN>>"
+      "ARRAY<OBJECT<a: DOUBLE, b: BOOLEAN>>"
     )
   }
 
@@ -256,7 +256,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     // Literal input.
     checkAnswer(
       sql("""SELECT schema_of_variant_agg(parse_json('{"a": [1, 2, 3]}'))"""),
-      Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+      Seq(Row("OBJECT<a: ARRAY<BIGINT>>")))
 
     // Non-grouping aggregation.
     def checkNonGrouping(input: Seq[String], expected: String): Unit = {
@@ -264,20 +264,20 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         Seq(Row(expected)))
     }
 
-    checkNonGrouping(Seq("""{"a": [1, 2, 3]}"""), "STRUCT<a: ARRAY<BIGINT>>")
-    checkNonGrouping((0 to 100).map(i => s"""{"a": [$i]}"""), "STRUCT<a: ARRAY<BIGINT>>")
-    checkNonGrouping(Seq("""[{"a": 1}, {"b": 2}]"""), "ARRAY<STRUCT<a: BIGINT, b: BIGINT>>")
-    checkNonGrouping(Seq("""{"a": [1, 2, 3]}""", """{"a": "banana"}"""), "STRUCT<a: VARIANT>")
+    checkNonGrouping(Seq("""{"a": [1, 2, 3]}"""), "OBJECT<a: ARRAY<BIGINT>>")
+    checkNonGrouping((0 to 100).map(i => s"""{"a": [$i]}"""), "OBJECT<a: ARRAY<BIGINT>>")
+    checkNonGrouping(Seq("""[{"a": 1}, {"b": 2}]"""), "ARRAY<OBJECT<a: BIGINT, b: BIGINT>>")
+    checkNonGrouping(Seq("""{"a": [1, 2, 3]}""", """{"a": "banana"}"""), "OBJECT<a: VARIANT>")
     checkNonGrouping(Seq("""{"a": "banana"}""", """{"b": "apple"}"""),
-      "STRUCT<a: STRING, b: STRING>")
-    checkNonGrouping(Seq("""{"a": "data"}""", null), "STRUCT<a: STRING>")
+      "OBJECT<a: STRING, b: STRING>")
+    checkNonGrouping(Seq("""{"a": "data"}""", null), "OBJECT<a: STRING>")
     checkNonGrouping(Seq(null, null), "VOID")
-    checkNonGrouping(Seq("""{"a": null}""", """{"a": null}"""), "STRUCT<a: VOID>")
+    checkNonGrouping(Seq("""{"a": null}""", """{"a": null}"""), "OBJECT<a: VOID>")
     checkNonGrouping(Seq(
       """{"hi":[]}""",
       """{"hi":[{},{}]}""",
       """{"hi":[{"it's":[{"me":[{"a": 1}]}]}]}"""),
-      "STRUCT<hi: ARRAY<STRUCT<`it's`: ARRAY<STRUCT<me: ARRAY<STRUCT<a: BIGINT>>>>>>>")
+      "OBJECT<hi: ARRAY<OBJECT<`it's`: ARRAY<OBJECT<me: ARRAY<OBJECT<a: BIGINT>>>>>>>")
 
     // Grouping aggregation.
     withView("v") {
@@ -286,11 +286,11 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         (id, json)
       }.toDF("id", "json").createTempView("v")
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 2"),
-        Seq(Row("STRUCT<a: ARRAY<STRING>>"), Row("STRUCT<a: ARRAY<VARIANT>>")))
+        Seq(Row("OBJECT<a: ARRAY<STRING>>"), Row("OBJECT<a: ARRAY<VARIANT>>")))
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 3"),
-        Seq.fill(3)(Row("STRUCT<a: ARRAY<VARIANT>>")))
+        Seq.fill(3)(Row("OBJECT<a: ARRAY<VARIANT>>")))
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 4"),
-        Seq.fill(3)(Row("STRUCT<a: ARRAY<STRING>>")) ++ Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+        Seq.fill(3)(Row("OBJECT<a: ARRAY<STRING>>")) ++ Seq(Row("OBJECT<a: ARRAY<BIGINT>>")))
     }
   }
 

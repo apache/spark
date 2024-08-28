@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -747,7 +747,21 @@ object SchemaOfVariant {
   /** The actual implementation of the `SchemaOfVariant` expression. */
   def schemaOfVariant(input: VariantVal): UTF8String = {
     val v = new Variant(input.getValue, input.getMetadata)
-    UTF8String.fromString(schemaOf(v).sql)
+    UTF8String.fromString(printSchema(schemaOf(v)))
+  }
+
+  /**
+   * Similar to `dataType.sql`. The only difference is that `StructType` is shown as
+   * `OBJECT<...>` rather than `STRUCT<...>`.
+   */
+  def printSchema(dataType: DataType): String = dataType match {
+    case StructType(fields) =>
+      def printField(f: StructField): String =
+        s"${QuotingUtils.quoteIfNeeded(f.name)}: ${printSchema(f.dataType)}"
+
+      s"OBJECT<${fields.map(printField).mkString(", ")}>"
+    case ArrayType(elementType, _) => s"ARRAY<${printSchema(elementType)}>"
+    case _ => dataType.sql
   }
 
   /**
@@ -848,7 +862,8 @@ case class SchemaOfVariantAgg(
   override def merge(buffer: DataType, input: DataType): DataType =
     SchemaOfVariant.mergeSchema(buffer, input)
 
-  override def eval(buffer: DataType): Any = UTF8String.fromString(buffer.sql)
+  override def eval(buffer: DataType): Any =
+    UTF8String.fromString(SchemaOfVariant.printSchema(buffer))
 
   override def serialize(buffer: DataType): Array[Byte] = buffer.json.getBytes("UTF-8")
 
