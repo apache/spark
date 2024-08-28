@@ -20,6 +20,7 @@ import scala.annotation.varargs
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
+import _root_.java.math.BigInteger
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
@@ -29,7 +30,6 @@ import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
-import _root_.java.math.BigInteger
 
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed
