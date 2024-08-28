@@ -88,8 +88,19 @@ case class FromProtobuf(
     descFilePath: Expression,
     options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
 
-  def this(data: Expression, messageName: Expression, descFilePath: Expression) = {
-    this(data, messageName, descFilePath, Literal(null))
+  def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
+    this(
+      data,
+      messageName,
+      descFilePathOrOptions.dataType match {
+        case _: StringType | BinaryType => descFilePathOrOptions
+        case _ => Literal(null)
+      },
+      descFilePathOrOptions.dataType match {
+        case _: MapType => descFilePathOrOptions
+        case _ => Literal(null)
+      }
+    )
   }
 
   def this(data: Expression, messageName: Expression) = {
@@ -210,8 +221,19 @@ case class ToProtobuf(
     descFilePath: Expression,
     options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
 
-  def this(data: Expression, messageName: Expression, descFilePath: Expression) = {
-    this(data, messageName, descFilePath, Literal(null))
+  def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
+    this(
+      data,
+      messageName,
+      descFilePathOrOptions.dataType match {
+        case _: StringType | BinaryType => descFilePathOrOptions
+        case _ => Literal(null)
+      },
+      descFilePathOrOptions.dataType match {
+        case _: MapType => descFilePathOrOptions
+        case _ => Literal(null)
+      }
+    )
   }
 
   def this(data: Expression, messageName: Expression) = {

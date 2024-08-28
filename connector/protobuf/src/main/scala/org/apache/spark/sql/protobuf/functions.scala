@@ -168,7 +168,12 @@ object functions {
     data: Column,
     messageClassName: String,
     options: java.util.Map[String, String]): Column = {
-    from_protobuf(data, messageClassName, "", options)
+    Column.internalFnWithOptions(
+      "from_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageClassName)
+    )
   }
 
   /**
@@ -309,6 +314,11 @@ object functions {
   @Experimental
   def to_protobuf(data: Column, messageClassName: String, options: java.util.Map[String, String])
   : Column = {
-    to_protobuf(data, messageClassName, "", options)
+    Column.internalFnWithOptions(
+      "to_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageClassName)
+    )
   }
 }
