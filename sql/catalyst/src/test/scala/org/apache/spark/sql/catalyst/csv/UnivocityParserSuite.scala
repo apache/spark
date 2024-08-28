@@ -23,12 +23,12 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -98,7 +98,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Throws exception for empty string with non null type") {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     val parser = new UnivocityParser(StructType(Seq.empty), options)
-    val exception = intercept[RuntimeException]{
+    val exception = intercept[RuntimeException] {
       parser.makeConverter("_1", IntegerType, nullable = false).apply("")
     }
     assert(exception.getMessage.contains("null value found but field _1 is not nullable."))
@@ -125,7 +125,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       timestampsOptions.locale)
     val expectedTime = format.parse(customTimestamp).getTime
     val castedTimestamp = parser.makeConverter("_1", TimestampType, nullable = true)
-        .apply(customTimestamp)
+      .apply(customTimestamp)
     assert(castedTimestamp == expectedTime * 1000L)
 
     val customDate = "31/01/2015"
@@ -137,7 +137,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       dateOptions.locale)
     val expectedDate = DateTimeUtils.millisToMicros(format.parse(customDate).getTime)
     val castedDate = parser.makeConverter("_1", DateType, nullable = true)
-        .apply(customDate)
+      .apply(customDate)
     assert(castedDate == DateTimeUtils.microsToDays(expectedDate, UTC))
 
     val timestamp = "2015-01-01 00:00:00"
@@ -321,6 +321,41 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`i`", "fields" -> ""))
+  }
+
+  test("Bad records test in permissive mode") {
+    def checkBadRecord(
+      input: String = "1,a",
+      dataSchema: StructType = StructType.fromDDL("i INTEGER, s STRING, d DOUBLE"),
+      requiredSchema: StructType = StructType.fromDDL("i INTEGER, s STRING"),
+      options: Map[String, String] = Map("mode" -> "PERMISSIVE")): BadRecordException = {
+      val csvOptions = new CSVOptions(options, false, "UTC")
+      val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions, Seq())
+      intercept[BadRecordException] {
+        parser.parse(input)
+      }
+    }
+
+    // Bad record exception caused by conversion error
+    checkBadRecord(input = "1.5,a,10.3")
+
+    // Bad record exception caused by insufficient number of columns
+    checkBadRecord(input = "2")
+  }
+
+  test("Array index out of bounds when parsing CSV with more columns than expected") {
+    val input = "1,string,3.14,5,7"
+    val dataSchema: StructType = StructType.fromDDL("i INTEGER, a STRING")
+    val requiredSchema: StructType = StructType.fromDDL("i INTEGER, a STRING")
+    val options = new CSVOptions(Map("maxColumns" -> "2"), false, "UTC")
+    val filters = Seq()
+    val parser = new UnivocityParser(dataSchema, requiredSchema, options, filters)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        parser.parse(input)
+      },
+      errorClass = "MALFORMED_CSV_RECORD",
+      parameters = Map("badRecord" -> "1,string,3.14,5,7"))
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
