@@ -5670,11 +5670,8 @@ class AstBuilder extends DataTypeAstBuilder
         left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       withWhereClause(c, left)
-    }.getOrElse(Option(ctx.operator).map { c =>
-      // TODO: parse the UNION ALL here
-      withWhereClause(c, left)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-    }.get)))
+    }.get))
   }
 }
