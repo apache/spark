@@ -1603,6 +1603,7 @@ class FunctionsTestsMixin:
         result = df.select(zeroifnull(df.a).alias("r")).collect()
         self.assertEqual([Row(r=0), Row(r=1)], result)
 
+
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass
 
