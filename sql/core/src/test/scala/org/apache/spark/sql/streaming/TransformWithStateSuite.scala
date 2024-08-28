@@ -74,7 +74,7 @@ class RunningCountStatefulProcessorWithTTL
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState",
-      Encoders.scalaLong, TTLConfig(Duration.ofMillis(30000)))
+      Encoders.scalaLong, TTLConfig(Duration.ofMillis(1000)))
   }
 
   override def handleInputRows(

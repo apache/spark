@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import java.time.Duration
+
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithTTL, StateStoreMetricsTest, TimeMode, TimerValues, TransformWithStateSuiteUtils, ValueState}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, OutputMode, RunningCountStatefulProcessor, StatefulProcessor, StateStoreMetricsTest, TimeMode, TimerValues, TransformWithStateSuiteUtils, TTLConfig, ValueState}
 
 /** Stateful processor of single value state var with non-primitive type */
 class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor {
@@ -41,6 +43,33 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
     val count = _valueState.getOption().getOrElse(TestClass(0L, "dummyKey")).id + 1
     _valueState.update(TestClass(count, "dummyKey"))
     Iterator((key, count.toString))
+  }
+}
+
+class StatefulProcessorWithTTL
+  extends StatefulProcessor[String, String, (String, String)] {
+  @transient protected var _countState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig(Duration.ofMillis(30000)))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
   }
 }
 
@@ -111,7 +140,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         val inputData = MemoryStream[String]
         val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
+          .transformWithState(new StatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 

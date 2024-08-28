@@ -162,7 +162,7 @@ class StatePartitionReader(
       .map(_.stateName).getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
     store
       .iterator(stateVarName)
-      .map(pair =>
+      .map { pair =>
         stateVariableInfoOpt match {
           case Some(stateVarInfo) =>
             val stateVarType = stateVarInfo.stateVariableType
@@ -185,7 +185,7 @@ class StatePartitionReader(
           case None =>
             SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
         }
-      )
+      }
   }
 
   override def close(): Unit = {

@@ -109,7 +109,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
             .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
 
           // Read the schema file path from operator metadata version v2 onwards
-          val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2) {
+          // for the transformWithState operator
+          val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
+            && storeMetadata.head.operatorName.contains("transformWithStateExec")) {
             val storeMetadataEntry = storeMetadata.head
             val operatorProperties = TransformWithStateOperatorProperties.fromJson(
               storeMetadataEntry.operatorPropertiesJson)
