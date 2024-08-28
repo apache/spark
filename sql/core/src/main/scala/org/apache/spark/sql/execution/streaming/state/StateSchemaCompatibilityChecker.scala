@@ -184,7 +184,6 @@ class StateSchemaCompatibilityChecker(
       newStateSchemaList.foreach { newSchema =>
         existingSchemaMap.get(newSchema.colFamilyName).foreach { existingStateSchema =>
           check(existingStateSchema, newSchema, ignoreValueSchema)
-          }
         }
       }
       false
