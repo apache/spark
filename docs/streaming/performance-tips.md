@@ -19,6 +19,8 @@ license: |
   limitations under the License.
 ---
 
+{:toc}
+
 # Asynchronous Progress Tracking
 ## What is it?
 
