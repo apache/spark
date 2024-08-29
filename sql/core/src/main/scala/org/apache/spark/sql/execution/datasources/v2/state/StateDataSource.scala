@@ -54,39 +54,31 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   override def shortName(): String = "statestore"
 
-  private var stateStoreMetadata: Option[Array[StateMetadataTableEntry]] = None
-
-  private var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
-
-  private var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
-
-  private var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
-
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, properties)
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    getStoreMetadataAndRunChecks(sourceOptions)
+    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
 
     // The key state encoder spec should be available for all operators except stream-stream joins
-    val keyStateEncoderSpec = if (keyStateEncoderSpecOpt.isDefined) {
-      keyStateEncoderSpecOpt.get
+    val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
+      stateStoreReaderInfo.keyStateEncoderSpecOpt.get
     } else {
       val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
       NoPrefixKeyStateEncoderSpec(keySchema)
     }
 
     new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
-      transformWithStateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+      stateStoreReaderInfo.transformWithStateVariableInfoOpt,
+      stateStoreReaderInfo.stateStoreColFamilySchemaOpt)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, options)
 
-    getStoreMetadataAndRunChecks(sourceOptions)
+    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
@@ -100,50 +92,16 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
             sourceOptions.operatorId, RightSide)
 
         case JoinSideValues.none =>
-          val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
-            partitionId, sourceOptions.storeName)
-          val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
-          val storeMetadata = stateStoreMetadata.get
-
-          val stateVarName = sourceOptions.stateVarName
-            .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
-
-          // Read the schema file path from operator metadata version v2 onwards
-          // for the transformWithState operator
-          val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
-            && storeMetadata.head.operatorName.contains("transformWithStateExec")) {
-            val storeMetadataEntry = storeMetadata.head
-            val operatorProperties = TransformWithStateOperatorProperties.fromJson(
-              storeMetadataEntry.operatorPropertiesJson)
-            val stateVarInfoList = operatorProperties.stateVariables
-              .filter(stateVar => stateVar.stateName == stateVarName)
-            require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
-              s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
-            val stateVarInfo = stateVarInfoList.head
-            transformWithStateVariableInfoOpt = Some(stateVarInfo)
-            val schemaFilePath = new Path(storeMetadataEntry.stateSchemaFilePath.get)
-            Some(schemaFilePath)
-          } else {
-            None
-          }
-
-          // Read the actual state schema from the provided path for v2 or from the dedicated path
-          // for v1
-          val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-            oldSchemaFilePath = oldSchemaFilePath)
-          val stateSchema = manager.readSchemaFile()
-
-          // Based on the version and read schema, populate the keyStateEncoderSpec used for
-          // reading the column families
-          val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
-          keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema))
-          stateStoreColFamilySchemaOpt = Some(resultSchema)
-
+          // we should have the schema for the state store if joinSide is none
+          require(stateStoreReaderInfo.stateStoreColFamilySchemaOpt.isDefined)
+          val resultSchema = stateStoreReaderInfo.stateStoreColFamilySchemaOpt.get
           (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
       SchemaUtil.getSourceSchema(sourceOptions, keySchema,
-        valueSchema, transformWithStateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+        valueSchema,
+        stateStoreReaderInfo.transformWithStateVariableInfoOpt,
+        stateStoreReaderInfo.stateStoreColFamilySchemaOpt)
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
@@ -231,16 +189,65 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     stateStoreMetadata
   }
 
-  private def getStoreMetadataAndRunChecks(stateSourceOptions: StateSourceOptions): Unit = {
-    if (stateStoreMetadata.isEmpty) {
-      stateStoreMetadata = Some(getStateStoreMetadata(stateSourceOptions))
-      runStateVarChecks(stateSourceOptions, stateStoreMetadata.get)
+  private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
+    StateStoreReaderInfo = {
+    val storeMetadata = getStateStoreMetadata(sourceOptions)
+    runStateVarChecks(sourceOptions, storeMetadata)
+    var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
+    var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
+    var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
+
+    if (sourceOptions.joinSide == JoinSideValues.none) {
+      val stateVarName = sourceOptions.stateVarName
+        .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
+
+      // Read the schema file path from operator metadata version v2 onwards
+      // for the transformWithState operator
+      val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
+        && storeMetadata.head.operatorName.contains("transformWithStateExec")) {
+        val storeMetadataEntry = storeMetadata.head
+        val operatorProperties = TransformWithStateOperatorProperties.fromJson(
+          storeMetadataEntry.operatorPropertiesJson)
+        val stateVarInfoList = operatorProperties.stateVariables
+          .filter(stateVar => stateVar.stateName == stateVarName)
+        require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
+          s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
+        val stateVarInfo = stateVarInfoList.head
+        transformWithStateVariableInfoOpt = Some(stateVarInfo)
+        val schemaFilePath = new Path(storeMetadataEntry.stateSchemaFilePath.get)
+        Some(schemaFilePath)
+      } else {
+        None
+      }
+
+      // Read the actual state schema from the provided path for v2 or from the dedicated path
+      // for v1
+      val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
+      val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
+      val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
+        partitionId, sourceOptions.storeName)
+      val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
+      val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
+        oldSchemaFilePath = oldSchemaFilePath)
+      val stateSchema = manager.readSchemaFile()
+
+      // Based on the version and read schema, populate the keyStateEncoderSpec used for
+      // reading the column families
+      val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
+      keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema, storeMetadata))
+      stateStoreColFamilySchemaOpt = Some(resultSchema)
     }
+
+    StateStoreReaderInfo(
+      keyStateEncoderSpecOpt,
+      stateStoreColFamilySchemaOpt,
+      transformWithStateVariableInfoOpt
+    )
   }
 
-  private def getKeyStateEncoderSpec(colFamilySchema: StateStoreColFamilySchema):
-    KeyStateEncoderSpec = {
-    val storeMetadata = stateStoreMetadata.get
+  private def getKeyStateEncoderSpec(
+      colFamilySchema: StateStoreColFamilySchema,
+      storeMetadata: Array[StateMetadataTableEntry]): KeyStateEncoderSpec = {
     // If operator metadata is not found, then log a warning and continue with using the no-prefix
     // key state encoder
     val keyStateEncoderSpec = if (storeMetadata.length == 0) {
@@ -485,3 +492,11 @@ object StateSourceOptions extends DataSourceOptions {
     }
   }
 }
+
+// Case class to store information around the key state encoder, col family schema and
+// operator specific state used primarily for the transformWithState operator.
+case class StateStoreReaderInfo(
+    keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo]
+)

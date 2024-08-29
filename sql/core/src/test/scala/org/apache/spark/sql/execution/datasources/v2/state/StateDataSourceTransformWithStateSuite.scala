@@ -203,6 +203,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
 
         // TODO: this should be removed when readChangeFeed is supported for TTL based state
+        // variables
         val ex1 = intercept[Exception] {
           spark.read
             .format("statestore")
