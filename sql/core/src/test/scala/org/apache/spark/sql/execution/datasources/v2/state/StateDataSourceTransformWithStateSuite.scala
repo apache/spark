@@ -127,6 +127,18 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
+
+        // TODO: this should be removed when readChangeFeed is supported for value state
+        val ex1 = intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
+            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
+            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+            .load()
+        }
+        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
       }
     }
   }
@@ -189,6 +201,18 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
+
+        // TODO: this should be removed when readChangeFeed is supported for TTL based state
+        val ex1 = intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
+            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+            .load()
+        }
+        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
       }
     }
   }
