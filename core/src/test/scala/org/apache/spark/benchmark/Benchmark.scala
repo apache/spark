@@ -114,8 +114,9 @@ private[spark] class Benchmark(
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
     val nameLen = Math.max(40, Math.max(name.length, benchmarks.map(_.name.length).max))
+    val relativeHeader = if (relativeTime) "Relative time" else "Relative"
     out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
-      name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", "Relative")
+      name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", relativeHeader)
     out.println("-" * (nameLen + 80))
     results.zip(benchmarks).foreach { case (result, benchmark) =>
       val relative = if (relativeTime) result.bestMs / firstBest else firstBest / result.bestMs
