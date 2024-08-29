@@ -92,13 +92,13 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
       offsetRanges.flatMap { range =>
         val size = range.size
         // number of partitions to divvy up this topic partition to
-        val parts = (size * avgMessageSize) / maxPartSize + 1
+        val parts = math.round(avgMessageSize.toDouble / maxPartSize * size).toInt + 1
         getDividedPartition(parts, range)
       }.filter(_.size > 0)
     }
   }
 
-  private def getDividedPartition(parts: Long, offsetRange: KafkaOffsetRange)
+  private def getDividedPartition(parts: Int, offsetRange: KafkaOffsetRange)
   : IndexedSeq[KafkaOffsetRange] = {
     var remaining = offsetRange.size
     var startOffset = offsetRange.fromOffset
