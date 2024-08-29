@@ -39,7 +39,9 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  *
  * @since 3.5.0
  */
-class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
+class KeyValueGroupedDataset[K, V] private[sql] ()
+  extends api.KeyValueGroupedDataset[K, V, Dataset] {
+  type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
