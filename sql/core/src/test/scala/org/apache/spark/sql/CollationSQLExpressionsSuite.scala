@@ -38,7 +38,8 @@ class CollationSQLExpressionsSuite
     with SharedSparkSession
     with ExpressionEvalHelper {
 
-  private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
+  private val testSuppCollations =
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE_CS_AS", "UNICODE_CI_AS")
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
@@ -1194,7 +1195,8 @@ class CollationSQLExpressionsSuite
         sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
       },
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
-      parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
+      parameters =
+        Map("explicitTypes" -> "`string collate UNICODE_CS_AS`, `string collate UNICODE_CI_AS`")
     )
   }
 
@@ -1578,7 +1580,7 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE",
         "ARRAY<STRUCT<a: BOOLEAN, b: BIGINT>>"),
       SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI",
-        "ARRAY<STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
+        "ARRAY<STRUCT<A: STRING COLLATE UNICODE_CI_AS, B: DECIMAL(1,0)>>")
     )
 
     // Supported collations
@@ -1609,7 +1611,7 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
         "UNICODE", "STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
       SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
-        "UNICODE_CI", "STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
+        "UNICODE_CI", "STRUCT<A: STRING COLLATE UNICODE_CI_AS, B: DECIMAL(3,2), C: BIGINT>")
     )
 
     // Supported collations
@@ -1890,7 +1892,7 @@ class CollationSQLExpressionsSuite
     for {
       collateKey <- Seq(true, false)
       collateVal <- Seq(true, false)
-      defaultCollation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE")
+      defaultCollation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE_CS_AS")
     } {
       val mapKey = if (collateKey) "'a' collate utf8_lcase" else "'a'"
       val mapVal = if (collateVal) "'b' collate utf8_lcase" else "'b'"

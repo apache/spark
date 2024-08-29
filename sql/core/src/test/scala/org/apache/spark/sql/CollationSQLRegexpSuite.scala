@@ -46,7 +46,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class LikeTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      LikeTestFail("ABC", "%b%", "UNICODE_CI")
+      LikeTestFail("ABC", "%b%", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT like(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -56,15 +56,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"collate(ABC, UNICODE_CI) LIKE %b%\"",
+          "sqlExpr" -> "\"collate(ABC, UNICODE_CI_AS) LIKE %b%\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABC, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABC, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"like(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 47)
+          stop = 50)
       )
     })
   }
@@ -140,7 +140,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class ILikeTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      ILikeTestFail("ABC", "%b%", "UNICODE_CI")
+      ILikeTestFail("ABC", "%b%", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT ilike(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -150,15 +150,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"ilike(collate(ABC, UNICODE_CI), %b%)\"",
+          "sqlExpr" -> "\"ilike(collate(ABC, UNICODE_CI_AS), %b%)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABC, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABC, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"ilike(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 48)
+          stop = 51)
       )
     })
   }
@@ -180,7 +180,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class LikeAllTestFail(s: String, p: Seq[String], c: String)
     val failCases = Seq(
-      LikeAllTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+      LikeAllTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT collate('${t.s}', '${t.c}') LIKE ALL ('${t.p.mkString("','")}')"
@@ -190,15 +190,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"likeall(collate(Foo, UNICODE_CI))\"",
+          "sqlExpr" -> "\"likeall(collate(Foo, UNICODE_CI_AS))\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(Foo, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(Foo, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"LIKE ALL ('${t.p.mkString("','")}')",
-          start = 36,
-          stop = 59)
+          start = 39,
+          stop = 62)
       )
     })
   }
@@ -220,7 +220,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class NotLikeAllTestFail(s: String, p: Seq[String], c: String)
     val failCases = Seq(
-      NotLikeAllTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+      NotLikeAllTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT collate('${t.s}', '${t.c}') NOT LIKE ALL ('${t.p.mkString("','")}')"
@@ -230,15 +230,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"notlikeall(collate(Foo, UNICODE_CI))\"",
+          "sqlExpr" -> "\"notlikeall(collate(Foo, UNICODE_CI_AS))\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(Foo, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(Foo, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"NOT LIKE ALL ('${t.p.mkString("','")}')",
-          start = 36,
-          stop = 63)
+          start = 39,
+          stop = 66)
       )
     })
   }
@@ -260,7 +260,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class LikeAnyTestFail(s: String, p: Seq[String], c: String)
     val failCases = Seq(
-      LikeAnyTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+      LikeAnyTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT collate('${t.s}', '${t.c}') LIKE ANY ('${t.p.mkString("','")}')"
@@ -270,15 +270,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"likeany(collate(Foo, UNICODE_CI))\"",
+          "sqlExpr" -> "\"likeany(collate(Foo, UNICODE_CI_AS))\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(Foo, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(Foo, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"LIKE ANY ('${t.p.mkString("','")}')",
-          start = 36,
-          stop = 59)
+          start = 39,
+          stop = 62)
       )
     })
   }
@@ -300,7 +300,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class NotLikeAnyTestFail(s: String, p: Seq[String], c: String)
     val failCases = Seq(
-      NotLikeAnyTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+      NotLikeAnyTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT collate('${t.s}', '${t.c}') NOT LIKE ANY ('${t.p.mkString("','")}')"
@@ -310,15 +310,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"notlikeany(collate(Foo, UNICODE_CI))\"",
+          "sqlExpr" -> "\"notlikeany(collate(Foo, UNICODE_CI_AS))\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(Foo, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(Foo, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"NOT LIKE ANY ('${t.p.mkString("','")}')",
-          start = 36,
-          stop = 63)
+          start = 39,
+          stop = 66)
       )
     })
   }
@@ -340,7 +340,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RLikeTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RLikeTestFail("ABC", ".b.", "UNICODE_CI")
+      RLikeTestFail("ABC", ".b.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT rlike(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -350,15 +350,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"RLIKE(collate(ABC, UNICODE_CI), .b.)\"",
+          "sqlExpr" -> "\"RLIKE(collate(ABC, UNICODE_CI_AS), .b.)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABC, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABC, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"rlike(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 48)
+          stop = 51)
       )
     })
   }
@@ -380,7 +380,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class StringSplitTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      StringSplitTestFail("ABC", "[b]", "UNICODE_CI")
+      StringSplitTestFail("ABC", "[b]", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -390,15 +390,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"split(collate(ABC, UNICODE_CI), [b], -1)\"",
+          "sqlExpr" -> "\"split(collate(ABC, UNICODE_CI_AS), [b], -1)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABC, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABC, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"split(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 48)
+          stop = 51)
       )
     })
   }
@@ -435,7 +435,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RegExpReplaceTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RegExpReplaceTestFail("ABCDE", ".c.", "UNICODE_CI")
+      RegExpReplaceTestFail("ABCDE", ".c.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query =
@@ -446,15 +446,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_replace(collate(ABCDE, UNICODE_CI), .c., FFF, 1)\"",
+          "sqlExpr" -> "\"regexp_replace(collate(ABCDE, UNICODE_CI_AS), .c., FFF, 1)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABCDE, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', 'FFF')",
           start = 7,
-          stop = 66)
+          stop = 69)
       )
     })
   }
@@ -477,7 +477,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RegExpExtractTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RegExpExtractTestFail("ABCDE", ".c.", "UNICODE_CI")
+      RegExpExtractTestFail("ABCDE", ".c.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query =
@@ -488,15 +488,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_extract(collate(ABCDE, UNICODE_CI), .c., 0)\"",
+          "sqlExpr" -> "\"regexp_extract(collate(ABCDE, UNICODE_CI_AS), .c., 0)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABCDE, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"regexp_extract(collate('${t.l}', '${t.c}'), '${t.r}', 0)",
           start = 7,
-          stop = 62)
+          stop = 65)
       )
     })
   }
@@ -519,7 +519,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RegExpExtractAllTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RegExpExtractAllTestFail("ABCDE", ".c.", "UNICODE_CI")
+      RegExpExtractAllTestFail("ABCDE", ".c.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query =
@@ -530,15 +530,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_extract_all(collate(ABCDE, UNICODE_CI), .c., 0)\"",
+          "sqlExpr" -> "\"regexp_extract_all(collate(ABCDE, UNICODE_CI_AS), .c., 0)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABCDE, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"regexp_extract_all(collate('${t.l}', '${t.c}'), '${t.r}', 0)",
           start = 7,
-          stop = 66)
+          stop = 69)
       )
     })
   }
@@ -560,7 +560,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RegExpCountTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RegExpCountTestFail("ABCDE", ".c.", "UNICODE_CI")
+      RegExpCountTestFail("ABCDE", ".c.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT regexp_count(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -570,15 +570,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_count(collate(ABCDE, UNICODE_CI), .c.)\"",
+          "sqlExpr" -> "\"regexp_count(collate(ABCDE, UNICODE_CI_AS), .c.)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABCDE, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"regexp_count(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 57)
+          stop = 60)
       )
     })
   }
@@ -600,7 +600,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RegExpSubStrTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RegExpSubStrTestFail("ABCDE", ".c.", "UNICODE_CI")
+      RegExpSubStrTestFail("ABCDE", ".c.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT regexp_substr(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -610,15 +610,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_substr(collate(ABCDE, UNICODE_CI), .c.)\"",
+          "sqlExpr" -> "\"regexp_substr(collate(ABCDE, UNICODE_CI_AS), .c.)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABCDE, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"regexp_substr(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 58)
+          stop = 61)
       )
     })
   }
@@ -640,7 +640,7 @@ class CollationSQLRegexpSuite
     // Unsupported collations
     case class RegExpInStrTestFail(l: String, r: String, c: String)
     val failCases = Seq(
-      RegExpInStrTestFail("ABCDE", ".c.", "UNICODE_CI")
+      RegExpInStrTestFail("ABCDE", ".c.", "UNICODE_CI_AS")
     )
     failCases.foreach(t => {
       val query = s"SELECT regexp_instr(collate('${t.l}', '${t.c}'), '${t.r}')"
@@ -650,15 +650,15 @@ class CollationSQLRegexpSuite
         },
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_instr(collate(ABCDE, UNICODE_CI), .c., 0)\"",
+          "sqlExpr" -> "\"regexp_instr(collate(ABCDE, UNICODE_CI_AS), .c., 0)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
+          "inputSql" -> "\"collate(ABCDE, UNICODE_CI_AS)\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_CI_AS\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
           fragment = s"regexp_instr(collate('${t.l}', '${t.c}'), '${t.r}')",
           start = 7,
-          stop = 57)
+          stop = 60)
       )
     })
   }

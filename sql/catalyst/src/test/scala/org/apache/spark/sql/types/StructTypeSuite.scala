@@ -38,7 +38,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val s = StructType.fromDDL("a INT, b STRING")
 
-  private val UNICODE_COLLATION = "UNICODE"
+  private val UNICODE_COLLATION = "UNICODE_CS_AS"
   private val UTF8_LCASE_COLLATION = "UTF8_LCASE"
   private val mapper = new ObjectMapper()
 
