@@ -138,9 +138,8 @@ trait HashJoin extends JoinCodegenSupport {
     UnsafeProjection.create(streamedBoundKeys)
 
   @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
-    if (joinType == FullOuter && buildSide == BuildLeft) {
-      // Put join left side before right side. This is to be consistent with
-      // `ShuffledHashJoinExec.fullOuterJoin`.
+    if ((joinType == FullOuter || joinType == LeftOuter) && buildSide == BuildLeft) {
+      // Put join left side before right side.
       Predicate.create(condition.get, buildPlan.output ++ streamedPlan.output).eval _
     } else {
       Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
