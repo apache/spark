@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{Observation, SparkSession}
+import org.apache.spark.sql.{Dataset, Observation, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -51,6 +51,14 @@ private[sql] class ObservationListener(
     qe.logical.exists {
       case c: CollectMetrics =>
         c.name == observation.name && c.dataframeId == dataFrameId
+      case _ => false
     }
+  }
+}
+
+private[sql] object ObservationUtil {
+  def listenForCompletion(ds: Dataset[_], observation: Observation): Unit = {
+    ds.sparkSession.listenerManager.register(
+      new ObservationListener(observation, ds.sparkSession, ds.id))
   }
 }
