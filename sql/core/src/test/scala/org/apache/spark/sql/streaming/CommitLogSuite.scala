@@ -17,26 +17,17 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.FileOutputStream
+import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream}
 import java.nio.file.Path
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata, LongOffset, Offset, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.test.SharedSparkSession
 
-trait OffsetSuite extends SparkFunSuite {
-  /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
-  def compare(one: Offset, two: Offset): Unit = {
-    test(s"comparison $one <=> $two") {
-      assert(one == one)
-      assert(two == two)
-      assert(one != two)
-      assert(two != one)
-    }
-  }
-}
+class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
 
-class CommitLogV2Suite extends OffsetSuite {
-  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+//  import testImplicits._
+
   private def testCommitLogV2FilePath: Path = {
     getWorkspaceFilePath(
       "sql",
@@ -51,7 +42,7 @@ class CommitLogV2Suite extends OffsetSuite {
       "streaming",
       "resources",
       "testCommitLogV2"
-    ).toAbsolutePath
+    )
   }
 
   private def testCommitLogV1FilePath: Path = {
@@ -67,21 +58,26 @@ class CommitLogV2Suite extends OffsetSuite {
       "sql",
       "streaming",
       "resources",
-      "testCommitLogV2"
-    ).toAbsolutePath
+      "testCommitLogV1"
+    )
   }
 
-  def testSerde(commitMetadata: CommitMetadata, path: Path): Unit = {
+  private def testSerde(commitMetadata: CommitMetadata, path: Path): Unit = {
     if (regenerateGoldenFiles) {
       val commitLog = new CommitLog(spark, path.toString)
-      //      val  = testCommitLogV2FilePath.getFileSystem(spark.sessionState.newHadoopConf())
-      val outputStream = new FileOutputStream(path)
+      val outputStream = new FileOutputStream(path.resolve("testCommitLog").toFile)
       commitLog.serialize(commitMetadata, outputStream)
     } else {
       val commitLog = new CommitLog(spark, path.toString)
-      val metadata = commitLog.deserialize(path)
+      val inputStream = new FileInputStream(path.resolve("testCommitLog").toFile)
+      val metadata = commitLog.deserialize(inputStream)
       assert(metadata === commitMetadata)
     }
+  }
+
+  test("Basic Commit Log V1 SerDe") {
+    val testMetadataV1 = CommitMetadata(1)
+    testSerde(testMetadataV1, testCommitLogV1FilePath)
   }
 
   test("Basic Commit Log V2 SerDe") {
@@ -90,22 +86,23 @@ class CommitLogV2Suite extends OffsetSuite {
         "0" -> Map("0" -> Map("default" -> Seq("unique_id1", "unique_id2", "unique_id3")),
           "1" -> Map("default" -> Seq("unique_id4", "unique_id5", "unique_id6"))),
         "1" -> Map("0" -> Map("default" -> Seq("unique_id7", "unique_id8", "unique_id9")),
-          "1" -> Map("default" -> Seq("unique_id10", "unique_id11", "unique_id12"))),
+          "1" -> Map("default" -> Seq("unique_id10", "unique_id11", "unique_id12")))
       )
-
     val testMetadataV2 = CommitMetadata(0, testStateUniqueIds)
-
     testSerde(testMetadataV2, testCommitLogV2FilePath)
-
   }
 
-  test("Basic Commit Log V1 SerDe") {
-    val testMetadataV1 = CommitMetadata(0)
-    testSerde(testMetadataV1, testCommitLogV2FilePath)
+  // Old metadata structure with no state unique ids should not affect the deserialization
+  test("Cross-version V1 SerDe") {
+    val commitlogV1 = """v1
+                        |{"nextBatchWatermarkMs":233}""".stripMargin
+    val inputStream: ByteArrayInputStream =
+      new ByteArrayInputStream(commitlogV1.getBytes("UTF-8"))
+    val commitMetadata: CommitMetadata = new CommitLog(
+      spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
+    assert(commitMetadata.nextBatchWatermarkMs === 233)
+    assert(commitMetadata.stateUniqueIds === Map.empty)
   }
-
-  // TODO: a commit log created under V1 (withou this change) but read using V2
-  //       basically put an actual json string
 }
 
 

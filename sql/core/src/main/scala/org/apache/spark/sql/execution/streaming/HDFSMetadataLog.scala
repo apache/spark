@@ -132,7 +132,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     require(metadata != null, "'null' metadata cannot written to a metadata log")
     val res = addNewBatchByStream(batchId) { output => serialize(metadata, output) }
     if (metadataCacheEnabled && res) batchCache.put(batchId, metadata)
-    newBatchStream  res
+    res
   }
 
   override def get(batchId: Long): Option[T] = {

@@ -26,6 +26,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Used to write log files that represent batch commit points in structured streaming.
@@ -50,18 +51,18 @@ class CommitLog(sparkSession: SparkSession, path: String)
 
   import CommitLog._
 
-  override protected def deserialize(in: InputStream): CommitMetadata = {
+  override protected[sql] def deserialize(in: InputStream): CommitMetadata = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
-    validateVersion(lines.next().trim, VERSION) // TODO: some error handling here?
+    validateVersion(lines.next().trim, VERSION)
     val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
     CommitMetadata(metadataJson)
   }
 
-  override protected def serialize(metadata: CommitMetadata, out: OutputStream): Unit = {
+  override protected[sql] def serialize(metadata: CommitMetadata, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
     out.write(s"v${VERSION}".getBytes(UTF_8))
     out.write('\n')
@@ -82,7 +83,7 @@ object CommitLog {
  *     +----+
  *          | 0 (partitionID)
  *     +----+
- *          |     ……
+ *          |     ......
  *          | 1 (partitionID)
  *          +----+
  *          |    |- default (storeName)
@@ -92,17 +93,17 @@ object CommitLog {
  *          |           |  22_unique_id_3.delta
  *          |           +  23_unique_id_4.delta
  *          | 2 (partitionID)
- *          +--- ……
+ *          +--- ......
  * In the commit log, in addition to nextBatchWatermarkMs, we also store the unique ids of the
  * state store files.
  * @param nextBatchWatermarkMs The watermark of the next batch.
  * @param stateUniqueIds Map[String, Map[String, Map[String, Seq[String]]]] of map
  *                       OperatorId -> PartitionId -> StoreName -> Seq[uniqueId]
  */
+
 case class CommitMetadata(
     nextBatchWatermarkMs: Long = 0,
-    stateUniqueIds: Map[String, Map[String, Map[String, Seq[String]]]] = Map.Empty
-) {
+    stateUniqueIds: Map[String, Map[String, Map[String, Seq[String]]]] = Map.empty) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 
