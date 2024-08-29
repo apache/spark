@@ -671,6 +671,11 @@ public class CollationAwareUTF8String {
     // Initialize the string search with respect to the specified ICU collation.
     String targetStr = target.toValidString();
     String patternStr = pattern.toValidString();
+    // Check if `start` is out of bounds. The provided offset `start` is given in number of
+    // codepoints, so a simple `targetStr.length` check is not sufficient here. This check is
+    // needed because `String.offsetByCodePoints` throws an `IndexOutOfBoundsException`
+    // exception when the offset is out of bounds.
+    if (targetStr.codePointCount(0, targetStr.length()) <= start) return MATCH_NOT_FOUND;
     StringSearch stringSearch =
       CollationFactory.getStringSearch(targetStr, patternStr, collationId);
     stringSearch.setOverlapping(true);
