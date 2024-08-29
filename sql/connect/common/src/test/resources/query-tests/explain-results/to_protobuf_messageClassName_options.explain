@@ -1,2 +1,2 @@
-Project [to_protobuf(bytes#0, org.apache.spark.connect.proto.StorageLevel, None, (recursive.fields.max.depth,2)) AS toprotobuf(bytes, org.apache.spark.connect.proto.StorageLevel, NULL, map(recursive.fields.max.depth, 2))#0]
+Project [to_protobuf(bytes#0, org.apache.spark.connect.proto.StorageLevel, None, (recursive.fields.max.depth,2)) AS to_protobuf(bytes, org.apache.spark.connect.proto.StorageLevel, NULL, map(recursive.fields.max.depth, 2))#0]
 +- LocalRelation <empty>, [id#0L, bytes#0]
