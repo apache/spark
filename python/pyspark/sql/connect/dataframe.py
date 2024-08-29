@@ -441,7 +441,7 @@ class DataFrame(ParentDataFrame):
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",
@@ -469,7 +469,7 @@ class DataFrame(ParentDataFrame):
                 session=self._session,
             )
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",

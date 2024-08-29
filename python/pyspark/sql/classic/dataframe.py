@@ -1232,7 +1232,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",
@@ -1251,7 +1251,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         if subset is None:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",
