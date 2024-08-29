@@ -1232,6 +1232,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
@@ -1245,6 +1251,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         if subset is None:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 

@@ -426,6 +426,8 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
+        res._cached_schema = self._cached_schema
+        return res
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
@@ -439,6 +441,12 @@ class DataFrame(ParentDataFrame):
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
             )
@@ -461,6 +469,12 @@ class DataFrame(ParentDataFrame):
                 session=self._session,
             )
         else:
+            for c in subset:  # type: ignore[assignment]
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             return DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
                 session=self._session,

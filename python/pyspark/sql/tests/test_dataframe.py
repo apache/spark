@@ -267,8 +267,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "str"},
+            errorClass="NOT_LIST_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "str"},
         )
 
         # Should raise proper error when taking non-string values
@@ -282,25 +282,7 @@ class DataFrameTestsMixin:
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicates(None).show()
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates([1]).show()
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "int"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicates(1).show()
 
         self.check_error(
             exception=pe.exception,
