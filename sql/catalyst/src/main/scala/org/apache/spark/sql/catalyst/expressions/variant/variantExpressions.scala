@@ -122,7 +122,7 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        {"a":1,"b":2}
       > SELECT _FUNC_(array(1, 2, 3));
-       [1, 2, 3]
+       [1,2,3]
       > SELECT _FUNC_(array(named_struct('a', 1)));
        [{"a":1}]
       > SELECT _FUNC_(array(map("a", 2)));
@@ -710,7 +710,7 @@ object VariantExplode {
       > SELECT _FUNC_(parse_json('null'));
        VOID
       > SELECT _FUNC_(parse_json('[{"b":true,"a":0}]'));
-       ARRAY<STRUCT<a: BIGINT, b: BOOLEAN>>
+       ARRAY<OBJECT<a: BIGINT, b: BOOLEAN>>
   """,
   since = "4.0.0",
   group = "variant_funcs"
@@ -823,7 +823,7 @@ object SchemaOfVariant {
       > SELECT _FUNC_(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j);
        BIGINT
       > SELECT _FUNC_(parse_json(j)) FROM VALUES ('{"a": 1}'), ('{"b": true}'), ('{"c": 1.23}') AS tab(j);
-       STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>
+       OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>
   """,
   since = "4.0.0",
   group = "variant_funcs")
