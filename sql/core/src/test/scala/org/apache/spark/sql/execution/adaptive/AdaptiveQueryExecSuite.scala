@@ -1608,8 +1608,8 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-49460: NPE error in EmptyRelationExec.cleanupResources") {
-    try {
+  test("SPARK-49460: NPE in EmptyRelationExec.cleanupResources") {
+    withTable("t1left", "t1right", "t1empty") {
       spark.sql("create table t1left (a int, b int);")
       spark.sql("insert into t1left values (1, 1), (2,2), (3,3);")
       spark.sql("create table t1right (a int, b int);")
@@ -1642,10 +1642,6 @@ class AdaptiveQueryExecSuite
                   |from
                   |  leftT
                   |  join t1right on leftT.a = t1right.a""".stripMargin).collect()
-    } finally {
-      Seq("t1left", "t1right", "t1empty").foreach { table =>
-        spark.sql(s"drop table if exists ${table}")
-      }
     }
   }
 
