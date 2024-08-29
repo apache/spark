@@ -48,9 +48,11 @@ Conditional Functions
     ifnull
     nanvl
     nullif
+    nullifzero
     nvl
     nvl2
     when
+    zeroifnull
 
 
 Predicate Functions
