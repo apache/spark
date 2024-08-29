@@ -73,7 +73,7 @@ class CommitLog(sparkSession: SparkSession, path: String)
 }
 
 object CommitLog {
-  private val VERSION = SQLConf.get.stateStoreCommitLogVersion
+  private val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
   private val EMPTY_JSON = "{}"
 }
 
