@@ -26,7 +26,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Class to calculate offset ranges to process based on the from and until offsets, and
  * the configured `minPartitions`.
  */
-private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int]) {
+private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int],
+                                                   val maxBytesPerPartition: Option[Int]) {
   require(minPartitions.isEmpty || minPartitions.get > 0)
 
   /**
@@ -47,13 +48,15 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
     val offsetRanges = ranges.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
-    if (minPartitions.isEmpty || offsetRanges.size >= minPartitions.get) {
+    // and maxBytesPerPartition is empty
+    if ((minPartitions.isEmpty || offsetRanges.size >= minPartitions.get)
+        && maxBytesPerPartition.isEmpty) {
       // Assign preferred executor locations to each range such that the same topic-partition is
       // preferentially read from the same executor and the KafkaConsumer can be reused.
       offsetRanges.map { range =>
         range.copy(preferredLoc = getLocation(range.topicPartition, executorLocations))
       }
-    } else {
+    } else if (minPartitions.isDefined && minPartitions.get > offsetRanges.size) {
 
       // Splits offset ranges with relatively large amount of data to smaller ones.
       val totalSize = offsetRanges.map(_.size).sum
@@ -80,18 +83,36 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
         } else {
           getPartCount(size, splitRangeTotalSize, splitRangeMinPartitions)
         }
-        var remaining = size
-        var startOffset = range.fromOffset
-        (0 until parts).map { part =>
-          // Fine to do integer division. Last partition will consume all the round off errors
-          val thisPartition = remaining / (parts - part)
-          remaining -= thisPartition
-          val endOffset = math.min(startOffset + thisPartition, range.untilOffset)
-          val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, None)
-          startOffset = endOffset
-          offsetRange
-        }
+        getDividedPartition(parts, range)
       }.filter(_.size > 0)
+    } else {
+      val avgMessageSize = 1 // Todo estimate row size
+      val maxPartSize = maxBytesPerPartition.get
+
+      offsetRanges.flatMap { range =>
+        val size = range.size
+        // number of partitions to divvy up this topic partition to
+        val parts = (size * avgMessageSize) / maxPartSize + 1
+        getDividedPartition(parts, range)
+      }.filter(_.size > 0)
+    }
+  }
+
+  private def getDividedPartition(parts: Long, offsetRange: KafkaOffsetRange)
+  : IndexedSeq[KafkaOffsetRange] = {
+    var remaining = offsetRange.size
+    var startOffset = offsetRange.fromOffset
+    val tp = offsetRange.topicPartition
+    val untilOffset = offsetRange.untilOffset
+
+    (0 until parts).map { part =>
+      // Fine to do integer division. Last partition will consume all the round off errors
+      val thisPartition = remaining / (parts - part)
+      remaining -= thisPartition
+      val endOffset = math.min(startOffset + thisPartition, untilOffset)
+      val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, None)
+      startOffset = endOffset
+      offsetRange
     }
   }
 
@@ -114,9 +135,12 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 private[kafka010] object KafkaOffsetRangeCalculator {
 
   def apply(options: CaseInsensitiveStringMap): KafkaOffsetRangeCalculator = {
-    val optionalValue = Option(options.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY))
+    val minPartition = Option(options.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY))
       .map(_.toInt)
-    new KafkaOffsetRangeCalculator(optionalValue)
+    val maxBytesPerPartition = Option(options.get(
+      KafkaSourceProvider.MAX_BYTES_PER_PARTITIONS_OPTION_KEY))
+      .map(_.toInt)
+    new KafkaOffsetRangeCalculator(minPartition, maxBytesPerPartition)
   }
 }
 
