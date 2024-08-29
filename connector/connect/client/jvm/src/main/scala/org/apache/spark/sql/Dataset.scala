@@ -1275,12 +1275,7 @@ class Dataset[T] private[sql] (
       .asScala
       .toArray
 
-  /**
-   * Interface for saving the content of the non-streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def write: DataFrameWriter[T] = {
     new DataFrameWriter[T](this)
   }

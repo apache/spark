@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
@@ -52,202 +52,58 @@ import org.apache.spark.util.ArrayImplicits._
  * @since 1.4.0
  */
 @Stable
-final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
+final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends api.DataFrameWriter {
 
   private val df = ds.toDF()
 
-  /**
-   * Specifies the behavior when data or table already exists. Options include:
-   * <ul>
-   * <li>`SaveMode.Overwrite`: overwrite the existing data.</li>
-   * <li>`SaveMode.Append`: append the data.</li>
-   * <li>`SaveMode.Ignore`: ignore the operation (i.e. no-op).</li>
-   * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li>
-   * </ul>
-   * <p>
-   * The default option is `ErrorIfExists`.
-   *
-   * @since 1.4.0
-   */
-  def mode(saveMode: SaveMode): DataFrameWriter[T] = {
-    this.mode = saveMode
-    this
-  }
 
-  /**
-   * Specifies the behavior when data or table already exists. Options include:
-   * <ul>
-   * <li>`overwrite`: overwrite the existing data.</li>
-   * <li>`append`: append the data.</li>
-   * <li>`ignore`: ignore the operation (i.e. no-op).</li>
-   * <li>`error` or `errorifexists`: default option, throw an exception at runtime.</li>
-   * </ul>
-   *
-   * @since 1.4.0
-   */
-  def mode(saveMode: String): DataFrameWriter[T] = {
-    saveMode.toLowerCase(Locale.ROOT) match {
-      case "overwrite" => mode(SaveMode.Overwrite)
-      case "append" => mode(SaveMode.Append)
-      case "ignore" => mode(SaveMode.Ignore)
-      case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
-      case _ => throw QueryCompilationErrors.invalidSaveModeError(saveMode)
-    }
-  }
+  /** @inheritdoc */
+  override def mode(saveMode: SaveMode): this.type = super.mode(saveMode)
 
-  /**
-   * Specifies the underlying output data source. Built-in options include "parquet", "json", etc.
-   *
-   * @since 1.4.0
-   */
-  def format(source: String): DataFrameWriter[T] = {
-    this.source = source
-    this
-  }
+  /** @inheritdoc */
+  override def mode(saveMode: String): this.type = super.mode(saveMode)
 
-  /**
-   * Adds an output option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 1.4.0
-   */
-  def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions = this.extraOptions + (key -> value)
-    this
-  }
+  /** @inheritdoc */
+  override def format(source: String): this.type = super.format(source)
 
-  /**
-   * Adds an output option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 2.0.0
-   */
-  def option(key: String, value: Boolean): DataFrameWriter[T] = option(key, value.toString)
+  /** @inheritdoc */
+  override def option(key: String, value: String): this.type = super.option(key, value)
 
-  /**
-   * Adds an output option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 2.0.0
-   */
-  def option(key: String, value: Long): DataFrameWriter[T] = option(key, value.toString)
+  /** @inheritdoc */
+  override def option(key: String, value: Boolean): this.type = super.option(key, value)
 
-  /**
-   * Adds an output option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 2.0.0
-   */
-  def option(key: String, value: Double): DataFrameWriter[T] = option(key, value.toString)
+  /** @inheritdoc */
+  override def option(key: String, value: Long): this.type = super.option(key, value)
 
-  /**
-   * (Scala-specific) Adds output options for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 1.4.0
-   */
-  def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
-    this.extraOptions ++= options
-    this
-  }
+  /** @inheritdoc */
+  override def option(key: String, value: Double): this.type = super.option(key, value)
 
-  /**
-   * Adds output options for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 1.4.0
-   */
-  def options(options: java.util.Map[String, String]): DataFrameWriter[T] = {
-    this.options(options.asScala)
-    this
-  }
+  /** @inheritdoc */
+  override def options(options: scala.collection.Map[String, String]): this.type =
+    super.options(options)
 
-  /**
-   * Partitions the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
-   * partition a dataset by year and then month, the directory layout would look like:
-   * <ul>
-   * <li>year=2016/month=01/</li>
-   * <li>year=2016/month=02/</li>
-   * </ul>
-   *
-   * Partitioning is one of the most widely used techniques to optimize physical data layout.
-   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
-   * predicates on the partitioned columns. In order for partitioning to work well, the number
-   * of distinct values in each column should typically be less than tens of thousands.
-   *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
-   * 2.1.0.
-   *
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
+  override def options(options: java.util.Map[String, String]): this.type =
+    super.options(options)
+
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def partitionBy(colNames: String*): DataFrameWriter[T] = {
-    this.partitioningColumns = Option(colNames)
-    validatePartitioning()
-    this
-  }
+  override def partitionBy(colNames: String*): this.type = super.partitionBy(colNames: _*)
 
-  /**
-   * Buckets the output by the given columns. If specified, the output is laid out on the file
-   * system similar to Hive's bucketing scheme, but with a different bucket hash function
-   * and is not compatible with Hive's bucketing.
-   *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
-   * 2.1.0.
-   *
-   * @since 2.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter[T] = {
-    this.numBuckets = Option(numBuckets)
-    this.bucketColumnNames = Option(colName +: colNames)
-    validatePartitioning()
-    this
-  }
+  override def bucketBy(numBuckets: Int, colName: String, colNames: String*): this.type =
+    super.bucketBy(numBuckets, colName, colNames: _*)
 
-  /**
-   * Sorts the output in each bucket by the given columns.
-   *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
-   * 2.1.0.
-   *
-   * @since 2.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def sortBy(colName: String, colNames: String*): DataFrameWriter[T] = {
-    this.sortColumnNames = Option(colName +: colNames)
-    this
-  }
+  override def sortBy(colName: String, colNames: String*): this.type =
+    super.sortBy(colName, colNames: _*)
 
-  /**
-   * Clusters the output by the given columns on the storage. The rows with matching values in the
-   * specified clustering columns will be consolidated within the same group.
-   *
-   * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
-   * together in a file. This arrangement improves query efficiency when you apply selective
-   * filters to these clustering columns, thanks to data skipping.
-   *
-   * @since 4.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def clusterBy(colName: String, colNames: String*): DataFrameWriter[T] = {
-    this.clusteringColumns = Option(colName +: colNames)
-    validatePartitioning()
-    this
-  }
+  override def clusterBy(colName: String, colNames: String*): this.type =
+    super.clusterBy(colName, colNames: _*)
 
   /**
    * Saves the content of the `DataFrame` at the specified path.
@@ -522,34 +378,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (sortColumnNames.isDefined && numBuckets.isEmpty) {
-      throw QueryCompilationErrors.sortByWithoutBucketingError()
-    }
-
+    isBucketed()
     numBuckets.map { n =>
       BucketSpec(n, bucketColumnNames.get, sortColumnNames.getOrElse(Nil))
-    }
-  }
-
-  private def assertNotBucketed(operation: String): Unit = {
-    if (getBucketSpec.isDefined) {
-      if (sortColumnNames.isEmpty) {
-        throw QueryCompilationErrors.bucketByUnsupportedByOperationError(operation)
-      } else {
-        throw QueryCompilationErrors.bucketByAndSortByUnsupportedByOperationError(operation)
-      }
-    }
-  }
-
-  private def assertNotPartitioned(operation: String): Unit = {
-    if (partitioningColumns.isDefined) {
-      throw QueryCompilationErrors.operationNotSupportPartitioningError(operation)
-    }
-  }
-
-  private def assertNotClustered(operation: String): Unit = {
-    if (clusteringColumns.isDefined) {
-      throw QueryCompilationErrors.operationNotSupportClusteringError(operation)
     }
   }
 
@@ -774,180 +605,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Validate that clusterBy is not used with partitionBy or bucketBy.
-   */
-  private def validatePartitioning(): Unit = {
-    if (clusteringColumns.nonEmpty) {
-      if (partitioningColumns.nonEmpty) {
-        throw QueryCompilationErrors.clusterByWithPartitionedBy()
-      }
-      if (getBucketSpec.nonEmpty) {
-        throw QueryCompilationErrors.clusterByWithBucketing()
-      }
-    }
-  }
-
-  /**
-   * Saves the content of the `DataFrame` to an external database table via JDBC. In the case the
-   * table already exists in the external database, behavior of this function depends on the
-   * save mode, specified by the `mode` function (default to throwing an exception).
-   *
-   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
-   * your external database systems.
-   *
-   * JDBC-specific option and parameter documentation for storing tables via JDBC in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @param table Name of the table in the external database.
-   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
-   *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included. "batchsize" can be used to control the
-   *                             number of rows per insert. "isolationLevel" can be one of
-   *                             "NONE", "READ_COMMITTED", "READ_UNCOMMITTED", "REPEATABLE_READ",
-   *                             or "SERIALIZABLE", corresponding to standard transaction
-   *                             isolation levels defined by JDBC's Connection object, with default
-   *                             of "READ_UNCOMMITTED".
-   * @since 1.4.0
-   */
-  def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    assertNotPartitioned("jdbc")
-    assertNotBucketed("jdbc")
-    assertNotClustered("jdbc")
-    // connectionProperties should override settings in extraOptions.
-    this.extraOptions ++= connectionProperties.asScala
-    // explicit url and dbtable should override all
-    this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
-    format("jdbc").save()
-  }
-
-  /**
-   * Saves the content of the `DataFrame` in JSON format (<a href="http://jsonlines.org/">
-   * JSON Lines text format or newline-delimited JSON</a>) at the specified path.
-   * This is equivalent to:
-   * {{{
-   *   format("json").save(path)
-   * }}}
-   *
-   * You can find the JSON-specific options for writing JSON files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 1.4.0
-   */
-  def json(path: String): Unit = {
-    format("json").save(path)
-  }
-
-  /**
-   * Saves the content of the `DataFrame` in Parquet format at the specified path.
-   * This is equivalent to:
-   * {{{
-   *   format("parquet").save(path)
-   * }}}
-   *
-   * Parquet-specific option(s) for writing Parquet files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 1.4.0
-   */
-  def parquet(path: String): Unit = {
-    format("parquet").save(path)
-  }
-
-  /**
-   * Saves the content of the `DataFrame` in ORC format at the specified path.
-   * This is equivalent to:
-   * {{{
-   *   format("orc").save(path)
-   * }}}
-   *
-   * ORC-specific option(s) for writing ORC files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 1.5.0
-   */
-  def orc(path: String): Unit = {
-    format("orc").save(path)
-  }
-
-  /**
-   * Saves the content of the `DataFrame` in a text file at the specified path.
-   * The DataFrame must have only one column that is of string type.
-   * Each row becomes a new line in the output file. For example:
-   * {{{
-   *   // Scala:
-   *   df.write.text("/path/to/output")
-   *
-   *   // Java:
-   *   df.write().text("/path/to/output")
-   * }}}
-   * The text files will be encoded as UTF-8.
-   *
-   * You can find the text-specific options for writing text files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 1.6.0
-   */
-  def text(path: String): Unit = {
-    format("text").save(path)
-  }
-
-  /**
-   * Saves the content of the `DataFrame` in CSV format at the specified path.
-   * This is equivalent to:
-   * {{{
-   *   format("csv").save(path)
-   * }}}
-   *
-   * You can find the CSV-specific options for writing CSV files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 2.0.0
-   */
-  def csv(path: String): Unit = {
-    format("csv").save(path)
-  }
-
-  /**
-   * Saves the content of the `DataFrame` in XML format at the specified path.
-   * This is equivalent to:
-   * {{{
-   *   format("xml").save(path)
-   * }}}
-   *
-   * Note that writing a XML file from `DataFrame` having a field `ArrayType` with
-   * its element as `ArrayType` would have an additional nested field for the element.
-   * For example, the `DataFrame` having a field below,
-   *
-   *    {@code fieldA [[data1], [data2]]}
-   *
-   * would produce a XML file below.
-   *    {@code
-   *    <fieldA>
-   *        <item>data1</item>
-   *    </fieldA>
-   *    <fieldA>
-   *        <item>data2</item>
-   *    </fieldA>}
-   *
-   * Namely, roundtrip in writing and reading can end up in different schema structure.
-   *
-   * You can find the XML-specific options for writing XML files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   * Data Source Option</a> in the version you use.
-   */
-  def xml(path: String): Unit = {
-    format("xml").save(path)
-  }
-
-  /**
    * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
@@ -964,23 +621,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  ///////////////////////////////////////////////////////////////////////////////////////
-  // Builder pattern config options
-  ///////////////////////////////////////////////////////////////////////////////////////
-
-  private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
-
-  private var mode: SaveMode = SaveMode.ErrorIfExists
-
-  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
-
-  private var partitioningColumns: Option[Seq[String]] = None
-
-  private var bucketColumnNames: Option[Seq[String]] = None
-
-  private var numBuckets: Option[Int] = None
-
-  private var sortColumnNames: Option[Seq[String]] = None
-
-  private var clusteringColumns: Option[Seq[String]] = None
+  override protected def defaultSourceOption: String =
+    df.sparkSession.sessionState.conf.defaultDataSourceName
 }

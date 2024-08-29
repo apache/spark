@@ -2609,4 +2609,12 @@ abstract class Dataset[T, DS[_] <: Dataset[_, DS]] extends Serializable {
    */
   @DeveloperApi
   def semanticHash(): Int
+
+  /**
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  def write: DataFrameWriter
 }
