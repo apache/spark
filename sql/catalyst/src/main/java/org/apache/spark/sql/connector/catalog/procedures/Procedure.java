@@ -15,21 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.connector.catalog.procedures;
 
-class DB2DatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME",
-    "icr.io/db2_community/db2:11.5.9.0")
-  override val env = Map(
-    "DB2INST1_PASSWORD" -> "rootpass",
-    "LICENSE" -> "accept",
-    "DBNAME" -> "foo",
-    "ARCHIVE_LOGS" -> "false",
-    "AUTOCONFIG" -> "false"
-  )
-  override val usesIpc = false
-  override val jdbcPort: Int = 50000
-  override val privileged = true
-  override def getJdbcUrl(ip: String, port: Int): String =
-    s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
+import org.apache.spark.annotation.Evolving;
+
+/**
+ * A base interface for all procedures.
+ *
+ * @since 4.0.0
+ */
+@Evolving
+public interface Procedure {
+  /**
+   * Returns the name of this procedure.
+   */
+  String name();
+
+  /**
+   * Returns the description of this procedure.
+   */
+  default String description() {
+    return getClass().toString();
+  }
 }

@@ -15,21 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.internal.connector
 
-class DB2DatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME",
-    "icr.io/db2_community/db2:11.5.9.0")
-  override val env = Map(
-    "DB2INST1_PASSWORD" -> "rootpass",
-    "LICENSE" -> "accept",
-    "DBNAME" -> "foo",
-    "ARCHIVE_LOGS" -> "false",
-    "AUTOCONFIG" -> "false"
-  )
-  override val usesIpc = false
-  override val jdbcPort: Int = 50000
-  override val privileged = true
-  override def getJdbcUrl(ip: String, port: Int): String =
-    s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
-}
+import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter
+import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
+import org.apache.spark.sql.types.DataType
+
+case class ProcedureParameterImpl(
+    mode: Mode,
+    name: String,
+    dataType: DataType,
+    defaultValueExpression: String,
+    comment: String) extends ProcedureParameter
