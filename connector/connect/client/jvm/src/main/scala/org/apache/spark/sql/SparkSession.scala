@@ -390,77 +390,30 @@ class SparkSession private[sql] (
     execute(command)
   }
 
-  /**
-   * Add a single artifact to the client session.
-   *
-   * Currently only local files with extensions .jar and .class are supported.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(path: String): Unit = client.addArtifact(path)
+  override def addArtifact(path: String): Unit = client.addArtifact(path)
 
-  /**
-   * Add a single artifact to the client session.
-   *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(uri: URI): Unit = client.addArtifact(uri)
+  override def addArtifact(uri: URI): Unit = client.addArtifact(uri)
 
-  /**
-   * Add a single in-memory artifact to the session while preserving the directory structure
-   * specified by `target` under the session's working directory of that particular file
-   * extension.
-   *
-   * Supported target file extensions are .jar and .class.
-   *
-   * ==Example==
-   * {{{
-   *  addArtifact(bytesBar, "foo/bar.class")
-   *  addArtifact(bytesFlat, "flat.class")
-   *  // Directory structure of the session's working directory for class files would look like:
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
-   * }}}
-   *
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(bytes: Array[Byte], target: String): Unit = client.addArtifact(bytes, target)
+  override def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    client.addArtifact(bytes, target)
+  }
 
-  /**
-   * Add a single artifact to the session while preserving the directory structure specified by
-   * `target` under the session's working directory of that particular file extension.
-   *
-   * Supported target file extensions are .jar and .class.
-   *
-   * ==Example==
-   * {{{
-   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
-   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
-   *  // Directory structure of the session's working directory for class files would look like:
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
-   * }}}
-   *
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(source: String, target: String): Unit = client.addArtifact(source, target)
+  override def addArtifact(source: String, target: String): Unit = {
+    client.addArtifact(source, target)
+  }
 
-  /**
-   * Add one or more artifacts to the session.
-   *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
   @scala.annotation.varargs
-  def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
+  override def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
 
   /**
    * Register a ClassFinder for dynamically generated classes.
