@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Cast, IsNotNull, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Project, Sort, Transpose}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.internal.SQLConf
@@ -147,6 +147,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       val queryExecution = sparkSession.sessionState.executePlan(limitedProject)
       val fullCollectedRows = queryExecution.executedPlan.executeCollect()
 
+      val hasNonIndexColumns = nonIndexColumnsAttr.nonEmpty
       if (fullCollectedRows.isEmpty) {
         // Return a DataFrame with a single column "key" containing non-index column names
         val keyAttr = AttributeReference("key", StringType, nullable = false)()
@@ -154,7 +155,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           _.name).map(name => UTF8String.fromString(name))
         val keyRows = keyValues.map(value => InternalRow(value))
 
-        LocalRelation(Seq(keyAttr), keyRows)
+        Transpose(Seq(keyAttr), keyRows, hasNonIndexColumns)
       } else {
         val rowCount = fullCollectedRows.length
         if (rowCount > maxValues) {
@@ -184,7 +185,6 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           )()
         }
 
-        val hasNonIndexColumns = nonIndexColumnsAttr.nonEmpty
         val transposeOutput = (keyAttr +: valueAttrs).toIndexedSeq
         val transposeData = transposedInternalRows.toIndexedSeq
         Transpose(transposeOutput, transposeData, hasNonIndexColumns)
