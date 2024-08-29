@@ -44,13 +44,16 @@ object SQLExecution extends Logging {
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
-  private val executionIdToQueryExecution = new ConcurrentHashMap[Long, QueryExecution]()
+  private[sql] val executionIdToQueryExecution = new ConcurrentHashMap[Long, QueryExecution]()
 
   def getQueryExecution(executionId: Long): QueryExecution = {
     executionIdToQueryExecution.get(executionId)
   }
 
   private val testing = sys.props.contains(IS_TESTING.key)
+
+  private[sql] def executionIdJobTag(session: SparkSession, id: Long) =
+    s"${session.sessionJobTag}-execution-root-id-$id"
 
   private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
     val sc = sparkSession.sparkContext
@@ -82,6 +85,7 @@ object SQLExecution extends Logging {
     // And for the root execution, rootExecutionId == executionId.
     if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
       sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
+      sc.addInternalJobTag(executionIdJobTag(sparkSession, executionId))
     }
     val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
@@ -213,6 +217,7 @@ object SQLExecution extends Logging {
       // The current execution is the root execution if rootExecutionId == executionId.
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
         sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
+        sc.removeInternalJobTag(executionIdJobTag(sparkSession, executionId))
       }
       sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }

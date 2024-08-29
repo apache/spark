@@ -29,6 +29,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.{Logging, MDC}
@@ -880,11 +881,12 @@ class SparkSession private(
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
 
-   * @return Sequence of job IDs requested to be interrupted.
+   * @return Sequence of SQL execution IDs requested to be interrupted.
 
    * @since 4.0.0
    */
-  def interruptAll(): Seq[String] = interruptTag(sessionJobTag)
+  def interruptAll(): Seq[String] =
+    doInterruptTag(sessionJobTag, "as part of cancellation of all jobs", tagIsInternal = true)
 
   /**
    * Request to interrupt all currently running operations of this session with the given operation
@@ -892,32 +894,43 @@ class SparkSession private(
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
-   * @return Sequence of job IDs requested to be interrupted.
+   * @return Sequence of SQL execution IDs requested to be interrupted.
    */
   def interruptTag(tag: String): Seq[String] = {
     val realTag = managedJobTags.get(tag)
     if (realTag == null) return Seq.empty
+    doInterruptTag(realTag, s"part of cancelled job tags $tag", tagIsInternal = false)
+  }
 
-    val cancelledIds = sparkContext.cancelJobsWithTagWithFuture(realTag, "Interrupted by user")
-    ThreadUtils.awaitResult(cancelledIds, 60.seconds).map(_.toString).toSeq
+  private def doInterruptTag(
+      tag: String,
+      reason: String,
+      tagIsInternal: Boolean): Seq[String] = {
+    val realTag = if (tagIsInternal) s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}$tag" else tag
+    val cancelledTags =
+      sparkContext.cancelJobsWithTagWithFuture(realTag, reason)
+
+    ThreadUtils.awaitResult(cancelledTags, 60.seconds)
+      .flatMap(job => Option(job.properties.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)))
   }
 
   /**
-   * Request to interrupt an operation of this session, given its job ID.
+   * Request to interrupt an operation of this session, given its SQL execution ID.
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
-   * @return The job ID requested to be interrupted, as a single-element sequence, or an empty
+   * @return The execution ID requested to be interrupted, as a single-element sequence, or an empty
    *    sequence if the operation is not started by this session.
    *
    * @since 4.0.0
    */
-  def interruptOperation(jobId: String): Seq[String] = {
-    scala.util.Try(jobId.toInt).toOption match {
-      case Some(jobIdToBeCancelled) =>
-        Seq()
+  def interruptOperation(executionId: String): Seq[String] = {
+    scala.util.Try(executionId.toLong).toOption match {
+      case Some(executionIdToBeCancelled) =>
+        val tagToBeCancelled = SQLExecution.executionIdJobTag(this, executionIdToBeCancelled)
+        doInterruptTag(tagToBeCancelled, reason = "", tagIsInternal = true)
       case None =>
-        throw new IllegalArgumentException("jobId must be a number in string form.")
+        throw new IllegalArgumentException("executionId must be a number in string form.")
     }
   }
 

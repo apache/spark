@@ -32,6 +32,7 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkExcept
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.util.ExecutionListenerBus
@@ -176,13 +177,21 @@ class SparkSessionJobTaggingAndCancellationSuite
         assert(job.size == 1)
         val tags = job.head.properties.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
           .split(SparkContext.SPARK_JOB_TAGS_SEP)
-        assert(tags.forall(_.contains(s"spark-session-${ss.sessionUUID}")))
-        val userTags = tags.map(_.replace(s"spark-session-${ss.sessionUUID}-", ""))
+
         val sessionTag = s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}${ss.sessionJobTag}"
+        val executionRootIdTag = SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX +
+          SQLExecution.executionIdJobTag(
+            ss,
+            job.head.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
+        val userTagsPrefix = s"spark-session-${ss.sessionUUID}-"
+
         ss match {
-          case s if s == sessionA => assert(userTags.toSet == Set(sessionTag, "one"))
-          case s if s == sessionB => assert(userTags.toSet == Set(sessionTag, "one", "two"))
-          case s if s == sessionC => assert(userTags.toSet == Set(sessionTag, "boo"))
+          case s if s == sessionA => assert(tags.toSet == Set(
+            sessionTag, executionRootIdTag, s"${userTagsPrefix}one"))
+          case s if s == sessionB => assert(tags.toSet == Set(
+            sessionTag, executionRootIdTag, s"${userTagsPrefix}one", s"${userTagsPrefix}two"))
+          case s if s == sessionC => assert(tags.toSet == Set(
+            sessionTag, executionRootIdTag, s"${userTagsPrefix}boo"))
         }
       }
 
@@ -190,19 +199,19 @@ class SparkSessionJobTaggingAndCancellationSuite
       assert(globalSession.interruptAll().isEmpty)
       assert(globalSession.interruptTag("one").isEmpty)
       assert(globalSession.interruptTag("two").isEmpty)
-      for (i <- 0 until globalSession.sparkContext.dagScheduler.numTotalJobs) {
+      for (i <- SQLExecution.executionIdToQueryExecution.keys().asScala) {
         assert(globalSession.interruptOperation(i.toString).isEmpty)
       }
       assert(jobEnded.intValue == 0)
 
       // One job cancelled
-      for (i <- 0 until globalSession.sparkContext.dagScheduler.numTotalJobs) {
+      for (i <- SQLExecution.executionIdToQueryExecution.keys().asScala) {
         sessionC.interruptOperation(i.toString)
       }
       val eC = intercept[SparkException] {
         ThreadUtils.awaitResult(jobC, 1.minute)
       }.getCause
-      assert(eC.getMessage contains "Interrupted")
+      assert(eC.getMessage contains "cancelled")
       assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
       assert(jobEnded.intValue == 1)
 
@@ -211,7 +220,7 @@ class SparkSessionJobTaggingAndCancellationSuite
       val eA = intercept[SparkException] {
         ThreadUtils.awaitResult(jobA, 1.minute)
       }.getCause
-      assert(eA.getMessage contains "Interrupted")
+      assert(eA.getMessage contains "cancelled job tags one")
       assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
       assert(jobEnded.intValue == 2)
 

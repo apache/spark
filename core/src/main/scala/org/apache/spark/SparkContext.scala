@@ -978,7 +978,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @since 3.5.0
    */
   def clearJobTags(): Unit = {
-    val internalTags = getInternalJobTags()
+    val internalTags = getInternalJobTags() // exclude internal tags
     if (internalTags.isEmpty) {
       setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
     } else {
@@ -2721,14 +2721,16 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @param reason reason for cancellation
-   * @return A future that will be completed with the set of job IDs that were cancelled.
+   * @return A future that will be completed with the set of job tags that were cancelled.
    */
-  private[spark] def cancelJobsWithTagWithFuture(tag: String, reason: String): Future[Set[Int]] = {
+  private[spark] def cancelJobsWithTagWithFuture(
+      tag: String,
+      reason: String): Future[Seq[ActiveJob]] = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
 
-    val cancelledJobs = Promise[Set[Int]]()
-    dagScheduler.cancelJobsWithTag(tag, Option(reason), Some(cancelledJobs))
+    val cancelledJobs = Promise[Seq[ActiveJob]]()
+    dagScheduler.cancelJobsWithTag(tag, Some(reason), Some(cancelledJobs))
     cancelledJobs.future
   }
 
@@ -2743,7 +2745,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobsWithTag(tag: String, reason: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(tag, Option(reason), jobsToBeCancelled = None)
+    dagScheduler.cancelJobsWithTag(tag, Option(reason), cancelledJobs = None)
   }
 
   /**
@@ -2756,7 +2758,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(tag, reason = None, jobsToBeCancelled = None)
+    dagScheduler.cancelJobsWithTag(tag, reason = None, cancelledJobs = None)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
