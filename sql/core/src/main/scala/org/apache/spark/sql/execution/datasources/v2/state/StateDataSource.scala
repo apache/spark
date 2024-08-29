@@ -220,22 +220,27 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         None
       }
 
-      // Read the actual state schema from the provided path for v2 or from the dedicated path
-      // for v1
-      val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
-      val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
-      val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
-        partitionId, sourceOptions.storeName)
-      val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
-      val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-        oldSchemaFilePath = oldSchemaFilePath)
-      val stateSchema = manager.readSchemaFile()
+      try {
+        // Read the actual state schema from the provided path for v2 or from the dedicated path
+        // for v1
+        val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
+        val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
+        val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
+          partitionId, sourceOptions.storeName)
+        val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
+        val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
+          oldSchemaFilePath = oldSchemaFilePath)
+        val stateSchema = manager.readSchemaFile()
 
-      // Based on the version and read schema, populate the keyStateEncoderSpec used for
-      // reading the column families
-      val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
-      keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema, storeMetadata))
-      stateStoreColFamilySchemaOpt = Some(resultSchema)
+        // Based on the version and read schema, populate the keyStateEncoderSpec used for
+        // reading the column families
+        val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
+        keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema, storeMetadata))
+        stateStoreColFamilySchemaOpt = Some(resultSchema)
+      } catch {
+        case NonFatal(ex) =>
+          throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, ex)
+      }
     }
 
     StateStoreReaderInfo(
