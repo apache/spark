@@ -214,14 +214,14 @@ class RocksDB(
 
   /**
    * Remove RocksDB column family, if exists
+   * @return columnFamilyId if it exists, else None
    */
-  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+  def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
     if (checkColFamilyExists(colFamilyName)) {
-      colFamilyNameToIdMap.remove(colFamilyName)
       shouldForceSnapshot.set(true)
-      true
+      Some(colFamilyNameToIdMap.remove(colFamilyName))
     } else {
-      false
+      None
     }
   }
 
