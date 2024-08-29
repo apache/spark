@@ -1492,7 +1492,8 @@ case class Transpose(
 ) extends LeafNode {
 
   override lazy val resolved: Boolean = {
-    output.nonEmpty && (!hasNonIndexColumns || data.nonEmpty)
+    (output.isEmpty && !hasNonIndexColumns) ||
+      (output.nonEmpty && (!hasNonIndexColumns || data.nonEmpty))
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)

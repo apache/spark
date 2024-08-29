@@ -1129,13 +1129,15 @@ class SparkConnectPlanner(
   private def transformTranspose(rel: proto.Transpose): LogicalPlan = {
     val child = transformRelation(rel.getInput)
 
-    val indexColumn = if (rel.hasIndexColumn) {
-      transformExpression(rel.getIndexColumn)
+    val indexColumnOpt = if (rel.hasIndexColumn) {
+      Some(transformExpression(rel.getIndexColumn))
+    } else if (child.output.nonEmpty) {
+      Some(child.output.head)
     } else {
-      child.output.head
+      None
     }
 
-    UnresolvedTranspose(indexColumn = indexColumn, child = child)
+    UnresolvedTranspose(indexColumn = indexColumnOpt, child = child)
   }
 
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {

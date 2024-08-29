@@ -983,26 +983,19 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def transpose(indexColumn: Column): DataFrame = withPlan {
-    if (this.columns.isEmpty) {
-      LocalRelation()
-    } else {
-      UnresolvedTranspose(
-        indexColumn.named,
-        logicalPlan
-      )
-    }
+    UnresolvedTranspose(
+      Some(indexColumn.named),
+      logicalPlan
+    )
   }
 
   /** @inheritdoc */
   def transpose(): DataFrame = withPlan {
-    if (this.columns.isEmpty) {
-      LocalRelation()
-    } else {
-      UnresolvedTranspose(
-        this.col(this.columns.head).named,
-        logicalPlan
-      )
-    }
+    val indexExpr = if (this.columns.isEmpty) None else Some(this.col(this.columns.head).named)
+    UnresolvedTranspose(
+      indexExpr,
+      logicalPlan
+    )
   }
 
   /** @inheritdoc */

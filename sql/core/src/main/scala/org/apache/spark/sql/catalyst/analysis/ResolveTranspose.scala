@@ -92,10 +92,21 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(TreePattern.UNRESOLVED_TRANSPOSE)) {
-    case t @ UnresolvedTranspose(indexColumn, child) if indexColumn.resolved && child.resolved =>
+    case t @ UnresolvedTranspose(indexColumnOpt, child) if child.resolved =>
+
+      // Handle empty frame with no column headers
+      if (child.output.isEmpty) {
+        return Transpose(Seq.empty, hasNonIndexColumns = false)
+      }
+
+      // Use the first column as index column if not provided
+      val resolvedIndexColumn = indexColumnOpt match {
+        case Some(indexColumn) if indexColumn.resolved => indexColumn
+        case _ => child.output.head
+      }
 
       // Cast the index column to StringType
-      val indexColumnAsString = indexColumn match {
+      val indexColumnAsString = resolvedIndexColumn match {
         case attr: Attribute if attr.dataType.isInstanceOf[AtomicType] =>
           Alias(Cast(attr, StringType), attr.name)()
         case attr: Attribute =>
@@ -114,7 +125,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
       // Cast non-index columns to the least common type
       val nonIndexColumnsAttr = child.output.filterNot(
-        _.exprId == indexColumn.asInstanceOf[Attribute].exprId)
+        _.exprId == resolvedIndexColumn.asInstanceOf[Attribute].exprId)
       val nonIndexTypes = nonIndexColumnsAttr.map(_.dataType)
       val commonType = leastCommonType(nonIndexTypes)
       val nonIndexColumnsAsLCT = nonIndexColumnsAttr.map { attr =>
@@ -123,9 +134,9 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
       // Exclude nulls and sort index column values, and collect the casted frame
       val allCastCols = indexColumnAsString +: nonIndexColumnsAsLCT
-      val nonNullChild = Filter(IsNotNull(indexColumn), child)
+      val nonNullChild = Filter(IsNotNull(resolvedIndexColumn), child)
       val sortedChild = Sort(
-        Seq(SortOrder(indexColumn.asInstanceOf[Attribute], Ascending)),
+        Seq(SortOrder(resolvedIndexColumn.asInstanceOf[Attribute], Ascending)),
         global = true,
         nonNullChild
       )
@@ -176,7 +187,6 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         val hasNonIndexColumns = nonIndexColumnsAttr.nonEmpty
         val transposeOutput = (keyAttr +: valueAttrs).toIndexedSeq
         val transposeData = transposedInternalRows.toIndexedSeq
-        println("are we here 2")
         Transpose(transposeOutput, transposeData, hasNonIndexColumns)
       }
   }
