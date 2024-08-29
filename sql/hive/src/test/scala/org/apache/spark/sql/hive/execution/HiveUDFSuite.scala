@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
@@ -698,13 +698,17 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
         sql(s"CREATE FUNCTION testListFiles1 AS '${classOf[ListFiles].getName}' " +
           s"USING ARCHIVE '${zipFile1.getAbsolutePath}'")
-        val df1 = sql(s"SELECT testListFiles1('${SparkFiles.get(zipFile1.getName)}')")
+        val fileName = s"${spark.sessionUUID}/${zipFile1.getName}"
+        val df1 = sql(s"SELECT testListFiles1('${SparkFiles.get(fileName)}')")
         val fileList1 =
           df1.collect().map(_.getList[String](0)).head.asScala.filter(_ != "META-INF")
 
         assert(fileList1.length === 2)
         assert(fileList1.contains(text1.getName))
         assert(fileList1.contains(json1.getName))
+        TestHive.cleanTempArtifacts(List(),
+          List(),
+          List(s"${zipFile1.getName}"))
       }
 
       // Test for file#alias style archive registration.
@@ -717,7 +721,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
         sql(s"CREATE FUNCTION testListFiles2 AS '${classOf[ListFiles].getName}' " +
           s"USING ARCHIVE '${zipFile2.getAbsolutePath}#foo'")
-        val df2 = sql(s"SELECT testListFiles2('${SparkFiles.get("foo")}')")
+        val fileName = s"${spark.sessionUUID}/foo"
+        val df2 = sql(s"SELECT testListFiles2('${SparkFiles.get(fileName)}')")
         val fileList2 =
           df2.collect().map(_.getList[String](0)).head.asScala.filter(_ != "META-INF")
 
@@ -725,6 +730,9 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         assert(fileList2.contains(text2.getName))
         assert(fileList2.contains(json2.getName))
         assert(fileList2.contains(csv2.getName))
+        TestHive.cleanTempArtifacts(List(),
+          List(),
+          List(s"${zipFile2.getName}"))
       }
     }
   }

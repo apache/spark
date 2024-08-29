@@ -126,7 +126,9 @@ def setup_spark_files(infile: IO) -> None:
     Set up Spark files, archives, and pyfiles.
     """
     # fetch name of workdir
-    spark_files_dir = utf8_deserializer.loads(infile)
+    spark_files_dirs = utf8_deserializer.loads(infile)
+    # use spark default jobArtifact dir as spark files root
+    spark_files_dir = spark_files_dirs.split(";")[0]
 
     if not is_remote_only():
         from pyspark.core.files import SparkFiles
@@ -135,11 +137,14 @@ def setup_spark_files(infile: IO) -> None:
         SparkFiles._is_running_on_worker = True
 
     # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-    add_path(spark_files_dir)  # *.py files that were added will be copied here
+    for spark_files_dir in spark_files_dirs.split(";"):
+        add_path(spark_files_dir)  # *.py files that were added will be copied here
     num_python_includes = read_int(infile)
     for _ in range(num_python_includes):
         filename = utf8_deserializer.loads(infile)
-        add_path(os.path.join(spark_files_dir, filename))
+        for spark_files_dir in spark_files_dirs.split(";"):
+            if os.path.exists(os.path.join(spark_files_dir, filename)):
+                add_path(os.path.join(spark_files_dir, filename))
 
     importlib.invalidate_caches()
 
