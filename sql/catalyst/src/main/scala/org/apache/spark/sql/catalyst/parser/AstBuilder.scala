@@ -5667,10 +5667,22 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, ctx.operator.getType)
+    }.getOrElse(Option(ctx.pivotClause()).map { c =>
+      if (ctx.unpivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withPivot(c, left)
+    }.getOrElse(Option(ctx.unpivotClause()).map { c =>
+      if (ctx.pivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withUnpivot(c, left)
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-    }.get))))
+    }.get)))))))
   }
 }

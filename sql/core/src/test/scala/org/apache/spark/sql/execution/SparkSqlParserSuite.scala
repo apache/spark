@@ -883,6 +883,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Operator pipe SQL syntax") {
     withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
+      // Basic selection, projection, and limits
       parser.parsePlan("SELECT 1 AS X |> LIMIT 1")
       parser.parsePlan("SELECT 1 AS X |> LIMIT 1 OFFSET 1")
       parser.parsePlan("SELECT 1 AS X |> WHERE X < 5")
@@ -905,6 +906,47 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("SELECT 1 AS X |> LIMIT 1 |> TABLESAMPLE (50 PERCENT)")
       parser.parsePlan("SELECT 1 AS X |> TABLESAMPLE (5 ROWS) |> LIMIT 1")
       parser.parsePlan("SELECT 1 AS X |> LIMIT 1 |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+      // PIVOT and UNPIVOT operations
+      parser.parsePlan(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 2012, 10000),
+          |  ("Java", 2012, 20000),
+          |  ("dotNET", 2012, 5000),
+          |  ("dotNET", 2013, 48000),
+          |  ("Java", 2013, 30000)
+          |  AS courseSales(course, year, earnings)
+          ||> PIVOT (
+          |  SUM(earnings)
+          |  FOR course IN ('dotNET', 'Java')
+          |)
+          |""".stripMargin)
+      parser.parsePlan(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+          ||> UNPIVOT (
+          |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+          |)
+          |""".stripMargin)
+        // Join operations.
+        parser.parsePlan(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+          ||> INNER JOIN (SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS otherCourseEarnings(course, `2012`, `2013`, `2014`))
+          |  USING (course)
+          |""".stripMargin
+      )
+
+      // TODO: test joins here.
     }
   }
 }
