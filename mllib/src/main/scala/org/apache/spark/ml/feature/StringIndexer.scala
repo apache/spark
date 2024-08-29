@@ -210,9 +210,7 @@ class StringIndexer @Since("1.4.0") (
       .groupBy("index", "value")
       .agg(countCol.as("count"))
       .groupBy("index")
-      .agg(collect_list(struct("count", "value")).alias("array"))
-      .repartition(8, col("index"))
-      .select(col("index"), sort_array(col("array")).getField("value"))
+      .agg(sort_array(collect_list(struct("count", "value"))).getField("value"))
       .collect()
       .foreach(r => result(r.getInt(0)) = r.getSeq[String](1).toArray)
     result
@@ -227,9 +225,7 @@ class StringIndexer @Since("1.4.0") (
     dataset.select(posexplode(array(selectedCols: _*)).as(Seq("index", "value")))
       .where(col("value").isNotNull)
       .groupBy("index")
-      .agg(collect_set("value").alias("array"))
-      .repartition(8, col("index"))
-      .select(col("index"), sort_array(col("array"), ascending))
+      .agg(sort_array(collect_set("value"), ascending))
       .collect()
       .foreach(r => result(r.getInt(0)) = r.getSeq[String](1).toArray)
     result
