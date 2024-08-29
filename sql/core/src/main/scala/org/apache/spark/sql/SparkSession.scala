@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.io.Closeable
 import java.net.URI
 import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
