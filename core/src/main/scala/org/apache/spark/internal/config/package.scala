@@ -1618,8 +1618,7 @@ package object config {
       .version("3.2.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
-      .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
-        "should be either ADLER32 or CRC32.")
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
       .createWithDefault("ADLER32")
 
   private[spark] val SHUFFLE_COMPRESS =
