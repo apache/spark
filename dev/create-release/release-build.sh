@@ -536,7 +536,7 @@ if [[ "$1" == "publish-release" ]]; then
       file_short=$(echo $file | sed -e "s/\.\///")
       dest_url="$nexus_upload/org/apache/spark/$file_short"
       echo "  Uploading $file_short"
-      curl --retry 3 --retry-all-errors -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
+      curl --retry 3 -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
     done
 
     echo "Closing nexus staging repository"
