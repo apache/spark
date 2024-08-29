@@ -16344,7 +16344,7 @@ def to_variant_object(
     >>> df.select(to_variant_object(df.v))
     DataFrame[to_variant_object(v): variant]
     >>> df.select(to_variant_object(df.v)).show(truncate=False)
-    +--------------------+                                                          
+    +--------------------+
     |to_variant_object(v)|
     +--------------------+
     |[{"a":{"b":"2"}}]   |
