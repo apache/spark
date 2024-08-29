@@ -16331,24 +16331,23 @@ def to_variant_object(
 
     Examples
     --------
-    >>> from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, \
-    ... MapType
+    >>> from pyspark.sql.types import ArrayType, StructType, StructField, StringType, MapType
     >>> from pyspark.sql.functions.builtin import to_variant_object
-    >>> schema = StructType([ \
-    ...     StructField("i", IntegerType(), True), \
-    ...     StructField("v", ArrayType(StructType([ \
-    ...         StructField("a", MapType(StringType(), IntegerType()), True) \
-    ...     ]), True)) \
+    >>> schema = StructType([
+    ...     StructField("i", StringType(), True),
+    ...     StructField("v", ArrayType(StructType([
+    ...         StructField("a", MapType(StringType(), StringType()), True)
+    ...     ]), True))
     ... ])
-    >>> data = [(1, [{"a": {"b": 2}}])]
+    >>> data = [("1", [{"a": {"b": 2}}])]
     >>> df = spark.createDataFrame(data, schema)
     >>> df.select(to_variant_object(df.v))
     DataFrame[to_variant_object(v): variant]
     >>> df.select(to_variant_object(df.v)).show(truncate=False)
-    +--------------------+
+    +--------------------+                                                          
     |to_variant_object(v)|
     +--------------------+
-    |[{"a":{"b":2}}]     |
+    |[{"a":{"b":"2"}}]   |
     +--------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
