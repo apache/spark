@@ -39,6 +39,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -964,8 +965,8 @@ class DataFrameTestsMixin:
             [StructField("key", StringType(), False), StructField("x", StringType(), True)]
         )
         expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
-        self.assertEqual(transposed_df.schema, expected_schema)
-        self.assertEqual(transposed_df.collect(), expected_data)
+        expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
 
         # specified index column
         transposed_df = df.transpose("c")
@@ -973,16 +974,18 @@ class DataFrameTestsMixin:
             [StructField("key", StringType(), False), StructField("z", StringType(), True)]
         )
         expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
-        self.assertEqual(transposed_df.schema, expected_schema)
-        self.assertEqual(transposed_df.collect(), expected_data)
+        expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
 
         # enforce transpose max values
         with self.sql_conf({"spark.sql.transposeMaxValues": 0}):
-            with self.assertRaisesRegex(
-                AnalysisException,
-                r"\[EXCEED_ROW_LIMIT\] Number of rows exceeds the allowed limit of",
-            ):
+            with self.assertRaises(AnalysisException) as pe:
                 df.transpose().collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="EXCEED_ROW_LIMIT",
+                messageParameters={"maxValues": "0", "config": "spark.sql.transposeMaxValues"},
+            )
 
         # enforce ascending order based on index column values for transposed columns
         df = self.spark.createDataFrame([{"a": "z"}, {"a": "y"}, {"a": "x"}])
@@ -994,26 +997,31 @@ class DataFrameTestsMixin:
                 StructField("y", StringType(), True),
                 StructField("z", StringType(), True),
             ]
-        )
-        self.assertEqual(transposed_df.schema, expected_schema)  # z, y, x -> x, y, z
+        )  # z, y, x -> x, y, z
+        expected_df = self.spark.createDataFrame([], schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
 
         # enforce AtomicType Attribute for index column values
         df = self.spark.createDataFrame([{"a": ["x", "x"], "b": "y", "c": "z"}])
-        with self.assertRaisesRegex(
-            AnalysisException,
-            r"\[INVALID_INDEX_COLUMN\] Invalid index column because:"
-            " Index column must be of atomic type",
-        ):
+        with self.assertRaises(AnalysisException) as pe:
             df.transpose().collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="INVALID_INDEX_COLUMN",
+            messageParameters={
+                "reason": "Index column must be of atomic type, but found: ArrayType(StringType,true)"
+            },
+        )
 
         # enforce least common type for non-index columns
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": 1}])
-        with self.assertRaisesRegex(
-            AnalysisException,
-            r"\[TRANSPOSE_NO_LEAST_COMMON_TYPE\] Transpose requires non-index"
-            " columns to share a least common type",
-        ):
+        with self.assertRaises(AnalysisException) as pe:
             df.transpose().collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="TRANSPOSE_NO_LEAST_COMMON_TYPE",
+            messageParameters={"dt1": "StringType", "dt2": "LongType"},
+        )
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
