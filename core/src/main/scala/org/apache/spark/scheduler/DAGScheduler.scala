@@ -168,7 +168,7 @@ private[spark] class DAGScheduler(
   // Stages that must be resubmitted due to fetch failures
   private[scheduler] val failedStages = new HashSet[Stage]
 
-  private[scheduler] val activeJobs = new HashSet[ActiveJob]
+  private[spark] val activeJobs = new HashSet[ActiveJob]
 
   // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
