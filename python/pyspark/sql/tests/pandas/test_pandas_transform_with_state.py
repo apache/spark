@@ -52,11 +52,12 @@ class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
         cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "5")
+        cfg.set("spark.sql.shuffle.partitions", "1")
         cfg.set(
             "spark.sql.streaming.stateStore.providerClass",
             "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
         )
+        cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
         return cfg
 
     def _prepare_test_resource1(self, input_path):
@@ -211,6 +212,17 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
+    def test_transform_with_state_in_pandas_list_state(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(), check_results, True
+        )
+
 
 class SimpleStatefulProcessor(StatefulProcessor):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
@@ -259,6 +271,41 @@ class InvalidSimpleStatefulProcessor(StatefulProcessor):
         assert self.num_violations_state.get() is None
         self.num_violations_state.clear()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
+
+    def close(self) -> None:
+        pass
+
+class ListStateProcessor(StatefulProcessor):
+    dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        self.list_state1 = handle.getListState("listState1", state_schema)
+        self.list_state2 = handle.getListState("listState2", state_schema)
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        count = 0
+        for pdf in rows:
+          self.list_state1.put(pdf)
+          self.list_state2.put(pdf)
+          self.list_state1.append_value((111,))
+          self.list_state2.append_value((222,))
+          self.list_state1.append_list(pdf)
+          self.list_state2.append_list(pdf)
+          pdf_count = pdf.count()
+          count += pdf_count.get('temperature')
+        iter1 = self.list_state1.get()
+        iter2 = self.list_state2.get()
+        # Mixing the iterator to test it we can resume from the correct point
+        next(iter1)
+        next(iter2)
+        result1 = next(iter1)
+        # the second fetch should return the append value 111 for list_state1
+        assert result1.at[0, 'temperature'] == 111
+        result2 = next(iter2)
+        # the second fetch should return the append value 222 for list_state2
+        assert result2.at[0, 'temperature'] == 222
+        yield pd.DataFrame({'id': key, 'countAsString': str(count)})
 
     def close(self) -> None:
         pass
