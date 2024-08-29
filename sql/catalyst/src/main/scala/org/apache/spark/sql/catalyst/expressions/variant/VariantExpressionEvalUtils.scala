@@ -121,7 +121,7 @@ object VariantExpressionEvalUtils {
           buildVariant(builder, element, elementType)
         }
         builder.finishWritingArray(start, offsets)
-      case MapType(StringType, valueType, _) =>
+      case MapType(_: StringType, valueType, _) =>
         val data = input.asInstanceOf[MapData]
         val keys = data.keyArray()
         val values = data.valueArray()
