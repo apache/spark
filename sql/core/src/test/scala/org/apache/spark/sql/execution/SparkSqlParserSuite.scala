@@ -945,8 +945,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           |  USING (course)
           |""".stripMargin
       )
-
-      // TODO: test joins here.
     }
   }
 }
