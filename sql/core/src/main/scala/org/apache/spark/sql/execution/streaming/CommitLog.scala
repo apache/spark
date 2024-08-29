@@ -57,6 +57,7 @@ class CommitLog(sparkSession: SparkSession, path: String)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
+    // TODO [SPARK-49462] This validation should be relaxed for a stateless query.
     validateVersion(lines.next().trim, VERSION)
     val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
     CommitMetadata(metadataJson)
