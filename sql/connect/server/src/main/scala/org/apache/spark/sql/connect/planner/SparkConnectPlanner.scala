@@ -78,7 +78,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, ObservationListener, TypedAggUtils}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
@@ -1178,8 +1178,10 @@ class SparkConnectPlanner(
     if (input.isStreaming || executeHolderOpt.isEmpty) {
       CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     } else {
+      // TODO this might be too complex for no good reason. It might
+      //  be easier to inspect the plan after it completes.
       val observation = Observation(name)
-      observation.register(session, planId)
+      session.listenerManager.register(new ObservationListener(observation, session, planId))
       executeHolderOpt.get.addObservation(name, observation)
       CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     }
