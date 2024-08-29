@@ -286,6 +286,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(
             session_id=self._initial_request.session_id,
+            client_observed_server_side_session_id=self._initial_request.client_observed_server_side_session_id,
             user_context=self._initial_request.user_context,
             operation_id=self._initial_request.operation_id,
         )
