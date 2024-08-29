@@ -53,6 +53,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends api.DataFrameWriter {
+  format(ds.sparkSession.sessionState.conf.defaultDataSourceName)
 
   private val df = ds.toDF()
 
@@ -620,7 +621,4 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends api.DataFram
       case other => other
     }
   }
-
-  override protected def defaultSourceOption: String =
-    df.sparkSession.sessionState.conf.defaultDataSourceName
 }

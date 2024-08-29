@@ -512,13 +512,11 @@ abstract class DataFrameWriter {
     }
   }
 
-  protected def defaultSourceOption: String = ""
-
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  protected var source: String = defaultSourceOption
+  protected var source: String = ""
 
   protected var mode: SaveMode = SaveMode.ErrorIfExists
 
