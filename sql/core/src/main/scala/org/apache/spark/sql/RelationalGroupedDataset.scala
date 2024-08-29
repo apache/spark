@@ -50,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 class RelationalGroupedDataset protected[sql](
-    protected val df: DataFrame,
+    protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType)
   extends api.RelationalGroupedDataset[Dataset] {
