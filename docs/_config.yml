@@ -45,6 +45,5 @@ DOCSEARCH_SCRIPT: |
   });
 
 permalink: 404.html
-destination: docs/latest
 
 exclude: ['README.md']
