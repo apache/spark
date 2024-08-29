@@ -549,6 +549,23 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(reattachableIter.resultComplete)
   }
 
+  test("SPARK-49458: reattachable iterators contain the server-side session id") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+
+    val plan = buildPlan("select * from range(10000000)")
+    val iter = client.execute(plan)
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    assert(reattachableIter.serverSideSessionId.isEmpty)
+    iter.next()
+    assert(reattachableIter.serverSideSessionId.get == client.sessionId)
+  }
+
   test("GRPC stub unary call throws error immediately") {
     // Spark Connect error retry handling depends on the error being returned from the unary
     // call immediately.
@@ -663,6 +680,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     val response = ExecutePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
+      .setServerSideSessionId(requestSessionId)
       .setOperationId(operationId)
       .build()
     responseObserver.onNext(response)
@@ -673,6 +691,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       val resultComplete = ExecutePlanResponse
         .newBuilder()
         .setSessionId(requestSessionId)
+        .setServerSideSessionId(requestSessionId)
         .setOperationId(operationId)
         .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
         .build()
