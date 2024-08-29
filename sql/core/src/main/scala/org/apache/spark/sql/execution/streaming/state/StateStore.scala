@@ -126,6 +126,8 @@ trait StateStore extends ReadStateStore {
 
   /**
    * Create column family with given name, if absent.
+   *
+   * @return column family ID
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,

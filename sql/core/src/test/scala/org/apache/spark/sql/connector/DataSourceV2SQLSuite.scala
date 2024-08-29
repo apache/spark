@@ -3703,6 +3703,86 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-49246: read-only catalog") {
+    def assertPrivilegeError(f: => Unit, privilege: String): Unit = {
+      val e = intercept[RuntimeException](f)
+      assert(e.getMessage.contains(privilege))
+    }
+
+    def checkWriteOperations(catalog: String): Unit = {
+      withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
+        val input = sql("SELECT 1")
+        val tbl = s"$catalog.default.t"
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (i INT)")
+          val df = sql(s"SELECT * FROM $tbl")
+          assert(df.collect().isEmpty)
+          assert(df.schema == new StructType().add("i", "int"))
+
+          assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT 1"), "INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT 1"), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"INSERT OVERWRITE $tbl SELECT 1"), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"DELETE FROM $tbl WHERE i = 0"), "DELETE")
+          assertPrivilegeError(sql(s"UPDATE $tbl SET i = 0"), "UPDATE")
+          assertPrivilegeError(
+            sql(s"""
+               |MERGE INTO $tbl USING (SELECT 1 i) AS source
+               |ON source.i = $tbl.i
+               |WHEN MATCHED THEN UPDATE SET *
+               |WHEN NOT MATCHED THEN INSERT *
+               |WHEN NOT MATCHED BY SOURCE THEN DELETE
+               |""".stripMargin),
+            "DELETE,INSERT,UPDATE"
+          )
+
+          assertPrivilegeError(input.write.insertInto(tbl), "INSERT")
+          assertPrivilegeError(input.write.mode("overwrite").insertInto(tbl), "DELETE,INSERT")
+          assertPrivilegeError(input.write.mode("append").saveAsTable(tbl), "INSERT")
+          assertPrivilegeError(input.write.mode("overwrite").saveAsTable(tbl), "DELETE,INSERT")
+          assertPrivilegeError(input.writeTo(tbl).append(), "INSERT")
+          assertPrivilegeError(input.writeTo(tbl).overwrite(df.col("i") === 1), "DELETE,INSERT")
+          assertPrivilegeError(input.writeTo(tbl).overwritePartitions(), "DELETE,INSERT")
+        }
+
+        // Test CTAS
+        withTable(tbl) {
+          assertPrivilegeError(sql(s"CREATE TABLE $tbl AS SELECT 1 i"), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(input.write.saveAsTable(tbl), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(input.writeTo(tbl).create(), "INSERT")
+        }
+        withTable(tbl) {
+          assertPrivilegeError(input.writeTo(tbl).createOrReplace(), "INSERT")
+        }
+      }
+    }
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    checkWriteOperations(SESSION_CATALOG_NAME)
+    checkWriteOperations("read_only_cat")
+  }
+
+  test("StagingTableCatalog without atomic support") {
+    withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
+      withTable("fakeStagedCat.t") {
+        sql("CREATE TABLE fakeStagedCat.t AS SELECT 1 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1))
+        sql("REPLACE TABLE fakeStagedCat.t AS SELECT 2 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(2))
+        sql("CREATE OR REPLACE TABLE fakeStagedCat.t AS SELECT 1 c1, 2 c2")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1, 2))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3771,3 +3851,55 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
   }
 }
 
+class ReadOnlyCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    throw new RuntimeException("cannot write with " +
+      writePrivileges.asScala.toSeq.map(_.toString).sorted.mkString(","))
+  }
+}
+
+class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
+  override def stageCreate(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.dropTable(ident)
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    try {
+      super.dropTable(ident)
+    } catch {
+      case _: Throwable =>
+    }
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+}

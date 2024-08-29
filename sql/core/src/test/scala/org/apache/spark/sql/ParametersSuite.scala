@@ -536,27 +536,27 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
   test("SPARK-45033: maps as parameters") {
     import org.apache.spark.util.ArrayImplicits._
     def fromArr(keys: Array[_], values: Array[_]): Column = {
-      map_from_arrays(Column(Literal(keys)), Column(Literal(values)))
+      map_from_arrays(lit(keys), lit(values))
     }
     def callFromArr(keys: Array[_], values: Array[_]): Column = {
-      call_function("map_from_arrays", Column(Literal(keys)), Column(Literal(values)))
+      call_function("map_from_arrays", lit(keys), lit(values))
     }
     def createMap(keys: Array[_], values: Array[_]): Column = {
-      val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
+      val zipped = keys.map(k => lit(k)).zip(values.map(v => lit(v)))
       map(zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def callMap(keys: Array[_], values: Array[_]): Column = {
-      val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
+      val zipped = keys.map(k => lit(k)).zip(values.map(v => lit(v)))
       call_function("map", zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def fromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
-        .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
+        .map { case (k, v) => struct(lit(k), lit(v))}
       map_from_entries(array(structures.toImmutableArraySeq: _*))
     }
     def callFromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
-        .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
+        .map { case (k, v) => struct(lit(k), lit(v))}
       call_function("map_from_entries", call_function("array", structures.toImmutableArraySeq: _*))
     }
 
@@ -590,8 +590,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       spark.sql("SELECT :m['a'][1]",
         Map("m" ->
           map_from_arrays(
-            Column(Literal(Array("a"))),
-            array(map_from_arrays(Column(Literal(Array(1))), Column(Literal(Array(2)))))))),
+            lit(Array("a")),
+            array(map_from_arrays(lit(Array(1)), lit(Array(2))))))),
       Row(2))
     // `str_to_map` is not supported
     checkError(
@@ -599,8 +599,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql("SELECT :m['a'][1]",
           Map("m" ->
             map_from_arrays(
-              Column(Literal(Array("a"))),
-              array(str_to_map(Column(Literal("a:1,b:2,c:3")))))))
+              lit(Array("a")),
+              array(str_to_map(lit("a:1,b:2,c:3"))))))
       },
       errorClass = "INVALID_SQL_ARG",
       parameters = Map("name" -> "m"),
@@ -679,6 +679,22 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       // Select from table using param
       checkAnswer(spark.sql("select identifier(?) from identifier(?) where ? == name",
         Array("id", "testtab", "test2")), Seq(Row(2)))
+    }
+  }
+
+  test("SPARK-49017: bind named parameters with IDENTIFIER clause in create table as") {
+    withTable("testtab", "testtab1") {
+
+      sql("create table testtab (id int, name string)")
+      sql("insert into testtab values(1, 'test1')")
+
+      // create table with parameters in query
+      spark.sql(
+        """create table identifier(:tab) as
+          | select * from testtab where identifier(:col) == 1""".stripMargin,
+        Map("tab" -> "testtab1", "col" -> "id"))
+
+      checkAnswer(sql("select * from testtab1"), Seq(Row(1, "test1")))
     }
   }
 

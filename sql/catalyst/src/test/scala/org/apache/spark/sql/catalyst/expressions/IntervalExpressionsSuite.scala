@@ -117,6 +117,16 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalSeconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
   }
 
+  test("cast large seconds to decimal") {
+    checkEvaluation(
+      Cast(
+        Cast(Literal(Decimal("9223372036854.775807")), DayTimeIntervalType(3, 3)),
+        DecimalType(19, 6)
+      ),
+      Decimal("9223372036854.775807")
+    )
+  }
+
   test("multiply") {
     def check(
         interval: String,

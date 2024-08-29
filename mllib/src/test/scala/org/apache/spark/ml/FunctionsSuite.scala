@@ -22,6 +22,7 @@ import org.apache.spark.ml.functions.{array_to_vector, vector_to_array}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions.col
 
 class FunctionsSuite extends MLTest {
@@ -80,12 +81,12 @@ class FunctionsSuite extends MLTest {
     assert(dfArrayFloat.schema.simpleString ===
       "struct<UDF(vec):array<float>,UDF(oldVec):array<float>>")
 
-    val thrown2 = intercept[IllegalArgumentException] {
+    val thrown2 = intercept[AnalysisException] {
       df3.select(
         vector_to_array($"vec", dtype = "float16"), vector_to_array($"oldVec", dtype = "float16"))
     }
     assert(thrown2.getMessage.contains(
-      s"Unsupported dtype: float16. Valid values: float64, float32."))
+      "Unsupported dtype: \"float16\". Valid values: float64, float32."))
   }
 
   test("test array_to_vector") {

@@ -27,8 +27,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
-import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -189,29 +188,35 @@ class StringIndexer @Since("1.4.0") (
   private def getSelectedCols(dataset: Dataset[_], inputCols: Seq[String]): Seq[Column] = {
     inputCols.map { colName =>
       val col = dataset.col(colName)
-      if (col.expr.dataType == StringType) {
-        col
-      } else {
-        // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
-        // we replace NaNs with null in advance.
-        when(!isnan(col), col).cast(StringType)
-      }
+      // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
+      // we replace NaNs with null in advance.
+      val fpTypes = Seq(DoubleType, FloatType).map(_.catalogString)
+      when(typeof(col).isin(fpTypes: _*) && isnan(col), lit(null))
+        .otherwise(col)
+        .cast(StringType)
     }
   }
 
   private def countByValue(
       dataset: Dataset[_],
       inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
-
-    val aggregator = new StringIndexerAggregator(inputCols.length)
-    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
-
     val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq)
-    dataset.select(selectedCols: _*)
-      .toDF()
-      .agg(aggregator.toColumn)
-      .as[Array[OpenHashMap[String, Long]]]
-      .collect()(0)
+    val results = Array.fill(selectedCols.size)(new OpenHashMap[String, Long]())
+    dataset.select(posexplode(array(selectedCols: _*)).as(Seq("index", "value")))
+      .where(col("value").isNotNull)
+      .groupBy("index", "value")
+      .agg(count(lit(1)).as("count"))
+      .groupBy("index")
+      .agg(collect_list(struct("value", "count")))
+      .collect()
+      .foreach { row =>
+        val index = row.getInt(0)
+        val result = results(index)
+        row.getSeq[Row](1).foreach { case Row(label: String, count: Long) =>
+          result.update(label, count)
+        }
+      }
+    results
   }
 
   private def sortByFreq(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
@@ -642,48 +647,4 @@ object IndexToString extends DefaultParamsReadable[IndexToString] {
 
   @Since("1.6.0")
   override def load(path: String): IndexToString = super.load(path)
-}
-
-/**
- * A SQL `Aggregator` used by `StringIndexer` to count labels in string columns during fitting.
- */
-private class StringIndexerAggregator(numColumns: Int)
-  extends Aggregator[Row, Array[OpenHashMap[String, Long]], Array[OpenHashMap[String, Long]]] {
-
-  override def zero: Array[OpenHashMap[String, Long]] =
-    Array.fill(numColumns)(new OpenHashMap[String, Long]())
-
-  def reduce(
-      array: Array[OpenHashMap[String, Long]],
-      row: Row): Array[OpenHashMap[String, Long]] = {
-    for (i <- 0 until numColumns) {
-      val stringValue = row.getString(i)
-      // We don't count for null values.
-      if (stringValue != null) {
-        array(i).changeValue(stringValue, 1L, _ + 1)
-      }
-    }
-    array
-  }
-
-  def merge(
-      array1: Array[OpenHashMap[String, Long]],
-      array2: Array[OpenHashMap[String, Long]]): Array[OpenHashMap[String, Long]] = {
-    for (i <- 0 until numColumns) {
-      array2(i).foreach { case (key: String, count: Long) =>
-        array1(i).changeValue(key, count, _ + count)
-      }
-    }
-    array1
-  }
-
-  def finish(array: Array[OpenHashMap[String, Long]]): Array[OpenHashMap[String, Long]] = array
-
-  override def bufferEncoder: Encoder[Array[OpenHashMap[String, Long]]] = {
-    Encoders.kryo[Array[OpenHashMap[String, Long]]]
-  }
-
-  override def outputEncoder: Encoder[Array[OpenHashMap[String, Long]]] = {
-    Encoders.kryo[Array[OpenHashMap[String, Long]]]
-  }
 }
