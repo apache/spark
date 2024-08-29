@@ -92,7 +92,7 @@ def records_to_arrow_batches(
         if num_columns != num_cols:
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                message_parameters={
+                messageParameters={
                     "expected": str(num_cols),
                     "actual": str(num_columns),
                 },
@@ -101,7 +101,7 @@ def records_to_arrow_batches(
             if name not in first_element.schema.names:
                 raise PySparkRuntimeError(
                     errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                    message_parameters={
+                    messageParameters={
                         "expected": str(column_names),
                         "actual": str(first_element.schema.names),
                     },
