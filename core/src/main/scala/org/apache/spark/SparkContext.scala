@@ -2720,8 +2720,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
-   * @param reason reason for cancellation
-   * @return A future that will be completed with the set of job tags that were cancelled.
+   * @param reason reason for cancellation.
+   * @return A future with [[ActiveJob]]s, allowing extraction of information such as Job ID and
+   *   tags.
    */
   private[spark] def cancelJobsWithTagWithFuture(
       tag: String,

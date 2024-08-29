@@ -861,8 +861,8 @@ class SparkSession private(
   }
 
   /**
-   * Get the tags that are currently set to be assigned to all the operations started by this
-   * thread.
+   * Get the operation tags that are currently set to be assigned to all the operations started by
+   * this session.
    *
    * @since 4.0.0
    */
@@ -888,8 +888,7 @@ class SparkSession private(
     doInterruptTag(sessionJobTag, "as part of cancellation of all jobs", tagIsInternal = true)
 
   /**
-   * Request to interrupt all currently running operations of this session with the given operation
-   * tag.
+   * Request to interrupt all currently running operations of this session with the given job tag.
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
