@@ -60,8 +60,8 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{ObservationUtil, SQLConf}
 import org.apache.spark.sql.internal.ExpressionUtils.column
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -1200,13 +1200,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @scala.annotation.varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
-    if (isStreaming) {
-      throw new IllegalArgumentException("Observation does not support streaming Datasets." +
-        "This is because there will be multiple observed metrics as microbatches are constructed" +
-        ". Please register a StreamingQueryListener and get the metric for each microbatch in " +
-        "QueryProgressEvent.progress, or use query.lastProgress or query.recentProgress.")
-    }
-    ObservationUtil.listenForCompletion(this, observation)
+    sparkSession.observationManager.register(observation, this)
     observe(observation.name, expr, exprs: _*)
   }
 

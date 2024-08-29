@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.{Duration, DurationInt}
@@ -53,6 +54,8 @@ class Observation(val name: String) {
    * Create an Observation with a random name.
    */
   def this() = this(UUID.randomUUID().toString)
+
+  private val isRegistered = new AtomicBoolean()
 
   private val promise = Promise[Map[String, Any]]()
 
@@ -94,11 +97,20 @@ class Observation(val name: String) {
   }
 
   /**
+   * Mark this Observation as registered.
+   */
+  private[sql] def markRegistered(): Unit = {
+    if (!isRegistered.compareAndSet(false, true)) {
+      throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
+    }
+  }
+
+  /**
    * Set the observed metrics and notify all waiting threads to resume.
    *
    * @return `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[spark] def setMetricsAndNotify(metrics: Row): Boolean = {
+  private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
     val metricsMap = metrics.getValuesMap(metrics.schema.map(_.name))
     promise.trySuccess(metricsMap)
   }
