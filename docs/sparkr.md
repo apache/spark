@@ -658,7 +658,7 @@ The following example shows how to save/load a MLlib model by SparkR.
 
 # Structured Streaming
 
-SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](/streaming/index.html).
+SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](./streaming/index.html).
 
 # Apache Arrow in SparkR
 
