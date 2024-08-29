@@ -122,6 +122,8 @@ import org.apache.spark.util.SparkClassUtils
 abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   type RGD <: RelationalGroupedDataset[DS]
 
+  def sparkSession: SparkSession[DS]
+
   val encoder: Encoder[T]
 
   /**
@@ -537,6 +539,18 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    */
   // scalastyle:off println
   def show(numRows: Int, truncate: Int, vertical: Boolean): Unit
+
+  /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   ds.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 1.6.0
+   */
+  def stat: DataFrameStatFunctions[DS]
 
   /**
    * Join with another `DataFrame`.
