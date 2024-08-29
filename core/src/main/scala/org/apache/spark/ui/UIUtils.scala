@@ -446,16 +446,16 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
+    val killTaskReasonText = reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) => s" ($count killed: $reason)"
+      }.mkString
     val progressTitle = s"$completed / $total" + {
       if (started > 0) s" ($started running)" else ""
     } + {
       if (failed > 0) s" ($failed failed)" else ""
     } + {
       if (skipped > 0) s" ($skipped skipped)" else ""
-    } +
-      reasonToNumKilled.toSeq.sortBy(-_._2).map {
-        case (reason, count) => s" ($count killed: $reason)"
-      }.mkString
+    } + killTaskReasonText
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%;" title={progressTitle}>
@@ -463,10 +463,7 @@ private[spark] object UIUtils extends Logging {
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
-        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
-            case (reason, count) => s"($count killed: $reason)"
-          }
-        }
+        { killTaskReasonText }
       </span>
       <div class="progress-bar progress-completed" style={completeWidth}></div>
       <div class="progress-bar progress-started" style={startWidth}></div>
