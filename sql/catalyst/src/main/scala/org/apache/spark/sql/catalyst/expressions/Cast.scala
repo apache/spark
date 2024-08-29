@@ -128,6 +128,9 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
+    // lossless equivalents for these types. The `to_variant_object` expression can be used instead
+    // to convert data of these types to Variant Objects.
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -237,6 +240,9 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
+    // lossless equivalents for these types. The `to_variant_object` expression can be used instead
+    // to convert data of these types to Variant Objects.
     case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>

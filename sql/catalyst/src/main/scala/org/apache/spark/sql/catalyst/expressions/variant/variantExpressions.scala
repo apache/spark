@@ -141,12 +141,8 @@ case class ToVariantObject(child: Expression)
   // Only accept nested types at the root but any types can be nested inside.
   override def checkInputDataTypes(): TypeCheckResult = {
     val checkResult: Boolean = child.dataType match {
-      case ArrayType(elementType, _) =>
-        VariantGet.checkDataType(elementType, allowStructsAndMaps = true)
-      case MapType(_: StringType, valueType, _) =>
-        VariantGet.checkDataType(valueType, allowStructsAndMaps = true)
-      case StructType(fields) =>
-        fields.forall(f => VariantGet.checkDataType(f.dataType, allowStructsAndMaps = true))
+      case _: StructType | _: ArrayType | _: MapType =>
+        VariantGet.checkDataType(child.dataType, allowStructsAndMaps = true)
       case _ => false
     }
     if (!checkResult) {
@@ -751,6 +747,9 @@ object SchemaOfVariant {
   /**
    * Similar to `dataType.sql`. The only difference is that `StructType` is shown as
    * `OBJECT<...>` rather than `STRUCT<...>`.
+   * SchemaOfVariant expressions use the Struct DataType to denote the Object type in the variant
+   * spec. However, the Object type is not equivalent to the struct type as an Object represents an
+   * unordered bag of key-value pairs while the Struct type is ordered.
    */
   def printSchema(dataType: DataType): String = dataType match {
     case StructType(fields) =>

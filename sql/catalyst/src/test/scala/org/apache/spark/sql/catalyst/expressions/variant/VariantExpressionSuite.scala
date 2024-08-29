@@ -1065,18 +1065,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Row(
         Seq("123", "true", "f"),
         Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Map("a" -> Row(132)),
         Row(0)),
-      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
+      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,d MAP<STRING, STRUCT<i: INT>>," +
+        "a STRUCT<i: INT>"))
     check(complexStruct,
-      """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""",
+      """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"],""" +
+      """"d":{"a":{"i":132}}}""",
       toVariantObject = true)
     check(ymArrLit, """["INTERVAL '0' MONTH","INTERVAL""" +
       """ '2147483647' MONTH","INTERVAL '-2147483647' MONTH"]""", toVariantObject = true)
 
-    // to_variant_object - failure cases - non-nested types
+    // to_variant_object - failure cases - non-nested types or map with non-string key
     checkFailure(1, toVariantObject = true)
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
+    checkFailure(Map(1 -> 1), toVariantObject = true)
   }
 
   test("schema_of_variant - unknown type") {
