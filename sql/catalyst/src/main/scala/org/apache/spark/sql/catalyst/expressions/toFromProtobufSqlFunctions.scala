@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -184,6 +185,9 @@ case class FromProtobuf(
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_protobuf")
 }
 
 /**
@@ -316,4 +320,7 @@ case class ToProtobuf(
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_protobuf")
 }

@@ -56,38 +56,31 @@ class SeriesPlotTestsMixin:
                 PandasOnSparkPlotAccessor._get_plot_backend(fake_plot_backend)
 
     def test_box_summary(self):
-        def check_box_summary(psdf, pdf):
-            k = 1.5
-            stats, fences = BoxPlotBase.compute_stats(psdf["a"], "a", whis=k, precision=0.01)
-            outliers = BoxPlotBase.outliers(psdf["a"], "a", *fences)
-            whiskers = BoxPlotBase.calc_whiskers("a", outliers)
-            fliers = BoxPlotBase.get_fliers("a", outliers, *fences)
+        psdf = self.psdf1
+        pdf = self.pdf1
 
-            expected_mean = pdf["a"].mean()
-            expected_median = pdf["a"].median()
-            expected_q1 = np.percentile(pdf["a"], 25)
-            expected_q3 = np.percentile(pdf["a"], 75)
-            iqr = expected_q3 - expected_q1
-            expected_fences = (expected_q1 - k * iqr, expected_q3 + k * iqr)
-            pdf["outlier"] = ~pdf["a"].between(fences[0], fences[1])
-            expected_whiskers = (
-                pdf.query("not outlier")["a"].min(),
-                pdf.query("not outlier")["a"].max(),
-            )
-            expected_fliers = pdf.query("outlier")["a"].values
+        k = 1.5
 
-            self.assertEqual(expected_mean, stats["mean"])
-            self.assertEqual(expected_median, stats["med"])
-            self.assertEqual(expected_q1, stats["q1"] + 0.5)
-            self.assertEqual(expected_q3, stats["q3"] - 0.5)
-            self.assertEqual(expected_fences[0], fences[0] + 2.0)
-            self.assertEqual(expected_fences[1], fences[1] - 2.0)
-            self.assertEqual(expected_whiskers[0], whiskers[0])
-            self.assertEqual(expected_whiskers[1], whiskers[1])
-            self.assertEqual(expected_fliers, fliers)
+        results = BoxPlotBase.compute_box(
+            sdf=psdf._internal.resolved_copy.spark_frame,
+            colnames=["a"],
+            whis=k,
+            precision=0.01,
+            showfliers=True,
+        )
+        self.assertEqual(len(results), 1)
+        result = results[0]
 
-        check_box_summary(self.psdf1, self.pdf1)
-        check_box_summary(-self.psdf1, -self.pdf1)
+        expected_mean = pdf["a"].mean()
+        expected_median = pdf["a"].median()
+        expected_q1 = np.percentile(pdf["a"], 25)
+        expected_q3 = np.percentile(pdf["a"], 75)
+
+        self.assertEqual(expected_mean, result["mean"])
+        self.assertEqual(expected_median, result["med"])
+        self.assertEqual(expected_q1, result["q1"] + 0.5)
+        self.assertEqual(expected_q3, result["q3"] - 0.5)
+        self.assertEqual([50], result["fliers"])
 
 
 class SeriesPlotTests(SeriesPlotTestsMixin, unittest.TestCase):

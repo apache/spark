@@ -2675,6 +2675,11 @@
           "expects an double literal, but got <invalidValue>."
         ]
       },
+      "DTYPE" : {
+        "message" : [
+          "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
