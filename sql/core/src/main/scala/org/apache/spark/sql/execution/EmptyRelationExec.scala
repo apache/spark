@@ -83,10 +83,13 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
   }
 
   override protected[sql] def cleanupResources(): Unit = {
-    logical.foreach {
-      case LogicalQueryStage(_, physical) =>
-        physical.cleanupResources()
-      case _ =>
+    // This code path might be executed in executor where `logical` could be null.
+    if (logical != null) {
+      logical.foreach {
+        case LogicalQueryStage(_, physical) =>
+          physical.cleanupResources()
+        case _ =>
+      }
     }
     super.cleanupResources()
   }
