@@ -149,6 +149,9 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def nullIndex(e: Column): Column = Column.internalFn("null_index", e)
 
+  def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
+
   def pandasProduct(e: Column, ignoreNA: Boolean): Column =
     Column.internalFn("pandas_product", e, lit(ignoreNA))
 

@@ -50,7 +50,7 @@ import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -87,11 +87,6 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
   override def loadTable(ident: Identifier): Table = {
     throw new NoSuchTableException(ident.asMultipartIdentifier)
   }
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = fail()
   override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
@@ -1331,8 +1326,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 cachedConnectRelation
               }.getOrElse(cachedRelation)
             }.orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
-              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
+              val writePrivilegesString =
+                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
+              val table = CatalogV2Util.loadTable(
+                catalog, ident, finalTimeTravelSpec, writePrivilegesString)
+              val loaded = createRelation(
+                catalog, ident, table, u.clearWritePrivileges.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
                 loaded.map { loadedRelation =>

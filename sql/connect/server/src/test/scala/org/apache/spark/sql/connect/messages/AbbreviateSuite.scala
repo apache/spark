@@ -258,4 +258,72 @@ class AbbreviateSuite extends SparkFunSuite {
       assert(v.getUnresolvedAttribute.getUnparsedIdentifier.indexOf("[truncated") === threshold)
     }
   }
+
+  test("truncate nested message") {
+    val threshold = 512
+
+    // Level 3.
+    val sql = proto.Relation
+      .newBuilder()
+      .setSql(
+        // Level 4.
+        proto.SQL
+          .newBuilder()
+          .setQuery(
+            // Level 5.
+            "x" * (threshold + 32))
+          .build())
+      .build()
+
+    // Level 2.
+    val drop = proto.Relation
+      .newBuilder()
+      .setDrop(
+        proto.Drop
+          .newBuilder()
+          .setInput(sql)
+          .addAllColumnNames(
+            // Level 3.
+            Seq("a", "b").asJava)
+          .build())
+      .build()
+
+    // Level 0.
+    val limit = proto.Relation
+      .newBuilder()
+      .setLimit(
+        // Level 1.
+        proto.Limit
+          .newBuilder()
+          .setInput(drop)
+          .setLimit(100)
+          .build())
+      .build()
+
+    (0 until 6).foreach { maxLevel =>
+      val truncated = ProtoUtils.abbreviate(limit, threshold, maxLevel)
+
+      // The top level message is always included.
+      assert(truncated.toString.contains("limit"), s"$truncated")
+      val truncatedLimit = truncated.getLimit
+
+      if (maxLevel != 0) {
+        assert(truncatedLimit.getLimit === 100)
+        val truncatedDrop = truncatedLimit.getInput.getDrop
+
+        if (maxLevel < 3) {
+          // Column names should have been truncated.
+          assert(truncatedDrop.getColumnNamesList.asScala.toSeq === Seq())
+        } else {
+          assert(truncatedDrop.getColumnNamesList.asScala.toSeq === Seq("a", "b"))
+          val truncatedSql = truncatedDrop.getInput.getSql
+
+          if (maxLevel == 5) {
+            // The query string must have been truncated.
+            assert(truncatedSql.getQuery.indexOf("[truncated") === threshold)
+          }
+        }
+      }
+    }
+  }
 }

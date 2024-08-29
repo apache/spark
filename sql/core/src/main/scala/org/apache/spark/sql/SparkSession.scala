@@ -29,7 +29,6 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.{Logging, MDC}
@@ -37,6 +36,7 @@ import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.SparkSession.applyAndLoadExtensions
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
@@ -114,8 +114,7 @@ class SparkSession private(
       sc,
       existingSharedState = None,
       parentSessionState = None,
-      SparkSession.applyExtensions(sc, new SparkSessionExtensions),
-      initialSessionOptions.asScala.toMap,
+      applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap,
       parentManagedJobTags = Map.empty)
   }
 
@@ -1538,6 +1537,18 @@ object SparkSession extends Logging {
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
     }
+  }
+
+  /**
+   * Create new session extensions, initialize with the confs set in [[StaticSQLConf]],
+   * and optionally apply the [[SparkSessionExtensionsProvider]] present on the classpath.
+   */
+  private[sql] def applyAndLoadExtensions(sparkContext: SparkContext): SparkSessionExtensions = {
+    val extensions = applyExtensions(sparkContext, new SparkSessionExtensions)
+    if (sparkContext.conf.get(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH)) {
+      loadExtensions(extensions)
+    }
+    extensions
   }
 
   /**
