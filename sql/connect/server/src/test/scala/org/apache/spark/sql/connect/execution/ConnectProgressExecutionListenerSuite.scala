@@ -84,7 +84,7 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
     listener.registerJobTag(testTag)
     listener.onJobStart(testJobStart)
 
-    val metrics = if (metricsPopulated) {
+    val metricsOrNull = if (metricsPopulated) {
       testStage1Task1Metrics
     } else {
       null
@@ -97,7 +97,7 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
       Success,
       testStage1Task1,
       testStage1Task1ExecutorMetrics,
-      metrics)
+      metricsOrNull)
 
     val t = listener.trackedTags(testTag)
     var yielded = false
