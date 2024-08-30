@@ -380,8 +380,10 @@ abstract class SparkFunSuite
       } else if (actual.contextType() == QueryContextType.DataFrame) {
         assert(actual.fragment() === expected.fragment,
           "Invalid code fragment of a query context. Actual:" + actual.toString)
-        assert(actual.callSite().matches(expected.callSitePattern),
-          "Invalid callSite of a query context. Actual:" + actual.toString)
+        if (expected.callSitePattern.nonEmpty) {
+          assert(actual.callSite().matches(expected.callSitePattern),
+            "Invalid callSite of a query context. Actual:" + actual.toString)
+        }
       }
     }
   }

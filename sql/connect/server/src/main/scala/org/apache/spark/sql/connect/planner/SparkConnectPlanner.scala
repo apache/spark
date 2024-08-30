@@ -42,7 +42,6 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
-import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
@@ -79,7 +78,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils, UserDefinedFunctionUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
@@ -1862,23 +1861,6 @@ class SparkConnectPlanner(
         }
         Some(CatalystDataToAvro(children.head, jsonFormatSchema))
 
-      // ML-specific functions
-      case "vector_to_array" if fun.getArgumentsCount == 2 =>
-        val expr = transformExpression(fun.getArguments(0))
-        val dtype = extractString(transformExpression(fun.getArguments(1)), "dtype")
-        dtype match {
-          case "float64" =>
-            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayUdf, Seq(expr)))
-          case "float32" =>
-            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayFloatUdf, Seq(expr)))
-          case other =>
-            throw InvalidPlanInput(s"Unsupported dtype: $other. Valid values: float64, float32.")
-        }
-
-      case "array_to_vector" if fun.getArgumentsCount == 1 =>
-        val expr = transformExpression(fun.getArguments(0))
-        Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
-
       // Protobuf-specific functions
       case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1892,17 +1874,6 @@ class SparkConnectPlanner(
 
       case _ => None
     }
-  }
-
-  /**
-   * There are some built-in yet not registered UDFs, for example, 'ml.function.array_to_vector'.
-   * This method is to convert them to ScalaUDF expressions.
-   */
-  private def transformUnregisteredUDF(
-      fun: org.apache.spark.sql.expressions.UserDefinedFunction,
-      exprs: Seq[Expression]): ScalaUDF = {
-    val f = fun.asInstanceOf[org.apache.spark.sql.expressions.SparkUserDefinedFunction]
-    UserDefinedFunctionUtils.toScalaUDF(f, exprs)
   }
 
   private def extractProtobufArgs(children: Seq[Expression]) = {
