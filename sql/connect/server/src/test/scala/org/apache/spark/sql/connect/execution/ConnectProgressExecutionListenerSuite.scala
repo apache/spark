@@ -79,11 +79,16 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
     }
   }
 
-  test("taskDone") {
+  def testTaskDone(metricsPopulated: Boolean): Unit = {
     val listener = new ConnectProgressExecutionListener
     listener.registerJobTag(testTag)
     listener.onJobStart(testJobStart)
 
+    val metrics = if (metricsPopulated) {
+      testStage1Task1Metrics
+    } else {
+      null
+    }
     // Finish the tasks
     val taskEnd = SparkListenerTaskEnd(
       1,
@@ -92,7 +97,7 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
       Success,
       testStage1Task1,
       testStage1Task1ExecutorMetrics,
-      testStage1Task1Metrics)
+      metrics)
 
     val t = listener.trackedTags(testTag)
     var yielded = false
@@ -117,7 +122,11 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
       assert(stages.map(_.numTasks).sum == 2)
       assert(stages.map(_.completedTasks).sum == 1)
       assert(stages.size == 2)
-      assert(stages.map(_.inputBytesRead).sum == 500)
+      if (metricsPopulated) {
+        assert(stages.map(_.inputBytesRead).sum == 500)
+      } else {
+        assert(stages.map(_.inputBytesRead).sum == 0)
+      }
       assert(
         stages
           .map(_.completed match {
@@ -140,7 +149,11 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
       assert(stages.map(_.numTasks).sum == 2)
       assert(stages.map(_.completedTasks).sum == 1)
       assert(stages.size == 2)
-      assert(stages.map(_.inputBytesRead).sum == 500)
+      if (metricsPopulated) {
+        assert(stages.map(_.inputBytesRead).sum == 500)
+      } else {
+        assert(stages.map(_.inputBytesRead).sum == 0)
+      }
       assert(
         stages
           .map(_.completed match {
@@ -151,6 +164,14 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
       yielded = true
     }
     assert(yielded, "Must updated with results")
+  }
+
+  test("taskDone - populated metrics") {
+    testTaskDone(metricsPopulated = true)
+  }
+
+  test("taskDone - null metrics") {
+    testTaskDone(metricsPopulated = false)
   }
 
 }
