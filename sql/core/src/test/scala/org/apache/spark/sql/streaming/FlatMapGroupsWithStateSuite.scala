@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
-import org.apache.spark.sql.{DataFrame, Encoder}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
@@ -639,7 +639,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
     val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
-      throw NullPointerException
+      Iterator(null.asInstanceOf[GroupState[RunningCount]].getCurrentProcessingTimeMs())
     }
 
     val inputData = MemoryStream[String]
