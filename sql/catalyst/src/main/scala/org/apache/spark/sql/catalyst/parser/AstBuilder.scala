@@ -5667,42 +5667,39 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
-    }.getOrElse(Option(ctx.aggregationClause()).map { c =>
-      val expressions: Seq[(Expression, Option[Expression => String])] =
-        Option(ctx.namedExpressionSeq()).map { n =>
-          visitNamedExpressionSeq(n)
-        }.getOrElse(Seq.empty)
-      val selectExpressions: Seq[NamedExpression] = expressions.map {
-        case (e: NamedExpression, _) => e
-        case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
-      }
-      withAggregationClause(c, selectExpressions, left) match {
-        case result if expressions.nonEmpty =>
-          result
-        case a: Aggregate =>
-          // If the AGGREGATE clause just contained GROUP BY with no aggregation expressions,
-          // return all the grouping keys by default.
-          val newAggExprs: Seq[NamedExpression] =
-            a.groupingExpressions.zipWithIndex.map {
-              case (n: NamedExpression, _: Int) =>
-                n
-              case (other: Expression, index: Int) =>
-                Alias(other, s"col_$index")()
-            }
-          a.copy(aggregateExpressions = newAggExprs)
-      }
     }.getOrElse(Option(ctx.AGGREGATE).map { _ =>
-      // There is an AGGREGATE keyword but no grouping keys.
-      val expressions: Seq[(Expression, Option[Expression => String])] =
-        visitNamedExpressionSeq(ctx.namedExpressionSeq())
-      val selectExpressions: Seq[NamedExpression] = expressions.map {
-        case (e: NamedExpression, _) => e
-        case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+      if (ctx.namedExpressionSeq() == null && ctx.aggregationClause() == null) {
+        operationNotAllowed(
+          "The AGGREGATE clause requires a list of aggregate expressions " +
+            "or a list of grouping expressions, or both", ctx)
       }
-      Aggregate(
-        groupingExpressions = Seq.empty,
-        aggregateExpressions = selectExpressions,
-        child = left)
+      val aggregateExpressions: Seq[NamedExpression] =
+        Option(ctx.namedExpressionSeq()).map { n =>
+          visitNamedExpressionSeq(n).map {
+            case (e: NamedExpression, _) => e
+            case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+          }
+        }.getOrElse(Seq.empty)
+      Option(ctx.aggregationClause()).map { c =>
+        withAggregationClause(c, aggregateExpressions, left) match {
+          case a: Aggregate =>
+            // Prepend grouping keys to the list of aggregate functions, since operator pipe
+            // AGGREGATE clause returns the GROUP BY expressions followed by the list of aggregate
+            // functions.
+            val namedGroupingExpressions: Seq[NamedExpression] =
+              a.groupingExpressions.map {
+                case n: NamedExpression => n
+                case e: Expression => UnresolvedAlias(e, None)
+              }
+            a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
+        }
+      }.getOrElse {
+        // This is a table aggregation with no grouping expressions.
+        Aggregate(
+          groupingExpressions = Seq.empty,
+          aggregateExpressions = aggregateExpressions,
+          child = left)
+      }
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
       withJoinRelation(c, left)
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
@@ -5719,6 +5716,6 @@ class AstBuilder extends DataTypeAstBuilder
       withSample(c, left)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-    }.get)))))))))
+    }.get))))))))
   }
 }
