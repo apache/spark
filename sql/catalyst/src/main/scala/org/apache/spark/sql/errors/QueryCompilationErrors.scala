@@ -19,11 +19,9 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -203,6 +201,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidAlphaParameter(invalidValue: Expression): Throwable = {
     invalidParameter("DOUBLE", "ewm", "alpha", invalidValue)
+  }
+
+  def invalidStringParameter(
+      functionName: String,
+      parameter: String,
+      invalidValue: Expression): Throwable = {
+    invalidParameter("STRING", functionName, parameter, invalidValue)
   }
 
   def invalidParameter(
@@ -2959,49 +2964,41 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1270",
-      messageParameters = Map("table" -> table))
-  }
-
-  def showCreateTableFailToExecuteUnsupportedFeatureError(table: CatalogTable): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1271",
-      messageParameters = Map(
-        "unsupportedFeatures" -> table.unsupportedFeatures.map(" - " + _).mkString("\n"),
-        "table" -> table.identifier.toString))
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TEMPORARY_VIEW",
+      messageParameters = Map("tableName" -> toSQLId(table)))
   }
 
   def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1272",
-      messageParameters = Map("table" -> table.identifier.toString))
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
+      messageParameters = Map("tableName" -> toSQLId(table.identifier.nameParts)))
   }
 
   def showCreateTableFailToExecuteUnsupportedConfError(
       table: TableIdentifier,
-      builder: mutable.StringBuilder): Throwable = {
+      configs: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1273",
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION",
       messageParameters = Map(
-        "table" -> table.identifier,
-        "configs" -> builder.toString()))
+        "tableName" -> toSQLId(table.nameParts),
+        "configs" -> configs))
   }
 
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
       table: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1274",
-      messageParameters = Map("table" -> table.toString))
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_DATA_SOURCE_TABLE_WITH_AS_SERDE",
+      messageParameters = Map("tableName" -> toSQLId(table.nameParts)))
   }
 
   def showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
       table: CatalogTable,
-      features: Seq[String]): Throwable = {
+      unsupportedFeatures: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1275",
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
       messageParameters = Map(
-        "table" -> table.identifier.toString,
-        "features" -> features.map(" - " + _).mkString("\n")))
+        "tableName" -> toSQLId(table.identifier.nameParts),
+        "unsupportedFeatures" -> unsupportedFeatures.map(" - " + _).mkString("\n")))
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
@@ -3130,7 +3127,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1285",
+      errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
       messageParameters = Map.empty)
   }
 
@@ -3242,28 +3239,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "colName" -> colName,
         "actualColumns" -> relation.output.map(_.name).mkString(", ")))
-  }
-
-  def invalidBoundaryStartError(start: Long): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_BOUNDARY.START",
-      messageParameters = Map(
-        "boundary" -> toSQLId("start"),
-        "invalidValue" -> toSQLValue(start, LongType),
-        "longMinValue" -> toSQLValue(Long.MinValue, LongType),
-        "intMinValue" -> toSQLValue(Int.MinValue, IntegerType),
-        "intMaxValue" -> toSQLValue(Int.MaxValue, IntegerType)))
-  }
-
-  def invalidBoundaryEndError(end: Long): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_BOUNDARY.END",
-      messageParameters = Map(
-        "boundary" -> toSQLId("end"),
-        "invalidValue" -> toSQLValue(end, LongType),
-        "longMaxValue" -> toSQLValue(Long.MaxValue, LongType),
-        "intMinValue" -> toSQLValue(Int.MinValue, IntegerType),
-        "intMaxValue" -> toSQLValue(Int.MaxValue, IntegerType)))
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
@@ -3401,12 +3376,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1322",
       messageParameters = Map("numBuckets" -> numBuckets, "e" -> e))
-  }
-
-  def usingUntypedScalaUDFError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNTYPED_SCALA_UDF",
-      messageParameters = Map.empty)
   }
 
   def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
@@ -4129,6 +4098,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       "createTable(..., Array[Column], ...)")
   }
 
+  def mustOverrideOneMethodError(methodName: String): RuntimeException = {
+    val msg = s"You must override one `$methodName`. It's preferred to not override the " +
+      "deprecated one."
+    new SparkRuntimeException(
+      "INTERNAL_ERROR",
+      Map("message" -> msg))
+  }
+
   def cannotAssignEventTimeColumn(): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
@@ -4139,6 +4116,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def avroNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
     new AnalysisException(
       errorClass = "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+      messageParameters = Map("functionName" -> functionName)
+    )
+  }
+
+  def protobufNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "PROTOBUF_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
       messageParameters = Map("functionName" -> functionName)
     )
   }

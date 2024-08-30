@@ -22,6 +22,8 @@ license: |
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
+SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version.
+
 # Overview
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R.
 In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implementation that

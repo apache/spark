@@ -281,9 +281,13 @@ class DataSource(LogicalPlan):
         assert schema is None or isinstance(schema, str)
 
         if options is not None:
+            new_options = {}
             for k, v in options.items():
-                assert isinstance(k, str)
-                assert isinstance(v, str)
+                if v is not None:
+                    assert isinstance(k, str)
+                    assert isinstance(v, str)
+                    new_options[k] = v
+            options = new_options
 
         if paths is not None:
             assert isinstance(paths, list)
@@ -682,7 +686,7 @@ class Deduplicate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
-        column_names: Optional[Sequence[str]] = None,
+        column_names: Optional[List[str]] = None,
         within_watermark: bool = False,
     ) -> None:
         super().__init__(child)

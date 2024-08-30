@@ -163,8 +163,8 @@ def _make_pretty_examples(jspark, infos):
 
     pretty_output = ""
     for info in infos:
-        if (info.examples.startswith("\n    Examples:")
-                and info.name.lower() not in ("from_avro", "to_avro")):
+        if (info.examples.startswith("\n    Examples:") and info.name.lower() not in
+                ("from_avro", "to_avro", "from_protobuf", "to_protobuf")):
             output = []
             output.append("-- %s" % info.name)
             query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))

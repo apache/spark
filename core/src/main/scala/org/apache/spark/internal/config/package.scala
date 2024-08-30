@@ -918,6 +918,18 @@ package object config {
       .booleanConf
       .createOptional
 
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_APPLICATION =
+    ConfigBuilder("spark.excludeOnFailure.application.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE =
+    ConfigBuilder("spark.excludeOnFailure.taskAndStage.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
@@ -1465,6 +1477,14 @@ package object config {
         s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_FILE_MERGE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.merge.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file input stream, in KiB unless " +
+        "otherwise specified. These buffers use off-heap buffers and are related to the number " +
+        "of files in the shuffle file. Too large buffers should be avoided.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_FILE_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")

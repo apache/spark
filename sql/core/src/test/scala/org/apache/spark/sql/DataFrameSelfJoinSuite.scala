@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeRef
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{count, explode, sum, year}
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData

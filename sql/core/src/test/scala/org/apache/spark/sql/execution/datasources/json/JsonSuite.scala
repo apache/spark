@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io._
-import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
@@ -32,13 +32,15 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
+import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -2207,7 +2209,7 @@ abstract class JsonSuite
         exception = intercept[AnalysisException] {
           spark.read.schema(schema).json(path).select("_corrupt_record").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1285",
+        errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
         parameters = Map.empty
       )
 
@@ -2368,14 +2370,20 @@ abstract class JsonSuite
 
   test("SPARK-23723: Unsupported encoding name") {
     val invalidCharset = "UTF-128"
-    val exception = intercept[UnsupportedCharsetException] {
-      spark.read
-        .options(Map("encoding" -> invalidCharset, "lineSep" -> "\n"))
-        .json(testFile("test-data/utf16LE.json"))
-        .count()
-    }
-
-    assert(exception.getMessage.contains(invalidCharset))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read
+          .options(Map("encoding" -> invalidCharset, "lineSep" -> "\n"))
+          .json(testFile("test-data/utf16LE.json"))
+          .count()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      parameters = Map(
+        "charset" -> invalidCharset,
+        "functionName" -> toSQLId("JSONOptionsInRead"),
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
+    )
   }
 
   test("SPARK-23723: checking that the encoding option is case agnostic") {
@@ -2426,17 +2434,19 @@ abstract class JsonSuite
   }
 
   test("SPARK-23723: save json in UTF-32BE") {
-    val encoding = "UTF-32BE"
-    withTempPath { path =>
-      val df = spark.createDataset(Seq(("Dog", 42)))
-      df.write
-        .options(Map("encoding" -> encoding))
-        .json(path.getCanonicalPath)
+    withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+      val encoding = "UTF-32BE"
+      withTempPath { path =>
+        val df = spark.createDataset(Seq(("Dog", 42)))
+        df.write
+          .options(Map("encoding" -> encoding))
+          .json(path.getCanonicalPath)
 
-      checkEncoding(
-        expectedEncoding = encoding,
-        pathToJsonFiles = path.getCanonicalPath,
-        expectedContent = """{"_1":"Dog","_2":42}""")
+        checkEncoding(
+          expectedEncoding = encoding,
+          pathToJsonFiles = path.getCanonicalPath,
+          expectedContent = """{"_1":"Dog","_2":42}""")
+      }
     }
   }
 
@@ -2454,22 +2464,22 @@ abstract class JsonSuite
 
   test("SPARK-23723: wrong output encoding") {
     val encoding = "UTF-128"
-    val exception = intercept[SparkException] {
-      withTempPath { path =>
-        val df = spark.createDataset(Seq((0)))
-        df.write
-          .options(Map("encoding" -> encoding))
-          .json(path.getCanonicalPath)
-      }
-    }
-
-    val baos = new ByteArrayOutputStream()
-    val ps = new PrintStream(baos, true, StandardCharsets.UTF_8.name())
-    exception.printStackTrace(ps)
-    ps.flush()
-
-    assert(baos.toString.contains(
-      "java.nio.charset.UnsupportedCharsetException: UTF-128"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        withTempPath { path =>
+          val df = spark.createDataset(Seq((0)))
+          df.write
+            .options(Map("encoding" -> encoding))
+            .json(path.getCanonicalPath)
+        }
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      parameters = Map(
+        "charset" -> encoding,
+        "functionName" -> toSQLId("JSONOptions"),
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
+    )
   }
 
   test("SPARK-23723: read back json in UTF-16LE") {
@@ -2516,16 +2526,18 @@ abstract class JsonSuite
         val os = new FileOutputStream(path)
         os.write(data)
         os.close()
-        val reader = if (inferSchema) {
-          spark.read
-        } else {
-          spark.read.schema(schema)
+        withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+          val reader = if (inferSchema) {
+            spark.read
+          } else {
+            spark.read.schema(schema)
+          }
+          val readBack = reader
+            .option("encoding", encoding)
+            .option("lineSep", lineSep)
+            .json(path.getCanonicalPath)
+          checkAnswer(readBack, records.map(rec => Row(rec._1, rec._2)))
         }
-        val readBack = reader
-          .option("encoding", encoding)
-          .option("lineSep", lineSep)
-          .json(path.getCanonicalPath)
-        checkAnswer(readBack, records.map(rec => Row(rec._1, rec._2)))
       }
     }
   }

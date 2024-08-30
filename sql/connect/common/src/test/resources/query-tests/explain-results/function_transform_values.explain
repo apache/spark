@@ -1,2 +1,2 @@
-Project [transform_values(f#0, lambdafunction(update_fields(lambda y#0, WithField(key, lambda x#0)), lambda x#0, lambda y#0, false)) AS transform_values(f, lambdafunction(update_fields(namedlambdavariable(), WithField(namedlambdavariable())), namedlambdavariable(), namedlambdavariable()))#0]
+Project [transform_values(f#0, lambdafunction(update_fields(lambda y_2#0, WithField(key, lambda x_1#0)), lambda x_1#0, lambda y_2#0, false)) AS transform_values(f, lambdafunction(update_fields(namedlambdavariable(), WithField(namedlambdavariable())), namedlambdavariable(), namedlambdavariable()))#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]
