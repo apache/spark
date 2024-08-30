@@ -355,7 +355,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.max.length")
       .doc("The maximum character length of the plan for the nested subquery.When the set length " +
         "is too large, it may cause the final plan to exceed the limit or memory overflow.")
-      .version("3.3.0")
+      .version("4.0.0")
       .intConf
       .createWithDefault(10 * 1024 * 1024)
 
