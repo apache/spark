@@ -42,7 +42,7 @@ case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCo
     AttributeReference("ICU_VERSION", StringType)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.listCollationMetas(pattern.getOrElse("*")).map(m => Row(
+    sparkSession.sessionState.catalog.listCollations(pattern.getOrElse("*")).map(m => Row(
       m.catalog,
       m.schema,
       m.collationName,

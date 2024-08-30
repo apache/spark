@@ -942,21 +942,21 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   override def listCollations(pattern: String): Dataset[CollationMetadata] = {
-    val metas = sparkSession.sessionState.catalog.listCollationMetas(pattern)
-    CatalogImpl.makeDataset(metas.map(m => makeCollation(m)), sparkSession)
+    val collations = sparkSession.sessionState.catalog.listCollations(pattern)
+    CatalogImpl.makeDataset(collations.map(c => makeCollation(c)), sparkSession)
   }
 
-  private def makeCollation(m: Collation.Meta): CollationMetadata = {
+  private def makeCollation(c: Collation): CollationMetadata = {
     new CollationMetadata(
-      m.catalog,
-      m.schema,
-      m.collationName,
-      m.language,
-      m.country,
-      m.icuVersion,
-      m.padAttribute,
-      if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE",
-      if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE")
+      c.catalog,
+      c.schema,
+      c.collationName,
+      c.language,
+      c.country,
+      c.icuVersion,
+      c.padAttribute,
+      if (c.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE",
+      if (c.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE")
   }
 }
 

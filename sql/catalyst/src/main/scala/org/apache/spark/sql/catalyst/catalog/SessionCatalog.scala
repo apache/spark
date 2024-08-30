@@ -1906,8 +1906,8 @@ class SessionCatalog(
   /**
    * List all built-in collation's meta with the given pattern.
    */
-  def listCollationMetas(pattern: String): Seq[Collation.Meta] = {
-    CollationFactory.listCollationMetas(
+  def listCollations(pattern: String): Seq[Collation] = {
+    CollationFactory.listCollations(
       DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA, pattern).asScala.toSeq
   }
 
