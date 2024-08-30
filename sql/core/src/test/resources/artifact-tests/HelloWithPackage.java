@@ -15,32 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+// Compile: javac --source 8 --target 8 HelloWithPackage.java
 
-import java.util.UUID
+package my.custom.pkg;
 
-class Observation(name: String) extends ObservationBase(name) {
+public class HelloWithPackage {
+    String name = "there";
 
-  /**
-   * Create an Observation instance without providing a name. This generates a random name.
-   */
-  def this() = this(UUID.randomUUID().toString)
-}
+    public HelloWithPackage() {
+    }
 
-/**
- * (Scala-specific) Create instances of Observation via Scala `apply`.
- * @since 4.0.0
- */
-object Observation {
+    public HelloWithPackage(String name) {
+        this.name = name;
+    }
 
-  /**
-   * Observation constructor for creating an anonymous observation.
-   */
-  def apply(): Observation = new Observation()
-
-  /**
-   * Observation constructor for creating a named observation.
-   */
-  def apply(name: String): Observation = new Observation(name)
-
+    public String msg() {
+        return "Hello " + name + "! Nice to meet you!";
+    }
 }
