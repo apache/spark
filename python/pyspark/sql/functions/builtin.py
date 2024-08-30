@@ -16542,7 +16542,7 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
     >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
-    [Row(r='STRUCT<a: BIGINT>')]
+    [Row(r='OBJECT<a: BIGINT>')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
