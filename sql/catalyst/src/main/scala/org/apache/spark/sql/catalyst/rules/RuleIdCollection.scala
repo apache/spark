@@ -54,6 +54,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveDeserializer" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveEncodersInUDF" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveProcedures" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGenerate" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
