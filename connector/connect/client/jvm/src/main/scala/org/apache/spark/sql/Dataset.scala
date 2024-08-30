@@ -135,6 +135,7 @@ class Dataset[T] private[sql] (
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
     extends api.Dataset[T, Dataset] {
+  type RGD = RelationalGroupedDataset
 
   import sparkSession.RichColumn
 
@@ -300,7 +301,7 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(sparkSession, plan.getRoot)
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
     checkSameSparkSession(right)
@@ -506,56 +507,10 @@ class Dataset[T] private[sql] (
     }
   }
 
-  /**
-   * Groups the Dataset using the specified columns, so we can run aggregation on them. See
-   * [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns grouped by department.
-   *   ds.groupBy($"department").avg()
-   *
-   *   // Compute the max age and average salary, grouped by department and gender.
-   *   ds.groupBy($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
     new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-  }
-
-  /**
-   * Groups the Dataset using the specified columns, so that we can run aggregation on them. See
-   * [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * This is a variant of groupBy that can only group by existing columns using column names (i.e.
-   * cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns grouped by department.
-   *   ds.groupBy("department").avg()
-   *
-   *   // Compute the max age and average salary, grouped by department and gender.
-   *   ds.groupBy($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  @scala.annotation.varargs
-  def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    new RelationalGroupedDataset(
-      toDF(),
-      colNames.map(colName => Column(colName)),
-      proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
 
   /** @inheritdoc */
@@ -599,134 +554,19 @@ class Dataset[T] private[sql] (
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     groupByKey(UdfUtils.mapFunctionToScalaFunc(func))(encoder)
 
-  /**
-   * Create a multi-dimensional rollup for the current Dataset using the specified columns, so we
-   * can run aggregation on them. See [[RelationalGroupedDataset]] for all the available aggregate
-   * functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns rolled up by department and group.
-   *   ds.rollup($"department", $"group").avg()
-   *
-   *   // Compute the max age and average salary, rolled up by department and gender.
-   *   ds.rollup($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
     new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
-  /**
-   * Create a multi-dimensional rollup for the current Dataset using the specified columns, so we
-   * can run aggregation on them. See [[RelationalGroupedDataset]] for all the available aggregate
-   * functions.
-   *
-   * This is a variant of rollup that can only group by existing columns using column names (i.e.
-   * cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns rolled up by department and group.
-   *   ds.rollup("department", "group").avg()
-   *
-   *   // Compute the max age and average salary, rolled up by department and gender.
-   *   ds.rollup($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  @scala.annotation.varargs
-  def rollup(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    new RelationalGroupedDataset(
-      toDF(),
-      colNames.map(colName => Column(colName)),
-      proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
-  }
-
-  /**
-   * Create a multi-dimensional cube for the current Dataset using the specified columns, so we
-   * can run aggregation on them. See [[RelationalGroupedDataset]] for all the available aggregate
-   * functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns cubed by department and group.
-   *   ds.cube($"department", $"group").avg()
-   *
-   *   // Compute the max age and average salary, cubed by department and gender.
-   *   ds.cube($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
     new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 
-  /**
-   * Create a multi-dimensional cube for the current Dataset using the specified columns, so we
-   * can run aggregation on them. See [[RelationalGroupedDataset]] for all the available aggregate
-   * functions.
-   *
-   * This is a variant of cube that can only group by existing columns using column names (i.e.
-   * cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns cubed by department and group.
-   *   ds.cube("department", "group").avg()
-   *
-   *   // Compute the max age and average salary, cubed by department and gender.
-   *   ds.cube($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  @scala.annotation.varargs
-  def cube(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    new RelationalGroupedDataset(
-      toDF(),
-      colNames.map(colName => Column(colName)),
-      proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
-  }
-
-  /**
-   * Create multi-dimensional aggregation for the current Dataset using the specified grouping
-   * sets, so we can run aggregation on them. See [[RelationalGroupedDataset]] for all the
-   * available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns group by specific grouping sets.
-   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
-   *
-   *   // Compute the max age and average salary, group by specific grouping sets.
-   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
     val groupingSetMsgs = groupingSets.map { groupingSet =>
@@ -742,61 +582,6 @@ class Dataset[T] private[sql] (
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS,
       groupingSets = Some(groupingSetMsgs))
   }
-
-  /**
-   * (Scala-specific) Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg("age" -> "max", "salary" -> "avg")
-   *   ds.groupBy().agg("age" -> "max", "salary" -> "avg")
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    groupBy().agg(aggExpr, aggExprs: _*)
-  }
-
-  /**
-   * (Scala-specific) Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
-   *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
-
-  /**
-   * (Java-specific) Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
-   *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
-
-  /**
-   * Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg(max($"age"), avg($"salary"))
-   *   ds.groupBy().agg(max($"age"), avg($"salary"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 3.4.0
-   */
-  @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs: _*)
 
   /** @inheritdoc */
   def unpivot(
@@ -1745,4 +1530,33 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   override def distinct(): Dataset[T] = super.distinct()
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def groupBy(col1: String, cols: String*): RelationalGroupedDataset =
+    super.groupBy(col1, cols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def rollup(col1: String, cols: String*): RelationalGroupedDataset =
+    super.rollup(col1, cols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def cube(col1: String, cols: String*): RelationalGroupedDataset =
+    super.cube(col1, cols: _*)
+
+  /** @inheritdoc */
+  override def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame =
+    super.agg(aggExpr, aggExprs: _*)
+
+  /** @inheritdoc */
+  override def agg(exprs: Map[String, String]): DataFrame = super.agg(exprs)
+
+  /** @inheritdoc */
+  override def agg(exprs: java.util.Map[String, String]): DataFrame = super.agg(exprs)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
 }
