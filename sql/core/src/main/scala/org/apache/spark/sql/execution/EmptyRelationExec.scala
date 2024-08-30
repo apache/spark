@@ -81,16 +81,4 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
   override def doCanonicalize(): SparkPlan = {
     this.copy(logical = LocalRelation(logical.output).canonicalized)
   }
-
-  override protected[sql] def cleanupResources(): Unit = {
-    // This code path might be executed in executor where `logical` could be null.
-    Option(logical).foreach { l =>
-      l.foreach {
-        case LogicalQueryStage(_, physical) =>
-          physical.cleanupResources()
-        case _ =>
-      }
-    }
-    super.cleanupResources()
-  }
 }
