@@ -18,14 +18,16 @@ package org.apache.spark.sql.artifact
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths}
 
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
@@ -292,5 +294,85 @@ class ArtifactManagerSuite extends SharedSparkSession {
     artifactManager.cleanUpResources()
     assert(!sessionDirectory.exists())
     assert(ArtifactManager.artifactRootDirectory.toFile.exists())
+  }
+
+  test("Add artifact to local session - by path") {
+    val (fileName, binaryName) = ("Hello.class", "Hello")
+    testAddArtifactToLocalSession(fileName, binaryName) { classPath =>
+      spark.addArtifact(classPath.toString)
+      fileName
+    }
+  }
+
+  test("Add artifact to local session - by URI") {
+    val (fileName, binaryName) = ("Hello.class", "Hello")
+    testAddArtifactToLocalSession(fileName, binaryName) { classPath =>
+      spark.addArtifact(classPath.toUri)
+      fileName
+    }
+  }
+
+  test("Add artifact to local session - custom target path") {
+    val (fileName, binaryName) = ("HelloWithPackage.class", "my.custom.pkg.HelloWithPackage")
+    val filePath = "my/custom/pkg/HelloWithPackage.class"
+    testAddArtifactToLocalSession(fileName, binaryName) { classPath =>
+      spark.addArtifact(classPath.toString, filePath)
+      filePath
+    }
+  }
+
+  test("Add artifact to local session - in memory") {
+    val (fileName, binaryName) = ("HelloWithPackage.class", "my.custom.pkg.HelloWithPackage")
+    val filePath = "my/custom/pkg/HelloWithPackage.class"
+    testAddArtifactToLocalSession(fileName, binaryName) { classPath =>
+      val buffer = Files.readAllBytes(classPath)
+      spark.addArtifact(buffer, filePath)
+      filePath
+    }
+  }
+
+  test("Add UDF as artifact") {
+    val buffer = Files.readAllBytes(artifactPath.resolve("IntSumUdf.class"))
+    spark.addArtifact(buffer, "IntSumUdf.class")
+
+    val instance = artifactManager.classloader
+      .loadClass("IntSumUdf")
+      .getDeclaredConstructor()
+      .newInstance()
+      .asInstanceOf[UDF2[Long, Long, Long]]
+    spark.udf.register("intSum", instance, DataTypes.LongType)
+
+    artifactManager.withResources {
+      val r = spark.range(5)
+        .withColumn("id2", col("id") + 1)
+        .selectExpr("intSum(id, id2)")
+        .collect()
+      assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
+    }
+  }
+
+  private def testAddArtifactToLocalSession(
+      classFileToUse: String, binaryName: String)(addFunc: Path => String): Unit = {
+    val copyDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val classPath = copyDir.resolve(classFileToUse)
+    assert(classPath.toFile.exists())
+
+    val movedClassPath = addFunc(classPath)
+
+    val movedClassFile = ArtifactManager.artifactRootDirectory
+      .resolve(s"$sessionUUID/classes/$movedClassPath")
+      .toFile
+    assert(movedClassFile.exists())
+
+    val classLoader = artifactManager.classloader
+
+    val instance = classLoader
+      .loadClass(binaryName)
+      .getDeclaredConstructor(classOf[String])
+      .newInstance("Talon")
+
+    val msg = instance.getClass.getMethod("msg").invoke(instance)
+    assert(msg == "Hello Talon! Nice to meet you!")
   }
 }
