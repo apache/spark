@@ -26,6 +26,7 @@
 .scala_dependencies
 .settings
 .vscode
+artifacts/
 /lib/
 R-unit-tests.log
 R/unit-tests.out
