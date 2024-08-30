@@ -5666,7 +5666,45 @@ class AstBuilder extends DataTypeAstBuilder
       withWhereClause(c, left)
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
-      visitSetOperationImpl(left, plan(ctx.right), all, ctx.operator.getType)
+      visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
+    }.getOrElse(Option(ctx.aggregationClause()).map { c =>
+      val expressions: Seq[(Expression, Option[Expression => String])] =
+        Option(ctx.namedExpressionSeq()).map { n =>
+          visitNamedExpressionSeq(n)
+        }.getOrElse(Seq.empty)
+      val selectExpressions: Seq[NamedExpression] = expressions.map {
+        case (e: NamedExpression, _) => e
+        case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+      }
+      withAggregationClause(c, selectExpressions, left) match {
+        case result if expressions.nonEmpty =>
+          result
+        case a: Aggregate =>
+          // If the AGGREGATE clause just contained GROUP BY with no aggregation expressions,
+          // return all the grouping keys by default.
+          val newAggExprs: Seq[NamedExpression] =
+            a.groupingExpressions.zipWithIndex.map {
+              case (n: NamedExpression, _: Int) =>
+                n
+              case (other: Expression, index: Int) =>
+                Alias(other, s"col_$index")()
+            }
+          a.copy(aggregateExpressions = newAggExprs)
+      }
+    }.getOrElse(Option(ctx.AGGREGATE).map { _ =>
+      // There is an AGGREGATE keyword but no grouping keys.
+      val expressions: Seq[(Expression, Option[Expression => String])] =
+        visitNamedExpressionSeq(ctx.namedExpressionSeq())
+      val selectExpressions: Seq[NamedExpression] = expressions.map {
+        case (e: NamedExpression, _) => e
+        case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+      }
+      Aggregate(
+        groupingExpressions = Seq.empty,
+        aggregateExpressions = selectExpressions,
+        child = left)
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
       if (ctx.unpivotClause() != null) {
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
@@ -5677,12 +5715,10 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
       }
       withUnpivot(c, left)
-    }.getOrElse(Option(ctx.joinRelation()).map { c =>
-      withJoinRelation(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, left, restrictToSingleClauseOnly = true)
-    }.get)))))))
+    }.get)))))))))
   }
 }

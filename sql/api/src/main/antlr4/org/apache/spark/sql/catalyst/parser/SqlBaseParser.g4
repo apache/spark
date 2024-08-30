@@ -1457,6 +1457,8 @@ operatorPipeRightSide
           operator=INTERSECT setQuantifier? right=queryTerm
       | {!legacy_setops_precedence_enabled}?
           operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm
+      | AGGREGATE namedExpressionSeq? aggregationClause
+      | AGGREGATE namedExpressionSeq
       | joinRelation
       | pivotClause
       | unpivotClause
