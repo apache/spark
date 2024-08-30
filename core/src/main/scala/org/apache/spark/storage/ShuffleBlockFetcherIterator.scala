@@ -1142,6 +1142,12 @@ final class ShuffleBlockFetcherIterator(
           s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
         logWarning(diagnosisResponse)
         diagnosisResponse
+      case shuffleBlockBatch: ShuffleBlockBatchId =>
+          val diagnosisResponse = s"BlockBatch $shuffleBlockBatch is corrupted " +
+          s"but corruption diagnosis is skipped due to lack of shuffle checksum support for " +
+          s"ShuffleBlockBatchId"
+        logWarning(diagnosisResponse)
+        diagnosisResponse
       case unexpected: BlockId =>
         throw new IllegalArgumentException(s"Unexpected type of BlockId, $unexpected")
     }
