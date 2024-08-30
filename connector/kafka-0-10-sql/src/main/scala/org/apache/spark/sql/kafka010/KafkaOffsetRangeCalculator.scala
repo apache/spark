@@ -27,7 +27,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * the configured `minPartitions`.
  */
 private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int],
-                                                   val maxBytesPerPartition: Option[Int]) {
+                                                   val maxRecordsPerPartition: Option[Int]) {
   require(minPartitions.isEmpty || minPartitions.get > 0)
 
   /**
@@ -50,7 +50,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
     // and maxBytesPerPartition is empty
     if ((minPartitions.isEmpty || offsetRanges.size >= minPartitions.get)
-        && maxBytesPerPartition.isEmpty) {
+        && maxRecordsPerPartition.isEmpty) {
       // Assign preferred executor locations to each range such that the same topic-partition is
       // preferentially read from the same executor and the KafkaConsumer can be reused.
       offsetRanges.map { range =>
@@ -86,13 +86,12 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
         getDividedPartition(parts, range)
       }.filter(_.size > 0)
     } else {
-      val avgMessageSize = 1 // Todo estimate row size
-      val maxPartSize = maxBytesPerPartition.get
+      val maxRecords = maxRecordsPerPartition.get
 
       offsetRanges.flatMap { range =>
         val size = range.size
         // number of partitions to divvy up this topic partition to
-        val parts = math.round(avgMessageSize.toDouble / maxPartSize * size).toInt + 1
+        val parts = (size / maxRecords).toInt + 1
         getDividedPartition(parts, range)
       }.filter(_.size > 0)
     }
@@ -137,10 +136,10 @@ private[kafka010] object KafkaOffsetRangeCalculator {
   def apply(options: CaseInsensitiveStringMap): KafkaOffsetRangeCalculator = {
     val minPartition = Option(options.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY))
       .map(_.toInt)
-    val maxBytesPerPartition = Option(options.get(
-      KafkaSourceProvider.MAX_BYTES_PER_PARTITIONS_OPTION_KEY))
+    val maxRecordsPerPartition = Option(options.get(
+      KafkaSourceProvider.MAX_RECORDS_PER_PARTITIONS_OPTION_KEY))
       .map(_.toInt)
-    new KafkaOffsetRangeCalculator(minPartition, maxBytesPerPartition)
+    new KafkaOffsetRangeCalculator(minPartition, maxRecordsPerPartition)
   }
 }
 

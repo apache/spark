@@ -99,10 +99,11 @@ private[kafka010] class KafkaOffsetReaderAdmin(
    */
   private val minPartitions =
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
-  private val maxBytesPerPartition =
-    readerOptions.get(KafkaSourceProvider.MAX_BYTES_PER_PARTITIONS_OPTION_KEY).map(_.toInt)
+  private val maxRecordsPerPartition =
+    readerOptions.get(KafkaSourceProvider.MAX_RECORDS_PER_PARTITIONS_OPTION_KEY).map(_.toInt)
 
-  private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions, maxBytesPerPartition)
+  private val rangeCalculator =
+    new KafkaOffsetRangeCalculator(minPartitions, maxRecordsPerPartition)
 
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
