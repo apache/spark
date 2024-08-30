@@ -885,7 +885,7 @@ class SparkSession private(
    * @since 4.0.0
    */
   def interruptAll(): Seq[String] =
-    doInterruptTag(sessionJobTag, "as part of cancellation of all jobs", tagIsInternal = true)
+    doInterruptTag(sessionJobTag, "as part of cancellation of all jobs")
 
   /**
    * Request to interrupt all currently running operations of this session with the given job tag.
@@ -897,16 +897,12 @@ class SparkSession private(
   def interruptTag(tag: String): Seq[String] = {
     val realTag = managedJobTags.get(tag)
     if (realTag == null) return Seq.empty
-    doInterruptTag(realTag, s"part of cancelled job tags $tag", tagIsInternal = false)
+    doInterruptTag(realTag, s"part of cancelled job tags $tag")
   }
 
-  private def doInterruptTag(
-      tag: String,
-      reason: String,
-      tagIsInternal: Boolean): Seq[String] = {
-    val realTag = if (tagIsInternal) s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}$tag" else tag
+  private def doInterruptTag(tag: String, reason: String): Seq[String] = {
     val cancelledTags =
-      sparkContext.cancelJobsWithTagWithFuture(realTag, reason)
+      sparkContext.cancelJobsWithTagWithFuture(tag, reason)
 
     ThreadUtils.awaitResult(cancelledTags, 60.seconds)
       .flatMap(job => Option(job.properties.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)))
@@ -926,7 +922,7 @@ class SparkSession private(
     scala.util.Try(executionId.toLong).toOption match {
       case Some(executionIdToBeCancelled) =>
         val tagToBeCancelled = SQLExecution.executionIdJobTag(this, executionIdToBeCancelled)
-        doInterruptTag(tagToBeCancelled, reason = "", tagIsInternal = true)
+        doInterruptTag(tagToBeCancelled, reason = "")
       case None =>
         throw new IllegalArgumentException("executionId must be a number in string form.")
     }

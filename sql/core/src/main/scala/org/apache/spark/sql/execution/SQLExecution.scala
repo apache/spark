@@ -85,7 +85,7 @@ object SQLExecution extends Logging {
     // And for the root execution, rootExecutionId == executionId.
     if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
       sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
-      sc.addInternalJobTag(executionIdJobTag(sparkSession, executionId))
+      sc.addJobTag(executionIdJobTag(sparkSession, executionId))
     }
     val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
@@ -133,7 +133,7 @@ object SQLExecution extends Logging {
             sparkPlanInfo = SparkPlanInfo.EMPTY,
             time = System.currentTimeMillis(),
             modifiedConfigs = redactedConfigs,
-            jobTags = sc.getJobTags() ++ sc.getInternalJobTags(),
+            jobTags = sc.getJobTags(),
             jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
           )
           try {
@@ -217,7 +217,7 @@ object SQLExecution extends Logging {
       // The current execution is the root execution if rootExecutionId == executionId.
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
         sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
-        sc.removeInternalJobTag(executionIdJobTag(sparkSession, executionId))
+        sc.removeJobTag(executionIdJobTag(sparkSession, executionId))
       }
       sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }
@@ -257,14 +257,14 @@ object SQLExecution extends Logging {
   }
 
   private[sql] def withSessionTagsApplied[T](sparkSession: SparkSession)(block: => T): T = {
-    sparkSession.sparkContext.addInternalJobTag(sparkSession.sessionJobTag)
+    sparkSession.sparkContext.addJobTag(sparkSession.sessionJobTag)
     val userTags = sparkSession.managedJobTags.values().asScala.toSeq
     userTags.foreach(sparkSession.sparkContext.addJobTag)
 
     try {
       block
     } finally {
-      sparkSession.sparkContext.removeInternalJobTag(sparkSession.sessionJobTag)
+      sparkSession.sparkContext.removeJobTag(sparkSession.sessionJobTag)
       userTags.foreach(sparkSession.sparkContext.removeJobTag)
     }
   }

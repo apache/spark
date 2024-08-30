@@ -912,17 +912,10 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def addJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    val existingTags = getJobTags() ++ getInternalJobTags()
+    val existingTags = getJobTags()
     val newTags = (existingTags + tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
-
-  /**
-   * Add a tag to be assigned to all the jobs started by this thread. The tag will be prefixed with
-   * an internal prefix to avoid conflicts with user tags.
-   */
-  private[spark] def addInternalJobTag(tag: String): Unit =
-    addJobTag(s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}$tag")
 
   /**
    * Remove a tag previously added to be assigned to all the jobs started by this thread.
@@ -934,29 +927,13 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def removeJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    val existingTags = getJobTags() ++ getInternalJobTags()
+    val existingTags = getJobTags()
     val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     if (newTags.isEmpty) {
       clearJobTags()
     } else {
       setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
     }
-  }
-
-  /**
-   * Remove an internal tag previously added to be assigned to all the jobs started by this thread.
-   */
-  private[spark] def removeInternalJobTag(tag: String): Unit =
-    removeJobTag(s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}$tag")
-
-  /**
-   * Get the tags that are currently set to be assigned to all the jobs started by this thread.
-   */
-  private[spark] def getInternalJobTags(): Set[String] = {
-    Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
-      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
-      .getOrElse(Set())
-      .filter(_.startsWith(SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX)) // only internal tags
   }
 
   /**
@@ -968,8 +945,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
-      .filterNot(_.startsWith(SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX)) // exclude internal tags
-      .filter(_.nonEmpty) // empty string tag should not happen, but be defensive
+      .filter(!_.isEmpty) // empty string tag should not happen, but be defensive
   }
 
   /**
@@ -978,14 +954,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @since 3.5.0
    */
   def clearJobTags(): Unit = {
-    val internalTags = getInternalJobTags() // exclude internal tags
-    if (internalTags.isEmpty) {
-      setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
-    } else {
-      setLocalProperty(
-        SparkContext.SPARK_JOB_TAGS,
-        internalTags.mkString(SparkContext.SPARK_JOB_TAGS_SEP))
-    }
+    setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
   }
 
   /**
@@ -3147,9 +3116,6 @@ object SparkContext extends Logging {
 
   /** Separator of tags in SPARK_JOB_TAGS property */
   private[spark] val SPARK_JOB_TAGS_SEP = ","
-
-  /** Prefix to mark a tag to be visible internally, not by users */
-  private[spark] val SPARK_JOB_TAGS_INTERNAL_PREFIX = "~~spark~internal~tag~~"
 
   // Same rules apply to Spark Connect execution tags, see ExecuteHolder.throwIfInvalidTag
   private[spark] def throwIfInvalidTag(tag: String) = {

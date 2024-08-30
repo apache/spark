@@ -171,20 +171,18 @@ class SparkSessionJobTaggingAndCancellationSuite
         val tags = job.head.properties.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
           .split(SparkContext.SPARK_JOB_TAGS_SEP)
 
-        val sessionTag = s"${SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX}${ss.sessionJobTag}"
-        val executionRootIdTag = SparkContext.SPARK_JOB_TAGS_INTERNAL_PREFIX +
-          SQLExecution.executionIdJobTag(
+        val executionRootIdTag = SQLExecution.executionIdJobTag(
             ss,
             job.head.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
         val userTagsPrefix = s"spark-session-${ss.sessionUUID}-"
 
         ss match {
           case s if s == sessionA => assert(tags.toSet == Set(
-            sessionTag, executionRootIdTag, s"${userTagsPrefix}one"))
+            s.sessionJobTag, executionRootIdTag, s"${userTagsPrefix}one"))
           case s if s == sessionB => assert(tags.toSet == Set(
-            sessionTag, executionRootIdTag, s"${userTagsPrefix}one", s"${userTagsPrefix}two"))
+            s.sessionJobTag, executionRootIdTag, s"${userTagsPrefix}one", s"${userTagsPrefix}two"))
           case s if s == sessionC => assert(tags.toSet == Set(
-            sessionTag, executionRootIdTag, s"${userTagsPrefix}boo"))
+            s.sessionJobTag, executionRootIdTag, s"${userTagsPrefix}boo"))
         }
       }
 
