@@ -20,7 +20,6 @@ license: |
 ---
 
 * Table of contents
-{:toc}
 
 # Asynchronous Progress Tracking
 ## What is it?
@@ -80,7 +79,6 @@ This is caused by the fact that when async progress tracking is enabled, the fra
 
 # Continuous Processing
 ## [Experimental]
-{:.no_toc}
 
 **Continuous processing** is a new, experimental streaming execution mode introduced in Spark 2.3 that enables low (~1 ms) end-to-end latency with at-least-once fault-tolerance guarantees. Compare this with the default *micro-batch processing* engine which can achieve exactly-once guarantees but achieve latencies of ~100ms at best. For some types of queries (discussed below), you can choose which mode to execute them in without modifying the application logic (i.e. without changing the DataFrame/Dataset operations).
 
@@ -152,7 +150,6 @@ spark
 A checkpoint interval of 1 second means that the continuous processing engine will record the progress of the query every second. The resulting checkpoints are in a format compatible with the micro-batch engine, hence any query can be restarted with any trigger. For example, a supported query started with the micro-batch mode can be restarted in continuous mode, and vice versa. Note that any time you switch to continuous mode, you will get at-least-once fault-tolerance guarantees.
 
 ## Supported Queries
-{:.no_toc}
 
 As of Spark 2.4, only the following type of queries are supported in the continuous processing mode.
 
@@ -171,7 +168,6 @@ As of Spark 2.4, only the following type of queries are supported in the continu
 See [Input Sources](./apis-on-dataframes-and-datasets.html#input-sources) and [Output Sinks](./apis-on-dataframes-and-datasets.html#output-sinks) sections for more details on them. While the console sink is good for testing, the end-to-end low-latency processing can be best observed with Kafka as the source and sink, as this allows the engine to process the data and make the results available in the output topic within milliseconds of the input data being available in the input topic.
 
 ## Caveats
-{:.no_toc}
 
 - Continuous processing engine launches multiple long-running tasks that continuously read data from sources, process it and continuously write to sinks. The number of tasks required by the query depends on how many partitions the query can read from the sources in parallel. Therefore, before starting a continuous processing query, you must ensure there are enough cores in the cluster to all the tasks in parallel. For example, if you are reading from a Kafka topic that has 10 partitions, then the cluster must have at least 10 cores for the query to make progress.
 - Stopping a continuous processing stream may produce spurious task termination warnings. These can be safely ignored.

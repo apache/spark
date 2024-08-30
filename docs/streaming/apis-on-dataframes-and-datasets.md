@@ -19,9 +19,6 @@ license: |
   limitations under the License.
 ---
 
-* Table of contents
-{:toc}
-
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
 ([Python](/api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[Scala](/api/scala/org/apache/spark/sql/SparkSession.html)/[Java](/api/java/org/apache/spark/sql/SparkSession.html)/[R](/api/R/reference/sparkR.session.html) docs)
@@ -950,7 +947,6 @@ Dataset<Row> anotherWindowedCounts = windowedCounts.groupBy(
 </div>
 
 ##### Conditions for watermarking to clean aggregation state
-{:.no_toc}
 
 It is important to note that the following conditions must be satisfied for the watermarking to
 clean the state in aggregation queries *(as of Spark 2.1.1, subject to change in the future)*.
@@ -972,7 +968,6 @@ For example, `df.groupBy("time").count().withWatermark("time", "1 min")` is inva
 output mode.
 
 ##### Semantic Guarantees of Aggregation with Watermarking
-{:.no_toc}
 
 - A watermark delay (set with `withWatermark`) of "2 hours" guarantees that the engine will never
 drop any data that is less than 2 hours delayed. In other words, any data less than 2 hours behind
@@ -1209,7 +1204,6 @@ joined <- join(
 </div>
 
 ###### Semantic Guarantees of Stream-stream Inner Joins with Watermarking
-{:.no_toc}
 This is similar to the [guarantees provided by watermarking on aggregations](#semantic-guarantees-of-aggregation-with-watermarking).
 A watermark delay of "2 hours" guarantees that the engine will never drop any data that is less than
  2 hours delayed. But data delayed by more than 2 hours may or may not get processed.
@@ -1298,12 +1292,10 @@ joined <- join(
 
 
 ###### Semantic Guarantees of Stream-stream Outer Joins with Watermarking
-{:.no_toc}
 Outer joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
 
 ###### Caveats
-{:.no_toc}
 There are a few important characteristics to note regarding how the outer results are generated.
 
 - *The outer NULL results will be generated with a delay that depends on the specified watermark
@@ -1325,7 +1317,6 @@ the engine must know when an input row on left side is not going to match with a
 side in future.
 
 ###### Semantic Guarantees of Stream-stream Semi Joins with Watermarking
-{:.no_toc}
 Semi joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
 
