@@ -160,14 +160,6 @@ case class ToVariantObject(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): ToVariantObject =
     copy(child = newChild)
 
-  override def genCode(ctx: CodegenContext): ExprCode = {
-    if (DataType.equalsStructurally(child.dataType, VariantType)) {
-      child.genCode(ctx)
-    } else {
-      super.genCode(ctx)
-    }
-  }
-
   protected override def nullSafeEval(input: Any): Any =
     VariantExpressionEvalUtils.castToVariant(input, child.dataType)
 
