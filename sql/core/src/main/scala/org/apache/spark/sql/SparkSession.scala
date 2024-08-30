@@ -779,6 +779,8 @@ class SparkSession private(
      */
     def named: NamedExpression = ExpressionUtils.toNamed(expr)
   }
+
+  private[sql] lazy val observationManager = new ObservationManager(this)
 }
 
 
