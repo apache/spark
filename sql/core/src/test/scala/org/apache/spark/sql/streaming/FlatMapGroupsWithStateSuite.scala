@@ -635,6 +635,29 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
+  testWithAllStateVersions("[SPARK-49474] flatMapGroupsWithState - user error is classified") {
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count if state is defined, otherwise does not return anything
+    val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
+      throw NullPointerException
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    val e = intercept[SparkException] {
+      testStream(result, Update)(
+        AddData(inputData, "a")
+      )
+    }
+
+    assert(e.getErrorClass == "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR")
+    assert(e.getCause.isInstanceOf[NullPointerException])
+  }
+
   test("mapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)

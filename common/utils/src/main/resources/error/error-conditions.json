@@ -1457,6 +1457,12 @@
     ],
     "sqlState" : "42704"
   },
+  "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in flatMapGroupsWithState. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>."

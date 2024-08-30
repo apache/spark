@@ -18,8 +18,11 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -448,9 +451,15 @@ case class FlatMapGroupsWithStateExec(
         watermarkPresent)
 
       // Call function, get the returned objects and convert them to rows
-      val mappedIterator = func(keyObj, valueObjIter, groupState).map { obj =>
-        numOutputRows += 1
-        getOutputRow(obj)
+      val mappedIterator = try {
+          func(keyObj, valueObjIter, groupState).map { obj =>
+            numOutputRows += 1
+            getOutputRow(obj)
+          }
+        }
+      catch {
+        case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+          throw FlatMapGroupsWithStateUserFuncException(e)
       }
 
       // When the iterator is consumed, then write changes to state
@@ -544,3 +553,13 @@ object FlatMapGroupsWithStateExec {
     }
   }
 }
+
+
+/**
+ * Exception that wraps the exception thrown in the user provided function in Foreach sink.
+ */
+private[sql] case class FlatMapGroupsWithStateUserFuncException(cause: Throwable)
+  extends SparkException(
+    errorClass = "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR",
+    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    cause = cause)
