@@ -55,6 +55,15 @@ class DataType(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Unknown(google.protobuf.message.Message):
+        """Used for testing purposes only."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     class Boolean(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -776,6 +785,7 @@ class DataType(google.protobuf.message.Message):
     VARIANT_FIELD_NUMBER: builtins.int
     UDT_FIELD_NUMBER: builtins.int
     UNPARSED_FIELD_NUMBER: builtins.int
+    UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -833,6 +843,8 @@ class DataType(google.protobuf.message.Message):
     @property
     def unparsed(self) -> global___DataType.Unparsed:
         """UnparsedDataType"""
+    @property
+    def unknown(self) -> global___DataType.Unknown: ...
     def __init__(
         self,
         *,
@@ -861,6 +873,7 @@ class DataType(google.protobuf.message.Message):
         variant: global___DataType.Variant | None = ...,
         udt: global___DataType.UDT | None = ...,
         unparsed: global___DataType.Unparsed | None = ...,
+        unknown: global___DataType.Unknown | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -909,6 +922,8 @@ class DataType(google.protobuf.message.Message):
             b"timestamp_ntz",
             "udt",
             b"udt",
+            "unknown",
+            b"unknown",
             "unparsed",
             b"unparsed",
             "var_char",
@@ -966,6 +981,8 @@ class DataType(google.protobuf.message.Message):
             b"timestamp_ntz",
             "udt",
             b"udt",
+            "unknown",
+            b"unknown",
             "unparsed",
             b"unparsed",
             "var_char",
@@ -1005,6 +1022,7 @@ class DataType(google.protobuf.message.Message):
             "variant",
             "udt",
             "unparsed",
+            "unknown",
         ]
         | None
     ): ...
