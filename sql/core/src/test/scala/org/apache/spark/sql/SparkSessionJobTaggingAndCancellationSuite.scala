@@ -81,6 +81,35 @@ class SparkSessionJobTaggingAndCancellationSuite
     assert(session.getTags() == Set("one"))
   }
 
+  test("Tags set from session are prefixed with session UUID") {
+    sc = new SparkContext("local[2]", "test")
+    val session = SparkSession.builder().sparkContext(sc).getOrCreate()
+    import session.implicits._
+
+    val sem = new Semaphore(0)
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        sem.release()
+      }
+    })
+
+    session.addTag("one")
+    Future {
+      session.range(1, 10000).map { i => Thread.sleep(100); i }.count()
+    }(ExecutionContext.global)
+
+    assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
+    val activeJobsFuture =
+      session.sparkContext.cancelJobsWithTagWithFuture(session.managedJobTags.get("one"), "reason")
+    val activeJob = ThreadUtils.awaitResult(activeJobsFuture, 60.seconds).head
+    val actualTags = activeJob.properties.getProperty(SparkContext.SPARK_JOB_TAGS)
+      .split(SparkContext.SPARK_JOB_TAGS_SEP)
+    assert(actualTags.toSet == Set(
+      session.sessionJobTag,
+      s"${session.sessionJobTag}-one",
+      SQLExecution.executionIdJobTag(session, 0L)))
+  }
+
   test("Cancellation APIs in SparkSession are isolated") {
     sc = new SparkContext("local[2]", "test")
     val globalSession = SparkSession.builder().sparkContext(sc).getOrCreate()
@@ -172,8 +201,8 @@ class SparkSessionJobTaggingAndCancellationSuite
           .split(SparkContext.SPARK_JOB_TAGS_SEP)
 
         val executionRootIdTag = SQLExecution.executionIdJobTag(
-            ss,
-            job.head.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
+          ss,
+          job.head.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
         val userTagsPrefix = s"spark-session-${ss.sessionUUID}-"
 
         ss match {
