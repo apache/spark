@@ -91,7 +91,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
       offsetRanges.flatMap { range =>
         val size = range.size
         // number of partitions to divvy up this topic partition to
-        val parts = (size / maxRecords).toInt + 1
+        val parts = math.ceil(size.toDouble / maxRecords).toInt
         getDividedPartition(parts, range)
       }.filter(_.size > 0)
     }
