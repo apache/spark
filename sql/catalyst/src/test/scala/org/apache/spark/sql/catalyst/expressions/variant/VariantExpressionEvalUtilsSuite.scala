@@ -24,12 +24,14 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
 
   test("parseJson type coercion") {
-    def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte]): Unit = {
+    def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte],
+              allowDuplicateKeys: Boolean = false): Unit = {
       // parse_json
-      val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+      val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        allowDuplicateKeys)
       // try_parse_json
       val tryActual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
-        failOnError = false)
+        allowDuplicateKeys, failOnError = false)
       val expected = new VariantVal(expectedValue, expectedMetadata)
       assert(actual === expected && tryActual === expected)
     }
@@ -94,7 +96,8 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
       /* id list */ 0, 1, 2,
       /* offset list */ 4, 0, 2, 6,
       /* field data */ primitiveHeader(INT1), 2, shortStrHeader(1), '3', primitiveHeader(INT1), 4),
-      Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c'))
+      Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c'),
+      allowDuplicateKeys = true)
     check("""{"z": 1, "y": 2, "x": "3"}""", Array(objectHeader(false, 1, 1),
       /* size */ 3,
       /* id list */ 2, 1, 0,

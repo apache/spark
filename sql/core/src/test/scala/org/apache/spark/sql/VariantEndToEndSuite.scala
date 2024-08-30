@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
@@ -57,10 +58,12 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
-    check(
-      """{"c": [], "b": 0, "a": null, "a": {"x": 0, "x": 1}, "b": 1, "b": 2, "c": [3]}""",
-      """{"a":{"x":1},"b":2,"c":[3]}"""
-    )
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
+      check(
+        """{"c": [], "b": 0, "a": null, "a": {"x": 0, "x": 1}, "b": 1, "b": 2, "c": [3]}""",
+        """{"a":{"x":1},"b":2,"c":[3]}"""
+      )
+    }
   }
 
   test("from_json/to_json round-trip") {

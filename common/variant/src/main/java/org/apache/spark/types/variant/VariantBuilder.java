@@ -276,8 +276,10 @@ public class VariantBuilder {
   // record the offset of the field. The offset is computed as `getWritePos() - start`.
   // 3. The caller calls `finishWritingObject` to finish writing a variant object.
   //
-  // This function is responsible to sort the fields by key. If there are duplicate field keys,
-  // the field with the greatest offset value (the last appended one) is kept.
+  // This function is responsible to sort the fields by key. If there are duplicate field keys:
+  // - when `allowDuplicateKeys` is true, the field with the greatest offset value (the last
+  // appended one) is kept.
+  // - otherwise, throw an exception.
   public void finishWritingObject(int start, ArrayList<FieldEntry> fields) {
     int size = fields.size();
     Collections.sort(fields);

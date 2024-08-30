@@ -4420,7 +4420,7 @@ object SQLConf {
         "last occurrence of all fields with the same key.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")

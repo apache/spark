@@ -33,7 +33,7 @@ object VariantExpressionEvalUtils {
 
   def parseJson(
       input: UTF8String,
-      allowDuplicateKeys: Boolean = true,
+      allowDuplicateKeys: Boolean = false,
       failOnError: Boolean = true): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
