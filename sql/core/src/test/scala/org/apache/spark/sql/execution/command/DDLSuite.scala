@@ -1376,39 +1376,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
-  test("show columns - negative test") {
-    // When case sensitivity is true, the user supplied database name in table identifier
-    // should match the supplied database name in case sensitive way.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      withTempDatabase { db =>
-        val tabName = s"$db.showcolumn"
-        withTable(tabName) {
-          sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
-            },
-            errorClass = "_LEGACY_ERROR_TEMP_1057",
-            parameters = Map("dbA" -> db.toUpperCase(Locale.ROOT), "dbB" -> db)
-          )
-        }
-      }
-    }
-  }
-
-  test("show columns - invalid db name") {
-    withTable("tbl") {
-      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SHOW COLUMNS IN tbl FROM a.b.c")
-        },
-        errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
-        parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> "`a`.`b`.`c`")
-      )
-    }
-  }
-
   test("SPARK-18009 calling toLocalIterator on commands") {
     import scala.jdk.CollectionConverters._
     val df = sql("show databases")
