@@ -367,6 +367,68 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   @scala.annotation.varargs
   def addArtifacts(uri: URI*): Unit
 
+
+  /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def addTag(tag: String): Unit
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def removeTag(tag: String): Unit
+
+  /**
+   * Get the operation tags that are currently set to be assigned to all the operations started by
+   * this thread in this session.
+   *
+   * @since 4.0.0
+   */
+  def getTags(): Set[String]
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 4.0.0
+   */
+  def clearTags(): Unit
+
+  // No docstring, the meaning of return value depends on the implementation.
+  def interruptAll(): Seq[String]
+
+  // No docstring, the meaning of return value depends on the implementation.
+  def interruptTag(tag: String): Seq[String]
+
+  // No docstring, the meaning of return value depends on the implementation.
+  def interruptOperation(operationId: String): Seq[String]
+
   /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
    * available in Scala only and is used primarily for interactive testing and debugging.
