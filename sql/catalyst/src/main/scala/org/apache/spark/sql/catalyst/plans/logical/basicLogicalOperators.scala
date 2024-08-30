@@ -1476,14 +1476,17 @@ case class Pivot(
 
 /**
  * A constructor for creating a transpose, which will later be converted
- * to a [[LocalRelation]] during the query optimization.
+ * to a [[LocalRelation]] at ReplaceTranspose during the query optimization.
  *
  * The result of the transpose operation is held in the `data` field, and the corresponding
  * schema is stored in the `output` field. The `Transpose` node does not depend on any child
  * logical plans after the data has been collected and transposed.
  *
  * @param output A sequence of output attributes representing the schema of the transposed data.
- * @param data   A sequence of [[InternalRow]] containing the transposed data.
+ * @param data A sequence of [[InternalRow]] containing the transposed data.
+ * @param hasNonIndexColumns A flag indicating whether there are non-index columns in the
+ *                           original DataFrame. This is used to determine if the transposed data
+ *                           should be populated or if it should remain empty.
  */
 case class Transpose(
     output: Seq[Attribute],

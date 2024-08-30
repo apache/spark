@@ -29,6 +29,23 @@ import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 
+/**
+ * Rule that resolves and transforms an `UnresolvedTranspose` logical plan into a `Transpose`
+ * logical plan, which effectively transposes a DataFrame by turning rows into columns based
+ * on a specified index column.
+ *
+ * The high-level logic for the transpose operation is as follows:
+ *   - If the index column is not provided, the first column of the DataFrame is used as the
+ *     default index column.
+ *   - The index column is cast to `StringType` to ensure consistent column naming.
+ *   - Non-index columns are cast to a common data type, determined by finding the least
+ *     common type that can accommodate all non-index columns.
+ *   - The data is sorted by the index column, and rows with `null` index values are excluded
+ *     from the transpose operation.
+ *   - The transposed DataFrame is constructed by turning the original rows into columns, with
+ *     the index column values becoming the new column names and the non-index column values
+ *     populating the transposed data.
+ */
 class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   private def leastCommonType(dataTypes: Seq[DataType]): DataType = {
