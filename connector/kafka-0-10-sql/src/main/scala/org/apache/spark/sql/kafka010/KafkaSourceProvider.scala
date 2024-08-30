@@ -271,7 +271,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       if (p <= 0) throw new IllegalArgumentException("minPartitions must be positive")
     }
 
-    if(params.contains(MAX_RECORDS_PER_PARTITIONS_OPTION_KEY)) {
+    if (params.contains(MAX_RECORDS_PER_PARTITIONS_OPTION_KEY)) {
       val p = params(MAX_RECORDS_PER_PARTITIONS_OPTION_KEY).toInt
       if (p <= 0) throw new IllegalArgumentException("maxRecordsPerPartition must be positive")
     }
