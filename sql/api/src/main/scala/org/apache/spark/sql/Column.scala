@@ -55,15 +55,15 @@ private[spark] object Column {
     Column.fn(name, augmentedArguments: _*)
   }
 
-  private[sql] def fn(name: String, inputs: Column*): Column = {
+  private[spark] def fn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, inputs: _*)
   }
 
-  private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
+  private[spark] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
     fn(name, isDistinct = isDistinct, isInternal = false, inputs)
   }
 
-  private[sql] def internalFn(name: String, inputs: Column*): Column = {
+  private[spark] def internalFn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, isInternal = true, inputs)
   }
 

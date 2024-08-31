@@ -19,10 +19,7 @@ package org.apache.spark.network.shuffle.checksum;
 
 import java.io.*;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.Adler32;
-import java.util.zip.CRC32;
-import java.util.zip.CheckedInputStream;
-import java.util.zip.Checksum;
+import java.util.zip.*;
 
 import com.google.common.io.ByteStreams;
 
@@ -63,6 +60,13 @@ public class ShuffleChecksumHelper {
         checksums = new CRC32[num];
         for (int i = 0; i < num; i++) {
           checksums[i] = new CRC32();
+        }
+      }
+
+      case "CRC32C"  -> {
+        checksums = new CRC32C[num];
+        for (int i = 0; i < num; i++) {
+          checksums[i] = new CRC32C();
         }
       }
 

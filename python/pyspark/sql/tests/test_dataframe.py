@@ -130,6 +130,20 @@ class DataFrameTestsMixin:
         self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
         self.assertTrue(df3.count() == 2)
 
+    def test_self_join_III(self):
+        df1 = self.spark.range(10).withColumn("value", lit(1))
+        df2 = df1.union(df1)
+        df3 = df1.join(df2, df1.id == df2.id, "left")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_self_join_IV(self):
+        df1 = self.spark.range(10).withColumn("value", lit(1))
+        df2 = df1.withColumn("value", lit(2)).union(df1.withColumn("value", lit(3)))
+        df3 = df1.join(df2, df1.id == df2.id, "right")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
         row = df.select("*").first()
@@ -252,22 +266,24 @@ class DataFrameTestsMixin:
         self.assertEqual(df2.columns, ["a"])
 
     def test_drop_duplicates(self):
+        # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
 
         # shouldn't drop a non-null row
         self.assertEqual(df.dropDuplicates().count(), 2)
 
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
+
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
-        self.assertEqual(df.drop_duplicates(["name"]).count(), 1)
-        self.assertEqual(df.drop_duplicates(["name", "age"]).count(), 2)
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates("name")
 
-        # SPARK-48482 dropDuplicates should take varargs
-        self.assertEqual(df.dropDuplicates("name").count(), 1)
-        self.assertEqual(df.dropDuplicates("name", "age").count(), 2)
-        self.assertEqual(df.drop_duplicates("name").count(), 1)
-        self.assertEqual(df.drop_duplicates("name", "age").count(), 2)
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_LIST_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "str"},
+        )
 
         # Should raise proper error when taking non-string values
         with self.assertRaises(PySparkTypeError) as pe:
@@ -280,25 +296,7 @@ class DataFrameTestsMixin:
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicates(None).show()
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates([1]).show()
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "int"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicates(1).show()
 
         self.check_error(
             exception=pe.exception,

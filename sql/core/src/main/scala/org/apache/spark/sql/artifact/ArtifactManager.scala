@@ -19,7 +19,7 @@ package org.apache.spark.sql.artifact
 
 import java.io.File
 import java.net.{URI, URL, URLClassLoader}
-import java.nio.file.{Files, Path, Paths, StandardCopyOption}
+import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.jdk.CollectionConverters._
@@ -28,12 +28,12 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkUnsupportedOperationException}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.artifact.util.ArtifactUtils
+import org.apache.spark.sql.{Artifact, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 
@@ -96,12 +96,19 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
-  protected def moveFile(source: Path, target: Path, allowOverwrite: Boolean = false): Unit = {
+  private def transferFile(
+      source: Path,
+      target: Path,
+      allowOverwrite: Boolean = false,
+      deleteSource: Boolean = true): Unit = {
+    def execute(s: Path, t: Path, opt: CopyOption*): Path =
+      if (deleteSource) Files.move(s, t, opt: _*) else Files.copy(s, t, opt: _*)
+
     Files.createDirectories(target.getParent)
     if (allowOverwrite) {
-      Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+      execute(source, target, StandardCopyOption.REPLACE_EXISTING)
     } else {
-      Files.move(source, target)
+      execute(source, target)
     }
   }
 
@@ -112,12 +119,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * @param remoteRelativePath
    * @param serverLocalStagingPath
    * @param fragment
+   * @param deleteStagedFile
    */
   def addArtifact(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
-      fragment: Option[String]): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
+      fragment: Option[String],
+      deleteStagedFile: Boolean = true
+  ): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
+
     if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
@@ -142,7 +153,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
       // Allow overwriting class files to capture updates to classes.
       // This is required because the client currently sends all the class files in each class file
       // transfer.
-      moveFile(serverLocalStagingPath, target, allowOverwrite = true)
+      transferFile(
+        serverLocalStagingPath,
+        target,
+        allowOverwrite = true,
+        deleteSource = deleteStagedFile)
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, remoteRelativePath)
       // Disallow overwriting with modified version
@@ -155,7 +170,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         throw new RuntimeException(s"Duplicate Artifact: $remoteRelativePath. " +
             "Artifacts cannot be overwritten.")
       }
-      moveFile(serverLocalStagingPath, target)
+      transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 
       // This URI is for Spark file server that starts with "spark://".
       val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
@@ -177,6 +192,38 @@ class ArtifactManager(session: SparkSession) extends Logging {
         session.sparkContext.addArchive(canonicalUri.toString)
       } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
         session.sparkContext.addFile(uri)
+      }
+    }
+  }
+
+  /**
+   * Add locally-stored artifacts to the session. These artifacts are from a user-provided
+   * permanent path which are accessible by the driver directly.
+   *
+   * Different from the [[addArtifact]] method, this method will not delete staged artifacts since
+   * they are from a permanent location.
+   */
+  private[sql] def addLocalArtifacts(artifacts: Seq[Artifact]): Unit = {
+    artifacts.foreach { artifact =>
+      artifact.storage match {
+        case d: Artifact.LocalFile =>
+          addArtifact(
+            artifact.path,
+            d.path,
+            fragment = None,
+            deleteStagedFile = false)
+        case d: Artifact.InMemory =>
+          val tempDir = Utils.createTempDir().toPath
+          val tempFile = tempDir.resolve(artifact.path.getFileName)
+          val outStream = Files.newOutputStream(tempFile)
+          Utils.tryWithSafeFinallyAndFailureCallbacks {
+            d.stream.transferTo(outStream)
+            addArtifact(artifact.path, tempFile, fragment = None)
+          }(finallyBlock = {
+            outStream.close()
+          })
+        case _ =>
+          throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
       }
     }
   }

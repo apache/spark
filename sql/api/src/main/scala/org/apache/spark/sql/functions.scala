@@ -1702,7 +1702,9 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS <: api.Dataset[_]](df: DS): DS = df.hint("broadcast").asInstanceOf[DS]
+  def broadcast[DS[U] <: api.Dataset[U, DS]](df: DS[_]): df.type = {
+    df.hint("broadcast").asInstanceOf[df.type]
+  }
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
@@ -7833,6 +7835,14 @@ object functions {
   def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
 
   /**
+   * Returns null if `col` is equal to zero, or `col` otherwise.
+   *
+   * @group conditional_funcs
+   * @since 4.0.0
+   */
+  def nullifzero(col: Column): Column = Column.fn("nullifzero", col)
+
+  /**
    * Returns `col2` if `col1` is null, or `col1` otherwise.
    *
    * @group conditional_funcs
@@ -7847,6 +7857,14 @@ object functions {
    * @since 3.5.0
    */
   def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
+
+  /**
+   * Returns zero if `col` is null, or `col` otherwise.
+   *
+   * @group conditional_funcs
+   * @since 4.0.0
+   */
+  def zeroifnull(col: Column): Column = Column.fn("zeroifnull", col)
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
