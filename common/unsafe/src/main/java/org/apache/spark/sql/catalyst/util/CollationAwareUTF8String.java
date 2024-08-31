@@ -57,7 +57,7 @@ public class CollationAwareUTF8String {
    * the uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
    */
   private static final int COMBINED_ASCII_SMALL_I_COMBINING_DOT =
-          SpecialCodePointConstants.ASCII_SMALL_I << 16 | SpecialCodePointConstants.COMBINING_DOT;
+    SpecialCodePointConstants.ASCII_SMALL_I << 16 | SpecialCodePointConstants.COMBINING_DOT;
 
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
@@ -580,29 +580,29 @@ public class CollationAwareUTF8String {
    * Greek sigma ('ς') or small non-final Greek sigma ('σ'). Words are separated by ASCII
    * space(\u0020).
    *
-   * @param target UTF8String to be title cased
-   * @return title cased target
+   * @param source UTF8String to be title cased
+   * @return title cased source
    */
-  public static UTF8String toTitleCaseICU(UTF8String target) {
+  public static UTF8String toTitleCaseICU(UTF8String source) {
     // In the default UTF8String implementation, `toLowerCase` method implicitly does UTF8String
     // validation (replacing invalid UTF-8 byte sequences with Unicode replacement character
     // U+FFFD), but now we have to do the validation manually.
-    target = target.makeValid();
+    source = source.makeValid();
 
-    // Building the title cased target with 'sb'.
+    // Building the title cased source with 'sb'.
     UTF8StringBuilder sb = new UTF8StringBuilder();
 
-    // 'newWord' is true if the current character is the beginning of a word, false otherwise.
-    boolean newWord = true;
+    // 'isNewWord' is true if the current character is the beginning of a word, false otherwise.
+    boolean isNewWord = true;
     // We are maintaining if the current character is preceded by a cased letter.
     // This is used when lowercasing capital Greek letter sigma ('Σ'), to figure out if it should be
     // lowercased into σ or ς.
     boolean precededByCasedLetter = false;
 
-    // 'offset' is a byte offset in target's byte array pointing to the beginning of the character
+    // 'offset' is a byte offset in source's byte array pointing to the beginning of the character
     // that we need to process next.
     int offset = 0;
-    int len = target.numBytes();
+    int len = source.numBytes();
 
     while (offset < len) {
       // We will actually call 'codePointFrom()' 2 times for each character in the worst case (once
@@ -610,16 +610,16 @@ public class CollationAwareUTF8String {
       // for almost every character is 'ΣΣΣΣΣ' (a string consisting only of Greek capital sigma)
       // and 'Σ`````' (a string consisting of a Greek capital sigma, followed by case-ignorable
       // characters).
-      int codepoint = target.codePointFrom(offset);
+      int codepoint = source.codePointFrom(offset);
       // Appending the correctly cased character onto 'sb'.
-      appendTitleCasedCodepoint(sb, codepoint, newWord, precededByCasedLetter, target, offset);
-      // Updating 'newWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
+      appendTitleCasedCodepoint(sb, codepoint, isNewWord, precededByCasedLetter, source, offset);
+      // Updating 'isNewWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
       // that we will process.
-      newWord = (codepoint == SpecialCodePointConstants.ASCII_SPACE);
+      isNewWord = (codepoint == SpecialCodePointConstants.ASCII_SPACE);
       if (!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
         precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
       }
-      offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
+      offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
     }
     return sb.build();
   }
@@ -629,7 +629,7 @@ public class CollationAwareUTF8String {
       int codepoint,
       boolean isAfterAsciiSpace,
       boolean precededByCasedLetter,
-      UTF8String target,
+      UTF8String source,
       int offset) {
     if (isAfterAsciiSpace) {
       // Title-casing a character if it is in the beginning of a new word.
@@ -638,7 +638,7 @@ public class CollationAwareUTF8String {
     }
     if (codepoint == SpecialCodePointConstants.GREEK_CAPITAL_SIGMA) {
       // Handling capital Greek letter sigma ('Σ').
-      appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, target, offset);
+      appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, source, offset);
       return;
     }
     // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
@@ -654,28 +654,28 @@ public class CollationAwareUTF8String {
   private static void appendLowerCasedGreekCapitalSigma(
       UTF8StringBuilder sb,
       boolean precededByCasedLetter,
-      UTF8String target,
+      UTF8String source,
       int offset) {
-    int codepoint = (!followedByCasedLetter(target, offset) && precededByCasedLetter)
+    int codepoint = (!followedByCasedLetter(source, offset) && precededByCasedLetter)
       ? SpecialCodePointConstants.GREEK_FINAL_SIGMA
       : SpecialCodePointConstants.GREEK_SMALL_SIGMA;
     sb.appendCodePoint(codepoint);
   }
 
   /**
-   * Checks if the character beginning at 'offset'(in 'targets' byte array) is followed by a cased
+   * Checks if the character beginning at 'offset'(in 'sources' byte array) is followed by a cased
    * letter.
    */
-  private static boolean followedByCasedLetter(UTF8String target, int offset) {
+  private static boolean followedByCasedLetter(UTF8String source, int offset) {
     // Moving the offset one character forward, so we could start the linear search from there.
-    offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
-    int len = target.numBytes();
+    offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+    int len = source.numBytes();
 
     while (offset < len) {
-      int codepoint = target.codePointFrom(offset);
+      int codepoint = source.codePointFrom(offset);
 
       if (UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
-        offset += UTF8String.numBytesForFirstByte(target.getByte(offset));
+        offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
         continue;
       }
       return UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
