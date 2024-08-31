@@ -27,7 +27,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * the configured `minPartitions`.
  */
 private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int],
-                                                   val maxRecordsPerPartition: Option[Int]) {
+                                                   val maxRecordsPerPartition: Option[Long]) {
   require(minPartitions.isEmpty || minPartitions.get > 0)
 
   /**
@@ -138,7 +138,7 @@ private[kafka010] object KafkaOffsetRangeCalculator {
       .map(_.toInt)
     val maxRecordsPerPartition = Option(options.get(
       KafkaSourceProvider.MAX_RECORDS_PER_PARTITIONS_OPTION_KEY))
-      .map(_.toInt)
+      .map(_.toLong)
     new KafkaOffsetRangeCalculator(minPartition, maxRecordsPerPartition)
   }
 }
