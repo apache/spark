@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
 import os
 import time
 import unittest
@@ -118,6 +119,12 @@ class CogroupedMapInArrowTestsMixin:
             CogroupedMapInArrowTestsMixin.apply_in_arrow_with_key_func(key_column), schema
         ).collect()
         self.assertEqual(actual2, expected.collect())
+
+        # apply in arrow returning iterator of batches
+        actual3 = cogrouped_df.applyInArrow(
+            CogroupedMapInArrowTestsMixin.apply_in_arrow_iterator_func, schema
+        ).collect()
+        self.assertEqual(actual3, expected.collect())
 
     def test_apply_in_arrow(self):
         self.do_test_apply_in_arrow(self.cogrouped)
