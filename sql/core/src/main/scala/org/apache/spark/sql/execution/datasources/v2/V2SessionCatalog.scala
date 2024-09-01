@@ -283,7 +283,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalog.getTableMetadata(ident.asTableIdentifier)
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(
+          CatalogManager.SESSION_CATALOG_NAME +: ident.asTableIdentifier.nameParts)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)

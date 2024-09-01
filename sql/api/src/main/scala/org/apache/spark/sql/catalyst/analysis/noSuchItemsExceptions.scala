@@ -105,6 +105,14 @@ class NoSuchTableException private(
       messageParameters)
   }
 
+  def this(catalog: String, db: String, table: String) = {
+    this(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" ->
+        (quoteIdentifier(catalog) + "." + quoteIdentifier(db) + "." + quoteIdentifier(table))),
+      cause = None)
+  }
+
   def this(db: String, table: String) = {
     this(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",

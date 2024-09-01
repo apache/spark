@@ -687,7 +687,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").replace()
     }
 
-    checkErrorTableNotFound(exc, "`table_name`")
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
   }
 
   test("CreateOrReplace: table does not exist") {
