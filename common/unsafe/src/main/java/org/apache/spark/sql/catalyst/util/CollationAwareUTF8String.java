@@ -613,8 +613,8 @@ public class CollationAwareUTF8String {
       int codepoint = source.codePointFrom(offset);
       // Appending the correctly cased character onto 'sb'.
       appendTitleCasedCodepoint(sb, codepoint, isNewWord, precededByCasedLetter, source, offset);
-      // Updating 'isNewWord', 'precededByCasedLetter' and 'offset' to be ready for the next character
-      // that we will process.
+      // Updating 'isNewWord', 'precededByCasedLetter' and 'offset' to be ready for the next
+      // character that we will process.
       isNewWord = (codepoint == SpecialCodePointConstants.ASCII_SPACE);
       if (!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
         precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
