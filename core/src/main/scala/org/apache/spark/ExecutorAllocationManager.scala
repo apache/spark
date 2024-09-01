@@ -101,6 +101,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  */
 private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
+    var scheduler: TaskScheduler,
     listenerBus: LiveListenerBus,
     conf: SparkConf,
     cleaner: Option[ContextCleaner] = None,
@@ -120,6 +121,9 @@ private[spark] class ExecutorAllocationManager(
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeoutS = conf.get(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
+
+  // How long will excluding node is triggered for launch speculative task (minutes)
+  private val excludeNodeTriggerTimeoutMin = conf.get(DYN_ALLOCATION_EXCLUDE_NODE_TRIGGER_TIMEOUT)
 
   // Same as above, but used only after `schedulerBacklogTimeoutS` is exceeded
   private val sustainedSchedulerBacklogTimeoutS =
@@ -152,6 +156,10 @@ private[spark] class ExecutorAllocationManager(
   // This is set when pending tasks are added but not scheduled yet
   private var addTime: Long = NOT_SET
 
+  // A timestamp of when node excluding should be triggered due to num of
+  // pending speculative tasks keeps positive and num of host count of current executors keeps 1
+  private var excludeNodesTriggerTime: Long = NOT_SET
+
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
 
@@ -181,6 +189,8 @@ private[spark] class ExecutorAllocationManager(
 
   // ResourceProfile id to Host to possible task running on it, used for executor placement.
   private var rpIdToHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
+
+  private var adjustMaxNeed = minNumExecutors;
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -281,6 +291,7 @@ private[spark] class ExecutorAllocationManager(
    */
   def reset(): Unit = synchronized {
     addTime = 0L
+    excludeNodesTriggerTime = NOT_SET
     numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
       numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
     }
@@ -290,11 +301,17 @@ private[spark] class ExecutorAllocationManager(
     executorMonitor.reset()
   }
 
+  def setScheduler(newScheduler: TaskScheduler): Unit = {
+    scheduler = newScheduler
+  }
+
   /**
    * The maximum number of executors, for the ResourceProfile id passed in, that we would need
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
-  private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
+  private[spark] def maxNumExecutorsNeededPerResourceProfile(
+      rpId: Int,
+      numExecutorsTarget: Int): Int = {
     val pendingTask = listener.pendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
@@ -308,13 +325,54 @@ private[spark] class ExecutorAllocationManager(
       tasksPerExecutor).toInt
 
     val maxNeededWithSpeculationLocalityOffset =
-      if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
-      // If we have pending speculative tasks and only need a single executor, allocate one more
-      // to satisfy the locality requirements of speculation
-      maxNeeded + 1
-    } else {
-      maxNeeded
-    }
+      if (pendingSpeculative > 0 && maxNeeded <= numExecutorsTarget &&
+        executorMonitor.executorHostsCount == 1 && scheduler.isInstanceOf[TaskSchedulerImpl]) {
+        val now = clock.nanoTime()
+        if (excludeNodesTriggerTime == NOT_SET) {
+          excludeNodesTriggerTime = now + TimeUnit.MINUTES.toNanos(excludeNodeTriggerTimeoutMin)
+          logDebug(log"Current timestamp ${MDC(TIMESTAMP, now)}, " +
+            log"set excludeNodesTriggerTime to ${MDC(TIMESTAMP, excludeNodesTriggerTime)}")
+          maxNeeded
+        } else if (now < excludeNodesTriggerTime) {
+          maxNeeded
+        } else {
+          if (executorMonitor.hasAdjustMaxNeed) {
+            adjustMaxNeed
+          } else {
+            logDebug(log"${MDC(TIMESTAMP, now)} exceeds" +
+              log" ${MDC(TIMESTAMP, excludeNodesTriggerTime)}, start exclude node!")
+            val node = executorMonitor.getExecutorHostsName(0)
+            // check if current remaining host has attempts of speculative task
+            val speculativeTasksInfo = listener.getPendingSpeculativeTasksInfo()
+            if (scheduler.asInstanceOf[TaskSchedulerImpl].
+              speculativeTasksHasAttemptOnHost(node, speculativeTasksInfo)) {
+              // make sure new maxNeed exceeds numExecutorsTarget and allocate executor
+              adjustMaxNeed = numExecutorsTarget + 1
+              // If hasAdjustMaxNeed, use last adjust value as
+              // maxNeededWithSpeculationLocalityOffset in case of numExecutorsTarget
+              // keeps increasing during maxNumExecutorsNeeded method call
+              scheduler.asInstanceOf[TaskSchedulerImpl].handleExcludeNodes(node)
+              logDebug(log"Exclude ${MDC(HOST, node)} for speculative, " +
+                log"old maxNeeded: ${MDC(COUNT, maxNeeded)}, " +
+                log"old numExecutorsTarget: ${MDC(COUNT, numExecutorsTarget)}, " +
+                log"current executors count: ${MDC(COUNT, executorMonitor.executorCount)}")
+              executorMonitor.setAdjustMaxNeed(true)
+              adjustMaxNeed
+            } else {
+              logDebug(log"No speculative task found on ${MDC(HOST, node)}")
+              maxNeeded
+            }
+          }
+        }
+      } else if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
+        resetExcludeNodesTriggerTime()
+        // If we have pending speculative tasks and only need a single executor, allocate one more
+        // to satisfy the locality requirements of speculation
+        maxNeeded + 1
+      } else {
+        resetExcludeNodesTriggerTime()
+        maxNeeded
+      }
 
     if (unschedulableTaskSets > 0) {
       // Request additional executors to account for task sets having tasks that are unschedulable
@@ -333,6 +391,10 @@ private[spark] class ExecutorAllocationManager(
   // need to access `listener.totalRunningTasksPerResourceProfile` with `synchronized`.
   private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
     listener.totalRunningTasksPerResourceProfile(id)
+  }
+
+  private def resetExcludeNodesTriggerTime(): Unit = {
+    excludeNodesTriggerTime = NOT_SET
   }
 
   /**
@@ -380,7 +442,7 @@ private[spark] class ExecutorAllocationManager(
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       numExecutorsTargetPerResourceProfileId.foreach { case (rpId, targetExecs) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rpId)
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rpId, targetExecs)
         if (maxNeeded < targetExecs) {
           // The target number exceeds the number we actually need, so stop adding new
           // executors and inform the cluster manager to cancel the extra pending requests
@@ -928,6 +990,18 @@ private[spark] class ExecutorAllocationManager(
       stageAttemptToPendingSpeculativeTasks.get(attempt).map(_.size).getOrElse(0)
     }
 
+    def getPendingSpeculativeTasksInfo(): ArrayBuffer[(Int, Int, Int)] = {
+      val res = new ArrayBuffer[(Int, Int, Int)]()
+      stageAttemptToPendingSpeculativeTasks.foreach { case (stageAttempt, taskIndexSet) =>
+        taskIndexSet.foreach {
+          case taskIndex =>
+            val stageTaskInfo = (stageAttempt.stageId, stageAttempt.stageAttemptId, taskIndex)
+            res += stageTaskInfo
+        }
+      }
+      res
+    }
+
     /**
      * Currently we only know when a task set has an unschedulable task, we don't know
      * the exact number and since the allocation manager isn't tied closely with the scheduler,
@@ -1021,8 +1095,8 @@ private[spark] class ExecutorAllocationManagerSource(
   registerGauge("numberTargetExecutors",
     executorAllocationManager.numExecutorsTargetPerResourceProfileId.values.sum, 0)
   registerGauge("numberMaxNeededExecutors",
-    executorAllocationManager.numExecutorsTargetPerResourceProfileId.keys
-      .map(executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
+    executorAllocationManager.numExecutorsTargetPerResourceProfileId.iterator.map(entry =>
+      executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(entry._1, entry._2)).sum, 0)
   registerGauge("numberDecommissioningExecutors",
     executorAllocationManager.executorMonitor.decommissioningCount, 0)
 }

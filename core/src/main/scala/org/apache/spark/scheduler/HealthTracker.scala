@@ -315,6 +315,20 @@ private[scheduler] class HealthTracker (
     }
   }
 
+  def updateBlacklistForSpeculativeTasks(node: String): Unit = {
+    val now = clock.getTimeMillis()
+    val expiryTimeForNewExcludes = now + EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS
+    if (!isNodeExcluded(node)) {
+      nodeIdToExcludedExpiryTime.put(node, expiryTimeForNewExcludes)
+      logInfo(log"Excluding node ${MDC(HOST, node)} because there are" +
+        log" pending speculative tasks and just one host exists")
+      listenerBus.post(SparkListenerNodeBlacklisted(now, node, 0))
+      listenerBus.post(SparkListenerExecutorExcluded(now, node, 0))
+      _excludedNodeList.set(nodeIdToExcludedExpiryTime.keySet.toSet)
+      updateNextExpiryTime()
+    }
+  }
+
   def isExecutorExcluded(executorId: String): Boolean = {
     executorIdToExcludedStatus.contains(executorId)
   }

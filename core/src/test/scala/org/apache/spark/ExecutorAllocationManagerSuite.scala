@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
+import scala.collection.mutable.HashMap
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -27,7 +28,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.{DECOMMISSION_ENABLED, DYN_ALLOCATION_EXCLUDE_NODE_TRIGGER_TIMEOUT}
 import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.resource._
@@ -901,6 +902,116 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onExecutorRemoved(manager, "9")
     assert(removeExecutorDefaultProfile(manager, "12"))
     onExecutorRemoved(manager, "12")
+  }
+
+  test("test pending speculative tasks and remaining executors locate on same host") {
+    val clock = new ManualClock()
+    val stage = createStageInfo(0, 20)
+    val conf = createConf(4, 10, 0).set(config.EXECUTOR_CORES, 4)
+    val sc = new SparkContext("local", "test")
+    val taskScheduler = new DummyTaskSchedulerImpl(sc)
+    val manager = createManager(conf, clock = clock)
+    manager.setScheduler(taskScheduler)
+    val taskArray = Array.fill[Task[_]](20)(null)
+    for (id <- 0 to 19) {
+      taskArray(id) = new Task[Int](0, 0, id, 20, null, null, null) {
+        override def runTask(context: TaskContext): Int = 0
+        override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
+      }
+    }
+    val taskSet = new TaskSet(taskArray, 0, 0, 0, null, 0, None)
+    // mock submit 20 task on host1
+    post(SparkListenerStageSubmitted(stage)) // add time = now + 1
+    clock.advance(1000)
+    var delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 5)
+
+    // no more numTargets add
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 5)
+
+    val host1ExecInfo = new ExecutorInfo("host1", 4, Map.empty,
+      Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    (0 to 4).foreach(execId => post(SparkListenerExecutorAdded(0L, execId.toString, host1ExecInfo)))
+    assert(manager.executorMonitor.executorCount == 5)
+    assert(manager.executorMonitor.executorHostsCount == 1)
+
+
+    (0 to 19).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    taskScheduler.submitTasks(0, 0, taskSet, "host1")
+
+    // 16 tasks (0 - 15) finished
+    (0 to 15).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null)) }
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == -1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 4)
+
+    // a hardware error occur to host1 and task 18, 19 hang, speculative task submitted
+    // with index (taskId - 4)
+    (20 to 23).foreach { taskId =>
+      post(new SparkListenerSpeculativeTaskSubmitted(0, 0, taskId - 4, taskId))}
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 4)
+
+    // wait for reaching excludeNodesTriggerTime
+    clock.advance(40000)
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 4)
+    assert(!manager.executorMonitor.hasAdjustMaxNeed)
+
+    // start exclude host 1
+    clock.advance(40000)
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 5)
+    assert(manager.executorMonitor.hasAdjustMaxNeed)
+
+    // return adjustMaxNeed
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 5)
+
+    val host2ExecInfo = new ExecutorInfo("host2", 4, Map.empty,
+      Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    post(SparkListenerExecutorAdded(0L, 6.toString, host2ExecInfo))
+    assert(!manager.executorMonitor.hasAdjustMaxNeed)
+    assert(manager.executorMonitor.executorCount == 6)
+    assert(manager.executorMonitor.executorHostsCount == 2)
+
+    // task 20-23 launch on executor 6 on host2
+    (20 to 23).map { i => createTaskInfo(i, i - 4, executorId = "6", speculative = true)}.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == -1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+
+    // task 20-23 finished
+    (20 to 24).map { i => createTaskInfo(i, i - 4, executorId = "6")}.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))}
+    // kill task 16-19
+    (16 to 19).map { i =>
+      createTaskInfo(i, i, executorId = s"${i / 4}")}
+      .foreach { info => post(
+        SparkListenerTaskEnd(0, 0, null, TaskKilled("test"), info, new ExecutorMetrics, null))}
+
+    delta = updateAndSyncNumExecutorsTarget(manager, clock.nanoTime())
+    assert(delta == 0)
+    assert(numExecutorsTargetForDefaultProfileId(manager) == 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 0)
+
+    // job finish
+    sc.stop()
   }
 
   test("properly handle task end events from completed stages") {
@@ -1802,6 +1913,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // and thread "pool-1-thread-1-ScalaTest-running".
       .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
       .set(DECOMMISSION_ENABLED, decommissioningEnabled)
+      .set(DYN_ALLOCATION_EXCLUDE_NODE_TRIGGER_TIMEOUT, excludeNodeTriggerTimeoutMin)
     sparkConf
   }
 
@@ -1811,7 +1923,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     ResourceProfile.reInitDefaultProfile(conf)
 
     rpManager = new ResourceProfileManager(conf, listenerBus)
-    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
+    val manager = new ExecutorAllocationManager(client, null, listenerBus, conf, clock = clock,
       resourceProfileManager = rpManager, reliableShuffleStorage = false)
     managers += manager
     manager.start()
@@ -1876,6 +1988,21 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def executorsDecommissioning(manager: ExecutorAllocationManager): Set[String] = {
     manager.executorMonitor.executorsDecommissioning()
   }
+
+
+  class DummyTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+    def submitTasks(stageId: Int, stageAttempt: Int, taskSet: TaskSet, host: String): Unit = {
+      val stageTaskSets = taskSetsByStageIdAndAttempt.getOrElseUpdate(
+        stageId, new HashMap[Int, TaskSetManager])
+      stageTaskSets(stageAttempt) = new TaskSetManager(this, taskSet, 0) {
+        for (id <- 0 to this.taskSet.tasks.length - 1) {
+          val task = this.taskSet.tasks(id)
+          taskAttempts(id) = new TaskInfo(task.partitionId, task.partitionId,
+            0, 0, (task.partitionId / 4).toString, host, null, false) :: taskAttempts(id)
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -1886,6 +2013,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val schedulerBacklogTimeout = 1L
   private val sustainedSchedulerBacklogTimeout = 2L
   private val executorIdleTimeout = 3L
+  private val excludeNodeTriggerTimeoutMin = 1L
 
   private def createStageInfo(
       stageId: Int,
@@ -1952,7 +2080,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def updateAndSyncNumExecutorsTarget(
       manager: ExecutorAllocationManager,
-      now: Long): Unit = {
+      now: Long): Int = {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(now)
   }
 
@@ -1982,7 +2110,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       rp: ResourceProfile
   ): Int = {
     val maxNumExecutorsNeeded =
-      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
+      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id,
+        numExecutorsTarget(manager, rp.id))
     manager invokePrivate
       _addExecutorsToTarget(maxNumExecutorsNeeded, rp.id, updatesNeeded)
   }
@@ -2005,7 +2134,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def maxNumExecutorsNeededPerResourceProfile(
       manager: ExecutorAllocationManager,
       rp: ResourceProfile): Int = {
-    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
+    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(
+      rp.id, numExecutorsTarget(manager, rp.id))
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {

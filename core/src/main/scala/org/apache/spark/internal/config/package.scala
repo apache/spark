@@ -736,6 +736,10 @@ package object config {
       .version("1.2.0")
       .timeConf(TimeUnit.SECONDS).createWithDefault(1)
 
+  private[spark] val DYN_ALLOCATION_EXCLUDE_NODE_TRIGGER_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.excludeNodeTriggerTimeout")
+      .timeConf(TimeUnit.MINUTES).createWithDefault(10)
+
   private[spark] val DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
       .version("1.2.0")

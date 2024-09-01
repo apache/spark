@@ -121,7 +121,7 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
-  private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
+  private[spark] val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
   // keyed by taskset
   // value is true if the task set has not rejected any resources due to locality
@@ -918,6 +918,34 @@ private[spark] class TaskSchedulerImpl(
       backend.reviveOffers()
     }
   }
+
+  def handleExcludeNodes(node: String): Unit = synchronized {
+    healthTrackerOpt.foreach(_.updateBlacklistForSpeculativeTasks(node))
+  }
+
+  def speculativeTasksHasAttemptOnHost(
+      node: String,
+      speculativeTasksInfo: ArrayBuffer[(Int, Int, Int)]): Boolean =
+    synchronized {
+      speculativeTasksInfo.foreach {
+        taskInfo =>
+          val stageId = taskInfo._1
+          val stageAttempts = taskInfo._2
+          val taskIndex = taskInfo._3
+          if (taskSetsByStageIdAndAttempt.contains(stageId) &&
+            taskSetsByStageIdAndAttempt(stageId).contains(stageAttempts)) {
+            val ret = taskSetsByStageIdAndAttempt(stageId)(stageAttempts).
+              hasAttemptOnHost(taskIndex, node)
+            if (ret) {
+              logDebug(log"stageId: ${MDC(STAGE_ID, stageId)}, " +
+                log"stageAttempts: ${MDC(STAGE_ATTEMPT, stageAttempts)}, " +
+                log"taskIndex: ${MDC(TASK_INDEX, taskIndex)} has attempt on ${MDC(HOST, node)}")
+            }
+            return ret
+          }
+      }
+      false
+    }
 
   /**
    * Marks the task has completed in the active TaskSetManager for the given stage.
