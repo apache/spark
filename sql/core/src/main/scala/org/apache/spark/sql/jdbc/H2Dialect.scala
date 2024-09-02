@@ -35,7 +35,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptions
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 import org.apache.spark.util.SparkStringUtils
 
-private[sql] case class H2Dialect() extends JdbcDialect with MergeByTempTable with NoLegacyJDBCError {
+private[sql] case class H2Dialect() extends JdbcDialect with MergeByTempTable
+    with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
