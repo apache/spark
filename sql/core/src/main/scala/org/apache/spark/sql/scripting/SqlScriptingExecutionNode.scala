@@ -436,7 +436,6 @@ class CaseStatementExec(
 
       override def next(): CompoundStatementExec = state match {
         case CaseState.Condition =>
-          assert(curr.get.isInstanceOf[SingleStatementExec])
           val condition = curr.get.asInstanceOf[SingleStatementExec]
           if (evaluateBooleanCondition(session, condition)) {
             state = CaseState.Body
