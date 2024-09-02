@@ -1707,7 +1707,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   override def toJSON: Dataset[String] = {
-    val rowSchema = this.encoder.schema
+    val rowSchema = exprEnc.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     mapPartitions { iter =>
       val writer = new CharArrayWriter()
