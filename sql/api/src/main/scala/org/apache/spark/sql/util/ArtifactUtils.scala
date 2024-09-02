@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.artifact.util
+package org.apache.spark.sql.util
 
 import java.nio.file.{Path, Paths}
 

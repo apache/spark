@@ -686,7 +686,7 @@ class Deduplicate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
-        column_names: Optional[Sequence[str]] = None,
+        column_names: Optional[List[str]] = None,
         within_watermark: bool = False,
     ) -> None:
         super().__init__(child)
