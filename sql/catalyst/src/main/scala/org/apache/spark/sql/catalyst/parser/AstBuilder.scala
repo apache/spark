@@ -262,8 +262,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitSearchedCaseStatement(
-    ctx: SearchedCaseStatementContext): SearchedCaseStatement = {
-    SearchedCaseStatement(
+    ctx: SearchedCaseStatementContext): CaseStatement = {
+    CaseStatement(
       conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
         SingleStatement(
           Project(
@@ -274,10 +274,10 @@ class AstBuilder extends DataTypeAstBuilder
       elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
   }
 
-  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): SearchedCaseStatement = {
+  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): CaseStatement = {
     // uses EqualTo to compare the case variable(the main case expression)
     // to the WHEN clause expressions
-    SearchedCaseStatement(
+    CaseStatement(
       conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
         SingleStatement(
           Project(

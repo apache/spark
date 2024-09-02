@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, IfElseStatement, IterateStatement, LeaveStatement, RepeatStatement, SearchedCaseStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, IfElseStatement, IterateStatement, LeaveStatement, RepeatStatement, CaseStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 
@@ -95,7 +95,7 @@ case class SqlScriptingInterpreter() {
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
 
-      case SearchedCaseStatement(conditions, conditionalBodies, elseBody) =>
+      case CaseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           // todo: what to put here for isInternal, in case of simple case statement
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
@@ -103,7 +103,7 @@ case class SqlScriptingInterpreter() {
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
-        new SearchedCaseStatementExec(
+        new CaseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
 
       case WhileStatement(condition, body, label) =>

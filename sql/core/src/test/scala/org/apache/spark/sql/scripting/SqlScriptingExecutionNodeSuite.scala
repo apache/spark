@@ -579,7 +579,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter first WHEN clause") {
     val iter = new CompoundBodyExec(Seq(
-      new SearchedCaseStatementExec(
+      new CaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = true, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
@@ -598,7 +598,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter body of the ELSE clause") {
     val iter = new CompoundBodyExec(Seq(
-      new SearchedCaseStatementExec(
+      new CaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1")
         ),
@@ -615,7 +615,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter second WHEN clause") {
     val iter = new CompoundBodyExec(Seq(
-      new SearchedCaseStatementExec(
+      new CaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
@@ -634,7 +634,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - without else (successful check)") {
     val iter = new CompoundBodyExec(Seq(
-      new SearchedCaseStatementExec(
+      new CaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
@@ -653,7 +653,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - without else (unsuccessful checks)") {
     val iter = new CompoundBodyExec(Seq(
-      new SearchedCaseStatementExec(
+      new CaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")

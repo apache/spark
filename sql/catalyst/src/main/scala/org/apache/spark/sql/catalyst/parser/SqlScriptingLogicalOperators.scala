@@ -133,7 +133,7 @@ case class IterateStatement(label: String) extends CompoundPlanStatement
  * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  */
-case class SearchedCaseStatement(
+case class CaseStatement(
     conditions: Seq[SingleStatement],
     conditionalBodies: Seq[CompoundBody],
     elseBody: Option[CompoundBody]) extends CompoundPlanStatement {

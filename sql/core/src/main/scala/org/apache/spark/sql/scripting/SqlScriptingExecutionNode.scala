@@ -406,7 +406,7 @@ class WhileStatementExec(
 }
 
 /**
- * Executable node for SearchedCaseStatement.
+ * Executable node for CaseStatement.
  * @param conditions Collection of executable conditions which correspond to WHEN clauses.
  * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
  *                 in WHEN branches.
@@ -414,7 +414,7 @@ class WhileStatementExec(
  *                          i.e. ELSE branch.
  * @param session Spark session that SQL script is executed within.
  */
-class SearchedCaseStatementExec(
+class CaseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
