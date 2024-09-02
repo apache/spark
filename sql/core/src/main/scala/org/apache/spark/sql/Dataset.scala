@@ -60,8 +60,8 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.internal.{SQLConf, ToScalaUDF}
 import org.apache.spark.sql.internal.ExpressionUtils.column
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -1025,7 +1025,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
-    groupByKey(func.call(_))(encoder)
+    groupByKey(ToScalaUDF(func))(encoder)
 
   /**
    * Create a multi-dimensional rollup for the current Dataset using the specified columns,
@@ -1591,12 +1591,6 @@ class Dataset[T] private[sql](
       implicitly[Encoder[U]])
   }
 
-  /** @inheritdoc */
-  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
-    mapPartitions(func)(encoder)
-  }
-
   /**
    * Returns a new `DataFrame` that contains the result of applying a serialized R function
    * `func` to each partition.
@@ -1653,11 +1647,6 @@ class Dataset[T] private[sql](
         logicalPlan,
         isBarrier,
         Option(profile)))
-  }
-
-  /** @inheritdoc */
-  def foreach(f: T => Unit): Unit = withNewRDDExecutionId("foreach") {
-    rdd.foreach(f)
   }
 
   /** @inheritdoc */
@@ -2187,14 +2176,15 @@ class Dataset[T] private[sql](
     super.dropDuplicatesWithinWatermark(col1, cols: _*)
 
   /** @inheritdoc */
+  override def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    super.mapPartitions(f, encoder)
+
+  /** @inheritdoc */
   override def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] = super.flatMap(func)
 
   /** @inheritdoc */
   override def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
     super.flatMap(f, encoder)
-
-  /** @inheritdoc */
-  override def foreach(func: ForeachFunction[T]): Unit = super.foreach(func)
 
   /** @inheritdoc */
   override def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
