@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto
  * @since 3.4.0
  */
 @Stable
-final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends api.DataFrameWriter {
+final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends api.DataFrameWriter[T] {
 
   /** @inheritdoc */
   override def mode(saveMode: SaveMode): this.type = super.mode(saveMode)

@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.CompilationErrors
  * @since 1.4.0
  */
 @Stable
-abstract class DataFrameWriter {
+abstract class DataFrameWriter[T] {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:

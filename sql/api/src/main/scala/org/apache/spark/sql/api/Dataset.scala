@@ -2868,5 +2868,5 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group basic
    * @since 1.6.0
    */
-  def write: DataFrameWriter
+  def write: DataFrameWriter[T]
 }
