@@ -38,11 +38,13 @@ def function_variations(func):
     yield func
     num_args = len(inspect.getfullargspec(func).args)
     if num_args == 2:
+
         def iter_func(left, right):
             yield from func(left, right).to_batches()
 
         yield iter_func
     else:
+
         def iter_keys_func(keys, left, right):
             yield from func(keys, left, right).to_batches()
 
@@ -154,7 +156,7 @@ class CogroupedMapInArrowTestsMixin:
     def test_apply_in_arrow_not_returning_arrow_table(self):
         def func(key, left, right):
             return key
-        
+
         def iter_func(key, left, right):
             yield key
 
@@ -189,9 +191,7 @@ class CogroupedMapInArrowTestsMixin:
                             PythonException,
                             f"Columns do not match in their data type: {expected}",
                         ):
-                            self.cogrouped.applyInArrow(
-                                func_variation, schema=schema
-                            ).collect()
+                            self.cogrouped.applyInArrow(func_variation, schema=schema).collect()
 
     def test_apply_in_arrow_returning_wrong_types_positional_assignment(self):
         for schema, expected in [
@@ -337,6 +337,7 @@ class CogroupedMapInArrowTestsMixin:
             "|        2|           3|         1|            2|\n"
             "+---------+------------+----------+-------------+\n",
         )
+
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
