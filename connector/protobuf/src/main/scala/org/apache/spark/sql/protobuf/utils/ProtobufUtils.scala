@@ -229,18 +229,14 @@ private[sql] object ProtobufUtils extends Logging {
   }
 
   def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    if (filePath == null || filePath.isEmpty) {
-      Array.emptyByteArray
-    } else {
-      try {
-        FileUtils.readFileToByteArray(new File(filePath))
-      } catch {
-        case ex: FileNotFoundException =>
-          throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-        case ex: NoSuchFileException =>
-          throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-        case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
-      }
+    try {
+      FileUtils.readFileToByteArray(new File(filePath))
+    } catch {
+      case ex: FileNotFoundException =>
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case ex: NoSuchFileException =>
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
     }
   }
 
