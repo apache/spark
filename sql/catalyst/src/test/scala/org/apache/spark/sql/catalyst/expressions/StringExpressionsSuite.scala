@@ -474,7 +474,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(UnBase64(Literal.create(null, StringType)).nullable)
     assert(UnBase64(Literal("AQIDBA==").castNullable()).nullable)
 
-
     checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
