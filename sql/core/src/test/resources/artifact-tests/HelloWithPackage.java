@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+// Compile: javac --source 8 --target 8 HelloWithPackage.java
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvedTable
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.LeafExecNode
+package my.custom.pkg;
 
-/**
- * Physical plan node for show columns from table.
- */
-case class ShowColumnsExec(
-     output: Seq[Attribute],
-     resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
-  override protected def run(): Seq[InternalRow] = {
-    resolvedTable.table.columns().map(f => toCatalystRow(f.name())).toSeq
-  }
+public class HelloWithPackage {
+    String name = "there";
+
+    public HelloWithPackage() {
+    }
+
+    public HelloWithPackage(String name) {
+        this.name = name;
+    }
+
+    public String msg() {
+        return "Hello " + name + "! Nice to meet you!";
+    }
 }
