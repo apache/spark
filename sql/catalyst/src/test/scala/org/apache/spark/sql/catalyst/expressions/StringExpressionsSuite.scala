@@ -466,6 +466,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = $"a".string.at(0)
     val b = $"b".binary.at(0)
     val bytes = Array[Byte](1, 2, 3, 4)
+    assert(!Base64(Literal(bytes)).nullable)
 
     checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
