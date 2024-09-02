@@ -1959,11 +1959,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Sentences") {
     val nullString = Literal.create(null, StringType)
-    checkEvaluation(Sentences(nullString, Some(nullString), Some(nullString)), null)
-    checkEvaluation(Sentences(nullString, Some(nullString)), null)
+    checkEvaluation(Sentences(nullString, nullString, nullString), null)
+    checkEvaluation(Sentences(nullString, nullString), null)
     checkEvaluation(Sentences(nullString), null)
-    checkEvaluation(Sentences("", Some(nullString), Some(nullString)), Seq.empty)
-    checkEvaluation(Sentences("", Some(nullString)), Seq.empty)
+    checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
+    checkEvaluation(Sentences("", nullString), Seq.empty)
     checkEvaluation(Sentences(""), Seq.empty)
 
     val answer = Seq(
@@ -1972,18 +1972,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq("But", "not", "now"))
 
     checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now."), answer)
-    checkEvaluation(
-      Sentences("Hi there! The price was $1,234.56.... But, not now.", Some("en")), answer)
-    checkEvaluation(
-      Sentences("Hi there! The price was $1,234.56.... But, not now.", Some("en"), Some("US")),
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en"), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
       answer)
-    checkEvaluation(
-      Sentences("Hi there! The price was $1,234.56.... But, not now.", Some("XXX"), Some("YYY")),
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXX", "YYY"),
       answer)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      Sentences(Literal("\"quote"), Some(Literal("\"quote")), Some(Literal("\"quote"))) :: Nil)
+      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
   test("SPARK-33386: elt ArrayIndexOutOfBoundsException") {

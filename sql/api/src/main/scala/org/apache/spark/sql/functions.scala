@@ -4265,6 +4265,14 @@ object functions {
 
   /**
    * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def sentences(string: Column, language: Column): Column =
+    Column.fn("sentences", string, language)
+
+  /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
    * The default locale is used.
    * @group string_funcs
    * @since 3.2.0

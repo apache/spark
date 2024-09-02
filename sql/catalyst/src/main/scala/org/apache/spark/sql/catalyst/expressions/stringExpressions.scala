@@ -3332,63 +3332,92 @@ case class FormatNumber(x: Expression, d: Expression)
 
 /**
  * Splits a string into arrays of sentences, where each sentence is an array of words.
- * The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
+ * The 'lang' and 'country' arguments are optional, and if they are both omitted,
+ * the default locale (the lang is `en` and the country is `US`) is used.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str[, lang, country]) - Splits `str` into an array of array of words.",
+  usage = "_FUNC_(str[, lang[, country]]) - Splits `str` into an array of array of words.",
+  arguments = """
+    Arguments:
+      * str - A STRING expression to be parsed.
+      * lang - An optional STRING expression with a language code from ISO 639 Alpha-2 (e.g. 'DE'),
+          Alpha-3, or a language subtag of up to 8 characters.
+      * country - An optional STRING expression with a country code from ISO 3166 alpha-2 country
+          code or a UN M.49 numeric-3 area code.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Hi there! Good morning.');
+       [["Hi","there"],["Good","morning"]]
+      > SELECT _FUNC_('Hi there! Good morning.', 'en');
+       [["Hi","there"],["Good","morning"]]
+      > SELECT _FUNC_('Hi there! Good morning.', 'en', 'US');
        [["Hi","there"],["Good","morning"]]
   """,
   since = "2.0.0",
   group = "string_funcs")
 case class Sentences(
     str: Expression,
-    language: Option[Expression] = None,
-    country: Option[Expression] = None)
-  extends Expression with ImplicitCastInputTypes {
+    language: Expression = Literal(""),
+    country: Expression = Literal(""))
+  extends TernaryExpression with ImplicitCastInputTypes {
 
-  def this(str: Expression) = this(str, None, None)
-
-  def this(str: Expression, language: Expression, country: Expression) =
-    this(str, Some(language), Some(country))
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length == 1 || children.length == 3) {
-      super.checkInputDataTypes()
-    } else {
-      throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq(1, 3), children.length)
-    }
-  }
+  def this(str: Expression) = this(str, Literal(""), Literal(""))
+  def this(str: Expression, language: Expression) = this(str, language, Literal(""))
 
   override def nullable: Boolean = true
   override def dataType: DataType =
     ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
+  override def first: Expression = str
+  override def second: Expression = language
+  override def third: Expression = country
 
   override def eval(input: InternalRow): Any = {
     val s = str.eval(input).asInstanceOf[UTF8String]
-    val (l, c) = (language, country) match {
-      case (Some(l), Some(c)) =>
-        (l.eval(input).asInstanceOf[UTF8String], c.eval(input).asInstanceOf[UTF8String])
-      case _ => (null, null)
-    }
+    val l = language.eval(input).asInstanceOf[UTF8String]
+    val c = country.eval(input).asInstanceOf[UTF8String]
     getSentences(s, l, c)
   }
 
-  protected def getSentences(
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    val strEval = str.genCode(ctx)
+    val languageEval = language.genCode(ctx)
+    val countryEval = country.genCode(ctx)
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    val baseCode =
+      s"""
+        |${strEval.code}
+        |${languageEval.code}
+        |${countryEval.code}
+        |$resultType $resultTerm = ($resultType) $expr.getSentences(
+        |  ${strEval.value}, ${languageEval.value}, ${countryEval.value});
+        |""".stripMargin
+    ev.copy(code =
+      code"""
+        |$baseCode
+        |boolean ${ev.isNull} = $resultTerm == null;
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |if (!${ev.isNull}) {
+        |  ${ev.value} = $resultTerm;
+        |}
+        |""".stripMargin
+    )
+  }
+
+  def getSentences(
       str: UTF8String,
       language: UTF8String,
       country: UTF8String): ArrayData = {
     if (str == null) return null
     val sentences = str.toString
-    val locale = if (language != null && country != null) {
-      new Locale(language.toString, country.toString)
-    } else {
-      Locale.US
+    val locale = (language, country) match {
+      case (null, null) | (null, _) => Locale.US
+      case (_, null) => new Locale(language.toString)
+      case _ => new Locale(language.toString, country.toString)
     }
     val bi = BreakIterator.getSentenceInstance(locale)
     bi.setText(sentences)
@@ -3412,58 +3441,9 @@ case class Sentences(
     new GenericArrayData(result)
   }
 
-  override def children: Seq[Expression] = {
-    (language, country) match {
-      case (Some(l), Some(c)) => Seq(str, l, c)
-      case _ => Seq(str)
-    }
-  }
-
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression = {
-    (language, country) match {
-      case (Some(_), Some(_)) =>
-        copy(str = newChildren.head,
-          language = Some(newChildren(1)), country = Some(newChildren(2)))
-      case _ =>
-        copy(str = newChildren.head, language = None, country = None)
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val expr = ctx.addReferenceObj("this", this)
-    val strEval = str.genCode(ctx)
-    val resultType = CodeGenerator.boxedType(dataType)
-    val resultTerm = ctx.freshName("result")
-    val baseCode = (language, country) match {
-      case (Some(l), Some(c)) =>
-        val languageEval = l.genCode(ctx)
-        val countryEval = c.genCode(ctx)
-        s"""
-           |${strEval.code}
-           |${languageEval.code}
-           |${countryEval.code}
-           |$resultType $resultTerm = ($resultType) $expr.getSentences(
-           |  ${strEval.value}, ${languageEval.value}, ${countryEval.value});
-           |""".stripMargin
-      case _ =>
-        s"""
-           |${strEval.code}
-           |$resultType $resultTerm = ($resultType) $expr.getSentences(
-           |  ${strEval.value}, null, null);
-           |""".stripMargin
-    }
-    ev.copy(code =
-      code"""
-         |$baseCode
-         |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |}
-         |""".stripMargin
-    )
-  }
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
+    copy(str = newFirst, language = newSecond, country = newThird)
 }
 
 /**
