@@ -1070,25 +1070,7 @@ class Dataset[T] private[sql] (
     new DataFrameWriter[T](this)
   }
 
-  /**
-   * Create a write configuration builder for v2 sources.
-   *
-   * This builder is used to configure and execute write operations. For example, to append to an
-   * existing table, run:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").append()
-   * }}}
-   *
-   * This can also be used to create or replace existing tables:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
-   * }}}
-   *
-   * @group basic
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def writeTo(table: String): DataFrameWriterV2[T] = {
     new DataFrameWriterV2[T](table, this)
   }

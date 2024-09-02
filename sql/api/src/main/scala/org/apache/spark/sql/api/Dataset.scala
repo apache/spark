@@ -2822,6 +2822,27 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit
 
   /**
+   * Create a write configuration builder for v2 sources.
+   *
+   * This builder is used to configure and execute write operations. For example, to append to an
+   * existing table, run:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").append()
+   * }}}
+   *
+   * This can also be used to create or replace existing tables:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
+   * }}}
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def writeTo(table: String): DataFrameWriterV2[T]
+
+  /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
    *
    * @since 2.0.0
