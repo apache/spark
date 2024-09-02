@@ -540,6 +540,18 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   def show(numRows: Int, truncate: Int, vertical: Boolean): Unit
 
   /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 1.6.0
+   */
+  def na: DataFrameNaFunctions[DS]
+
+  /**
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
    * {{{
    *   // Finding frequent items in column with name 'a'.
