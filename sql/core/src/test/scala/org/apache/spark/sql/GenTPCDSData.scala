@@ -359,7 +359,7 @@ class GenTPCDSDataConfig(args: Array[String]) {
   private def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off
     System.err.println("""
-      |build/sbt "test:runMain <this class> [Options]"
+      |build/sbt "Test/runMain <this class> [Options]"
       |Options:
       |  --master                        the Spark master to use, default to local[*]
       |  --dsdgenDir                     location of dsdgen

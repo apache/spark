@@ -123,6 +123,20 @@ public class TaskMemoryManager {
   private volatile long acquiredButNotUsed = 0L;
 
   /**
+   * Current off heap memory usage by this task.
+   */
+  private long currentOffHeapMemory = 0L;
+
+  private final Object offHeapMemoryLock = new Object();
+
+  /*
+   * Current on heap memory usage by this task.
+   */
+  private long currentOnHeapMemory = 0L;
+
+  private final Object onHeapMemoryLock = new Object();
+
+  /**
    * Peak off heap memory usage by this task.
    */
   private volatile long peakOffHeapMemory = 0L;
@@ -213,14 +227,16 @@ public class TaskMemoryManager {
           requestingConsumer);
       }
 
-      // Consumer will update its used memory after acquireExecutionMemory, so we need to add `got`
-      // to compute current peak
-      long currentPeak = consumers.stream().filter(c -> c.getMode() == mode)
-        .mapToLong(MemoryConsumer::getUsed).sum() + got;
       if (mode == MemoryMode.OFF_HEAP) {
-        peakOffHeapMemory = Math.max(peakOffHeapMemory, currentPeak);
+        synchronized (offHeapMemoryLock) {
+          currentOffHeapMemory += got;
+          peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
+        }
       } else {
-        peakOnHeapMemory = Math.max(peakOnHeapMemory, currentPeak);
+        synchronized (onHeapMemoryLock) {
+          currentOnHeapMemory += got;
+          peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
+        }
       }
 
       return got;
@@ -290,6 +306,15 @@ public class TaskMemoryManager {
         consumer);
     }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
+    if (consumer.getMode() == MemoryMode.OFF_HEAP) {
+      synchronized (offHeapMemoryLock) {
+        currentOffHeapMemory -= size;
+      }
+    } else {
+      synchronized (onHeapMemoryLock) {
+        currentOnHeapMemory -= size;
+      }
+    }
   }
 
   /**

@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.util.Locale
-
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -35,6 +31,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
+import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -52,12 +50,19 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 class RelationalGroupedDataset protected[sql](
-    private[sql] val df: DataFrame,
+    protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
-    groupType: RelationalGroupedDataset.GroupType) {
+    groupType: RelationalGroupedDataset.GroupType)
+  extends api.RelationalGroupedDataset[Dataset] {
+  type RGD = RelationalGroupedDataset
   import RelationalGroupedDataset._
+  import df.sparkSession._
 
-  private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
+  override protected def toDF(aggCols: Seq[Column]): DataFrame = {
+    val aggExprs = aggCols.map(expression).map { e =>
+      withInputType(e, df.exprEnc, df.logicalPlan.output)
+    }
+
     @scala.annotation.nowarn("cat=deprecation")
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
@@ -95,9 +100,7 @@ class RelationalGroupedDataset protected[sql](
     }
   }
 
-  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
-    : DataFrame = {
-
+  override protected def selectNumericColumns(colNames: Seq[String]): Seq[Column] = {
     val columnExprs = if (colNames.isEmpty) {
       // No columns specified. Use all numeric columns.
       df.numericColumns
@@ -111,29 +114,9 @@ class RelationalGroupedDataset protected[sql](
         namedExpr
       }
     }
-    toDF(columnExprs.map(expr => f(expr).toAggregateExpression()))
+    columnExprs.map(column)
   }
 
-  private[this] def strToExpr(expr: String): (Expression => Expression) = {
-    val exprToFunc: (Expression => Expression) = {
-      (inputExpr: Expression) => expr.toLowerCase(Locale.ROOT) match {
-        // We special handle a few cases that have alias that are not in function registry.
-        case "avg" | "average" | "mean" =>
-          UnresolvedFunction("avg", inputExpr :: Nil, isDistinct = false)
-        case "stddev" | "std" =>
-          UnresolvedFunction("stddev", inputExpr :: Nil, isDistinct = false)
-        // Also special handle count because we need to take care count(*).
-        case "count" | "size" =>
-          // Turn count(*) into count(1)
-          inputExpr match {
-            case s: Star => Count(Literal(1)).toAggregateExpression()
-            case _ => Count(inputExpr).toAggregateExpression()
-          }
-        case name => UnresolvedFunction(name, inputExpr :: Nil, isDistinct = false)
-      }
-    }
-    (inputExpr: Expression) => exprToFunc(inputExpr)
-  }
 
   /**
    * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
@@ -156,296 +139,68 @@ class RelationalGroupedDataset protected[sql](
       groupingAttributes)
   }
 
-  /**
-   * (Scala-specific) Compute aggregates by specifying the column names and
-   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
-   *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
-   * {{{
-   *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupBy("department").agg(
-   *     "age" -> "max",
-   *     "expense" -> "sum"
-   *   )
-   * }}}
-   *
-   * @since 1.3.0
-   */
-  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
-      strToExpr(expr)(df(colName).expr)
-    })
-  }
+  /** @inheritdoc */
+  override def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame =
+    super.agg(aggExpr, aggExprs: _*)
 
-  /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
-   *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
-   * {{{
-   *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupBy("department").agg(Map(
-   *     "age" -> "max",
-   *     "expense" -> "sum"
-   *   ))
-   * }}}
-   *
-   * @since 1.3.0
-   */
-  def agg(exprs: Map[String, String]): DataFrame = {
-    toDF(exprs.map { case (colName, expr) =>
-      strToExpr(expr)(df(colName).expr)
-    }.toSeq)
-  }
+  /** @inheritdoc */
+  override def agg(exprs: Map[String, String]): DataFrame = super.agg(exprs)
 
-  /**
-   * (Java-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
-   *
-   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
-   * {{{
-   *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   import com.google.common.collect.ImmutableMap;
-   *   df.groupBy("department").agg(ImmutableMap.of("age", "max", "expense", "sum"));
-   * }}}
-   *
-   * @since 1.3.0
-   */
-  def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.asScala.toMap)
-  }
+  /** @inheritdoc */
+  override def agg(exprs: java.util.Map[String, String]): DataFrame = super.agg(exprs)
 
-  /**
-   * Compute aggregates by specifying a series of aggregate columns. Note that this function by
-   * default retains the grouping columns in its output. To not retain grouping columns, set
-   * `spark.sql.retainGroupColumns` to false.
-   *
-   * The available aggregate methods are defined in [[org.apache.spark.sql.functions]].
-   *
-   * {{{
-   *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *
-   *   // Scala:
-   *   import org.apache.spark.sql.functions._
-   *   df.groupBy("department").agg(max("age"), sum("expense"))
-   *
-   *   // Java:
-   *   import static org.apache.spark.sql.functions.*;
-   *   df.groupBy("department").agg(max("age"), sum("expense"));
-   * }}}
-   *
-   * Note that before Spark 1.4, the default behavior is to NOT retain grouping columns. To change
-   * to that behavior, set config variable `spark.sql.retainGroupColumns` to `false`.
-   * {{{
-   *   // Scala, 1.3.x:
-   *   df.groupBy("department").agg($"department", max("age"), sum("expense"))
-   *
-   *   // Java, 1.3.x:
-   *   df.groupBy("department").agg(col("department"), max("age"), sum("expense"));
-   * }}}
-   *
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = {
-    toDF((expr +: exprs).map {
-      case typed: TypedColumn[_, _] =>
-        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
-      case c => c.expr
-    })
-  }
+  override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
 
-  /**
-   * Count the number of rows for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   *
-   * @since 1.3.0
-   */
-  def count(): DataFrame = toDF(Seq(Alias(Count(Literal(1)).toAggregateExpression(), "count")()))
+  /** @inheritdoc */
+  override def count(): DataFrame = super.count()
 
-  /**
-   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the average values for them.
-   *
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def mean(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average(_))
-  }
+  override def mean(colNames: String*): DataFrame = super.mean(colNames: _*)
 
-  /**
-   * Compute the max value for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the max values for them.
-   *
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def max(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Max)
-  }
+  override def max(colNames: String*): DataFrame = super.max(colNames: _*)
 
-  /**
-   * Compute the mean value for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the mean values for them.
-   *
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average(_))
-  }
+  override def avg(colNames: String*): DataFrame = super.avg(colNames: _*)
 
-  /**
-   * Compute the min value for each numeric column for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the min values for them.
-   *
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def min(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Min)
-  }
+  override def min(colNames: String*): DataFrame = super.min(colNames: _*)
 
-  /**
-   * Compute the sum for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the sum for them.
-   *
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def sum(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Sum(_))
+  override def sum(colNames: String*): DataFrame = super.sum(colNames: _*)
+
+  /** @inheritdoc */
+  override def pivot(pivotColumn: String): RelationalGroupedDataset = super.pivot(pivotColumn)
+
+  /** @inheritdoc */
+  override def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset =
+    super.pivot(pivotColumn, values)
+
+  /** @inheritdoc */
+  override def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset =
+    super.pivot(pivotColumn, values)
+
+  /** @inheritdoc */
+  override def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
+    super.pivot(pivotColumn, values)
   }
 
-  /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   *
-   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine
-   * the resulting schema of the transformation. To avoid any eager computations, provide an
-   * explicit list of values via `pivot(pivotColumn: String, values: Seq[Any])`.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy("year").pivot("course").sum("earnings")
-   * }}}
-   *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   *
-   * @param pivotColumn Name of the column to pivot.
-   * @since 1.6.0
-   */
-  def pivot(pivotColumn: String): RelationalGroupedDataset = pivot(Column(pivotColumn))
-
-  /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   * There are two versions of pivot function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
-   * efficient, because Spark needs to first compute the list of distinct values internally.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
-   *
-   *   // Or without specifying column values (less efficient)
-   *   df.groupBy("year").pivot("course").sum("earnings")
-   * }}}
-   *
-   * From Spark 3.0.0, values can be literal columns, for instance, struct. For pivoting by
-   * multiple columns, use the `struct` function to combine the columns and values:
-   *
-   * {{{
-   *   df.groupBy("year")
-   *     .pivot("trainingCourse", Seq(struct(lit("java"), lit("Experts"))))
-   *     .agg(sum($"earnings"))
-   * }}}
-   *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   *
-   * @param pivotColumn Name of the column to pivot.
-   * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 1.6.0
-   */
-  def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset = {
-    pivot(Column(pivotColumn), values)
-  }
-
-  /**
-   * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
-   * aggregation.
-   *
-   * There are two versions of pivot function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
-   * efficient, because Spark needs to first compute the list of distinct values internally.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy("year").pivot("course", Arrays.<Object>asList("dotNET", "Java")).sum("earnings");
-   *
-   *   // Or without specifying column values (less efficient)
-   *   df.groupBy("year").pivot("course").sum("earnings");
-   * }}}
-   *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   *
-   * @param pivotColumn Name of the column to pivot.
-   * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 1.6.0
-   */
-  def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(Column(pivotColumn), values)
-  }
-
-  /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   *
-   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine
-   * the resulting schema of the transformation. To avoid any eager computations, provide an
-   * explicit list of values via `pivot(pivotColumn: Column, values: Seq[Any])`.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy($"year").pivot($"course").sum($"earnings");
-   * }}}
-   *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   *
-   * @param pivotColumn he column to pivot.
-   * @since 2.4.0
-   */
-  def pivot(pivotColumn: Column): RelationalGroupedDataset = {
+  /** @inheritdoc */
+  override def pivot(pivotColumn: Column): RelationalGroupedDataset =
     pivot(pivotColumn, collectPivotValues(df, pivotColumn))
-  }
 
-  /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   * This is an overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
-   * }}}
-   *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   *
-   * @param pivotColumn the column to pivot.
-   * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 2.4.0
-   */
+  /** @inheritdoc */
   def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
-        val valueExprs = values.map(_ match {
+        val valueExprs = values.map {
           case c: Column => c.expr
           case v =>
             try {
@@ -454,7 +209,7 @@ class RelationalGroupedDataset protected[sql](
               case _: SparkRuntimeException =>
                 throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr)
             }
-        })
+        }
         new RelationalGroupedDataset(
           df,
           groupingExprs,
@@ -466,22 +221,6 @@ class RelationalGroupedDataset protected[sql](
       case _ =>
         throw QueryExecutionErrors.pivotNotAfterGroupByUnsupportedError()
     }
-  }
-
-  /**
-   * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
-   * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
-   * the `String` type.
-   *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   *
-   * @param pivotColumn the column to pivot.
-   * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 2.4.0
-   */
-  def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(pivotColumn, values.asScala.toSeq)
   }
 
   /**
@@ -508,7 +247,7 @@ class RelationalGroupedDataset protected[sql](
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
       val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(Column(_))
+      val groupingCols = groupingNamedExpressions.map(column)
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
       Dataset.ofRows(
@@ -538,7 +277,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInPandas(column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       "Must pass a grouped map pandas udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -570,7 +310,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInArrow(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
       "Must pass a grouped map arrow udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -602,7 +343,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapCoGroupsInPandas(
       r: RelationalGroupedDataset,
-      expr: PythonUDF): DataFrame = {
+      column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       "Must pass a cogrouped map pandas udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
@@ -648,7 +390,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapCoGroupsInArrow(
       r: RelationalGroupedDataset,
-      expr: PythonUDF): DataFrame = {
+      column: Column): DataFrame = {
+    val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
       "Must pass a cogrouped map arrow udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
@@ -697,7 +440,7 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def applyInPandasWithState(
-      func: PythonUDF,
+      func: Column,
       outputStructType: StructType,
       stateStructType: StructType,
       outputModeStr: String,
@@ -715,13 +458,49 @@ class RelationalGroupedDataset protected[sql](
     val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
     val outputAttrs = toAttributes(outputStructType)
     val plan = FlatMapGroupsInPandasWithState(
-      func,
+      func.expr,
       groupingAttrs,
       outputAttrs,
       stateStructType,
       outputMode,
       timeoutConf,
       child = df.logicalPlan)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
+   * Applies a grouped vectorized python user-defined function to each group of data.
+   * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
+   * iterator of `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as an iterator of `pandas.DataFrame`
+   * along with corresponding state, and the results for all groups are combined into a new
+   * [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def transformWithStateInPandas(
+      func: Column,
+      outputStructType: StructType,
+      outputModeStr: String,
+      timeModeStr: String): DataFrame = {
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = toAttributes(outputStructType)
+    val outputMode = InternalOutputModes(outputModeStr)
+    val timeMode = TimeModes(timeModeStr)
+
+    val plan = TransformWithStateInPandas(
+      func.expr,
+      groupingAttrs,
+      outputAttrs,
+      outputMode,
+      timeMode,
+      child = df.logicalPlan
+    )
     Dataset.ofRows(df.sparkSession, plan)
   }
 
@@ -772,7 +551,7 @@ private[sql] object RelationalGroupedDataset {
 
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
-    case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
+    case a: AggregateExpression => UnresolvedAlias(a, Some(generateAlias))
     case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }

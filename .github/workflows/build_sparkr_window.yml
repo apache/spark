@@ -85,6 +85,7 @@ jobs:
       shell: cmd
       env:
         NOT_CRAN: true
+        SPARK_TESTING: 1
         # See SPARK-27848. Currently installing some dependent packages causes
         # "(converted from warning) unable to identify current timezone 'C':" for an unknown reason.
         # This environment variable works around to test SparkR against a higher version.

@@ -27,11 +27,12 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
@@ -218,7 +219,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   test("SPARK-25403 refresh the table after inserting data") {
     withTable("t") {
       val catalog = spark.sessionState.catalog
-      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+      val table = FullQualifiedTableName(
+        CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
       sql("CREATE TABLE t (a INT) USING parquet")
       sql("INSERT INTO TABLE t VALUES (1)")
       assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
@@ -231,7 +233,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTable("t") {
       withTempDir { dir =>
         val catalog = spark.sessionState.catalog
-        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+        val table = FullQualifiedTableName(
+          CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
         val p1 = s"${dir.getCanonicalPath}/p1"
         val p2 = s"${dir.getCanonicalPath}/p2"
         sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
@@ -1369,39 +1372,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       checkAnswer(
         sql("select a, b, c from partitionedTable"),
         Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
-      )
-    }
-  }
-
-  test("show columns - negative test") {
-    // When case sensitivity is true, the user supplied database name in table identifier
-    // should match the supplied database name in case sensitive way.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      withTempDatabase { db =>
-        val tabName = s"$db.showcolumn"
-        withTable(tabName) {
-          sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
-            },
-            errorClass = "_LEGACY_ERROR_TEMP_1057",
-            parameters = Map("dbA" -> db.toUpperCase(Locale.ROOT), "dbB" -> db)
-          )
-        }
-      }
-    }
-  }
-
-  test("show columns - invalid db name") {
-    withTable("tbl") {
-      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SHOW COLUMNS IN tbl FROM a.b.c")
-        },
-        errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
-        parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> "`a`.`b`.`c`")
       )
     }
   }

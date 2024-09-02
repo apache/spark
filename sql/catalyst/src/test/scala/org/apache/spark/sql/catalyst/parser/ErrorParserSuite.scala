@@ -142,10 +142,6 @@ class ErrorParserSuite extends AnalysisTest {
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-db"))
     checkError(
-      exception = parseException("SHOW COLUMNS IN t FROM test-db"),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-db"))
-    checkError(
       exception = parseException("DESC SCHEMA EXTENDED test-db"),
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-db"))

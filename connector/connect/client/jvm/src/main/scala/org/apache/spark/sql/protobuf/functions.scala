@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.errors.CompilationErrors
-import org.apache.spark.sql.functions.{fnWithOptions, lit}
+import org.apache.spark.sql.functions.lit
 
 // scalastyle:off: object.name
 object functions {
@@ -76,7 +76,7 @@ object functions {
       messageName: String,
       binaryFileDescriptorSet: Array[Byte],
       options: java.util.Map[String, String]): Column = {
-    fnWithOptions(
+    Column.fnWithOptions(
       "from_protobuf",
       options.asScala.iterator,
       data,
@@ -164,7 +164,7 @@ object functions {
       data: Column,
       messageClassName: String,
       options: java.util.Map[String, String]): Column = {
-    fnWithOptions("from_protobuf", options.asScala.iterator, data, lit(messageClassName))
+    Column.fnWithOptions("from_protobuf", options.asScala.iterator, data, lit(messageClassName))
   }
 
   /**
@@ -251,7 +251,7 @@ object functions {
       messageName: String,
       binaryFileDescriptorSet: Array[Byte],
       options: java.util.Map[String, String]): Column = {
-    fnWithOptions(
+    Column.fnWithOptions(
       "to_protobuf",
       options.asScala.iterator,
       data,
@@ -298,7 +298,7 @@ object functions {
       data: Column,
       messageClassName: String,
       options: java.util.Map[String, String]): Column = {
-    fnWithOptions("to_protobuf", options.asScala.iterator, data, lit(messageClassName))
+    Column.fnWithOptions("to_protobuf", options.asScala.iterator, data, lit(messageClassName))
   }
 
   private def emptyOptions: java.util.Map[String, String] = Collections.emptyMap[String, String]()
