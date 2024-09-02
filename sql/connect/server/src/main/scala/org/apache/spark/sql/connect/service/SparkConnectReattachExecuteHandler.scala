@@ -54,7 +54,7 @@ class SparkConnectReattachExecuteHandler(
           messageParameters = Map("handle" -> v.getOperationId))
       }
     }
-    if (!executeHolder.reattachable) {
+    if (!executeHolder.reattachable || !executeHolder.started()) {
       logWarning(s"Reattach to not reattachable operation.")
       throw new SparkSQLException(
         errorClass = "INVALID_CURSOR.NOT_REATTACHABLE",

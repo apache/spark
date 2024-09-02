@@ -429,4 +429,22 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     val abandonedExecutions = manager.listAbandonedExecutions
     assert(abandonedExecutions.forall(_.operationId != dummyOpId))
   }
+
+  test("SPARK-49492: reattach succeeds on an inactive execution holder") {
+    val dummyOpId = UUID.randomUUID().toString
+    val dummyRequest =
+      buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
+    val manager = SparkConnectService.executionManager
+    val holder = manager.createExecuteHolder(dummyRequest)
+    assert(!holder.started())
+    withRawBlockingStub { stub =>
+      val reattach = stub.reattachExecute(buildReattachExecuteRequest(dummyOpId, None))
+      val e = intercept[StatusRuntimeException] {
+        reattach.hasNext()
+      }
+      assert(e.getMessage.contains("INVALID_CURSOR.NOT_REATTACHABLE"))
+    }
+    holder.start()
+    assert(holder.started())
+  }
 }

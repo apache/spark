@@ -47,7 +47,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // forwarding of thread locals needs to be taken into account.
   private val executionThread: ExecutionThread = new ExecutionThread(promise)
 
-  private var started: Boolean = false
+  // Indicates whether the execution thread has started running.
+  @volatile private[connect] var started: Boolean = false
 
   private var interrupted: Boolean = false
 

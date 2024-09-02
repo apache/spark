@@ -131,6 +131,11 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
+  /** Returns true if execution has started in a background thread. */
+  def started(): Boolean = {
+    runner.started
+  }
+
   def addObservation(name: String, observation: Observation): Unit = synchronized {
     observations += (name -> observation)
   }
