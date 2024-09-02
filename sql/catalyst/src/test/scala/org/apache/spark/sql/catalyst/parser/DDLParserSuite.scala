@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after,
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -2863,17 +2863,19 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-48824: implement parser support for " +
-    "GENERATED ALWAYS/BY DEFAULT AS IDENTITY columns in tables") {
+    "GENERATED ALWAYS/BY DEFAULT AS IDENTITY columns in tables ") {
     def parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr: String,
         identityColumnDefStr: String,
         identityColumnSpecStr: String,
+        expectedDataType: DataType,
         expectedStart: Long,
         expectedStep: Long,
         expectedAllowExplicitInsert: Boolean): Unit = {
       val columnsWithIdentitySpec = Seq(
         ColumnDefinition(
-          "id",
-          LongType,
+          name = "id",
+          dataType = expectedDataType,
           nullable = true,
           identityColumnSpec = Some(
             IdentityColumnSpec(
@@ -2887,7 +2889,7 @@ class DDLParserSuite extends AnalysisTest {
       )
       comparePlans(
         parsePlan(
-          s"CREATE TABLE my_tab(id BIGINT GENERATED $identityColumnDefStr" +
+          s"CREATE TABLE my_tab(id $identityColumnDataTypeStr GENERATED $identityColumnDefStr" +
             s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
         ),
         CreateTable(
@@ -2909,7 +2911,7 @@ class DDLParserSuite extends AnalysisTest {
 
       comparePlans(
         parsePlan(
-          s"REPLACE TABLE my_tab(id BIGINT GENERATED $identityColumnDefStr" +
+          s"REPLACE TABLE my_tab(id $identityColumnDataTypeStr GENERATED $identityColumnDefStr" +
             s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
         ),
         ReplaceTable(
@@ -2931,64 +2933,77 @@ class DDLParserSuite extends AnalysisTest {
     }
     for {
       identityColumnDefStr <- Seq("BY DEFAULT", "ALWAYS")
+      identityColumnDataTypeStr <- Seq("BIGINT", "INT")
     } {
       val expectedAllowExplicitInsert = identityColumnDefStr == "BY DEFAULT"
+      val expectedDataType = identityColumnDataTypeStr match {
+        case "BIGINT" => LongType
+        case "INT" => IntegerType
+      }
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "(START WITH 2 INCREMENT BY 2)",
+        expectedDataType,
         expectedStart = 2,
         expectedStep = 2,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "(START WITH -2 INCREMENT BY -2)",
+        expectedDataType,
         expectedStart = -2,
         expectedStep = -2,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "(START WITH 2)",
+        expectedDataType,
         expectedStart = 2,
         expectedStep = 1,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "(START WITH -2)",
+        expectedDataType,
         expectedStart = -2,
         expectedStep = 1,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "(INCREMENT BY 2)",
+        expectedDataType,
         expectedStart = 1,
         expectedStep = 2,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "(INCREMENT BY -2)",
+        expectedDataType,
         expectedStart = 1,
         expectedStep = -2,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "()",
+        expectedDataType,
         expectedStart = 1,
         expectedStep = 1,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
       parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
         identityColumnDefStr,
         "",
+        expectedDataType,
         expectedStart = 1,
         expectedStep = 1,
-        expectedAllowExplicitInsert = expectedAllowExplicitInsert
-      )
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
     }
   }
 
@@ -3020,17 +3035,17 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
-  test("SPARK-48824: Identity column datatype must be long") {
+  test("SPARK-48824: Identity column datatype must be long or integer") {
     checkError(
       exception = intercept[ParseException] {
         parsePlan(
-          s"CREATE TABLE testcat.my_tab(id INT GENERATED ALWAYS AS IDENTITY(), val INT) USING foo"
+          s"CREATE TABLE testcat.my_tab(id FLOAT GENERATED ALWAYS AS IDENTITY(), val INT) USING foo"
         )
       },
       condition = "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE",
-      parameters = Map("dataType" -> "IntegerType"),
+      parameters = Map("dataType" -> "FloatType"),
       context =
-        ExpectedContext(fragment = "id INT GENERATED ALWAYS AS IDENTITY()", start = 28, stop = 64)
+        ExpectedContext(fragment = "id FLOAT GENERATED ALWAYS AS IDENTITY()", start = 28, stop = 66)
     )
   }
 

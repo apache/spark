@@ -3638,7 +3638,7 @@ class AstBuilder extends DataTypeAstBuilder
   protected def visitIdentityColumn(
       ctx: IdentityColumnContext,
       dataType: DataType): IdentityColumnSpec = {
-    if (dataType != LongType) {
+    if (dataType != LongType && dataType != IntegerType) {
       throw QueryParsingErrors.identityColumnUnsupportedDataType(ctx, dataType.toString)
     }
     // We support two flavors of syntax:
