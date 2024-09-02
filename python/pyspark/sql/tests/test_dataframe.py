@@ -1009,7 +1009,8 @@ class DataFrameTestsMixin:
             exception=pe.exception,
             errorClass="INVALID_INDEX_COLUMN",
             messageParameters={
-                "reason": "Index column must be of atomic type, but found: ArrayType(StringType,true)"
+                "reason": "Index column must be of atomic type, "
+                          "but found: ArrayType(StringType,true)"
             },
         )
 
