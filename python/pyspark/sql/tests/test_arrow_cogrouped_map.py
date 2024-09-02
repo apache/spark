@@ -33,6 +33,22 @@ if have_pyarrow:
     import pyarrow.compute as pc
 
 
+def function_variations(func):
+    """Wraps a applyInArrow function returning a Table to return an iter of batches"""
+    yield func
+    num_args = len(inspect.getfullargspec(func).args)
+    if num_args == 2:
+        def iter_func(left, right):
+            yield from func(left, right).to_batches()
+
+        yield iter_func
+    else:
+        def iter_keys_func(keys, left, right):
+            yield from func(keys, left, right).to_batches()
+
+        yield iter_keys_func
+
+
 @unittest.skipIf(
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
@@ -138,6 +154,9 @@ class CogroupedMapInArrowTestsMixin:
     def test_apply_in_arrow_not_returning_arrow_table(self):
         def func(key, left, right):
             return key
+        
+        def iter_func(key, left, right):
+            yield key
 
         with self.quiet():
             with self.assertRaisesRegex(
@@ -145,6 +164,12 @@ class CogroupedMapInArrowTestsMixin:
                 "Return type of the user-defined function should be pyarrow.Table, but is tuple",
             ):
                 self.cogrouped.applyInArrow(func, schema="id long").collect()
+
+            with self.assertRaisesRegex(
+                PythonException,
+                "Return type of the user-defined function should be pyarrow.RecordBatch, but is tuple",
+            ):
+                self.cogrouped.applyInArrow(iter_func, schema="id long").collect()
 
     def test_apply_in_arrow_returning_wrong_types(self):
         for schema, expected in [
@@ -159,13 +184,14 @@ class CogroupedMapInArrowTestsMixin:
         ]:
             with self.subTest(schema=schema):
                 with self.quiet():
-                    with self.assertRaisesRegex(
-                        PythonException,
-                        f"Columns do not match in their data type: {expected}",
-                    ):
-                        self.cogrouped.applyInArrow(
-                            lambda left, right: left, schema=schema
-                        ).collect()
+                    for func_variation in function_variations(lambda left, right: left):
+                        with self.assertRaisesRegex(
+                            PythonException,
+                            f"Columns do not match in their data type: {expected}",
+                        ):
+                            self.cogrouped.applyInArrow(
+                                func_variation, schema=schema
+                            ).collect()
 
     def test_apply_in_arrow_returning_wrong_types_positional_assignment(self):
         for schema, expected in [
@@ -311,21 +337,6 @@ class CogroupedMapInArrowTestsMixin:
             "|        2|           3|         1|            2|\n"
             "+---------+------------+----------+-------------+\n",
         )
-
-    def test_apply_in_arrow_iterator(self):
-        schema = "metric string, left long, right long"
-
-        # compare with result of applyInPandas
-        expected = self.cogrouped.applyInPandas(
-            CogroupedMapInArrowTestsMixin.apply_in_pandas_with_key_func("id"), schema
-        )
-
-        # apply in arrow without key
-        actual = self.cogrouped.applyInArrow(
-            CogroupedMapInArrowTestsMixin.apply_in_arrow_iterator_func, schema
-        ).collect()
-        self.assertEqual(actual, expected.collect())
-
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
