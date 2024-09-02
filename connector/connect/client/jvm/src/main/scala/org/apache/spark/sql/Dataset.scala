@@ -1497,7 +1497,8 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   override def distinct(): Dataset[T] = super.distinct()
 
-  /** @inheritdoc */  @scala.annotation.varargs
+  /** @inheritdoc */
+  @scala.annotation.varargs
   override def groupBy(col1: String, cols: String*): RelationalGroupedDataset =
     super.groupBy(col1, cols: _*)
 

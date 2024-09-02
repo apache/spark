@@ -80,12 +80,7 @@ class RelationalGroupedDataset private[sql] (
     colNames.map(df.col)
   }
 
-  /**
-   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions of
-   * current `RelationalGroupedDataset`.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
     KeyValueGroupedDatasetImpl[K, T](df, encoderFor[K], encoderFor[T], groupingExprs)
   }
