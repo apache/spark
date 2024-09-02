@@ -214,10 +214,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     schemaBuilder.result()
   }
 
-  override def getTableExistsQuery(table: String): String = {
-    s"SELECT 1 FROM $table LIMIT 1"
-  }
-
   override def supportsUpsert(): Boolean = true
 
   override def getUpsertStatement(

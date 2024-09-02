@@ -24,7 +24,7 @@ import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -326,6 +326,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTes
         DateTimeUtils.toJavaTimestamp(1471022551949271L),
         DateTimeUtils.toJavaTimestamp(62551949000L)))
     }
+  }
 
   test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
     "should be recognized") {
