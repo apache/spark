@@ -918,6 +918,18 @@ package object config {
       .booleanConf
       .createOptional
 
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_APPLICATION =
+    ConfigBuilder("spark.excludeOnFailure.application.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE =
+    ConfigBuilder("spark.excludeOnFailure.taskAndStage.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
@@ -1618,8 +1630,7 @@ package object config {
       .version("3.2.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
-      .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
-        "should be either ADLER32 or CRC32.")
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
       .createWithDefault("ADLER32")
 
   private[spark] val SHUFFLE_COMPRESS =

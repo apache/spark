@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.net.URI
+import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -55,7 +57,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -608,6 +610,45 @@ class SparkSession private(
     }
   }
 
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(path: String): Unit = addArtifact(SparkFileUtils.resolveURI(path))
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(uri: URI): Unit = {
+    artifactManager.addLocalArtifacts(Artifact.parseArtifacts(uri))
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.InMemory(bytes))
+    artifactManager.addLocalArtifacts(artifact :: Nil)
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(source: String, target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(source)))
+    artifactManager.addLocalArtifacts(artifact :: Nil)
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  @scala.annotation.varargs
+  override def addArtifacts(uri: URI*): Unit = {
+    artifactManager.addLocalArtifacts(uri.flatMap(Artifact.parseArtifacts))
+  }
+
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
    * `DataFrame`.
@@ -738,6 +779,8 @@ class SparkSession private(
      */
     def named: NamedExpression = ExpressionUtils.toNamed(expr)
   }
+
+  private[sql] lazy val observationManager = new ObservationManager(this)
 }
 
 
