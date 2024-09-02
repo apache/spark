@@ -169,7 +169,8 @@ class CogroupedMapInArrowTestsMixin:
 
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.RecordBatch, but is tuple",
+                "Return type of the user-defined function should be pyarrow.RecordBatch, but is "
+                + "tuple",
             ):
                 self.cogrouped.applyInArrow(iter_func, schema="id long").collect()
 
@@ -209,13 +210,12 @@ class CogroupedMapInArrowTestsMixin:
                     {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
                 ):
                     with self.quiet():
-                        with self.assertRaisesRegex(
-                            PythonException,
-                            f"Columns do not match in their data type: {expected}",
-                        ):
-                            self.cogrouped.applyInArrow(
-                                lambda left, right: left, schema=schema
-                            ).collect()
+                        for func_variation in function_variations(lambda left, right: left):
+                            with self.assertRaisesRegex(
+                                PythonException,
+                                f"Columns do not match in their data type: {expected}",
+                            ):
+                                self.cogrouped.applyInArrow(func_variation, schema=schema).collect()
 
     def test_apply_in_arrow_returning_wrong_column_names(self):
         def stats(key, left, right):
@@ -229,13 +229,16 @@ class CogroupedMapInArrowTestsMixin:
             )
 
         with self.quiet():
-            with self.assertRaisesRegex(
-                PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m. Unexpected: v, v2.\n",
-            ):
-                # stats returns three columns while here we set schema with two columns
-                self.cogrouped.applyInArrow(stats, schema="id long, m double").collect()
+            for func_variation in function_variations(stats):
+                with self.assertRaisesRegex(
+                    PythonException,
+                    "Column names of the returned pyarrow.Table do not match specified schema. "
+                    "Missing: m. Unexpected: v, v2.\n",
+                ):
+                    # stats returns three columns while here we set schema with two columns
+                    self.cogrouped.applyInArrow(
+                        func_variation, schema="id long, m double"
+                    ).collect()
 
     def test_apply_in_arrow_returning_empty_dataframe(self):
         def odd_means(key, left, right):
@@ -251,9 +254,10 @@ class CogroupedMapInArrowTestsMixin:
                 )
 
         schema = "id long, m double, n double"
-        actual = self.cogrouped.applyInArrow(odd_means, schema=schema).sort("id").collect()
-        expected = [Row(id=1, m=50.0, n=60.0), Row(id=2, m=80.0, n=90.0)]
-        self.assertEqual(expected, actual)
+        for func_variation in function_variations(odd_means):
+            actual = self.cogrouped.applyInArrow(func_variation, schema=schema).sort("id").collect()
+            expected = [Row(id=1, m=50.0, n=60.0), Row(id=2, m=80.0, n=90.0)]
+            self.assertEqual(expected, actual)
 
     def test_apply_in_arrow_returning_empty_dataframe_and_wrong_column_names(self):
         def odd_means(key, left, _):
@@ -281,14 +285,15 @@ class CogroupedMapInArrowTestsMixin:
         def change_col_order(left, _):
             return left.append_column("u", pc.multiply(left.column("v"), 3))
 
-        # The result should assign columns by name from the table
-        result = (
-            self.cogrouped.applyInArrow(change_col_order, "id long, u long, v long")
-            .sort("id", "v")
-            .select("id", "u", "v")
-            .collect()
-        )
-        self.assertEqual(expected, result)
+        for func_variation in function_variations(change_col_order):
+            # The result should assign columns by name from the table
+            result = (
+                self.cogrouped.applyInArrow(func_variation, "id long, u long, v long")
+                .sort("id", "v")
+                .select("id", "u", "v")
+                .collect()
+            )
+            self.assertEqual(expected, result)
 
     def test_positional_assignment_conf(self):
         with self.sql_conf(
@@ -298,10 +303,15 @@ class CogroupedMapInArrowTestsMixin:
             def foo(left, right):
                 return pa.Table.from_pydict({"x": ["hi"], "y": [1]})
 
-            result = self.cogrouped.applyInArrow(foo, "a string, b long").select("a", "b").collect()
-            for r in result:
-                self.assertEqual(r.a, "hi")
-                self.assertEqual(r.b, 1)
+            for func_variation in function_variations(foo):
+                result = (
+                    self.cogrouped.applyInArrow(func_variation, "a string, b long")
+                    .select("a", "b")
+                    .collect()
+                )
+                for r in result:
+                    self.assertEqual(r.a, "hi")
+                    self.assertEqual(r.b, 1)
 
     def test_with_local_data(self):
         df1 = self.spark.createDataFrame(
@@ -319,24 +329,25 @@ class CogroupedMapInArrowTestsMixin:
                 }
             )
 
-        df = (
-            df1.groupby("id")
-            .cogroup(df2.groupby("id"))
-            .applyInArrow(
-                summarize,
-                schema="left_rows long, left_columns long, right_rows long, right_columns long",
+        for func_variation in function_variations(summarize):
+            df = (
+                df1.groupby("id")
+                .cogroup(df2.groupby("id"))
+                .applyInArrow(
+                    func_variation,
+                    schema="left_rows long, left_columns long, right_rows long, right_columns long",
+                )
             )
-        )
 
-        self.assertEqual(
-            df._show_string(),
-            "+---------+------------+----------+-------------+\n"
-            "|left_rows|left_columns|right_rows|right_columns|\n"
-            "+---------+------------+----------+-------------+\n"
-            "|        2|           3|         2|            2|\n"
-            "|        2|           3|         1|            2|\n"
-            "+---------+------------+----------+-------------+\n",
-        )
+            self.assertEqual(
+                df._show_string(),
+                "+---------+------------+----------+-------------+\n"
+                "|left_rows|left_columns|right_rows|right_columns|\n"
+                "+---------+------------+----------+-------------+\n"
+                "|        2|           3|         2|            2|\n"
+                "|        2|           3|         1|            2|\n"
+                "+---------+------------+----------+-------------+\n",
+            )
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
