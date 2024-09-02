@@ -3970,7 +3970,7 @@ abstract class JsonSuite
     }
   }
 
-  test("Dataset#toJSON should use correct schema #1: decimals") {
+  test("SPARK-48965: Dataset#toJSON should use correct schema #1: decimals") {
     val numString = "123.456"
     val bd = BigDecimal(numString)
     val ds1 = sql(s"select ${numString}bd as a, ${numString}bd as b").as[DecimalData]
@@ -3985,7 +3985,7 @@ abstract class JsonSuite
     )
   }
 
-  test("Dataset#toJSON should use correct schema #2: misaligned columns") {
+  test("SPARK-48965: Dataset#toJSON should use correct schema #2: misaligned columns") {
     val ds1 = sql("select 'Hey there' as value, 90000001 as key").as[TestData]
     checkDataset(
       ds1,
