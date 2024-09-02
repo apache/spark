@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.util.TimerTask
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, TimeUnit}
 import java.util.function.Consumer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -53,7 +53,7 @@ private[spark] class BarrierCoordinator(
 
   // TODO SPARK-25030 Create a Timer() in the mainClass submitted to SparkSubmit makes it unable to
   // fetch result, we shall fix the issue.
-  private lazy val timer = ThreadUtils.newSingleThreadScheduledExecutor(
+  private lazy val timer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     "BarrierCoordinator barrier epoch increment timer")
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
@@ -136,7 +136,11 @@ private[spark] class BarrierCoordinator(
     private def cancelTimerTask(): Unit = {
       if (timerTask != null) {
         timerTask.cancel()
-        timer.purge()
+        timer match {
+          case scheduledThreadPoolExecutor: ScheduledThreadPoolExecutor =>
+            scheduledThreadPoolExecutor.purge()
+          case _ =>
+        }
         timerTask = null
       }
     }
