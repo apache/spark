@@ -101,9 +101,9 @@ iterateStatement
 
 caseStatement
     : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
-        (ELSE elseBody=compoundBody)? END CASE                     #searchedCaseStatement
+        (ELSE elseBody=compoundBody)? END CASE                #searchedCaseStatement
     | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
-        (ELSE elseBody=compoundBody)? END CASE                 #simpleCaseStatement
+        (ELSE elseBody=compoundBody)? END CASE                #simpleCaseStatement
     ;
 
 singleStatement

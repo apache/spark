@@ -1403,9 +1403,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   private def checkSimpleCaseStatementCondition(
-    conditionStatement: SingleStatement,
-    predicateLeft: Expression => Boolean,
-    predicateRight: Expression => Boolean): Unit = {
+      conditionStatement: SingleStatement,
+      predicateLeft: Expression => Boolean,
+      predicateRight: Expression => Boolean): Unit = {
     assert(conditionStatement.parsedPlan.isInstanceOf[Project])
     val project = conditionStatement.parsedPlan.asInstanceOf[Project]
     assert(project.projectList.head.isInstanceOf[Alias])
