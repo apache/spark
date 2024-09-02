@@ -209,7 +209,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("Upsert") {
-    JdbcDialects.registerDialect(H2Dialect)
+    JdbcDialects.registerDialect(H2Dialect())
     val table = "upsert"
     spark
       .range(10)
