@@ -66,7 +66,7 @@ jobs:
       - name: Install Pandoc
         uses: pandoc/actions/setup@d6abb76f6c8a1a9a5e15a5190c96a02aabffd1ee
         with:
-          version: 3.0
+          version: 3.3
       - name: Install dependencies for documentation generation
         run: |
           cd docs
