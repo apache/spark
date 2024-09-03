@@ -34,7 +34,8 @@ final class DataFrameWriterV2Impl[T] private[sql] (table: String, ds: Dataset[T]
     extends DataFrameWriterV2[T] {
   import ds.sparkSession.RichColumn
 
-  private val builder = proto.WriteOperationV2.newBuilder()
+  private val builder = proto.WriteOperationV2
+    .newBuilder()
     .setInput(ds.plan.getRoot)
     .setTableName(table)
 
@@ -114,7 +115,8 @@ final class DataFrameWriterV2Impl[T] private[sql] (table: String, ds: Dataset[T]
   }
 
   private def executeWriteOperation(mode: proto.WriteOperationV2.Mode): Unit = {
-    val command = proto.Command.newBuilder()
+    val command = proto.Command
+      .newBuilder()
       .setWriteOperationV2(builder.setMode(mode))
       .build()
     ds.sparkSession.execute(command)
