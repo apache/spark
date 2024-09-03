@@ -23,7 +23,7 @@ import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
-import org.apache.spark.sql.{functions, AnalysisException, Column, Encoder, Observation, Row, TypedColumn}
+import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, Encoder, Observation, Row, TypedColumn}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -538,6 +538,18 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    */
   // scalastyle:off println
   def show(numRows: Int, truncate: Int, vertical: Boolean): Unit
+
+  /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 1.6.0
+   */
+  def na: DataFrameNaFunctions[DS]
 
   /**
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
@@ -2861,4 +2873,12 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    */
   @DeveloperApi
   def semanticHash(): Int
+
+  /**
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  def write: DataFrameWriter[T]
 }
