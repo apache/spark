@@ -24,6 +24,7 @@ import _root_.java.util
 import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
 import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, Encoder, Observation, Row, TypedColumn}
+import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -251,7 +252,6 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = if (extended) {
-    // TODO move ExplainMode?
     explain("extended")
   } else {
     explain("simple")
@@ -1384,7 +1384,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group action
    * @since 1.6.0
    */
-  def reduce(func: ReduceFunction[T]): T = reduce(func.call)
+  def reduce(func: ReduceFunction[T]): T = reduce(ToScalaUDF(func))
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -2437,7 +2437,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): DS[U]
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): DS[U] =
+    mapPartitions(ToScalaUDF(f))(encoder)
 
   /**
    * (Scala-specific)
@@ -2448,7 +2449,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def flatMap[U: Encoder](func: T => IterableOnce[U]): DS[U] =
-    mapPartitions(_.flatMap(func))
+    mapPartitions(UDFAdaptors.flatMapToMapPartitions[T, U](func))
 
   /**
    * (Java-specific)
@@ -2459,8 +2460,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): DS[U] = {
-    val func: T => Iterator[U] = x => f.call(x).asScala
-    flatMap(func)(encoder)
+    mapPartitions(UDFAdaptors.flatMapToMapPartitions(f))(encoder)
   }
 
   /**
@@ -2469,7 +2469,9 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit
+  def foreach(f: T => Unit): Unit = {
+    foreachPartition(UDFAdaptors.foreachToForeachPartition(f))
+  }
 
   /**
    * (Java-specific)
@@ -2478,7 +2480,9 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group action
    * @since 1.6.0
    */
-  def foreach(func: ForeachFunction[T]): Unit = foreach(func.call)
+  def foreach(func: ForeachFunction[T]): Unit = {
+    foreachPartition(UDFAdaptors.foreachToForeachPartition(func))
+  }
 
   /**
    * Applies a function `f` to each partition of this Dataset.
@@ -2496,7 +2500,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
-    foreachPartition((it: Iterator[T]) => func.call(it.asJava))
+    foreachPartition(ToScalaUDF(func))
   }
 
   /**

@@ -344,6 +344,24 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   @Experimental
   def addArtifact(uri: URI): Unit
 
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
   @Experimental
   def addArtifact(bytes: Array[Byte], target: String): Unit
 
