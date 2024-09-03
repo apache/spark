@@ -666,7 +666,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
     assert(whileStmt.label.contains("lbl"))
-
   }
 
   // Helper methods

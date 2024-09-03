@@ -84,4 +84,17 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
+
+  def invalidLabelUsageInStatement(
+      origin: Origin,
+      labelName: String,
+      statementType: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE_IN_STATEMENT",
+      cause = null,
+      messageParameters = Map(
+        "labelName" -> toSQLStmt(labelName),
+        "statementType" -> statementType))
+  }
 }

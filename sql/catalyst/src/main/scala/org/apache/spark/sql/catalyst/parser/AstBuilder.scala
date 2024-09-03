@@ -277,33 +277,37 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
-  override def visitLeaveStatement(ctx: LeaveStatementContext): LeaveStatement = {
-    val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
-    var parentCtx = ctx.parent
+  override def visitLeaveStatement(ctx: LeaveStatementContext): LeaveStatement =
+    withOrigin(ctx) {
+      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      var parentCtx = ctx.parent
 
-    while (Option(parentCtx).isDefined) {
-      if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = true)) {
-        return LeaveStatement(labelText)
+      while (Option(parentCtx).isDefined) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = true)) {
+          return LeaveStatement(labelText)
+        }
+        parentCtx = parentCtx.parent
       }
-      parentCtx = parentCtx.parent
+
+      throw SqlScriptingErrors.invalidLabelUsageInStatement(
+        CurrentOrigin.get, labelText, "LEAVE")
     }
 
-    throw SparkException.internalError("No matching block (with same label) found!")
-  }
+  override def visitIterateStatement(ctx: IterateStatementContext): IterateStatement =
+    withOrigin(ctx) {
+      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      var parentCtx = ctx.parent
 
-  override def visitIterateStatement(ctx: IterateStatementContext): IterateStatement = {
-    val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
-    var parentCtx = ctx.parent
-
-    while (Option(parentCtx).isDefined) {
-      if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = false)) {
-        return IterateStatement(labelText)
+      while (Option(parentCtx).isDefined) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = false)) {
+          return IterateStatement(labelText)
+        }
+        parentCtx = parentCtx.parent
       }
-      parentCtx = parentCtx.parent
-    }
 
-    throw SparkException.internalError("No matching block (with same label) found!")
-  }
+      throw SqlScriptingErrors.invalidLabelUsageInStatement(
+        CurrentOrigin.get, labelText, "ITERATE")
+    }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])

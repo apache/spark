@@ -2489,6 +2489,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_LABEL_USAGE_IN_STATEMENT" : {
+    "message" : [
+      "The label <labelName> used in the <statementType> statement does not belong to any surrounding block."
+    ],
+    "sqlState" : "42K0L"
+  },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
       "Invalid lambda function call."
