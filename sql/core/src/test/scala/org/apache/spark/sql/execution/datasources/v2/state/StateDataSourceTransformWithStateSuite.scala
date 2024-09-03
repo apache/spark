@@ -50,7 +50,6 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
 class StatefulProcessorWithTTL
   extends StatefulProcessor[String, String, (String, String)] {
   @transient protected var _countState: ValueState[Long] = _
-  @transient protected var _listEntries: ListState[String] = _
 
   override def init(
       outputMode: OutputMode,
