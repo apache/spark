@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
+import java.sql.{Connection, Timestamp}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -69,8 +70,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement(
       s"CREATE TABLE datetime_table (id INTEGER, time TIMESTAMP)"
     ).executeUpdate()
-    Iterator.range(1, 4).foreach(h => {
-      connection.prepareStatement(s"INSERT INTO datetime_table VALUES ($h, '2024-01-02 $h:00:00')")
+    Iterator.range(1, 3).foreach(i => {
+      connection.prepareStatement(s"INSERT INTO datetime_table VALUES ($i, '2024-$i-$i $i:$i:$i')")
         .executeUpdate()
     })
   }
@@ -133,12 +134,47 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("SPARK-49162: Push down date_trunc function") {
-    val df = sql(s"SELECT * FROM $catalogName.datetime_table" +
-      " WHERE DATE_TRUNC('DAY', time) = '2024-01-02 00:00:00'")
-    val filter = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
+    def testDateTruncPushdown(format: String, expectedResult: Set[Row]): Unit = {
+      val df = sql(
+        s"""
+            SELECT DATE_TRUNC('$format', time), COUNT(*)
+            | FROM $catalogName.datetime_table
+            | GROUP BY 1
+         """.stripMargin
+      )
+      val aggregates = df.queryExecution.optimizedPlan.collect {
+        case agg: Aggregate => agg
+      }
+      assert(aggregates.isEmpty)
+      assert(df.collect().toSet === expectedResult)
     }
-    assert(filter.isEmpty)
-    assert(df.collect().length == 3)
+
+    testDateTruncPushdown("YEAR",
+      Set(Row(Timestamp.valueOf("2024-01-01 00:00:00.0"), 2)))
+    testDateTruncPushdown("MONTH",
+      Set(
+        Row(Timestamp.valueOf("2024-02-01 00:00:00.0"), 1),
+        Row(Timestamp.valueOf("2024-01-01 00:00:00.0"), 1)
+      ))
+    testDateTruncPushdown("DAY",
+      Set(
+        Row(Timestamp.valueOf("2024-02-02 00:00:00.0"), 1),
+        Row(Timestamp.valueOf("2024-01-01 00:00:00.0"), 1)
+      ))
+    testDateTruncPushdown("HOUR",
+      Set(
+        Row(Timestamp.valueOf("2024-02-02 02:00:00.0"), 1),
+        Row(Timestamp.valueOf("2024-01-01 01:00:00.0"), 1)
+      ))
+    testDateTruncPushdown("MINUTE",
+      Set(
+        Row(Timestamp.valueOf("2024-02-02 02:02:00.0"), 1),
+        Row(Timestamp.valueOf("2024-01-01 01:01:00.0"), 1)
+      ))
+    testDateTruncPushdown("SECOND",
+      Set(
+        Row(Timestamp.valueOf("2024-02-02 02:02:02.0"), 1),
+        Row(Timestamp.valueOf("2024-01-01 01:01:01.0"), 1)
+      ))
   }
 }
