@@ -16331,8 +16331,10 @@ def to_variant_object(
 
     Examples
     --------
+    Example 1: Converting an array containing a nested struct into a variant
+
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql.types import ArrayType, StructType, StructField, StringType, MapType
-    >>> from pyspark.sql.functions.builtin import to_variant_object
     >>> schema = StructType([
     ...     StructField("i", StringType(), True),
     ...     StructField("v", ArrayType(StructType([
@@ -16341,9 +16343,9 @@ def to_variant_object(
     ... ])
     >>> data = [("1", [{"a": {"b": 2}}])]
     >>> df = spark.createDataFrame(data, schema)
-    >>> df.select(to_variant_object(df.v))
+    >>> df.select(sf.to_variant_object(df.v))
     DataFrame[to_variant_object(v): variant]
-    >>> df.select(to_variant_object(df.v)).show(truncate=False)
+    >>> df.select(sf.to_variant_object(df.v)).show(truncate=False)
     +--------------------+
     |to_variant_object(v)|
     +--------------------+
