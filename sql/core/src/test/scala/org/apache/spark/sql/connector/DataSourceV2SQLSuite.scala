@@ -2415,7 +2415,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("global temp view should not be masked by v2 catalog") {
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
 
     try {
@@ -2429,7 +2429,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30104: global temp db is used as a table name under v2 catalog") {
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     val t = s"testcat.$globalTempDB"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
@@ -2440,7 +2440,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30104: v2 catalog named global_temp will be masked") {
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
     checkError(
       exception = intercept[AnalysisException] {
@@ -2646,7 +2646,7 @@ class DataSourceV2SQLSuiteV1Filter
       parameters = Map("relationName" -> "`testcat`.`abc`"),
       context = ExpectedContext(fragment = "testcat.abc", start = 17, stop = 27))
 
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
     withTempView("v") {
       sql("create global temp view v as select 1")

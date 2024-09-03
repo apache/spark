@@ -485,7 +485,7 @@ abstract class StreamExecution(
   @throws[TimeoutException]
   protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
     val timeout = math.max(
-      sparkSession.conf.get(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
     queryExecutionThread.interrupt()
     queryExecutionThread.join(timeout)
     if (queryExecutionThread.isAlive) {

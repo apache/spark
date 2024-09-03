@@ -14,16 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 
-import scala.jdk.CollectionConverters._
-
-import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -33,17 +26,13 @@ import org.apache.spark.sql.internal.SQLConf
  * @since 2.0.0
  */
 @Stable
-class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) {
-
+abstract class RuntimeConfig {
   /**
    * Sets the given Spark runtime configuration property.
    *
    * @since 2.0.0
    */
-  def set(key: String, value: String): Unit = {
-    requireNonStaticConf(key)
-    sqlConf.setConfString(key, value)
-  }
+  def set(key: String, value: String): Unit
 
   /**
    * Sets the given Spark runtime configuration property.
@@ -64,14 +53,6 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) {
   }
 
   /**
-   * Sets the given Spark runtime configuration property.
-   */
-  private[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
-    requireNonStaticConf(entry.key)
-    sqlConf.setConf(entry, value)
-  }
-
-  /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
    * @throws java.util.NoSuchElementException if the key is not set and does not have a default
@@ -79,71 +60,35 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   @throws[NoSuchElementException]("if the key is not set")
-  def get(key: String): String = {
-    sqlConf.getConfString(key)
-  }
+  def get(key: String): String
 
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
    * @since 2.0.0
    */
-  def get(key: String, default: String): String = {
-    sqlConf.getConfString(key, default)
-  }
-
-  /**
-   * Returns the value of Spark runtime configuration property for the given key.
-   */
-  @throws[NoSuchElementException]("if the key is not set")
-  private[sql] def get[T](entry: ConfigEntry[T]): T = {
-    sqlConf.getConf(entry)
-  }
-
-  private[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
-    sqlConf.getConf(entry)
-  }
-
-  /**
-   * Returns the value of Spark runtime configuration property for the given key.
-   */
-  private[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
-    sqlConf.getConf(entry, default)
-  }
+  def get(key: String, default: String): String
 
   /**
    * Returns all properties set in this conf.
    *
    * @since 2.0.0
    */
-  def getAll: Map[String, String] = {
-    sqlConf.getAllConfs
-  }
-
-  private[sql] def getAllAsJava: java.util.Map[String, String] = {
-    getAll.asJava
-  }
+  def getAll: Map[String, String]
 
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
    * @since 2.0.0
    */
-  def getOption(key: String): Option[String] = {
-    try Option(get(key)) catch {
-      case _: NoSuchElementException => None
-    }
-  }
+  def getOption(key: String): Option[String]
 
   /**
    * Resets the configuration property for the given key.
    *
    * @since 2.0.0
    */
-  def unset(key: String): Unit = {
-    requireNonStaticConf(key)
-    sqlConf.unsetConf(key)
-  }
+  def unset(key: String): Unit
 
   /**
    * Indicates whether the configuration property with the given key
@@ -154,22 +99,5 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) {
    *         the returned value is `false`.
    * @since 2.4.0
    */
-  def isModifiable(key: String): Boolean = sqlConf.isModifiable(key)
-
-  /**
-   * Returns whether a particular key is set.
-   */
-  private[sql] def contains(key: String): Boolean = {
-    sqlConf.contains(key)
-  }
-
-  private def requireNonStaticConf(key: String): Unit = {
-    if (SQLConf.isStaticConfigKey(key)) {
-      throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
-    }
-    if (sqlConf.setCommandRejectsSparkCoreConfs &&
-        ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
-      throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key, SPARK_DOC_ROOT)
-    }
-  }
+  def isModifiable(key: String): Boolean
 }

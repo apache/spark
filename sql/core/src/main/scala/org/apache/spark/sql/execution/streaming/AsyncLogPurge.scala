@@ -42,7 +42,8 @@ trait AsyncLogPurge extends Logging {
 
   protected def purge(threshold: Long): Unit
 
-  protected lazy val useAsyncPurge: Boolean = sparkSession.conf.get(SQLConf.ASYNC_LOG_PURGE)
+  protected lazy val useAsyncPurge: Boolean = sparkSession.sessionState.conf
+    .getConf(SQLConf.ASYNC_LOG_PURGE)
 
   protected def purgeAsync(batchId: Long): Unit = {
     if (purgeRunning.compareAndSet(false, true)) {

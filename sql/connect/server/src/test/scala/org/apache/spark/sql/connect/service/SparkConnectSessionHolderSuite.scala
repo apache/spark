@@ -399,7 +399,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("Test session plan cache - disabled") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     // Disable plan cache of the session
-    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, false)
+    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, false)
     val planner = new SparkConnectPlanner(sessionHolder)
 
     val query = buildRelation("select 1")

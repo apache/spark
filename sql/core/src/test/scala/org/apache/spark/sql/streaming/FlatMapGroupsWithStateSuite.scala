@@ -1097,7 +1097,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       func: (Int, Iterator[Int], GroupState[Int]) => Iterator[Int],
       timeoutType: GroupStateTimeout = GroupStateTimeout.NoTimeout,
       batchTimestampMs: Long = NO_TIMESTAMP): FlatMapGroupsWithStateExec = {
-    val stateFormatVersion = spark.conf.get(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+    val stateFormatVersion = sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
     val emptyRdd = spark.sparkContext.emptyRDD[InternalRow]
     MemoryStream[Int]
       .toDS()

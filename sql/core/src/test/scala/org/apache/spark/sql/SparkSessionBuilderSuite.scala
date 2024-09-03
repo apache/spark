@@ -201,10 +201,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .getOrCreate()
 
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE.key) === "globaltempdb-spark-31234")
     session.sql("RESET")
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE.key) === "globaltempdb-spark-31234")
   }
 
   test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
@@ -244,8 +244,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .builder()
       .config(GLOBAL_TEMP_DATABASE.key, "globalTempDB-SPARK-31532-1")
       .getOrCreate()
-    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
-    assert(session1.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE.key) === "globaltempdb-spark-31532")
+    assert(session1.conf.get(GLOBAL_TEMP_DATABASE.key) === "globaltempdb-spark-31532")
 
     // do not propagate static sql configs to the existing default session
     SparkSession.clearActiveSession()
@@ -255,9 +255,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532-2")
       .getOrCreate()
 
-    assert(!session.conf.get(WAREHOUSE_PATH).contains("SPARK-31532-db"))
-    assert(session.conf.get(WAREHOUSE_PATH) === session2.conf.get(WAREHOUSE_PATH))
-    assert(session2.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
+    assert(!session.conf.get(WAREHOUSE_PATH.key).contains("SPARK-31532-db"))
+    assert(session.conf.get(WAREHOUSE_PATH.key) === session2.conf.get(WAREHOUSE_PATH.key))
+    assert(session2.conf.get(GLOBAL_TEMP_DATABASE.key) === "globaltempdb-spark-31532")
   }
 
   test("SPARK-31532: propagate static sql configs if no existing SparkSession") {
@@ -275,8 +275,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .config(WAREHOUSE_PATH.key, "SPARK-31532-db-2")
       .getOrCreate()
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31532-2")
-    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
-    assert(session.conf.get(WAREHOUSE_PATH) contains "SPARK-31532-db-2")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE.key) === "globaltempdb-spark-31532-2")
+    assert(session.conf.get(WAREHOUSE_PATH.key) contains "SPARK-31532-db-2")
   }
 
   test("SPARK-32062: reset listenerRegistered in SparkSession") {
@@ -461,7 +461,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       val expected = path.getFileSystem(hadoopConf).makeQualified(path).toString
       // session related configs
       assert(hadoopConf.get("hive.metastore.warehouse.dir") === expected)
-      assert(session.conf.get(WAREHOUSE_PATH) === expected)
+      assert(session.conf.get(WAREHOUSE_PATH.key) === expected)
       assert(session.sessionState.conf.warehousePath === expected)
 
       // shared configs

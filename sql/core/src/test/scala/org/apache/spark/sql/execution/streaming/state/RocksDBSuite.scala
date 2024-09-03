@@ -2157,9 +2157,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  private def sqlConf = SQLConf.get.clone()
-
-  private def dbConf = RocksDBConf(StateStoreConf(sqlConf))
+  private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   def withDB[T](
       remoteDir: String,

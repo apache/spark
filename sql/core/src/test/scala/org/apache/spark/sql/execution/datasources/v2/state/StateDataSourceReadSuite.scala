@@ -942,7 +942,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         // skip version and operator ID to test out functionalities
         .load()
 
-      val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+      val numShufflePartitions = sqlConf.getConf(SQLConf.SHUFFLE_PARTITIONS)
 
       val resultDf = stateReadDf
         .selectExpr("key.value AS key_value", "value.count AS value_count", "partition_id")
@@ -966,7 +966,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
   }
 
   test("partition_id column with stream-stream join") {
-    val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+    val numShufflePartitions = sqlConf.getConf(SQLConf.SHUFFLE_PARTITIONS)
 
     withTempDir { tempDir =>
       runStreamStreamJoinQueryWithOneThousandInputs(tempDir.getAbsolutePath)

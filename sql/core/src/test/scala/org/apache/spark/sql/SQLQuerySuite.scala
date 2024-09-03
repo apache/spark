@@ -2568,20 +2568,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
 
       val newSession = spark.newSession()
+      val newSqlConf = newSession.sessionState.conf
       val originalValue = newSession.sessionState.conf.runSQLonFile
 
       try {
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, false)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
         intercept[AnalysisException] {
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
         }
 
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, true)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
         checkAnswer(
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
           Row(1, "a"))
       } finally {
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, originalValue)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
     }
   }

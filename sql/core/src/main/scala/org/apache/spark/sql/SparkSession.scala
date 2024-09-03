@@ -173,16 +173,8 @@ class SparkSession private(
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying `SparkContext`, if any.
-   *
-   * @since 2.0.0
-   */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  /** @inheritdoc */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfigImpl(sessionState.conf)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -759,7 +751,8 @@ class SparkSession private(
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {
-    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
+    sessionState.conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM)
+      .getOrElse(sparkContext.defaultParallelism)
   }
 
   private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
@@ -1124,13 +1117,13 @@ object SparkSession extends Logging {
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.conf.get[Boolean])
+    val configsEnabled = configurations.filter(session.sessionState.conf.getConf[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.conf.set(conf, false)
+        newSession.sessionState.conf.setConf(conf, false)
       })
       newSession
     }
