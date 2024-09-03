@@ -449,7 +449,7 @@ private[spark] object UIUtils extends Logging {
     val killTaskReasonText = reasonToNumKilled.toSeq.sortBy(-_._2).map {
         case (reason, count) => s" ($count killed: $reason)"
       }.mkString
-    val progressTitle = s"$completed / $total" + {
+    val progressTitle = s"$completed/$total" + {
       if (started > 0) s" ($started running)" else ""
     } + {
       if (failed > 0) s" ($failed failed)" else ""
