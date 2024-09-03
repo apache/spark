@@ -11242,8 +11242,8 @@ def sentences(
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
     The `language` and `country` arguments are optional,
-    if they are both omitted, the default locale (the language is 'en' and the country is 'US') is used.
-    if the `country` is omitted, the default `country` ('') is used.
+    if they are both omitted, the default locale (the language is 'en' and the country is 'US')
+    is used, if the `country` is omitted, the default `country` ('') is used.
 
     .. versionadded:: 3.2.0
 
