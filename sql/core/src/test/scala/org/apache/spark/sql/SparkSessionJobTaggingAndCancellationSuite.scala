@@ -107,7 +107,9 @@ class SparkSessionJobTaggingAndCancellationSuite
     assert(actualTags.toSet == Set(
       session.sessionJobTag,
       s"${session.sessionJobTag}-one",
-      SQLExecution.executionIdJobTag(session, 0L)))
+      SQLExecution.executionIdJobTag(
+        session,
+        activeJob.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)))
   }
 
   test("Cancellation APIs in SparkSession are isolated") {
