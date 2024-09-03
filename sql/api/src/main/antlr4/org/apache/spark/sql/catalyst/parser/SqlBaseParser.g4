@@ -1588,10 +1588,12 @@ ansiNonReserved
     | INTERVAL
     | INVOKER
     | ITEMS
+    | ITERATE
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
+    | LEAVE
     | LIKE
     | ILIKE
     | LIMIT
@@ -1937,11 +1939,13 @@ nonReserved
     | INVOKER
     | IS
     | ITEMS
+    | ITERATE
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
     | LEADING
+    | LEAVE
     | LIKE
     | LONG
     | ILIKE

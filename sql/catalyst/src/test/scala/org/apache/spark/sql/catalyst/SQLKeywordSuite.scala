@@ -200,7 +200,7 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     withTempDir { dir =>
       val tmpFile = new File(dir, "tmp")
       val is = Thread.currentThread().getContextClassLoader
-        .getResourceAsStream("ansi-sql-2016-reserved-keywords.txt")
+        .getResourceAsStream("ansi-sql-2016-reserved- ke.txt")
       Files.copy(is, tmpFile.toPath)
       val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
         .asScala.filterNot(_.startsWith("--")).map(_.trim).toSet

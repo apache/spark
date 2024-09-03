@@ -55,7 +55,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   case class TestWhile(
       condition: TestWhileCondition,
       body: CompoundBodyExec)
-    extends WhileStatementExec(condition, body, spark) {
+    extends WhileStatementExec(condition, body, None, spark) {
 
     private var callCount: Int = 0
 
