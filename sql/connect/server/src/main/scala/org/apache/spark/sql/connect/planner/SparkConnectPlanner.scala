@@ -43,7 +43,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -78,7 +78,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
@@ -3496,16 +3496,14 @@ class SparkConnectPlanner(
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
     val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
-    var mergeInto = sourceDs
+    val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, column(transformExpression(cmd.getMergeCondition)))
-      .withNewMatchedActions(matchedActions: _*)
-      .withNewNotMatchedActions(notMatchedActions: _*)
-      .withNewNotMatchedBySourceActions(notMatchedBySourceActions: _*)
-
-    mergeInto = if (cmd.getWithSchemaEvolution) {
+      .asInstanceOf[MergeIntoWriterImpl[Row]]
+    mergeInto.matchedActions ++= matchedActions
+    mergeInto.notMatchedActions ++= notMatchedActions
+    mergeInto.notMatchedBySourceActions ++= notMatchedBySourceActions
+    if (cmd.getWithSchemaEvolution) {
       mergeInto.withSchemaEvolution()
-    } else {
-      mergeInto
     }
     mergeInto.merge()
     executeHolder.eventsManager.postFinished()
