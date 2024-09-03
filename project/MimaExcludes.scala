@@ -124,6 +124,9 @@ object MimaExcludes {
     // SPARK-49423: Consolidate Observation in sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
+
+    // SPARK-49425: Create a shared DataFrameWriter interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter")
   )
 
   // Default exclude rules
