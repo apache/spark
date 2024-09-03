@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import _root_.java.util
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{functions, Column, Row}
+import org.apache.spark.sql.{functions, Column, Encoder, Row}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -64,6 +64,14 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
       function: Column => Column): DS[Row] = {
     toDF(selectNumericColumns(colNames).map(function))
   }
+
+  /**
+   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
+   * of current `RelationalGroupedDataset`.
+   *
+   * @since 3.0.0
+   */
+  def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T, DS]
 
   /**
    * (Scala-specific) Compute aggregates by specifying the column names and
