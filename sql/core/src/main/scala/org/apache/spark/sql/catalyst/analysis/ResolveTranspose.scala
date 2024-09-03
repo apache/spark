@@ -131,13 +131,13 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           Alias(Cast(attr, StringType), attr.name)()
         case attr: Attribute =>
           throw new AnalysisException(
-            errorClass = "INVALID_INDEX_COLUMN",
+            errorClass = "TRANSPOSE_INVALID_INDEX_COLUMN",
             messageParameters = Map(
               "reason" -> s"Index column must be of atomic type, but found: ${attr.dataType}")
           )
         case _ =>
           throw new AnalysisException(
-            errorClass = "INVALID_INDEX_COLUMN",
+            errorClass = "TRANSPOSE_INVALID_INDEX_COLUMN",
             messageParameters = Map(
               "reason" -> s"Index column must be an atomic attribute")
           )
@@ -180,7 +180,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         val rowCount = fullCollectedRows.length
         if (rowCount > maxValues) {
           throw new AnalysisException(
-            errorClass = "EXCEED_ROW_LIMIT",
+            errorClass = "TRANSPOSE_EXCEED_ROW_LIMIT",
             messageParameters = Map(
               "maxValues" -> maxValues.toString,
               "config" -> SQLConf.DATAFRAME_TRANSPOSE_MAX_VALUES.key))

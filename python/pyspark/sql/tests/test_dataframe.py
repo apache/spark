@@ -983,7 +983,7 @@ class DataFrameTestsMixin:
                 df.transpose().collect()
             self.check_error(
                 exception=pe.exception,
-                errorClass="EXCEED_ROW_LIMIT",
+                errorClass="TRANSPOSE_EXCEED_ROW_LIMIT",
                 messageParameters={"maxValues": "0", "config": "spark.sql.transposeMaxValues"},
             )
 
@@ -1007,7 +1007,7 @@ class DataFrameTestsMixin:
             df.transpose().collect()
         self.check_error(
             exception=pe.exception,
-            errorClass="INVALID_INDEX_COLUMN",
+            errorClass="TRANSPOSE_INVALID_INDEX_COLUMN",
             messageParameters={
                 "reason": "Index column must be of atomic type, "
                 "but found: ArrayType(StringType,true)"

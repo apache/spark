@@ -1475,8 +1475,8 @@ case class Pivot(
 }
 
 /**
- * A constructor for creating a transpose, which will later be converted
- * to a [[LocalRelation]] at ReplaceTranspose during the query optimization.
+ * A logical plan node for transpose, which will later be converted to a [[LocalRelation]]
+ * at ReplaceTranspose during the query optimization.
  *
  * The result of the transpose operation is held in the `data` field, and the corresponding
  * schema is stored in the `output` field. The `Transpose` node does not depend on any child
