@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevel
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
-import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, UnresolvedAttribute, UnresolvedRegex}
+import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -1060,14 +1060,9 @@ class Dataset[T] private[sql] (
       .asScala
       .toArray
 
-  /**
-   * Interface for saving the content of the non-streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def write: DataFrameWriter[T] = {
-    new DataFrameWriter[T](this)
+    new DataFrameWriterImpl[T](this)
   }
 
   /**

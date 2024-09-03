@@ -60,8 +60,8 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.internal.{DataFrameWriterImpl, SQLConf}
 import org.apache.spark.sql.internal.ExpressionUtils.column
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -1614,19 +1614,14 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Interface for saving the content of the non-streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def write: DataFrameWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("write")))
     }
-    new DataFrameWriter[T](this)
+    new DataFrameWriterImpl[T](this)
   }
 
   /**
