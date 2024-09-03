@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.{ByteBuffer, CharBuffer}
 import java.nio.charset.CharacterCodingException
-import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
+import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
@@ -3333,8 +3333,9 @@ case class FormatNumber(x: Expression, d: Expression)
 
 /**
  * Splits a string into arrays of sentences, where each sentence is an array of words.
- * The 'lang' and 'country' arguments are optional, and if they are both omitted,
- * the default locale (the lang is `en` and the country is `US`) is used.
+ * The `lang` and `country` arguments are optional,
+ * if they are both omitted, the default locale (the lang is 'en' and the country is 'US') is used.
+ * if the `country` is omitted, the default `country` ('') is used.
  */
 @ExpressionDescription(
   usage = "_FUNC_(str[, lang[, country]]) - Splits `str` into an array of array of words.",
@@ -3361,7 +3362,9 @@ case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression
+  with ImplicitCastInputTypes
+  with RuntimeReplaceable {
 
   def this(str: Expression) = this(str, Literal(""), Literal(""))
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
@@ -3375,72 +3378,14 @@ case class Sentences(
   override def second: Expression = language
   override def third: Expression = country
 
-  override def eval(input: InternalRow): Any = {
-    val s = str.eval(input).asInstanceOf[UTF8String]
-    val l = language.eval(input).asInstanceOf[UTF8String]
-    val c = country.eval(input).asInstanceOf[UTF8String]
-    getSentences(s, l, c)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val expr = ctx.addReferenceObj("this", this)
-    val strEval = str.genCode(ctx)
-    val languageEval = language.genCode(ctx)
-    val countryEval = country.genCode(ctx)
-    val resultType = CodeGenerator.boxedType(dataType)
-    val resultTerm = ctx.freshName("result")
-    val baseCode =
-      s"""
-        |${strEval.code}
-        |${languageEval.code}
-        |${countryEval.code}
-        |$resultType $resultTerm = ($resultType) $expr.getSentences(
-        |  ${strEval.value}, ${languageEval.value}, ${countryEval.value});
-        |""".stripMargin
-    ev.copy(code =
-      code"""
-        |$baseCode
-        |boolean ${ev.isNull} = $resultTerm == null;
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  ${ev.value} = $resultTerm;
-        |}
-        |""".stripMargin
-    )
-  }
-
-  def getSentences(
-      str: UTF8String,
-      language: UTF8String,
-      country: UTF8String): ArrayData = {
-    if (str == null) return null
-    val sentences = str.toString
-    val locale = (language, country) match {
-      case (null, null) | (null, _) => Locale.US
-      case (_, null) => new Locale(language.toString)
-      case _ => new Locale(language.toString, country.toString)
-    }
-    val bi = BreakIterator.getSentenceInstance(locale)
-    bi.setText(sentences)
-    var idx = 0
-    val result = new ArrayBuffer[GenericArrayData]
-    while (bi.next != BreakIterator.DONE) {
-      val sentence = sentences.substring(idx, bi.current)
-      idx = bi.current
-
-      val wi = BreakIterator.getWordInstance(locale)
-      var widx = 0
-      wi.setText(sentence)
-      val words = new ArrayBuffer[UTF8String]
-      while (wi.next != BreakIterator.DONE) {
-        val word = sentence.substring(widx, wi.current)
-        widx = wi.current
-        if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
-      }
-      result += new GenericArrayData(words)
-    }
-    new GenericArrayData(result)
-  }
+  override def replacement: Expression =
+    StaticInvoke(
+      classOf[ExpressionImplUtils],
+      dataType,
+      "getSentences",
+      Seq(str, language, country),
+      inputTypes,
+      propagateNull = false)
 
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.execution.{FormattedMode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -763,18 +763,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         start = 0,
         stop = 10)
     )
-  }
-
-  test("function sentences - Codegen Support") {
-    withTempView("SentencesTable") {
-      val data = Seq(("Hi there! The price was $1,234.56.... But, not now.", "en", "US"))
-        .toDF("str", "language", "country")
-      data.createOrReplaceTempView("SentencesTable")
-      val df = sql("SELECT sentences(str, language, country) FROM SentencesTable")
-      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      checkAnswer(df,
-        Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
-    }
   }
 
   test("str_to_map function") {

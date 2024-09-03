@@ -17,20 +17,25 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.SparkBuildInfo;
-import org.apache.spark.sql.errors.QueryExecutionErrors;
-import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.util.VersionUtils;
-
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
+import java.text.BreakIterator;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
+import org.apache.spark.SparkBuildInfo;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.util.VersionUtils;
 
 /**
  * A utility class for constructing expressions.
@@ -271,5 +276,45 @@ public class ExpressionImplUtils {
     } catch (GeneralSecurityException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
+  }
+
+  public static ArrayData getSentences(
+      UTF8String str,
+      UTF8String language,
+      UTF8String country) {
+    if (str == null) return null;
+    Locale locale;
+    if (language == null && country == null) {
+      locale = Locale.US;
+    } else if (language == null) {
+      locale = Locale.US;
+    } else if (country == null) {
+      locale = new Locale(language.toString());
+    } else {
+      locale = new Locale(language.toString(), country.toString());
+    }
+    String sentences = str.toString();
+    BreakIterator sentenceInstance = BreakIterator.getSentenceInstance(locale);
+    sentenceInstance.setText(sentences);
+
+    int sentenceIndex = 0;
+    List<GenericArrayData> res = new ArrayList<>();
+    while (sentenceInstance.next() != BreakIterator.DONE) {
+      String sentence = sentences.substring(sentenceIndex, sentenceInstance.current());
+      sentenceIndex = sentenceInstance.current();
+      BreakIterator wordInstance = BreakIterator.getWordInstance(locale);
+      wordInstance.setText(sentence);
+      int wordIndex = 0;
+      List<UTF8String> words = new ArrayList<>();
+      while (wordInstance.next() != BreakIterator.DONE) {
+        String word = sentence.substring(wordIndex, wordInstance.current());
+        wordIndex = wordInstance.current();
+        if (Character.isLetterOrDigit(word.charAt(0))) {
+          words.add(UTF8String.fromString(word));
+        }
+      }
+      res.add(new GenericArrayData(words.toArray(new UTF8String[0])));
+    }
+    return new GenericArrayData(res.toArray(new GenericArrayData[0]));
   }
 }
