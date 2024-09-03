@@ -184,15 +184,11 @@ class HistogramPlotBase(NumericPlotBase):
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column):
             index = SF.binary_search(F.lit(bins), value)
-            bucket = (
-                F.when(value == F.lit(bins[-1]), F.lit(len(bins) - 2))
-                .when(index > F.lit(0), index)
-                .otherwise(-index - F.lit(2))
-            )
+            bucket = F.when(index >= F.lit(0), index).otherwise(-index - F.lit(2))
 
             return (
-                F.when(value.between(F.lit(bins[0]), F.lit(bins[-1])), bucket)
-                .when(value.isNaN(), F.raise_error(F.lit("Histogram encountered NaN value.")))
+                F.when(value == F.lit(bins[-1]), F.lit(len(bins) - 2))
+                .when(value.between(F.lit(bins[0]), F.lit(bins[-1])), bucket)
                 .otherwise(
                     F.raise_error(
                         F.printf(
