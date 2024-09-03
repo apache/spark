@@ -211,7 +211,7 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder getImplicitGroupingKeyRequestOrBuilder();
 
-    public org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest.MethodCase getMethodCase();
+    org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest.MethodCase getMethodCase();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateRequest}
@@ -228,18 +228,6 @@ public final class StateMessage {
     private StateRequest() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new StateRequest();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_descriptor;
@@ -254,6 +242,7 @@ public final class StateMessage {
     }
 
     private int methodCase_ = 0;
+    @SuppressWarnings("serial")
     private java.lang.Object method_;
     public enum MethodCase
         implements com.google.protobuf.Internal.EnumLite,
@@ -297,7 +286,7 @@ public final class StateMessage {
     }
 
     public static final int VERSION_FIELD_NUMBER = 1;
-    private int version_;
+    private int version_ = 0;
     /**
      * <code>int32 version = 1;</code>
      * @return The version.
@@ -563,11 +552,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -642,8 +633,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         version_ = 0;
-
         if (statefulProcessorCallBuilder_ != null) {
           statefulProcessorCallBuilder_.clear();
         }
@@ -681,65 +672,36 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest(this);
-        result.version_ = version_;
-        if (methodCase_ == 2) {
-          if (statefulProcessorCallBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = statefulProcessorCallBuilder_.build();
-          }
-        }
-        if (methodCase_ == 3) {
-          if (stateVariableRequestBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = stateVariableRequestBuilder_.build();
-          }
-        }
-        if (methodCase_ == 4) {
-          if (implicitGroupingKeyRequestBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = implicitGroupingKeyRequestBuilder_.build();
-          }
-        }
-        result.methodCase_ = methodCase_;
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.version_ = version_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 2 &&
+            statefulProcessorCallBuilder_ != null) {
+          result.method_ = statefulProcessorCallBuilder_.build();
+        }
+        if (methodCase_ == 3 &&
+            stateVariableRequestBuilder_ != null) {
+          result.method_ = stateVariableRequestBuilder_.build();
+        }
+        if (methodCase_ == 4 &&
+            implicitGroupingKeyRequestBuilder_ != null) {
+          result.method_ = implicitGroupingKeyRequestBuilder_.build();
+        }
       }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest) {
@@ -800,7 +762,7 @@ public final class StateMessage {
                 break;
               case 8: {
                 version_ = input.readInt32();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 8
               case 18: {
@@ -854,6 +816,7 @@ public final class StateMessage {
         return this;
       }
 
+      private int bitField0_;
 
       private int version_ ;
       /**
@@ -870,8 +833,9 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setVersion(int value) {
-        
+
         version_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -880,7 +844,7 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearVersion() {
-        
+        bitField0_ = (bitField0_ & ~0x00000001);
         version_ = 0;
         onChanged();
         return this;
@@ -1024,7 +988,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 2;
-        onChanged();;
+        onChanged();
         return statefulProcessorCallBuilder_;
       }
 
@@ -1166,7 +1130,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 3;
-        onChanged();;
+        onChanged();
         return stateVariableRequestBuilder_;
       }
 
@@ -1308,21 +1272,9 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 4;
-        onChanged();;
+        onChanged();
         return implicitGroupingKeyRequestBuilder_;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StateRequest)
     }
@@ -1420,18 +1372,6 @@ public final class StateMessage {
       value_ = com.google.protobuf.ByteString.EMPTY;
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new StateResponse();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor;
@@ -1446,7 +1386,7 @@ public final class StateMessage {
     }
 
     public static final int STATUSCODE_FIELD_NUMBER = 1;
-    private int statusCode_;
+    private int statusCode_ = 0;
     /**
      * <code>int32 statusCode = 1;</code>
      * @return The statusCode.
@@ -1457,7 +1397,8 @@ public final class StateMessage {
     }
 
     public static final int ERRORMESSAGE_FIELD_NUMBER = 2;
-    private volatile java.lang.Object errorMessage_;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object errorMessage_ = "";
     /**
      * <code>string errorMessage = 2;</code>
      * @return The errorMessage.
@@ -1495,7 +1436,7 @@ public final class StateMessage {
     }
 
     public static final int VALUE_FIELD_NUMBER = 3;
-    private com.google.protobuf.ByteString value_;
+    private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
     /**
      * <code>bytes value = 3;</code>
      * @return The value.
@@ -1635,11 +1576,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -1714,12 +1657,10 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         statusCode_ = 0;
-
         errorMessage_ = "";
-
         value_ = com.google.protobuf.ByteString.EMPTY;
-
         return this;
       }
 
@@ -1746,45 +1687,24 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse result = new org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse(this);
-        result.statusCode_ = statusCode_;
-        result.errorMessage_ = errorMessage_;
-        result.value_ = value_;
+        if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.statusCode_ = statusCode_;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.errorMessage_ = errorMessage_;
+        }
+        if (((from_bitField0_ & 0x00000004) != 0)) {
+          result.value_ = value_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse) {
@@ -1802,6 +1722,7 @@ public final class StateMessage {
         }
         if (!other.getErrorMessage().isEmpty()) {
           errorMessage_ = other.errorMessage_;
+          bitField0_ |= 0x00000002;
           onChanged();
         }
         if (other.getValue() != com.google.protobuf.ByteString.EMPTY) {
@@ -1835,17 +1756,17 @@ public final class StateMessage {
                 break;
               case 8: {
                 statusCode_ = input.readInt32();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 8
               case 18: {
                 errorMessage_ = input.readStringRequireUtf8();
-
+                bitField0_ |= 0x00000002;
                 break;
               } // case 18
               case 26: {
                 value_ = input.readBytes();
-
+                bitField0_ |= 0x00000004;
                 break;
               } // case 26
               default: {
@@ -1863,6 +1784,7 @@ public final class StateMessage {
         } // finally
         return this;
       }
+      private int bitField0_;
 
       private int statusCode_ ;
       /**
@@ -1879,8 +1801,9 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setStatusCode(int value) {
-        
+
         statusCode_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -1889,7 +1812,7 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearStatusCode() {
-        
+        bitField0_ = (bitField0_ & ~0x00000001);
         statusCode_ = 0;
         onChanged();
         return this;
@@ -1936,11 +1859,9 @@ public final class StateMessage {
        */
       public Builder setErrorMessage(
           java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         errorMessage_ = value;
+        bitField0_ |= 0x00000002;
         onChanged();
         return this;
       }
@@ -1949,8 +1870,8 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearErrorMessage() {
-        
         errorMessage_ = getDefaultInstance().getErrorMessage();
+        bitField0_ = (bitField0_ & ~0x00000002);
         onChanged();
         return this;
       }
@@ -1961,12 +1882,10 @@ public final class StateMessage {
        */
       public Builder setErrorMessageBytes(
           com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
         errorMessage_ = value;
+        bitField0_ |= 0x00000002;
         onChanged();
         return this;
       }
@@ -1986,11 +1905,9 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setValue(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         value_ = value;
+        bitField0_ |= 0x00000004;
         onChanged();
         return this;
       }
@@ -1999,23 +1916,11 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearValue() {
-        
+        bitField0_ = (bitField0_ & ~0x00000004);
         value_ = getDefaultInstance().getValue();
         onChanged();
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StateResponse)
     }
@@ -2132,7 +2037,7 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder getGetMapStateOrBuilder();
 
-    public org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall.MethodCase getMethodCase();
+    org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall.MethodCase getMethodCase();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall}
@@ -2149,18 +2054,6 @@ public final class StateMessage {
     private StatefulProcessorCall() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new StatefulProcessorCall();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor;
@@ -2175,6 +2068,7 @@ public final class StateMessage {
     }
 
     private int methodCase_ = 0;
+    @SuppressWarnings("serial")
     private java.lang.Object method_;
     public enum MethodCase
         implements com.google.protobuf.Internal.EnumLite,
@@ -2510,11 +2404,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -2589,6 +2485,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         if (setHandleStateBuilder_ != null) {
           setHandleStateBuilder_.clear();
         }
@@ -2629,71 +2526,37 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall result = new org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall(this);
-        if (methodCase_ == 1) {
-          if (setHandleStateBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = setHandleStateBuilder_.build();
-          }
-        }
-        if (methodCase_ == 2) {
-          if (getValueStateBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = getValueStateBuilder_.build();
-          }
-        }
-        if (methodCase_ == 3) {
-          if (getListStateBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = getListStateBuilder_.build();
-          }
-        }
-        if (methodCase_ == 4) {
-          if (getMapStateBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = getMapStateBuilder_.build();
-          }
-        }
-        result.methodCase_ = methodCase_;
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall result) {
+        int from_bitField0_ = bitField0_;
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 1 &&
+            setHandleStateBuilder_ != null) {
+          result.method_ = setHandleStateBuilder_.build();
+        }
+        if (methodCase_ == 2 &&
+            getValueStateBuilder_ != null) {
+          result.method_ = getValueStateBuilder_.build();
+        }
+        if (methodCase_ == 3 &&
+            getListStateBuilder_ != null) {
+          result.method_ = getListStateBuilder_.build();
+        }
+        if (methodCase_ == 4 &&
+            getMapStateBuilder_ != null) {
+          result.method_ = getMapStateBuilder_.build();
+        }
       }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall) {
@@ -2811,6 +2674,7 @@ public final class StateMessage {
         return this;
       }
 
+      private int bitField0_;
 
       private com.google.protobuf.SingleFieldBuilderV3<
           org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState, org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleStateOrBuilder> setHandleStateBuilder_;
@@ -2950,7 +2814,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 1;
-        onChanged();;
+        onChanged();
         return setHandleStateBuilder_;
       }
 
@@ -3092,7 +2956,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 2;
-        onChanged();;
+        onChanged();
         return getValueStateBuilder_;
       }
 
@@ -3234,7 +3098,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 3;
-        onChanged();;
+        onChanged();
         return getListStateBuilder_;
       }
 
@@ -3376,21 +3240,9 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 4;
-        onChanged();;
+        onChanged();
         return getMapStateBuilder_;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall)
     }
@@ -3477,7 +3329,7 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCallOrBuilder getListStateCallOrBuilder();
 
-    public org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest.MethodCase getMethodCase();
+    org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest.MethodCase getMethodCase();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateVariableRequest}
@@ -3494,18 +3346,6 @@ public final class StateMessage {
     private StateVariableRequest() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new StateVariableRequest();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor;
@@ -3520,6 +3360,7 @@ public final class StateMessage {
     }
 
     private int methodCase_ = 0;
+    @SuppressWarnings("serial")
     private java.lang.Object method_;
     public enum MethodCase
         implements com.google.protobuf.Internal.EnumLite,
@@ -3759,11 +3600,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -3838,6 +3681,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         if (valueStateCallBuilder_ != null) {
           valueStateCallBuilder_.clear();
         }
@@ -3872,57 +3716,29 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest(this);
-        if (methodCase_ == 1) {
-          if (valueStateCallBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = valueStateCallBuilder_.build();
-          }
-        }
-        if (methodCase_ == 2) {
-          if (listStateCallBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = listStateCallBuilder_.build();
-          }
-        }
-        result.methodCase_ = methodCase_;
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest result) {
+        int from_bitField0_ = bitField0_;
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 1 &&
+            valueStateCallBuilder_ != null) {
+          result.method_ = valueStateCallBuilder_.build();
+        }
+        if (methodCase_ == 2 &&
+            listStateCallBuilder_ != null) {
+          result.method_ = listStateCallBuilder_.build();
+        }
       }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest) {
@@ -4018,6 +3834,7 @@ public final class StateMessage {
         return this;
       }
 
+      private int bitField0_;
 
       private com.google.protobuf.SingleFieldBuilderV3<
           org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall, org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCallOrBuilder> valueStateCallBuilder_;
@@ -4157,7 +3974,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 1;
-        onChanged();;
+        onChanged();
         return valueStateCallBuilder_;
       }
 
@@ -4299,21 +4116,9 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 2;
-        onChanged();;
+        onChanged();
         return listStateCallBuilder_;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StateVariableRequest)
     }
@@ -4400,7 +4205,7 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder getRemoveImplicitKeyOrBuilder();
 
-    public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.MethodCase getMethodCase();
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.MethodCase getMethodCase();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest}
@@ -4417,18 +4222,6 @@ public final class StateMessage {
     private ImplicitGroupingKeyRequest() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new ImplicitGroupingKeyRequest();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor;
@@ -4443,6 +4236,7 @@ public final class StateMessage {
     }
 
     private int methodCase_ = 0;
+    @SuppressWarnings("serial")
     private java.lang.Object method_;
     public enum MethodCase
         implements com.google.protobuf.Internal.EnumLite,
@@ -4682,11 +4476,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -4761,6 +4557,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         if (setImplicitKeyBuilder_ != null) {
           setImplicitKeyBuilder_.clear();
         }
@@ -4795,57 +4592,29 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest(this);
-        if (methodCase_ == 1) {
-          if (setImplicitKeyBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = setImplicitKeyBuilder_.build();
-          }
-        }
-        if (methodCase_ == 2) {
-          if (removeImplicitKeyBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = removeImplicitKeyBuilder_.build();
-          }
-        }
-        result.methodCase_ = methodCase_;
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result) {
+        int from_bitField0_ = bitField0_;
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 1 &&
+            setImplicitKeyBuilder_ != null) {
+          result.method_ = setImplicitKeyBuilder_.build();
+        }
+        if (methodCase_ == 2 &&
+            removeImplicitKeyBuilder_ != null) {
+          result.method_ = removeImplicitKeyBuilder_.build();
+        }
       }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) {
@@ -4941,6 +4710,7 @@ public final class StateMessage {
         return this;
       }
 
+      private int bitField0_;
 
       private com.google.protobuf.SingleFieldBuilderV3<
           org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder> setImplicitKeyBuilder_;
@@ -5080,7 +4850,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 1;
-        onChanged();;
+        onChanged();
         return setImplicitKeyBuilder_;
       }
 
@@ -5222,21 +4992,9 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 2;
-        onChanged();;
+        onChanged();
         return removeImplicitKeyBuilder_;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
     }
@@ -5334,18 +5092,6 @@ public final class StateMessage {
       schema_ = "";
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new StateCallCommand();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor;
@@ -5360,7 +5106,8 @@ public final class StateMessage {
     }
 
     public static final int STATENAME_FIELD_NUMBER = 1;
-    private volatile java.lang.Object stateName_;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object stateName_ = "";
     /**
      * <code>string stateName = 1;</code>
      * @return The stateName.
@@ -5398,7 +5145,8 @@ public final class StateMessage {
     }
 
     public static final int SCHEMA_FIELD_NUMBER = 2;
-    private volatile java.lang.Object schema_;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object schema_ = "";
     /**
      * <code>string schema = 2;</code>
      * @return The schema.
@@ -5553,11 +5301,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -5632,10 +5382,9 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         stateName_ = "";
-
         schema_ = "";
-
         return this;
       }
 
@@ -5662,44 +5411,21 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand result = new org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand(this);
-        result.stateName_ = stateName_;
-        result.schema_ = schema_;
+        if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.stateName_ = stateName_;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.schema_ = schema_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) {
@@ -5714,10 +5440,12 @@ public final class StateMessage {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance()) return this;
         if (!other.getStateName().isEmpty()) {
           stateName_ = other.stateName_;
+          bitField0_ |= 0x00000001;
           onChanged();
         }
         if (!other.getSchema().isEmpty()) {
           schema_ = other.schema_;
+          bitField0_ |= 0x00000002;
           onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
@@ -5748,12 +5476,12 @@ public final class StateMessage {
                 break;
               case 10: {
                 stateName_ = input.readStringRequireUtf8();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 10
               case 18: {
                 schema_ = input.readStringRequireUtf8();
-
+                bitField0_ |= 0x00000002;
                 break;
               } // case 18
               default: {
@@ -5771,6 +5499,7 @@ public final class StateMessage {
         } // finally
         return this;
       }
+      private int bitField0_;
 
       private java.lang.Object stateName_ = "";
       /**
@@ -5813,11 +5542,9 @@ public final class StateMessage {
        */
       public Builder setStateName(
           java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         stateName_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -5826,8 +5553,8 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearStateName() {
-        
         stateName_ = getDefaultInstance().getStateName();
+        bitField0_ = (bitField0_ & ~0x00000001);
         onChanged();
         return this;
       }
@@ -5838,12 +5565,10 @@ public final class StateMessage {
        */
       public Builder setStateNameBytes(
           com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
         stateName_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -5889,11 +5614,9 @@ public final class StateMessage {
        */
       public Builder setSchema(
           java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         schema_ = value;
+        bitField0_ |= 0x00000002;
         onChanged();
         return this;
       }
@@ -5902,8 +5625,8 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearSchema() {
-        
         schema_ = getDefaultInstance().getSchema();
+        bitField0_ = (bitField0_ & ~0x00000002);
         onChanged();
         return this;
       }
@@ -5914,27 +5637,13 @@ public final class StateMessage {
        */
       public Builder setSchemaBytes(
           com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
         schema_ = value;
+        bitField0_ |= 0x00000002;
         onChanged();
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StateCallCommand)
     }
@@ -6063,7 +5772,7 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.ClearOrBuilder getClearOrBuilder();
 
-    public org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall.MethodCase getMethodCase();
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall.MethodCase getMethodCase();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ValueStateCall}
@@ -6081,18 +5790,6 @@ public final class StateMessage {
       stateName_ = "";
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new ValueStateCall();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor;
@@ -6107,6 +5804,7 @@ public final class StateMessage {
     }
 
     private int methodCase_ = 0;
+    @SuppressWarnings("serial")
     private java.lang.Object method_;
     public enum MethodCase
         implements com.google.protobuf.Internal.EnumLite,
@@ -6152,7 +5850,8 @@ public final class StateMessage {
     }
 
     public static final int STATENAME_FIELD_NUMBER = 1;
-    private volatile java.lang.Object stateName_;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object stateName_ = "";
     /**
      * <code>string stateName = 1;</code>
      * @return The stateName.
@@ -6490,11 +6189,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -6569,8 +6270,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         stateName_ = "";
-
         if (existsBuilder_ != null) {
           existsBuilder_.clear();
         }
@@ -6611,72 +6312,40 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall(this);
-        result.stateName_ = stateName_;
-        if (methodCase_ == 2) {
-          if (existsBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = existsBuilder_.build();
-          }
-        }
-        if (methodCase_ == 3) {
-          if (getBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = getBuilder_.build();
-          }
-        }
-        if (methodCase_ == 4) {
-          if (valueStateUpdateBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = valueStateUpdateBuilder_.build();
-          }
-        }
-        if (methodCase_ == 5) {
-          if (clearBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = clearBuilder_.build();
-          }
-        }
-        result.methodCase_ = methodCase_;
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.stateName_ = stateName_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 2 &&
+            existsBuilder_ != null) {
+          result.method_ = existsBuilder_.build();
+        }
+        if (methodCase_ == 3 &&
+            getBuilder_ != null) {
+          result.method_ = getBuilder_.build();
+        }
+        if (methodCase_ == 4 &&
+            valueStateUpdateBuilder_ != null) {
+          result.method_ = valueStateUpdateBuilder_.build();
+        }
+        if (methodCase_ == 5 &&
+            clearBuilder_ != null) {
+          result.method_ = clearBuilder_.build();
+        }
       }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall) {
@@ -6691,6 +6360,7 @@ public final class StateMessage {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall.getDefaultInstance()) return this;
         if (!other.getStateName().isEmpty()) {
           stateName_ = other.stateName_;
+          bitField0_ |= 0x00000001;
           onChanged();
         }
         switch (other.getMethodCase()) {
@@ -6742,7 +6412,7 @@ public final class StateMessage {
                 break;
               case 10: {
                 stateName_ = input.readStringRequireUtf8();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 10
               case 18: {
@@ -6803,6 +6473,7 @@ public final class StateMessage {
         return this;
       }
 
+      private int bitField0_;
 
       private java.lang.Object stateName_ = "";
       /**
@@ -6845,11 +6516,9 @@ public final class StateMessage {
        */
       public Builder setStateName(
           java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         stateName_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -6858,8 +6527,8 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearStateName() {
-        
         stateName_ = getDefaultInstance().getStateName();
+        bitField0_ = (bitField0_ & ~0x00000001);
         onChanged();
         return this;
       }
@@ -6870,12 +6539,10 @@ public final class StateMessage {
        */
       public Builder setStateNameBytes(
           com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
         stateName_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -7018,7 +6685,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 2;
-        onChanged();;
+        onChanged();
         return existsBuilder_;
       }
 
@@ -7160,7 +6827,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 3;
-        onChanged();;
+        onChanged();
         return getBuilder_;
       }
 
@@ -7302,7 +6969,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 4;
-        onChanged();;
+        onChanged();
         return valueStateUpdateBuilder_;
       }
 
@@ -7444,21 +7111,9 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 5;
-        onChanged();;
+        onChanged();
         return clearBuilder_;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ValueStateCall)
     }
@@ -7617,7 +7272,7 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.ClearOrBuilder getClearOrBuilder();
 
-    public org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall.MethodCase getMethodCase();
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall.MethodCase getMethodCase();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStateCall}
@@ -7635,18 +7290,6 @@ public final class StateMessage {
       stateName_ = "";
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new ListStateCall();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor;
@@ -7661,6 +7304,7 @@ public final class StateMessage {
     }
 
     private int methodCase_ = 0;
+    @SuppressWarnings("serial")
     private java.lang.Object method_;
     public enum MethodCase
         implements com.google.protobuf.Internal.EnumLite,
@@ -7710,7 +7354,8 @@ public final class StateMessage {
     }
 
     public static final int STATENAME_FIELD_NUMBER = 1;
-    private volatile java.lang.Object stateName_;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object stateName_ = "";
     /**
      * <code>string stateName = 1;</code>
      * @return The stateName.
@@ -8140,11 +7785,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -8219,8 +7866,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         stateName_ = "";
-
         if (existsBuilder_ != null) {
           existsBuilder_.clear();
         }
@@ -8267,86 +7914,48 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall(this);
-        result.stateName_ = stateName_;
-        if (methodCase_ == 2) {
-          if (existsBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = existsBuilder_.build();
-          }
-        }
-        if (methodCase_ == 3) {
-          if (getBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = getBuilder_.build();
-          }
-        }
-        if (methodCase_ == 4) {
-          if (listStatePutBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = listStatePutBuilder_.build();
-          }
-        }
-        if (methodCase_ == 5) {
-          if (appendValueBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = appendValueBuilder_.build();
-          }
-        }
-        if (methodCase_ == 6) {
-          if (appendListBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = appendListBuilder_.build();
-          }
-        }
-        if (methodCase_ == 7) {
-          if (clearBuilder_ == null) {
-            result.method_ = method_;
-          } else {
-            result.method_ = clearBuilder_.build();
-          }
-        }
-        result.methodCase_ = methodCase_;
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.stateName_ = stateName_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 2 &&
+            existsBuilder_ != null) {
+          result.method_ = existsBuilder_.build();
+        }
+        if (methodCase_ == 3 &&
+            getBuilder_ != null) {
+          result.method_ = getBuilder_.build();
+        }
+        if (methodCase_ == 4 &&
+            listStatePutBuilder_ != null) {
+          result.method_ = listStatePutBuilder_.build();
+        }
+        if (methodCase_ == 5 &&
+            appendValueBuilder_ != null) {
+          result.method_ = appendValueBuilder_.build();
+        }
+        if (methodCase_ == 6 &&
+            appendListBuilder_ != null) {
+          result.method_ = appendListBuilder_.build();
+        }
+        if (methodCase_ == 7 &&
+            clearBuilder_ != null) {
+          result.method_ = clearBuilder_.build();
+        }
       }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall) {
@@ -8361,6 +7970,7 @@ public final class StateMessage {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall.getDefaultInstance()) return this;
         if (!other.getStateName().isEmpty()) {
           stateName_ = other.stateName_;
+          bitField0_ |= 0x00000001;
           onChanged();
         }
         switch (other.getMethodCase()) {
@@ -8420,7 +8030,7 @@ public final class StateMessage {
                 break;
               case 10: {
                 stateName_ = input.readStringRequireUtf8();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 10
               case 18: {
@@ -8495,6 +8105,7 @@ public final class StateMessage {
         return this;
       }
 
+      private int bitField0_;
 
       private java.lang.Object stateName_ = "";
       /**
@@ -8537,11 +8148,9 @@ public final class StateMessage {
        */
       public Builder setStateName(
           java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         stateName_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -8550,8 +8159,8 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearStateName() {
-        
         stateName_ = getDefaultInstance().getStateName();
+        bitField0_ = (bitField0_ & ~0x00000001);
         onChanged();
         return this;
       }
@@ -8562,12 +8171,10 @@ public final class StateMessage {
        */
       public Builder setStateNameBytes(
           com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
         stateName_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -8710,7 +8317,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 2;
-        onChanged();;
+        onChanged();
         return existsBuilder_;
       }
 
@@ -8852,7 +8459,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 3;
-        onChanged();;
+        onChanged();
         return getBuilder_;
       }
 
@@ -8994,7 +8601,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 4;
-        onChanged();;
+        onChanged();
         return listStatePutBuilder_;
       }
 
@@ -9136,7 +8743,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 5;
-        onChanged();;
+        onChanged();
         return appendValueBuilder_;
       }
 
@@ -9278,7 +8885,7 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 6;
-        onChanged();;
+        onChanged();
         return appendListBuilder_;
       }
 
@@ -9420,21 +9027,9 @@ public final class StateMessage {
           method_ = null;
         }
         methodCase_ = 7;
-        onChanged();;
+        onChanged();
         return clearBuilder_;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ListStateCall)
     }
@@ -9513,18 +9108,6 @@ public final class StateMessage {
       key_ = com.google.protobuf.ByteString.EMPTY;
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new SetImplicitKey();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor;
@@ -9539,7 +9122,7 @@ public final class StateMessage {
     }
 
     public static final int KEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString key_;
+    private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
     /**
      * <code>bytes key = 1;</code>
      * @return The key.
@@ -9658,11 +9241,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -9737,8 +9322,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         key_ = com.google.protobuf.ByteString.EMPTY;
-
         return this;
       }
 
@@ -9765,43 +9350,18 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey result = new org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey(this);
-        result.key_ = key_;
+        if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.key_ = key_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) {
@@ -9845,7 +9405,7 @@ public final class StateMessage {
                 break;
               case 10: {
                 key_ = input.readBytes();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 10
               default: {
@@ -9863,6 +9423,7 @@ public final class StateMessage {
         } // finally
         return this;
       }
+      private int bitField0_;
 
       private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
       /**
@@ -9879,11 +9440,9 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setKey(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         key_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -9892,23 +9451,11 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearKey() {
-        
+        bitField0_ = (bitField0_ & ~0x00000001);
         key_ = getDefaultInstance().getKey();
         onChanged();
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
     }
@@ -9980,18 +9527,6 @@ public final class StateMessage {
     private RemoveImplicitKey() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new RemoveImplicitKey();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor;
@@ -10103,11 +9638,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -10213,38 +9750,6 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) {
           return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey)other);
@@ -10297,18 +9802,6 @@ public final class StateMessage {
         } // finally
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
     }
@@ -10380,18 +9873,6 @@ public final class StateMessage {
     private Exists() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Exists();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor;
@@ -10503,11 +9984,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -10613,38 +10096,6 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.Exists) {
           return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.Exists)other);
@@ -10697,18 +10148,6 @@ public final class StateMessage {
         } // finally
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.Exists)
     }
@@ -10780,18 +10219,6 @@ public final class StateMessage {
     private Get() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Get();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor;
@@ -10903,11 +10330,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -11013,38 +10442,6 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.Get) {
           return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.Get)other);
@@ -11097,18 +10494,6 @@ public final class StateMessage {
         } // finally
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.Get)
     }
@@ -11187,18 +10572,6 @@ public final class StateMessage {
       value_ = com.google.protobuf.ByteString.EMPTY;
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new ValueStateUpdate();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor;
@@ -11213,7 +10586,7 @@ public final class StateMessage {
     }
 
     public static final int VALUE_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString value_;
+    private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
     /**
      * <code>bytes value = 1;</code>
      * @return The value.
@@ -11332,11 +10705,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -11411,8 +10786,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         value_ = com.google.protobuf.ByteString.EMPTY;
-
         return this;
       }
 
@@ -11439,43 +10814,18 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate(this);
-        result.value_ = value_;
+        if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.value_ = value_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate) {
@@ -11519,7 +10869,7 @@ public final class StateMessage {
                 break;
               case 10: {
                 value_ = input.readBytes();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 10
               default: {
@@ -11537,6 +10887,7 @@ public final class StateMessage {
         } // finally
         return this;
       }
+      private int bitField0_;
 
       private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
       /**
@@ -11553,11 +10904,9 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setValue(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         value_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -11566,23 +10915,11 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearValue() {
-        
+        bitField0_ = (bitField0_ & ~0x00000001);
         value_ = getDefaultInstance().getValue();
         onChanged();
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ValueStateUpdate)
     }
@@ -11654,18 +10991,6 @@ public final class StateMessage {
     private Clear() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Clear();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor;
@@ -11777,11 +11102,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -11887,38 +11214,6 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.Clear) {
           return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.Clear)other);
@@ -11971,18 +11266,6 @@ public final class StateMessage {
         } // finally
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.Clear)
     }
@@ -12054,18 +11337,6 @@ public final class StateMessage {
     private ListStatePut() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new ListStatePut();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_descriptor;
@@ -12177,11 +11448,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -12287,38 +11560,6 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut) {
           return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut)other);
@@ -12371,18 +11612,6 @@ public final class StateMessage {
         } // finally
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ListStatePut)
     }
@@ -12461,18 +11690,6 @@ public final class StateMessage {
       value_ = com.google.protobuf.ByteString.EMPTY;
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new AppendValue();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_descriptor;
@@ -12487,7 +11704,7 @@ public final class StateMessage {
     }
 
     public static final int VALUE_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString value_;
+    private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
     /**
      * <code>bytes value = 1;</code>
      * @return The value.
@@ -12606,11 +11823,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -12685,8 +11904,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         value_ = com.google.protobuf.ByteString.EMPTY;
-
         return this;
       }
 
@@ -12713,43 +11932,18 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue result = new org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue(this);
-        result.value_ = value_;
+        if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.value_ = value_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue) {
@@ -12793,7 +11987,7 @@ public final class StateMessage {
                 break;
               case 10: {
                 value_ = input.readBytes();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 10
               default: {
@@ -12811,6 +12005,7 @@ public final class StateMessage {
         } // finally
         return this;
       }
+      private int bitField0_;
 
       private com.google.protobuf.ByteString value_ = com.google.protobuf.ByteString.EMPTY;
       /**
@@ -12827,11 +12022,9 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setValue(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
+        if (value == null) { throw new NullPointerException(); }
         value_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -12840,23 +12033,11 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearValue() {
-        
+        bitField0_ = (bitField0_ & ~0x00000001);
         value_ = getDefaultInstance().getValue();
         onChanged();
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.AppendValue)
     }
@@ -12928,18 +12109,6 @@ public final class StateMessage {
     private AppendList() {
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new AppendList();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_descriptor;
@@ -13051,11 +12220,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -13161,38 +12332,6 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList) {
           return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList)other);
@@ -13245,18 +12384,6 @@ public final class StateMessage {
         } // finally
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.AppendList)
     }
@@ -13340,18 +12467,6 @@ public final class StateMessage {
       state_ = 0;
     }
 
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new SetHandleState();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor;
@@ -13366,7 +12481,7 @@ public final class StateMessage {
     }
 
     public static final int STATE_FIELD_NUMBER = 1;
-    private int state_;
+    private int state_ = 0;
     /**
      * <code>.org.apache.spark.sql.execution.streaming.state.HandleState state = 1;</code>
      * @return The enum numeric value on the wire for state.
@@ -13379,8 +12494,7 @@ public final class StateMessage {
      * @return The state.
      */
     @java.lang.Override public org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState getState() {
-      @SuppressWarnings("deprecation")
-      org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState result = org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState.valueOf(state_);
+      org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState result = org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState.forNumber(state_);
       return result == null ? org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState.UNRECOGNIZED : result;
     }
 
@@ -13492,11 +12606,13 @@ public final class StateMessage {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
+
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
@@ -13571,8 +12687,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        bitField0_ = 0;
         state_ = 0;
-
         return this;
       }
 
@@ -13599,43 +12715,18 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState result = new org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState(this);
-        result.state_ = state_;
+        if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
       }
 
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.state_ = state_;
+        }
       }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
+
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
         if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState) {
@@ -13679,7 +12770,7 @@ public final class StateMessage {
                 break;
               case 8: {
                 state_ = input.readEnum();
-
+                bitField0_ |= 0x00000001;
                 break;
               } // case 8
               default: {
@@ -13697,6 +12788,7 @@ public final class StateMessage {
         } // finally
         return this;
       }
+      private int bitField0_;
 
       private int state_ = 0;
       /**
@@ -13712,8 +12804,8 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder setStateValue(int value) {
-        
         state_ = value;
+        bitField0_ |= 0x00000001;
         onChanged();
         return this;
       }
@@ -13723,8 +12815,7 @@ public final class StateMessage {
        */
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState getState() {
-        @SuppressWarnings("deprecation")
-        org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState result = org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState.valueOf(state_);
+        org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState result = org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState.forNumber(state_);
         return result == null ? org.apache.spark.sql.execution.streaming.state.StateMessage.HandleState.UNRECOGNIZED : result;
       }
       /**
@@ -13736,7 +12827,7 @@ public final class StateMessage {
         if (value == null) {
           throw new NullPointerException();
         }
-        
+        bitField0_ |= 0x00000001;
         state_ = value.getNumber();
         onChanged();
         return this;
@@ -13746,23 +12837,11 @@ public final class StateMessage {
        * @return This builder for chaining.
        */
       public Builder clearState() {
-        
+        bitField0_ = (bitField0_ & ~0x00000001);
         state_ = 0;
         onChanged();
         return this;
       }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.SetHandleState)
     }

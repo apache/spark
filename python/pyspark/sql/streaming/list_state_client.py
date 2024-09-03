@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Union, cast, Tuple
+from typing import Any, Iterator, Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
@@ -147,9 +147,9 @@ class ListStateIterator:
         self.list_state_client = list_state_client
         self.state_name = state_name
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator["PandasDataFrameLike"]:
         return self
 
-    def __next__(self):
+    def __next__(self) -> "PandasDataFrameLike":
         pdf = self.list_state_client.get(self.state_name)
         return pdf

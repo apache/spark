@@ -188,6 +188,7 @@ class StatefulProcessorApiClient:
 
     def _send_arrow_state(self, state):
         import pyarrow as pa
+
         batch = pa.RecordBatch.from_pandas(state)
         self.serializer.dump_stream(iter([batch]), self.sockfile)
         self.sockfile.flush()
