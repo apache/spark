@@ -897,8 +897,9 @@ message Transpose {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Optional) The single column that will be treated as the index.
-  optional Expression index_column = 2;
+  // (Optional) A list of columns that will be treated as the indices.
+  // Only single column is supported now.
+  repeated Expression index_columns = 2;
 }
 
 message ToSchema {

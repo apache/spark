@@ -1860,7 +1860,7 @@ class DataFrame(ParentDataFrame):
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
         return DataFrame(
-            plan.Transpose(self._plan, F._to_col(indexColumn) if indexColumn is not None else None),
+            plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
             self._session,
         )
 

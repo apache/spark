@@ -1010,7 +1010,7 @@ class DataFrameTestsMixin:
             errorClass="INVALID_INDEX_COLUMN",
             messageParameters={
                 "reason": "Index column must be of atomic type, "
-                          "but found: ArrayType(StringType,true)"
+                "but found: ArrayType(StringType,true)"
             },
         )
 

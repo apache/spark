@@ -3159,34 +3159,35 @@ class Transpose(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    INDEX_COLUMN_FIELD_NUMBER: builtins.int
+    INDEX_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
     @property
-    def index_column(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
-        """(Optional) The single column that will be treated as the index."""
+    def index_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) A list of columns that will be treated as the indices.
+        Only single column is supported now.
+        """
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        index_column: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        index_columns: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_index_column", b"_index_column", "index_column", b"index_column", "input", b"input"
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
-            "_index_column", b"_index_column", "index_column", b"index_column", "input", b"input"
-        ],
+        field_name: typing_extensions.Literal["index_columns", b"index_columns", "input", b"input"],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_index_column", b"_index_column"]
-    ) -> typing_extensions.Literal["index_column"] | None: ...
 
 global___Transpose = Transpose
 

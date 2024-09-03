@@ -489,11 +489,11 @@ class Dataset[T] private[sql] (
     }
   }
 
-  private def buildTranspose(indexColumnOption: Option[Column]): DataFrame =
+  private def buildTranspose(indices: Seq[Column]): DataFrame =
     sparkSession.newDataFrame { builder =>
       val transpose = builder.getTransposeBuilder.setInput(plan.getRoot)
-      indexColumnOption.foreach { indexColumn =>
-        transpose.setIndexColumn(indexColumn.expr)
+      indices.foreach { indexColumn =>
+        transpose.addIndexColumns(indexColumn.expr)
       }
     }
 
@@ -592,11 +592,11 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def transpose(indexColumn: Column): DataFrame =
-    buildTranspose(Option(indexColumn))
+    buildTranspose(Seq(indexColumn))
 
   /** @inheritdoc */
   def transpose(): DataFrame =
-    buildTranspose(None)
+    buildTranspose(Seq.empty)
 
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
