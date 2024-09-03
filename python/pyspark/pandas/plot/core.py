@@ -25,7 +25,6 @@ from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import DoubleType
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
@@ -182,22 +181,29 @@ class HistogramPlotBase(NumericPlotBase):
         colnames = sdf.columns
         bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
-        # TODO(SPARK-49202): register this function in scala side
-        @F.udf(returnType=DoubleType())
-        def binary_search_for_buckets(value):
-            # Given bins = [1.0, 2.0, 3.0, 4.0]
-            # the intervals are:
-            #   [1.0, 2.0) -> 0.0
-            #   [2.0, 3.0) -> 1.0
-            #   [3.0, 4.0] -> 2.0 (the last bucket is a closed interval)
-            if value < bins[0] or value > bins[-1]:
-                raise ValueError(f"value {value} out of the bins bounds: [{bins[0]}, {bins[-1]}]")
+        # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
+        def binary_search_for_buckets(value: Column):
+            index = SF.binary_search(F.lit(bins), value)
+            bucket = (
+                F.when(value == F.lit(bins[-1]), F.lit(len(bins) - 2))
+                .when(index > F.lit(0), index)
+                .otherwise(-index - F.lit(2))
+            )
 
-            if value == bins[-1]:
-                idx = len(bins) - 2
-            else:
-                idx = bisect.bisect(bins, value) - 1
-            return float(idx)
+            return (
+                F.when(value.between(F.lit(bins[0]), F.lit(bins[-1])), bucket)
+                .when(value.isNaN(), F.raise_error(F.lit("Histogram encountered NaN value.")))
+                .otherwise(
+                    F.raise_error(
+                        F.printf(
+                            F.lit("value %s out of the bins bounds: [%s, %s]"),
+                            value,
+                            F.lit(bins[0]),
+                            F.lit(bins[-1]),
+                        )
+                    )
+                )
+            )
 
         output_df = (
             sdf.select(
@@ -205,10 +211,10 @@ class HistogramPlotBase(NumericPlotBase):
                     F.array([F.col(colname).cast("double") for colname in colnames])
                 ).alias("__group_id", "__value")
             )
-            # to match handleInvalid="skip" in Bucketizer
-            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN()).select(
+            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN())
+            .select(
                 F.col("__group_id"),
-                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
+                binary_search_for_buckets(F.col("__value")).cast("double").alias("__bucket"),
             )
         )
 
