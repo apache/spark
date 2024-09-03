@@ -192,10 +192,8 @@ class HistogramPlotBase(NumericPlotBase):
                 .otherwise(
                     F.raise_error(
                         F.printf(
-                            F.lit("value %s out of the bins bounds: [%s, %s]"),
+                            F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]"),
                             value,
-                            F.lit(bins[0]),
-                            F.lit(bins[-1]),
                         )
                     )
                 )
