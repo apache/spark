@@ -389,7 +389,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "SA" | "SAT" | "SATURDAY" => SATURDAY
       case _ =>
         throw new SparkIllegalArgumentException(
-          errorClass = "INTERVAL_ERROR.ILLEGAL_DAY_OF_WEEK",
+          errorClass = "ILLEGAL_DAY_OF_WEEK",
           messageParameters = Map("string" -> string.toString))
     }
   }

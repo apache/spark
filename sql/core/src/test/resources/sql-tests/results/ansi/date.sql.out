@@ -268,7 +268,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERVAL_ERROR.ILLEGAL_DAY_OF_WEEK",
+  "errorClass" : "ILLEGAL_DAY_OF_WEEK",
   "sqlState" : "22009",
   "messageParameters" : {
     "string" : "xx"

@@ -1107,8 +1107,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { interval =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), YearMonthIntervalType()),
-          "INTERVAL_ERROR.INTERVAL_PARSING",
-          Map("interval" -> "year-month", "msg" -> "integer overflow"))
+          "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          Map(
+            "interval" -> "year-month",
+            "msg" -> "integer overflow",
+            "input" -> interval))
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)

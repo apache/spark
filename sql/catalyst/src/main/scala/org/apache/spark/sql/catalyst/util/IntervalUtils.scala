@@ -149,12 +149,12 @@ object IntervalUtils extends SparkIntervalUtils {
 
     input.trimAll().toString match {
       case yearMonthRegex(sign, year, month) if checkTargetType(YM.YEAR, YM.MONTH) =>
-        toYMInterval(year, month, finalSign(sign))
+        toYMInterval(year, month, input.trimAll().toString, finalSign(sign))
       case yearMonthLiteralRegex(firstSign, secondSign, year, month)
         if checkTargetType(YM.YEAR, YM.MONTH) =>
-        toYMInterval(year, month, finalSign(firstSign, secondSign))
+        toYMInterval(year, month, input.trimAll().toString, finalSign(firstSign, secondSign))
       case yearMonthIndividualRegex(firstSign, value) =>
-        safeToInterval("year-month") {
+        safeToInterval("year-month", input.trimAll().toString) {
           val sign = finalSign(firstSign)
           if (endField == YM.YEAR) {
             sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
@@ -166,7 +166,7 @@ object IntervalUtils extends SparkIntervalUtils {
           }
         }
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, unit) =>
-        safeToInterval("year-month") {
+        safeToInterval("year-month", input.trimAll().toString) {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "YEAR" if checkTargetType(YM.YEAR, YM.YEAR) =>
@@ -204,21 +204,21 @@ object IntervalUtils extends SparkIntervalUtils {
     new CalendarInterval(months, 0, 0)
   }
 
-  private def safeToInterval[T](interval: String)(f: => T): T = {
+  private def safeToInterval[T](interval: String, input: String)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable => throw e
       case NonFatal(e) =>
         throw new SparkIllegalArgumentException(
-          errorClass = "INTERVAL_ERROR.INTERVAL_PARSING",
-          messageParameters = Map("interval" -> interval, "msg" -> e.getMessage),
+          errorClass = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          messageParameters = Map("input" -> input, "interval" -> interval, "msg" -> e.getMessage),
           cause = e)
     }
   }
 
-  private def toYMInterval(year: String, month: String, sign: Int): Int = {
-    safeToInterval("year-month") {
+  private def toYMInterval(year: String, month: String, input: String, sign: Int): Int = {
+    safeToInterval("year-month", input) {
       val years = toLongWithRange(yearStr, year, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
       val totalMonths =
         sign * (years * MONTHS_PER_YEAR + toLongWithRange(monthStr, month, 0, 11))
@@ -326,7 +326,7 @@ object IntervalUtils extends SparkIntervalUtils {
         toDTInterval(minute, secondAndMicro(second, micro), finalSign(firstSign, secondSign))
 
       case dayTimeIndividualRegex(firstSign, value, suffix) =>
-        safeToInterval("day-time") {
+        safeToInterval("day-time", input.trimAll().toString) {
           val sign = finalSign(firstSign)
           (startField, endField) match {
             case (DT.DAY, DT.DAY) if suffix == null && value.length <= 9 =>
@@ -345,7 +345,7 @@ object IntervalUtils extends SparkIntervalUtils {
           }
         }
       case dayTimeIndividualLiteralRegex(firstSign, secondSign, value, suffix, unit) =>
-        safeToInterval("day-time") {
+        safeToInterval("day-time", input.trimAll().toString) {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "DAY" if suffix == null && value.length <= 9 && checkTargetType(DT.DAY, DT.DAY) =>
@@ -568,7 +568,9 @@ object IntervalUtils extends SparkIntervalUtils {
       case Array(secondsStr, nanosStr) =>
         val seconds = parseSeconds(secondsStr)
         Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
-      case _ => throw new SparkIllegalArgumentException("INTERVAL_ERROR.SECOND_NANO_FORMAT")
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
+        messageParameters = Map("input" -> secondNano))
     }
   }
 

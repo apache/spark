@@ -395,8 +395,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         toDTInterval("12", "33.33.33", 1)
       },
-      errorClass = "INTERVAL_ERROR.SECOND_NANO_FORMAT",
-      sqlState = Some("22009")
+      errorClass = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
+      parameters = Map("input" -> "33.33.33"),
+      sqlState = Some("22006")
     )
   }
 

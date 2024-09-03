@@ -1583,6 +1583,12 @@
     ],
     "sqlState" : "42601"
   },
+  "ILLEGAL_DAY_OF_WEEK" : {
+    "message" : [
+      "Illegal input for day of week: <string>."
+    ],
+    "sqlState" : "22009"
+  },
   "ILLEGAL_STATE_STORE_VALUE" : {
     "message" : [
       "Illegal value provided to the State Store"
@@ -1931,29 +1937,6 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
-  },
-  "INTERVAL_ERROR" : {
-    "message" : [
-      "Interval error."
-    ],
-    "subClass" : {
-      "ILLEGAL_DAY_OF_WEEK" : {
-        "message" : [
-          "Illegal input for day of week: <string>."
-        ]
-      },
-      "INTERVAL_PARSING" : {
-        "message" : [
-          "Error parsing interval <interval> string: <msg>."
-        ]
-      },
-      "SECOND_NANO_FORMAT" : {
-        "message" : [
-          "Interval string does not match second-nano format of ss.nnnnnnnnn."
-        ]
-      }
-    },
-    "sqlState" : "22009"
   },
   "INVALID_AGGREGATE_FILTER" : {
     "message" : [
@@ -2433,6 +2416,11 @@
           "Interval string cannot be null."
         ]
       },
+      "INTERVAL_PARSING" : {
+        "message" : [
+          "Error parsing interval <interval> string."
+        ]
+      },
       "INVALID_FRACTION" : {
         "message" : [
           "<unit> cannot have fractional part."
@@ -2466,6 +2454,11 @@
       "MISSING_UNIT" : {
         "message" : [
           "Expect a unit name after <word> but hit EOL."
+        ]
+      },
+      "SECOND_NANO_FORMAT" : {
+        "message" : [
+          "Interval string does not match second-nano format of ss.nnnnnnnnn."
         ]
       },
       "UNKNOWN_PARSING_ERROR" : {

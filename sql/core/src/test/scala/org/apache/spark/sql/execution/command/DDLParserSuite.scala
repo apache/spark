@@ -406,10 +406,11 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         parser.parsePlan(sql1)
       },
-      condition = "INTERVAL_ERROR.INTERVAL_PARSING",
-      parameters = Map("interval" -> "year-month",
-        "msg" -> "requirement failed: month 32 outside range [0, 11]")
-    )
+      condition = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+      parameters = Map(
+        "input" -> "42-32",
+        "interval" -> "year-month",
+        "msg" -> "requirement failed: month 32 outside range [0, 11]"))
 
     val sql2 = "select interval '5 49:12:15' day to second"
     val fragment2 = "'5 49:12:15' day to second"
