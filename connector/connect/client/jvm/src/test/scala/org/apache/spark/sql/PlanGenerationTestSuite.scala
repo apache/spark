@@ -1801,7 +1801,11 @@ class PlanGenerationTestSuite
     fn.sentences(fn.col("g"))
   }
 
-  functionTest("sentences with locale") {
+  functionTest("sentences with language") {
+    fn.sentences(fn.col("g"), lit("en"))
+  }
+
+  functionTest("sentences with language and country") {
     fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 
