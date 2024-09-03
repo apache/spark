@@ -125,6 +125,7 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
 
+<<<<<<< HEAD
     // SPARK-49414: Remove Logging from DataFrameReader.
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.DataFrameReader"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logName"),
@@ -144,6 +145,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary$default$2"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeForcefully"),
+
+    // SPARK-49425: Create a shared DataFrameWriter interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter"),
   )
 
   // Default exclude rules

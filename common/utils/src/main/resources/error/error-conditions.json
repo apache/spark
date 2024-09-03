@@ -2177,6 +2177,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXTERNAL_TYPE" : {
+    "message" : [
+      "The external type <externalType> is not valid for the type <type> at the expression <expr>."
+    ],
+    "sqlState" : "42K0N"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
