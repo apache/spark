@@ -984,16 +984,15 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def transpose(indexColumn: Column): DataFrame = withPlan {
     UnresolvedTranspose(
-      Some(indexColumn.named),
+      Seq(indexColumn.named),
       logicalPlan
     )
   }
 
   /** @inheritdoc */
   def transpose(): DataFrame = withPlan {
-    val indexExpr = if (this.columns.isEmpty) None else Some(this.col(this.columns.head).named)
     UnresolvedTranspose(
-      indexExpr,
+      Seq.empty,
       logicalPlan
     )
   }

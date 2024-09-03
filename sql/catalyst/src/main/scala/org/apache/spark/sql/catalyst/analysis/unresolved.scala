@@ -976,7 +976,7 @@ case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
 }
 
 case class UnresolvedTranspose(
-    indexColumn: Option[Expression],
+    indices: Seq[Expression],
     child: LogicalPlan
 ) extends UnresolvedUnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TRANSPOSE)

@@ -53,7 +53,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       StringType
     } else {
       dataTypes.reduce { (dt1, dt2) =>
-        TypeCoercion.findTightestCommonType(dt1, dt2).getOrElse {
+        AnsiTypeCoercion.findTightestCommonType(dt1, dt2).getOrElse {
           throw new AnalysisException(
             errorClass = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
             messageParameters = Map(
@@ -109,7 +109,9 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(TreePattern.UNRESOLVED_TRANSPOSE)) {
-    case t @ UnresolvedTranspose(indexColumnOpt, child) if child.resolved =>
+    case t @ UnresolvedTranspose(indices, child) if child.resolved && indices.forall(_.resolved) =>
+      assert(indices.length == 0 || indices.length == 1,
+        "The number of index columns should be either 0 or 1.")
 
       // Handle empty frame with no column headers
       if (child.output.isEmpty) {
@@ -117,13 +119,14 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       }
 
       // Use the first column as index column if not provided
-      val resolvedIndexColumn = indexColumnOpt match {
-        case Some(indexColumn) if indexColumn.resolved => indexColumn
-        case _ => child.output.head
+      val inferredIndexColumn = if (indices.isEmpty) {
+        child.output.head
+      } else {
+        indices.head
       }
 
       // Cast the index column to StringType
-      val indexColumnAsString = resolvedIndexColumn match {
+      val indexColumnAsString = inferredIndexColumn match {
         case attr: Attribute if attr.dataType.isInstanceOf[AtomicType] =>
           Alias(Cast(attr, StringType), attr.name)()
         case attr: Attribute =>
@@ -142,7 +145,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
       // Cast non-index columns to the least common type
       val nonIndexColumnsAttr = child.output.filterNot(
-        _.exprId == resolvedIndexColumn.asInstanceOf[Attribute].exprId)
+        _.exprId == inferredIndexColumn.asInstanceOf[Attribute].exprId)
       val nonIndexTypes = nonIndexColumnsAttr.map(_.dataType)
       val commonType = leastCommonType(nonIndexTypes)
       val nonIndexColumnsAsLCT = nonIndexColumnsAttr.map { attr =>
@@ -151,9 +154,9 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
       // Exclude nulls and sort index column values, and collect the casted frame
       val allCastCols = indexColumnAsString +: nonIndexColumnsAsLCT
-      val nonNullChild = Filter(IsNotNull(resolvedIndexColumn), child)
+      val nonNullChild = Filter(IsNotNull(inferredIndexColumn), child)
       val sortedChild = Sort(
-        Seq(SortOrder(resolvedIndexColumn.asInstanceOf[Attribute], Ascending)),
+        Seq(SortOrder(inferredIndexColumn.asInstanceOf[Attribute], Ascending)),
         global = true,
         nonNullChild
       )
