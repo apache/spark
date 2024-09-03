@@ -125,7 +125,6 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
 
-<<<<<<< HEAD
     // SPARK-49414: Remove Logging from DataFrameReader.
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.DataFrameReader"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logName"),
