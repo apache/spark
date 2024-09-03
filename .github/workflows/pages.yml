@@ -38,6 +38,7 @@ jobs:
       pages: write
     env:
       SPARK_TESTING: 1 # Reduce some noise in the logs
+      RELEASE_VERSION: 'In-Progress'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -74,6 +75,10 @@ jobs:
           bundle install --retry=100
       - name: Run documentation build
         run: |
+          sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
+          sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
           cd docs
           SKIP_RDOC=1 bundle exec jekyll build
       - name: Setup Pages
