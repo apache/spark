@@ -35,6 +35,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     override def reset(): Unit = ()
   }
 
+  case class TestLeaveStatement(labelText: String) extends LeaveStatementExec(labelText)
+
+  case class TestIterateStatement(labelText: String) extends IterateStatementExec(labelText)
+
   case class TestIfElseCondition(condVal: Boolean, description: String)
     extends SingleStatementExec(
       parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
@@ -54,8 +58,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   case class TestWhile(
       condition: TestWhileCondition,
-      body: CompoundBodyExec)
-    extends WhileStatementExec(condition, body, None, spark) {
+      body: CompoundBodyExec,
+      label: Option[String] = None)
+    extends WhileStatementExec(condition, body, label, spark) {
 
     private var callCount: Int = 0
 
@@ -77,6 +82,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case TestLeafStatement(testVal) => testVal
       case TestIfElseCondition(_, description) => description
       case TestWhileCondition(_, _, description) => description
+      case TestLeaveStatement(label) => label
+      case TestIterateStatement(label) => label
       case _ => fail("Unexpected statement type")
     }
 
@@ -314,4 +321,100 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
                                       "con2", "body1", "con2", "con1"))
   }
 
+  test("leave compound block") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestLeafStatement("one"),
+        TestLeaveStatement("lbl")
+      ),
+      label = Some("lbl")
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("one", "lbl"))
+  }
+
+  test("leave while loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestWhile(
+          condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestLeafStatement("body1"),
+            TestLeaveStatement("lbl"))
+          ),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1", "lbl"))
+  }
+
+  test("iterate while loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestWhile(
+          condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestLeafStatement("body1"),
+            TestIterateStatement("lbl"),
+            TestLeafStatement("body2"))
+          ),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "body1", "lbl", "con1", "body1", "lbl", "con1"))
+  }
+
+  test("leave outer loop from nested while loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestWhile(
+          condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestWhile(
+              condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
+              body = new CompoundBodyExec(Seq(
+                TestLeafStatement("body1"),
+                TestLeaveStatement("lbl"))
+              ),
+              label = Some("lbl2")
+            )
+          )),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("con1", "con2", "body1", "lbl"))
+  }
+
+  test("iterate outer loop from nested while loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestWhile(
+          condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestWhile(
+              condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
+              body = new CompoundBodyExec(Seq(
+                TestLeafStatement("body1"),
+                TestIterateStatement("lbl"),
+                TestLeafStatement("body2"))
+              ),
+              label = Some("lbl2")
+            )
+          )),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq(
+      "con1", "con2", "body1", "lbl",
+      "con1", "con2", "body1", "lbl",
+      "con1"))
+  }
 }
