@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
-import scala.jdk.CollectionConverters.MapHasAsJava
+import com.ibm.icu.text.Collator
+import com.ibm.icu.util.ULocale
 
+import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -186,6 +188,50 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
+  }
+
+  test("check difference betweeen SR_AI and SR_Latn_AI collations") {
+    // scalastyle:off nonascii
+    // SR_AI collation
+    var collationName = "SR_AI"
+    var builder = new ULocale.Builder();
+    builder.setLocale(new ULocale(collationName))
+    builder.setUnicodeLocaleKeyword("ks", "level1")
+    builder.setUnicodeLocaleKeyword("kc", "true")
+    var collator = Collator.getInstance(builder.build())
+
+    assert(collator.compare("cCćĆčČšŠžŽ", "čČcCćĆsSzZ") == 0)
+    checkAnswer(sql(s"SELECT 'cCćĆčČšŠžŽ' = 'čČcCćĆsSzZ' COLLATE $collationName"), Row(true))
+
+    // SR_Latn_AI collation
+    collationName = "SR_Latn_AI"
+    builder = new ULocale.Builder();
+    builder.setLocale(new ULocale(collationName))
+    builder.setUnicodeLocaleKeyword("ks", "level1")
+    builder.setUnicodeLocaleKeyword("kc", "true")
+    collator = Collator.getInstance(builder.build())
+
+    assert(collator.compare("c", "ć") != 0)
+    checkAnswer(sql(s"SELECT 'c' = 'ć' COLLATE $collationName"), Row(false))
+    assert(collator.compare("c", "č") != 0)
+    checkAnswer(sql(s"SELECT 'c' = 'č' COLLATE $collationName"), Row(false))
+    assert(collator.compare("ć", "č") != 0)
+    checkAnswer(sql(s"SELECT 'ć' = 'č' COLLATE $collationName"), Row(false))
+    assert(collator.compare("C", "Ć") != 0)
+    checkAnswer(sql(s"SELECT 'C' = 'Ć' COLLATE $collationName"), Row(false))
+    assert(collator.compare("C", "Č") != 0)
+    checkAnswer(sql(s"SELECT 'C' = 'Č' COLLATE $collationName"), Row(false))
+    assert(collator.compare("Ć", "Č") != 0)
+    checkAnswer(sql(s"SELECT 'Ć' = 'Č' COLLATE $collationName"), Row(false))
+    assert(collator.compare("s", "š") != 0)
+    checkAnswer(sql(s"SELECT 's' = 'Š' COLLATE $collationName"), Row(false))
+    assert(collator.compare("S", "Š") != 0)
+    checkAnswer(sql(s"SELECT 'S' = 'Š' COLLATE $collationName"), Row(false))
+    assert(collator.compare("z", "ž") != 0)
+    checkAnswer(sql(s"SELECT 'z' = 'ž' COLLATE $collationName"), Row(false))
+    assert(collator.compare("Z", "Ž") != 0)
+    checkAnswer(sql(s"SELECT 'Z' = 'Ž' COLLATE $collationName"), Row(false))
+    // scalastyle:on nonascii
   }
 
   test("equality check respects collation") {
