@@ -115,7 +115,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
       // Handle empty frame with no column headers
       if (child.output.isEmpty) {
-        return Transpose(Seq.empty, hasNonIndexColumns = false)
+        return Transpose(Seq.empty)
       }
 
       // Use the first column as index column if not provided
@@ -167,7 +167,6 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       val queryExecution = sparkSession.sessionState.executePlan(limitedProject)
       val fullCollectedRows = queryExecution.executedPlan.executeCollect()
 
-      val hasNonIndexColumns = nonIndexColumnsAttr.nonEmpty
       if (fullCollectedRows.isEmpty) {
         // Return a DataFrame with a single column "key" containing non-index column names
         val keyAttr = AttributeReference("key", StringType, nullable = false)()
@@ -175,7 +174,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           _.name).map(name => UTF8String.fromString(name))
         val keyRows = keyValues.map(value => InternalRow(value))
 
-        Transpose(Seq(keyAttr), keyRows, hasNonIndexColumns)
+        Transpose(Seq(keyAttr), keyRows)
       } else {
         val rowCount = fullCollectedRows.length
         if (rowCount > maxValues) {
@@ -207,7 +206,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
         val transposeOutput = (keyAttr +: valueAttrs).toIndexedSeq
         val transposeData = transposedInternalRows.toIndexedSeq
-        Transpose(transposeOutput, transposeData, hasNonIndexColumns)
+        Transpose(transposeOutput, transposeData)
       }
   }
 }

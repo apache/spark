@@ -1484,21 +1484,11 @@ case class Pivot(
  *
  * @param output A sequence of output attributes representing the schema of the transposed data.
  * @param data A sequence of [[InternalRow]] containing the transposed data.
- * @param hasNonIndexColumns A flag indicating whether there are non-index columns in the
- *                           original DataFrame. This is used to determine if the transposed data
- *                           should be populated or if it should remain empty.
  */
 case class Transpose(
     output: Seq[Attribute],
-    data: Seq[InternalRow] = Nil,
-    hasNonIndexColumns: Boolean = true
+    data: Seq[InternalRow] = Nil
 ) extends LeafNode {
-
-  override lazy val resolved: Boolean = {
-    (output.isEmpty && !hasNonIndexColumns) ||
-      (output.nonEmpty && (!hasNonIndexColumns || data.nonEmpty))
-  }
-
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
 }
 
