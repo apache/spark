@@ -248,6 +248,18 @@ abstract class SparkFunSuite
   }
 
   /**
+   * Creates a temporary directory with the provided prefix, which is then passed to `f` and will
+   * be deleted after `f` returns.
+   */
+  protected def withTempDir(prefix: String)(f: File => Unit): Unit = {
+    val dir = Utils.createTempDir(namePrefix = prefix)
+    try f(dir) finally {
+      Utils.deleteRecursively(dir)
+    }
+  }
+
+
+  /**
    * Creates a temporary directory containing a secret file, which is then passed to `f` and
    * will be deleted after `f` returns.
    */

@@ -700,7 +700,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val description = "this is a test table"
 
     withTable("t") {
-      withTempDir { dir =>
+      withTempDir(prefix = "test%prefix") { dir =>
         spark.catalog.createTable(
           tableName = "t",
           source = "json",
