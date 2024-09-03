@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
+
+import java.util
+
+import scala.collection.mutable
+import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.{Column, DataFrame, DataFrameWriterV2, Dataset}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, LogicalExpressions, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.IntegerType
@@ -33,8 +39,8 @@ import org.apache.spark.sql.types.IntegerType
  * @since 3.0.0
  */
 @Experimental
-final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
-    extends api.DataFrameWriterV2[T] {
+final class DataFrameWriterV2Impl[T] private[sql](table: String, ds: Dataset[T])
+    extends DataFrameWriterV2[T] {
 
   private val df: DataFrame = ds.toDF()
 
@@ -45,28 +51,49 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val logicalPlan = df.queryExecution.logical
 
+  private var provider: Option[String] = None
+
+  private val options = new mutable.HashMap[String, String]()
+
+  private val properties = new mutable.HashMap[String, String]()
+
   private var partitioning: Option[Seq[Transform]] = None
 
   private var clustering: Option[ClusterByTransform] = None
 
   /** @inheritdoc */
-  override def using(provider: String): this.type = super.using(provider)
+  override def using(provider: String): this.type = {
+    this.provider = Some(provider)
+    this
+  }
 
   /** @inheritdoc */
-  override def option(key: String, value: String): this.type =
-    super.option(key, value)
+  override def option(key: String, value: String): this.type = {
+    this.options.put(key, value)
+    this
+  }
 
   /** @inheritdoc */
-  override def options(options: scala.collection.Map[String, String]): this.type =
-    super.options(options)
+  override def options(options: scala.collection.Map[String, String]): this.type = {
+    options.foreach {
+      case (key, value) =>
+        this.options.put(key, value)
+    }
+    this
+  }
 
   /** @inheritdoc */
-  override def options(options: java.util.Map[String, String]): this.type =
-    super.options(options)
+  override def options(options: util.Map[String, String]): this.type = {
+    this.options(options.asScala)
+    this
+  }
 
   /** @inheritdoc */
-  override def tableProperty(property: String, value: String): this.type =
-    super.tableProperty(property, value)
+  override def tableProperty(property: String, value: String): this.type = {
+    this.properties.put(property, value)
+    this
+  }
+
 
   /** @inheritdoc */
   @scala.annotation.varargs

@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.{Column, DataFrameWriterV2, Dataset}
 
 /**
  * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2
@@ -29,47 +30,55 @@ import org.apache.spark.connect.proto
  * @since 3.4.0
  */
 @Experimental
-final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
-    extends api.DataFrameWriterV2[T] {
+final class DataFrameWriterV2Impl[T] private[sql] (table: String, ds: Dataset[T])
+    extends DataFrameWriterV2[T] {
   import ds.sparkSession.RichColumn
 
-  private var partitioning: Option[Seq[proto.Expression]] = None
-
-  private var clustering: Option[Seq[String]] = None
-
-  private var overwriteCondition: Option[proto.Expression] = None
+  private val builder = proto.WriteOperationV2.newBuilder()
+    .setInput(ds.plan.getRoot)
+    .setTableName(table)
 
   /** @inheritdoc */
-  override def using(provider: String): this.type = super.using(provider)
+  override def using(provider: String): this.type = {
+    builder.setProvider(provider)
+    this
+  }
 
   /** @inheritdoc */
-  override def option(key: String, value: String): this.type =
-    super.option(key, value)
+  override def option(key: String, value: String): this.type = {
+    builder.putOptions(key, value)
+    this
+  }
 
   /** @inheritdoc */
-  override def options(options: scala.collection.Map[String, String]): this.type =
-    super.options(options)
+  override def options(options: scala.collection.Map[String, String]): this.type = {
+    builder.putAllOptions(options.asJava)
+    this
+  }
 
   /** @inheritdoc */
-  override def options(options: java.util.Map[String, String]): this.type =
-    super.options(options)
+  override def options(options: java.util.Map[String, String]): this.type = {
+    builder.putAllOptions(options)
+    this
+  }
 
   /** @inheritdoc */
-  override def tableProperty(property: String, value: String): this.type =
-    super.tableProperty(property, value)
+  override def tableProperty(property: String, value: String): this.type = {
+    builder.putTableProperties(property, value)
+    this
+  }
 
   /** @inheritdoc */
   @scala.annotation.varargs
   override def partitionedBy(column: Column, columns: Column*): this.type = {
-    val asTransforms = (column +: columns).map(_.expr)
-    this.partitioning = Some(asTransforms)
+    builder.addAllPartitioningColumns((column +: columns).map(_.expr).asJava)
     this
   }
 
   /** @inheritdoc */
   @scala.annotation.varargs
   override def clusterBy(colName: String, colNames: String*): this.type = {
-    this.clustering = Some(colName +: colNames)
+    builder.addAllClusteringColumns((colName +: colNames).asJava)
     this
   }
 
@@ -95,7 +104,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
 
   /** @inheritdoc */
   def overwrite(condition: Column): Unit = {
-    overwriteCondition = Some(condition.expr)
+    builder.setOverwriteCondition(condition.expr)
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_OVERWRITE)
   }
 
@@ -105,26 +114,9 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
   }
 
   private def executeWriteOperation(mode: proto.WriteOperationV2.Mode): Unit = {
-    val builder = proto.WriteOperationV2.newBuilder()
-
-    builder.setInput(ds.plan.getRoot)
-    builder.setTableName(table)
-    provider.foreach(builder.setProvider)
-
-    partitioning.foreach(columns => builder.addAllPartitioningColumns(columns.asJava))
-    clustering.foreach(columns => builder.addAllClusteringColumns(columns.asJava))
-
-    options.foreach { case (k, v) =>
-      builder.putOptions(k, v)
-    }
-    properties.foreach { case (k, v) =>
-      builder.putTableProperties(k, v)
-    }
-
-    builder.setMode(mode)
-
-    overwriteCondition.foreach(builder.setOverwriteCondition)
-
-    ds.sparkSession.execute(proto.Command.newBuilder().setWriteOperationV2(builder).build())
+    val command = proto.Command.newBuilder()
+      .setWriteOperationV2(builder.setMode(mode))
+      .build()
+    ds.sparkSession.execute(command)
   }
 }

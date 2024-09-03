@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevel
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
-import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, UnresolvedAttribute, UnresolvedRegex}
+import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterV2Impl, UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -1072,7 +1072,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def writeTo(table: String): DataFrameWriterV2[T] = {
-    new DataFrameWriterV2[T](table, this)
+    new DataFrameWriterV2Impl[T](table, this)
   }
 
   /**
