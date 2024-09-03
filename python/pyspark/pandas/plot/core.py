@@ -185,18 +185,11 @@ class HistogramPlotBase(NumericPlotBase):
         def binary_search_for_buckets(value: Column):
             index = SF.binary_search(F.lit(bins), value)
             bucket = F.when(index >= F.lit(0), index).otherwise(-index - F.lit(2))
-
+            unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
                 F.when(value == F.lit(bins[-1]), F.lit(len(bins) - 2))
                 .when(value.between(F.lit(bins[0]), F.lit(bins[-1])), bucket)
-                .otherwise(
-                    F.raise_error(
-                        F.printf(
-                            F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]"),
-                            value,
-                        )
-                    )
-                )
+                .otherwise(F.raise_error(F.printf(unboundErrMsg, value)))
             )
 
         output_df = (
