@@ -14,20 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
+
+import java.util
 
 import scala.jdk.CollectionConverters._
 
-import _root_.java.util
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.CompilationErrors
 
 /**
- * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use `Dataset.write` to access this.
+ * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage systems
+ * (e.g. file systems, key-value stores, etc). Use `Dataset.write` to access this.
  *
  * @since 1.4.0
  */

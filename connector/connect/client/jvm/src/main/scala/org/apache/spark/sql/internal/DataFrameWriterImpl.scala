@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.{DataFrameWriter, Dataset, SaveMode}
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems, key-value
@@ -29,7 +30,7 @@ import org.apache.spark.connect.proto
  * @since 3.4.0
  */
 @Stable
-final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends api.DataFrameWriter[T] {
+final class DataFrameWriterImpl[T] private[sql] (ds: Dataset[T]) extends DataFrameWriter[T] {
 
   /** @inheritdoc */
   override def mode(saveMode: SaveMode): this.type = super.mode(saveMode)

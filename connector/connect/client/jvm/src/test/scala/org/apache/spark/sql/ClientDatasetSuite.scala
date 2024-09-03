@@ -72,19 +72,22 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val df = ss.newDataFrame(_ => ()).limit(10)
 
     def toPlan(builder: proto.WriteOperation.Builder): proto.Plan = {
-      proto.Plan.newBuilder()
+      proto.Plan
+        .newBuilder()
         .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
         .build()
     }
 
-    val builder = proto.WriteOperation.newBuilder()
+    val builder = proto.WriteOperation
+      .newBuilder()
       .setInput(df.plan.getRoot)
       .setPath("my/test/path")
       .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS)
       .setSource("parquet")
 
     val partitionedPlan = toPlan(
-      builder.clone()
+      builder
+        .clone()
         .addSortColumnNames("col1")
         .addPartitioningColumns("col99")
         .setBucketBy(
