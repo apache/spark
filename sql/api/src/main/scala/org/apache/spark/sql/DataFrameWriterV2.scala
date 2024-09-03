@@ -104,6 +104,55 @@ abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
 }
 
 /**
+ * Configuration methods common to create/replace operations and insert/overwrite operations.
+ * @tparam R builder type to return
+ * @since 3.0.0
+ */
+trait WriteConfigMethods[R] {
+  /**
+   * Add a write option.
+   *
+   * @since 3.0.0
+   */
+  def option(key: String, value: String): R
+
+  /**
+   * Add a boolean output option.
+   *
+   * @since 3.0.0
+   */
+  def option(key: String, value: Boolean): R = option(key, value.toString)
+
+  /**
+   * Add a long output option.
+   *
+   * @since 3.0.0
+   */
+  def option(key: String, value: Long): R = option(key, value.toString)
+
+  /**
+   * Add a double output option.
+   *
+   * @since 3.0.0
+   */
+  def option(key: String, value: Double): R = option(key, value.toString)
+
+  /**
+   * Add write options from a Scala Map.
+   *
+   * @since 3.0.0
+   */
+  def options(options: scala.collection.Map[String, String]): R
+
+  /**
+   * Add write options from a Java Map.
+   *
+   * @since 3.0.0
+   */
+  def options(options: java.util.Map[String, String]): R
+}
+
+/**
  * Trait to restrict calls to create and replace operations.
  *
  * @since 3.0.0
@@ -195,53 +244,4 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * Add a table property.
    */
   def tableProperty(property: String, value: String): CreateTableWriter[T]
-}
-
-/**
- * Configuration methods common to create/replace operations and insert/overwrite operations.
- * @tparam R builder type to return
- * @since 3.0.0
- */
-trait WriteConfigMethods[R] {
-  /**
-   * Add a write option.
-   *
-   * @since 3.0.0
-   */
-  def option(key: String, value: String): R
-
-  /**
-   * Add a boolean output option.
-   *
-   * @since 3.0.0
-   */
-  def option(key: String, value: Boolean): R = option(key, value.toString)
-
-  /**
-   * Add a long output option.
-   *
-   * @since 3.0.0
-   */
-  def option(key: String, value: Long): R = option(key, value.toString)
-
-  /**
-   * Add a double output option.
-   *
-   * @since 3.0.0
-   */
-  def option(key: String, value: Double): R = option(key, value.toString)
-
-  /**
-   * Add write options from a Scala Map.
-   *
-   * @since 3.0.0
-   */
-  def options(options: scala.collection.Map[String, String]): R
-
-  /**
-   * Add write options from a Java Map.
-   *
-   * @since 3.0.0
-   */
-  def options(options: java.util.Map[String, String]): R
 }
