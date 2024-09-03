@@ -21,7 +21,7 @@ from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
-from pyspark.errors import ParseException, PythonException, PySparkTypeError, PySparkValueError
+from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -348,10 +348,9 @@ class PandasUDFTestsMixin:
 
         df = self.spark.createDataFrame([("a",)], schema="s string")
 
-        with self.assertRaisesRegex(
-            PySparkValueError, "Invalid return type."
-        ):
-            df.select(upper("s")).collect()
+        self.assertRaisesRegex(
+            PythonException, "Invalid return type", df.select(upper("s")).collect
+        )
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
