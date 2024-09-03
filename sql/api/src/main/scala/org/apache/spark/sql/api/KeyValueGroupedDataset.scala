@@ -245,7 +245,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @param func Function to be called on every group.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](func: (K, Iterator[V], GroupState[S]) => U): DS[U]
@@ -264,7 +264,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param func        Function to be called on every group.
    * @param timeoutConf Timeout configuration for groups that do not receive data for a while.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
@@ -291,7 +291,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *                     KeyValueGroupedDataset[K, S]
    *                     do {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
@@ -314,7 +314,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param stateEncoder  Encoder for the state type.
    * @param outputEncoder Encoder for the output type.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
   def mapGroupsWithState[S, U](
@@ -340,7 +340,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputEncoder Encoder for the output type.
    * @param timeoutConf   Timeout configuration for groups that do not receive data for a while.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
   def mapGroupsWithState[S, U](
@@ -371,7 +371,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *                      will be called on the state data even if there are no other values in
    *                      the group.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
    */
   def mapGroupsWithState[S, U](
@@ -399,7 +399,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputMode  The output mode of the function.
    * @param timeoutConf Timeout configuration for groups that do not receive data for a while.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
@@ -427,7 +427,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *                     the group. To covert a Dataset `ds` of type  of type `Dataset[(K, S)]`
    *                     to a `KeyValueGroupedDataset[K, S]`, use
    *                     {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
    */
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
@@ -453,7 +453,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputEncoder Encoder for the output type.
    * @param timeoutConf   Timeout configuration for groups that do not receive data for a while.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
   def flatMapGroupsWithState[S, U](
@@ -489,7 +489,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *                      to a `KeyValueGroupedDataset[K, S]`, use
    * {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
    */
   def flatMapGroupsWithState[S, U](
@@ -524,7 +524,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param timeMode          The time mode semantics of the stateful processor for timers and TTL.
    * @param outputMode        The output mode of the stateful processor.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -552,7 +552,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *                            the watermark boundary, otherwise streaming query will fail.
    * @param outputMode          The output mode of the stateful processor.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -575,7 +575,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputMode The output mode of the stateful processor.
    * @param outputEncoder Encoder for the output type.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -608,7 +608,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputMode        The output mode of the stateful processor.
    * @param outputEncoder     Encoder for the output type.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -632,7 +632,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param initialState      User provided initial state that will be used to initiate state for
    *                          the query in the first batch.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
@@ -661,7 +661,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param initialState        User provided initial state that will be used to initiate state for
    *                            the query in the first batch.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
@@ -686,7 +686,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputEncoder       Encoder for the output type.
    * @param initialStateEncoder Encoder for the initial state type.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
@@ -721,7 +721,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @param outputEncoder     Encoder for the output type.
    * @param initialStateEncoder Encoder for the initial state type.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
