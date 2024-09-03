@@ -1195,6 +1195,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 class TransformWithStateInPandasStateSerializer:
     def load_stream(self, stream):
         import pyarrow as pa
+
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
@@ -1202,6 +1203,7 @@ class TransformWithStateInPandasStateSerializer:
     def dump_stream(self, state, stream, schema):
         import pyarrow as pa
         from pyspark.sql.pandas.types import to_arrow_schema
+
         writer = None
         print("dumping arrow batch")
         try:

@@ -52,7 +52,7 @@ class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
         cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "1")
+        cfg.set("spark.sql.shuffle.partitions", "5")
         cfg.set(
             "spark.sql.streaming.stateStore.providerClass",
             "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
@@ -219,9 +219,7 @@ class TransformWithStateInPandasTestsMixin:
                 Row(id="1", countAsString="2"),
             }
 
-        self._test_transform_with_state_in_pandas_basic(
-            ListStateProcessor(), check_results, True
-        )
+        self._test_transform_with_state_in_pandas_basic(ListStateProcessor(), check_results, True)
 
 
 class SimpleStatefulProcessor(StatefulProcessor):
@@ -275,8 +273,12 @@ class InvalidSimpleStatefulProcessor(StatefulProcessor):
     def close(self) -> None:
         pass
 
+
 class ListStateProcessor(StatefulProcessor):
-    dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
+    # Dict to store the expected results. The key represents the grouping key string, and the value
+    # is a dictionary of pandas dataframe index -> expected temperature value. Since we set
+    # maxRecordsPerBatch to 2, we expect the pandas dataframe dictionary to have 2 entries.
+    dict = {"0": {0: 123, 1: 46}, "1": {0: 146, 1: 346}}
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
@@ -285,27 +287,36 @@ class ListStateProcessor(StatefulProcessor):
 
     def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
         count = 0
+        key_str = key[0]
         for pdf in rows:
-          self.list_state1.put(pdf)
-          self.list_state2.put(pdf)
-          self.list_state1.append_value((111,))
-          self.list_state2.append_value((222,))
-          self.list_state1.append_list(pdf)
-          self.list_state2.append_list(pdf)
-          pdf_count = pdf.count()
-          count += pdf_count.get('temperature')
+            self.list_state1.put(pdf)
+            self.list_state2.put(pdf)
+            self.list_state1.append_value((111,))
+            self.list_state2.append_value((222,))
+            self.list_state1.append_list(pdf)
+            self.list_state2.append_list(pdf)
+            pdf_count = pdf.count()
+            count += pdf_count.get("temperature")
+        pandas_dict = self.dict[key_str]
         iter1 = self.list_state1.get()
         iter2 = self.list_state2.get()
         # Mixing the iterator to test it we can resume from the correct point
-        next(iter1)
-        next(iter2)
         result1 = next(iter1)
-        # the second fetch should return the append value 111 for list_state1
-        assert result1.at[0, 'temperature'] == 111
+        assert result1.at[0, "temperature"] == pandas_dict[0]
+        assert result1.at[1, "temperature"] == pandas_dict[1]
         result2 = next(iter2)
-        # the second fetch should return the append value 222 for list_state2
-        assert result2.at[0, 'temperature'] == 222
-        yield pd.DataFrame({'id': key, 'countAsString': str(count)})
+        assert result2.at[0, "temperature"] == pandas_dict[0]
+        assert result2.at[1, "temperature"] == pandas_dict[1]
+
+        # the second pdf should contain the appended value 111 for list_state1
+        result1 = next(iter1)
+        assert result1.at[0, "temperature"] == 111
+        assert result1.at[1, "temperature"] == pandas_dict[0]
+        result2 = next(iter2)
+        # the second pdf should contain the appended value 222 for list_state2
+        assert result2.at[0, "temperature"] == 222
+        assert result2.at[1, "temperature"] == pandas_dict[0]
+        yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
         pass

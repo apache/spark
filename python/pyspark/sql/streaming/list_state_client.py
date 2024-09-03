@@ -60,18 +60,15 @@ class ListStateClient:
         state_variable_request = stateMessage.StateVariableRequest(listStateCall=list_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
-        print(f"sending get request: {message.SerializeToString()}")
         self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status == 0:
             iterator = self._stateful_processor_api_client._read_arrow_state()
             batch = next(iterator)
-            print(f"arrow batch: {batch}")
             return batch.to_pandas()
         else:
-            # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
+            raise StopIteration()
 
     def append_value(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -93,11 +90,7 @@ class ListStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
-    def append_list(
-        self,
-        state_name: str,
-        values: "PandasDataFrameLike"
-    ) -> None:
+    def append_list(self, state_name: str, values: "PandasDataFrameLike") -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         append_list_call = stateMessage.AppendList()
@@ -109,7 +102,6 @@ class ListStateClient:
 
         self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
 
-        print(f"sending arrow state: {values}")
         self._stateful_processor_api_client._send_arrow_state(values)
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
@@ -117,17 +109,11 @@ class ListStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
-    def put(
-        self,
-        state_name: str,
-        values: "PandasDataFrameLike"
-    ) -> None:
+    def put(self, state_name: str, values: "PandasDataFrameLike") -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         put_call = stateMessage.ListStatePut()
-        list_state_call = stateMessage.ListStateCall(
-            stateName=state_name, listStatePut=put_call
-        )
+        list_state_call = stateMessage.ListStateCall(stateName=state_name, listStatePut=put_call)
         state_variable_request = stateMessage.StateVariableRequest(listStateCall=list_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
@@ -139,7 +125,6 @@ class ListStateClient:
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
-
 
     def clear(self, state_name: str) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage

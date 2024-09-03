@@ -174,7 +174,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
 
-  test("list state get - iterator not exist") {
+  test("list state get - iterator not in map") {
     val message = ListStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
