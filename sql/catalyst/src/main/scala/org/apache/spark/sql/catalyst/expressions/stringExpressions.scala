@@ -2714,7 +2714,8 @@ case class Base64(child: Expression, chunkBase64: Boolean)
     dataType,
     "encode",
     Seq(child, Literal(chunkBase64, BooleanType)),
-    Seq(BinaryType, BooleanType))
+    Seq(BinaryType, BooleanType),
+    returnNullable = false)
 
   override def toString: String = s"$prettyName($child)"
 
