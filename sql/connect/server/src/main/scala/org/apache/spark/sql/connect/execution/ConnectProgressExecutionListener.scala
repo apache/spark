@@ -145,7 +145,8 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
           stage.update { i =>
             i.completedTasks += 1
             i.inputBytesRead += Option(taskEnd.taskMetrics)
-              .map(_.inputMetrics.bytesRead).getOrElse(0L)
+              .map(_.inputMetrics.bytesRead)
+              .getOrElse(0L)
           }
         }
         // This should never become negative, simply reset to zero if it does.
