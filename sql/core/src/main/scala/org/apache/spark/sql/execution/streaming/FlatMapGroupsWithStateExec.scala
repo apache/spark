@@ -450,16 +450,20 @@ case class FlatMapGroupsWithStateExec(
         hasTimedOut,
         watermarkPresent)
 
-      // Call function, get the returned objects and convert them to rows
-      val mappedIterator = try {
-          func(keyObj, valueObjIter, groupState).map { obj =>
-            numOutputRows += 1
-            getOutputRow(obj)
-          }
-        }
-      catch {
+      // Call function
+      val iterator = try {
+        func(keyObj, valueObjIter, groupState)
+      } catch {
         case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
           throw FlatMapGroupsWithStateUserFuncException(e)
+        case f: Throwable =>
+          throw f
+      }
+
+      // Get the returned objects and convert them to rows
+      val mappedIterator = iterator.map { obj =>
+        numOutputRows += 1
+        getOutputRow(obj)
       }
 
       // When the iterator is consumed, then write changes to state

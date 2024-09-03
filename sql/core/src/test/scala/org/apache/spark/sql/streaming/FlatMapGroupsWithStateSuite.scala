@@ -23,9 +23,8 @@ import java.sql.Timestamp
 import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder}
+import org.apache.spark.sql.{DataFrame, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
@@ -648,14 +647,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .groupByKey(x => x)
         .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
 
-    val e = intercept[SparkException] {
-      testStream(result, Update)(
-        AddData(inputData, "a")
-      )
-    }
-
-    assert(e.getErrorClass == "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR")
-    assert(e.getCause.isInstanceOf[NullPointerException])
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException]()
+    )
   }
 
   test("mapGroupsWithState - streaming") {
@@ -839,7 +834,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       CheckNewAnswer(("a", 2L)),
       setFailInTask(true),
       AddData(inputData, "a"),
-      ExpectFailure[SparkException](),   // task should fail but should not increment count
+      // task should fail but should not increment count
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException](),
       setFailInTask(false),
       StartStream(),
       CheckNewAnswer(("a", 3L))     // task should not fail, and should show correct count
