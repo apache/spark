@@ -1205,14 +1205,11 @@ class TransformWithStateInPandasStateSerializer:
         from pyspark.sql.pandas.types import to_arrow_schema
 
         writer = None
-        print("dumping arrow batch")
         try:
             if writer is None:
                 arrow_schema = to_arrow_schema(schema)
                 batch = pa.RecordBatch.from_pandas(state)
-                print(f"arrow table schema: {batch.schema}")
                 writer = pa.RecordBatchStreamWriter(stream, arrow_schema)
-                print(f"arrow batch: {batch}")
                 writer.write_batch(batch)
         finally:
             if writer is not None:
