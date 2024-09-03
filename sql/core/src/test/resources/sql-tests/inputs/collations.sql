@@ -101,3 +101,28 @@ select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyVal
 select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4;
 
 drop table t4;
+
+-- create table for split_part
+create table t5(str string collate utf8_binary, delimiter string collate utf8_lcase, partNum int) using parquet;
+
+insert into t5 values('11AB12AB13', 'AB', 2);
+
+select split_part(str, delimiter, partNum) from t5;
+select split_part(str collate utf8_binary, delimiter collate utf8_lcase, partNum) from t5;
+select split_part(str collate utf8_binary, delimiter collate utf8_binary, partNum) from t5;
+
+drop table t5;
+
+-- create table for levenshtein
+create table t6 (utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase, threshold int) using parquet;
+
+insert into t6 values('kitten', 'sitting', 2);
+
+select levenshtein(utf8_binary, utf8_lcase) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t6;
+select levenshtein(utf8_binary, utf8_lcase, threshold) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase, threshold) from t6;
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary, threshold) from t6;
+
+drop table t6;

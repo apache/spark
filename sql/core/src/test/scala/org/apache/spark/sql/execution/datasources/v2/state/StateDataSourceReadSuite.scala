@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, Offset
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, TimeMode, TransformWithStateSuiteUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
@@ -268,6 +268,25 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           "message" -> s"value should be less than or equal to $endBatchId"))
     }
   }
+
+  test("ERROR: trying to specify state variable name with " +
+    "non-transformWithState operator") {
+    withTempDir { tempDir =>
+      runDropDuplicatesQuery(tempDir.getAbsolutePath)
+
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "test")
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", Some("42616"),
+        Map("optionName" -> StateSourceOptions.STATE_VAR_NAME,
+          "message" -> ".*"),
+        matchPVals = true)
+    }
+  }
 }
 
 /**
@@ -428,6 +447,40 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
       newStateStoreProvider().getClass.getName)
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "false")
+  }
+
+  test("ERROR: Do not provide state variable name with " +
+    "transformWithState operator") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val e = intercept[StateDataSourceUnspecifiedRequiredOption] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .load()
+        }
+        checkError(e, "STDS_REQUIRED_OPTION_UNSPECIFIED", Some("42601"),
+          Map("optionName" -> "stateVarName"))
+      }
+    }
   }
 }
 

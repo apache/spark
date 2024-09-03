@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import java.io.Closeable
+import java.net.URI
+import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
-import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.jdk.CollectionConverters._
@@ -34,6 +34,7 @@ import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.SparkSession.applyAndLoadExtensions
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
@@ -56,7 +57,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -92,7 +93,7 @@ class SparkSession private(
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String])
-  extends Serializable with Closeable with Logging { self =>
+  extends api.SparkSession[Dataset] with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -106,8 +107,7 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None, SparkSession.applyExtensions(sc, new SparkSessionExtensions),
-      initialSessionOptions.asScala.toMap)
+    this(sc, None, None, applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -122,11 +122,7 @@ class SparkSession private(
       .getOrElse(SQLConf.getFallbackConf)
   })
 
-  /**
-   * The version of Spark on which this application is running.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def version: String = SPARK_VERSION
 
   /* ----------------------- *
@@ -207,27 +203,7 @@ class SparkSession private(
   @Unstable
   def experimental: ExperimentalMethods = sessionState.experimentalMethods
 
-  /**
-   * A collection of methods for registering user-defined functions (UDF).
-   *
-   * The following example registers a Scala closure as UDF:
-   * {{{
-   *   sparkSession.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
-   * }}}
-   *
-   * The following example registers a UDF in Java:
-   * {{{
-   *   sparkSession.udf().register("myUDF",
-   *       (Integer arg1, String arg2) -> arg2 + arg1,
-   *       DataTypes.StringType);
-   * }}}
-   *
-   * @note The user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def udf: UDFRegistration = sessionState.udfRegistration
 
   private[sql] def udtf: UDTFRegistration = sessionState.udtfRegistration
@@ -260,17 +236,7 @@ class SparkSession private(
   @Unstable
   private[sql] def artifactManager: ArtifactManager = sessionState.artifactManager
 
-  /**
-   * Start a new session with isolated SQL configurations, temporary tables, registered
-   * functions are isolated, but sharing the underlying `SparkContext` and cached data.
-   *
-   * @note Other than the `SparkContext`, all shared state is initialized lazily.
-   * This method will force the initialization of the shared state to ensure that parent
-   * and child sessions are set up with the same shared state. If the underlying catalog
-   * implementation is Hive, this will initialize the metastore, which may take some time.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def newSession(): SparkSession = {
     new SparkSession(
       sparkContext,
@@ -308,19 +274,11 @@ class SparkSession private(
    |  Methods for creating DataFrames  |
    * --------------------------------- */
 
-  /**
-   * Returns a `DataFrame` with no rows or columns.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient
   lazy val emptyDataFrame: DataFrame = Dataset.ofRows(self, LocalRelation())
 
-  /**
-   * Creates a new [[Dataset]] of type T containing zero elements.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
     new Dataset(self, LocalRelation(encoder.schema), encoder)
@@ -336,11 +294,7 @@ class SparkSession private(
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
   }
 
-  /**
-   * Creates a `DataFrame` from a local Seq of Product.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = withActive {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = toAttributes(schema)
@@ -403,14 +357,7 @@ class SparkSession private(
     createDataFrame(rowRDD.rdd, replaced)
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided List matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
@@ -447,13 +394,7 @@ class SparkSession private(
     createDataFrame(rdd.rdd, beanClass)
   }
 
-  /**
-   * Applies a schema to a List of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
     val attrSeq = getSchema(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
@@ -473,33 +414,7 @@ class SparkSession private(
    |  Methods for creating DataSets  |
    * ------------------------------- */
 
-  /**
-   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * == Example ==
-   *
-   * {{{
-   *
-   *   import spark.implicits._
-   *   case class Person(name: String, age: Long)
-   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
-   *   val ds = spark.createDataset(data)
-   *
-   *   ds.show()
-   *   // +-------+---+
-   *   // |   name|age|
-   *   // +-------+---+
-   *   // |Michael| 29|
-   *   // |   Andy| 30|
-   *   // | Justin| 19|
-   *   // +-------+---+
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val toRow = enc.createSerializer()
@@ -521,60 +436,25 @@ class SparkSession private(
     Dataset[T](self, ExternalRDD(data, self))
   }
 
-  /**
-   * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * == Java Example ==
-   *
-   * {{{
-   *     List<String> data = Arrays.asList("hello", "world");
-   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala.toSeq)
   }
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from 0 to `end` (exclusive) with step value 1.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with step value 1.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1, numPartitions = leafNodeDefaultParallelism)
   }
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = leafNodeDefaultParallelism)
   }
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value, with partition number
-   * specified.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
@@ -608,19 +488,7 @@ class SparkSession private(
    */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
-  /**
-   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
-   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
-   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
-   * streaming query plan.
-   *
-   * @param tableName is either a qualified or unqualified name that designates a table or view.
-   *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first attempts to find a temporary view with the given name
-   *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     read.table(tableName)
   }
@@ -661,22 +529,7 @@ class SparkSession private(
       Dataset.ofRows(self, plan, tracker)
     }
 
-  /**
-   * Executes a SQL query substituting positional parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with positional parameters to execute.
-   * @param args An array of Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             A value can be also a `Column` of a literal or collection constructor functions
-   *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   @Experimental
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
@@ -714,57 +567,20 @@ class SparkSession private(
       Dataset.ofRows(self, plan, tracker)
     }
 
-  /**
-   * Executes a SQL query substituting named parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, map keys: "rank", "name", "birthdate";
-   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             Map value can be also a `Column` of a literal or collection constructor functions
-   *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
-  /**
-   * Executes a SQL query substituting named parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, map keys: "rank", "name", "birthdate";
-   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             Map value can be also a `Column` of a literal or collection constructor functions
-   *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
 
-  /**
-   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @since 2.0.0
-   */
-  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
+  /** @inheritdoc */
+  override def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Execute an arbitrary string command inside an external execution engine rather than Spark.
@@ -794,6 +610,45 @@ class SparkSession private(
     }
   }
 
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(path: String): Unit = addArtifact(SparkFileUtils.resolveURI(path))
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(uri: URI): Unit = {
+    artifactManager.addLocalArtifacts(Artifact.parseArtifacts(uri))
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.InMemory(bytes))
+    artifactManager.addLocalArtifacts(artifact :: Nil)
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(source: String, target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(source)))
+    artifactManager.addLocalArtifacts(artifact :: Nil)
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  @scala.annotation.varargs
+  override def addArtifacts(uri: URI*): Unit = {
+    artifactManager.addLocalArtifacts(uri.flatMap(Artifact.parseArtifacts))
+  }
+
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
    * `DataFrame`.
@@ -817,22 +672,6 @@ class SparkSession private(
    */
   def readStream: DataStreamReader = new DataStreamReader(self)
 
-  /**
-   * Executes some code block and prints to stdout the time taken to execute the block. This is
-   * available in Scala only and is used primarily for interactive testing and debugging.
-   *
-   * @since 2.1.0
-   */
-  def time[T](f: => T): T = {
-    val start = System.nanoTime()
-    val ret = f
-    val end = System.nanoTime()
-    // scalastyle:off println
-    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
-    // scalastyle:on println
-    ret
-  }
-
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -854,18 +693,11 @@ class SparkSession private(
   /**
    * Stop the underlying `SparkContext`.
    *
-   * @since 2.0.0
-   */
-  def stop(): Unit = {
-    sparkContext.stop()
-  }
-
-  /**
-   * Synonym for `stop()`.
-   *
    * @since 2.1.0
    */
-  override def close(): Unit = stop()
+  override def close(): Unit = {
+    sparkContext.stop()
+  }
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -947,6 +779,8 @@ class SparkSession private(
      */
     def named: NamedExpression = ExpressionUtils.toNamed(expr)
   }
+
+  private[sql] lazy val observationManager = new ObservationManager(this)
 }
 
 
@@ -1393,6 +1227,18 @@ object SparkSession extends Logging {
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
     }
+  }
+
+  /**
+   * Create new session extensions, initialize with the confs set in [[StaticSQLConf]],
+   * and optionally apply the [[SparkSessionExtensionsProvider]] present on the classpath.
+   */
+  private[sql] def applyAndLoadExtensions(sparkContext: SparkContext): SparkSessionExtensions = {
+    val extensions = applyExtensions(sparkContext, new SparkSessionExtensions)
+    if (sparkContext.conf.get(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH)) {
+      loadExtensions(extensions)
+    }
+    extensions
   }
 
   /**

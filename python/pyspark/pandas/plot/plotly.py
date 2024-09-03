@@ -147,34 +147,41 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
         )
 
     fig = go.Figure()
+
+    if isinstance(data, ps.Series):
+        sdf = data._psdf._internal.resolved_copy.spark_frame
+        spark_column_name = data._internal.spark_column_name_for(data._column_label)
+        colnames = [spark_column_name]
+    else:
+        sdf = data._internal.resolved_copy.spark_frame
+        colnames = []
+        for column_label in data._internal.column_labels:
+            if isinstance(data._internal.spark_type_for(column_label), NumericType):
+                colnames.append(name_like_string(column_label))
+
+    results = BoxPlotBase.compute_box(
+        sdf,
+        colnames,
+        whis,
+        precision,
+        boxpoints is not None,
+    )
+    assert len(results) == len(colnames)
+
     if isinstance(data, ps.Series):
         colname = name_like_string(data.name)
-        spark_column_name = data._internal.spark_column_name_for(data._column_label)
-
-        # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-        col_stats, col_fences = BoxPlotBase.compute_stats(data, spark_column_name, whis, precision)
-
-        # Creates a column to flag rows as outliers or not
-        outliers = BoxPlotBase.outliers(data, spark_column_name, *col_fences)
-
-        # Computes min and max values of non-outliers - the whiskers
-        whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
-
-        fliers = None
-        if boxpoints:
-            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
-            fliers = [fliers] if len(fliers) > 0 else None
+        result = results[0]
 
         fig.add_trace(
             go.Box(
                 name=colname,
-                q1=[col_stats["q1"]],
-                median=[col_stats["med"]],
-                q3=[col_stats["q3"]],
-                mean=[col_stats["mean"]],
-                lowerfence=[whiskers[0]],
-                upperfence=[whiskers[1]],
-                y=fliers,
+                q1=[result["q1"]],
+                median=[result["med"]],
+                q3=[result["q3"]],
+                mean=[result["mean"]],
+                lowerfence=[result["lower_whisker"]],
+                upperfence=[result["upper_whisker"]],
+                y=[result["fliers"]] if result["fliers"] else None,
                 boxpoints=boxpoints,
                 notched=notched,
                 **kwargs,  # this is for workarounds. Box takes different options from express.box.
@@ -183,52 +190,25 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
         fig["layout"]["xaxis"]["title"] = colname
 
     else:
-        numeric_column_names = []
-        for column_label in data._internal.column_labels:
-            if isinstance(data._internal.spark_type_for(column_label), NumericType):
-                numeric_column_names.append(name_like_string(column_label))
-
-        # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-        multicol_stats = BoxPlotBase.compute_multicol_stats(
-            data, numeric_column_names, whis, precision
-        )
-
-        # Creates a column to flag rows as outliers or not
-        outliers = BoxPlotBase.multicol_outliers(data, multicol_stats)
-
-        # Computes min and max values of non-outliers - the whiskers
-        whiskers = BoxPlotBase.calc_multicol_whiskers(numeric_column_names, outliers)
-
-        fliers = None
-        if boxpoints:
-            fliers = BoxPlotBase.get_multicol_fliers(numeric_column_names, outliers, whiskers)
-
-        i = 0
-        for colname in numeric_column_names:
-            col_stats = multicol_stats[colname]
-            col_whiskers = whiskers[colname]
-
-            col_fliers = None
-            if fliers is not None and colname in fliers and len(fliers[colname]) > 0:
-                col_fliers = [fliers[colname]]
+        for i, colname in enumerate(colnames):
+            result = results[i]
 
             fig.add_trace(
                 go.Box(
                     x=[i],
                     name=colname,
-                    q1=[col_stats["q1"]],
-                    median=[col_stats["med"]],
-                    q3=[col_stats["q3"]],
-                    mean=[col_stats["mean"]],
-                    lowerfence=[col_whiskers["min"]],
-                    upperfence=[col_whiskers["max"]],
-                    y=col_fliers,
+                    q1=[result["q1"]],
+                    median=[result["med"]],
+                    q3=[result["q3"]],
+                    mean=[result["mean"]],
+                    lowerfence=[result["lower_whisker"]],
+                    upperfence=[result["upper_whisker"]],
+                    y=[result["fliers"]] if result["fliers"] else None,
                     boxpoints=boxpoints,
                     notched=notched,
                     **kwargs,
                 )
             )
-            i += 1
 
     fig["layout"]["yaxis"]["title"] = "value"
     return fig

@@ -2390,16 +2390,6 @@ class DataSourceV2SQLSuiteV1Filter
     sql(s"UNCACHE TABLE IF EXISTS $t")
   }
 
-  test("SHOW COLUMNS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t IN testcat.ns1.ns2"), Seq(Row("id"), Row("data")))
-      checkAnswer(sql(s"SHOW COLUMNS in $t"), Seq(Row("id"), Row("data")))
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
-    }
-  }
-
   test("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -3872,27 +3862,11 @@ class ReadOnlyCatalog extends InMemoryCatalog {
 class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
   override def stageCreate(
       ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
-  }
-
-  override def stageCreate(
-      ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     super.createTable(ident, columns, partitions, properties)
     null
-  }
-
-  override def stageReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
   }
 
   override def stageReplace(
@@ -3903,14 +3877,6 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
     super.dropTable(ident)
     super.createTable(ident, columns, partitions, properties)
     null
-  }
-
-  override def stageCreateOrReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
   }
 
   override def stageCreateOrReplace(
