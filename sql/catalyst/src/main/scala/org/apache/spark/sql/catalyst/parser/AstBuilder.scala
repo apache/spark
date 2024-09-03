@@ -24,7 +24,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
@@ -259,6 +259,50 @@ class AstBuilder extends DataTypeAstBuilder
     val body = visitCompoundBody(ctx.compoundBody())
 
     WhileStatement(condition, body, Some(labelText))
+  }
+
+  private def leaveOrIterateContextHasLabel(
+      ctx: RuleContext, label: String, isLeave: Boolean): Boolean = {
+    ctx match {
+      case c: BeginEndCompoundBlockContext
+        if isLeave &&
+          Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        => true
+      case c: WhileStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        => true
+      case _ => false
+    }
+  }
+
+  override def visitLeaveStatement(ctx: LeaveStatementContext): LeaveStatement = {
+    val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+    var parentCtx = ctx.parent
+
+    while (Option(parentCtx).isDefined) {
+      if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = true)) {
+        return LeaveStatement(labelText)
+      }
+      parentCtx = parentCtx.parent
+    }
+
+    throw SparkException.internalError("No matching block (with same label) found!")
+  }
+
+  override def visitIterateStatement(ctx: IterateStatementContext): IterateStatement = {
+    val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+    var parentCtx = ctx.parent
+
+    while (Option(parentCtx).isDefined) {
+      if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = false)) {
+        return IterateStatement(labelText)
+      }
+      parentCtx = parentCtx.parent
+    }
+
+    throw SparkException.internalError("No matching block (with same label) found!")
   }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {

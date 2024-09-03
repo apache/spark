@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -141,11 +141,14 @@ class SingleStatementExec(
  * @param collection
  *   Collection of child execution nodes.
  */
-abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
+abstract class CompoundNestedStatementIteratorExec(
+    collection: Seq[CompoundStatementExec],
+    label: Option[String] = None)
   extends NonLeafStatementExec {
 
   private var localIterator = collection.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var stopIteration = false
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
@@ -157,7 +160,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        localIterator.hasNext || childHasNext
+        !stopIteration && (localIterator.hasNext || childHasNext)
       }
 
       @scala.annotation.tailrec
@@ -165,12 +168,21 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
+          case Some(leaveStatement: LeaveStatementExec) =>
+            handleLeaveStatement(leaveStatement)
+            curr = None
+            leaveStatement
           case Some(statement: LeafStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
-              body.getTreeIterator.next()
+              body.getTreeIterator.next() match {
+                case leaveStatement: LeaveStatementExec =>
+                  handleLeaveStatement(leaveStatement)
+                  leaveStatement
+                case other => other
+              }
             } else {
               curr = if (localIterator.hasNext) Some(localIterator.next()) else None
               next()
@@ -187,6 +199,19 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
     collection.foreach(_.reset())
     localIterator = collection.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+    stopIteration = false
+  }
+
+  private def handleLeaveStatement(leaveStatement: LeaveStatementExec): Unit = {
+    if (!leaveStatement.hasBeenMatched) {
+      // Stop the iteration.
+      stopIteration = true
+
+      // TODO: Variable cleanup (once we add SQL script execution logic).
+
+      // Check if label has been matched.
+      leaveStatement.hasBeenMatched = label.isDefined && label.get.equals(leaveStatement.label)
+    }
   }
 }
 
@@ -195,8 +220,8 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec])
-  extends CompoundNestedStatementIteratorExec(statements)
+class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
+  extends CompoundNestedStatementIteratorExec(statements, label)
 
 /**
  * Executable node for IfElseStatement.
@@ -282,6 +307,7 @@ class IfElseStatementExec(
 class WhileStatementExec(
     condition: SingleStatementExec,
     body: CompoundBodyExec,
+    label: Option[String],
     session: SparkSession) extends NonLeafStatementExec {
 
   private object WhileState extends Enumeration {
@@ -308,6 +334,25 @@ class WhileStatementExec(
             condition
           case WhileState.Body =>
             val retStmt = body.getTreeIterator.next()
+
+            retStmt match {
+              case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
+                if (label.contains(leaveStatementExec.label)) {
+                  leaveStatementExec.hasBeenMatched = true
+                }
+                curr = None
+                return retStmt
+              case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+                if (label.contains(iterStatementExec.label)) {
+                  iterStatementExec.hasBeenMatched = true
+                }
+                state = WhileState.Condition
+                curr = Some(condition)
+                condition.reset()
+                return retStmt
+              case _ =>
+            }
+
             if (!body.getTreeIterator.hasNext) {
               state = WhileState.Condition
               curr = Some(condition)
@@ -325,4 +370,14 @@ class WhileStatementExec(
     condition.reset()
     body.reset()
   }
+}
+
+class LeaveStatementExec(val label: String) extends LeafStatementExec {
+  var hasBeenMatched: Boolean = false
+  override def reset(): Unit = hasBeenMatched = false
+}
+
+class IterateStatementExec(val label: String) extends LeafStatementExec {
+  var hasBeenMatched: Boolean = false
+  override def reset(): Unit = hasBeenMatched = false
 }
