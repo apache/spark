@@ -205,7 +205,7 @@ html_theme_options = {
     "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],
     "logo": {
-        "image_light": "https://spark.apache.org/images/spark-logo-rev.svg",
+        "image_light": "https://spark.apache.org/images/spark-logo.png",
         "image_dark": "https://spark.apache.org/images/spark-logo-rev.svg",
     },
     "icon_links": [
