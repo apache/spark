@@ -55,6 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String
 @Stable
 class DataFrameReader private[sql](sparkSession: SparkSession)
   extends api.DataFrameReader[Dataset] {
+  format(sparkSession.sessionState.conf.defaultDataSourceName)
 
   /** @inheritdoc */
   override def format(source: String): this.type = super.format(source)
