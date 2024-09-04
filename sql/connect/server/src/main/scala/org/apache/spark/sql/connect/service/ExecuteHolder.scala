@@ -29,7 +29,7 @@ import org.apache.spark.sql.Observation
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{SystemClock, Utils}
 
 /**
  * Object used to hold the Spark Connect execution state.
@@ -240,7 +240,7 @@ private[connect] class ExecuteHolder(
   def close(): Unit = synchronized {
     if (closedTimeMs.isEmpty) {
       // interrupt execution, if still running.
-      if (eventsManager.status != ExecuteStatus.Pending) {
+      if (!Utils.isTesting) {
         runner.interrupt()
       }
       // Do not wait for the execution to finish, clean up resources immediately.
