@@ -97,4 +97,14 @@ private[sql] object SqlScriptingErrors {
         "labelName" -> toSQLStmt(labelName),
         "statementType" -> statementType))
   }
+
+  def invalidIterateLabelUsageForCompound(
+      origin: Origin,
+      labelName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_ITERATE_LABEL_USAGE_FOR_COMPOUND",
+      cause = null,
+      messageParameters = Map("labelName" -> toSQLStmt(labelName)))
+  }
 }

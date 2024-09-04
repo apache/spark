@@ -262,13 +262,15 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   private def leaveOrIterateContextHasLabel(
-      ctx: RuleContext, label: String, isLeave: Boolean): Boolean = {
+      ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
     ctx match {
       case c: BeginEndCompoundBlockContext
-        if isLeave &&
-          Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label) =>
+        if (isIterate) {
+          throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
+        }
+        true
       case c: WhileStatementContext
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
@@ -283,7 +285,7 @@ class AstBuilder extends DataTypeAstBuilder
       var parentCtx = ctx.parent
 
       while (Option(parentCtx).isDefined) {
-        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = true)) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isIterate = false)) {
           return LeaveStatement(labelText)
         }
         parentCtx = parentCtx.parent
@@ -299,7 +301,7 @@ class AstBuilder extends DataTypeAstBuilder
       var parentCtx = ctx.parent
 
       while (Option(parentCtx).isDefined) {
-        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isLeave = false)) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isIterate = true)) {
           return IterateStatement(labelText)
         }
         parentCtx = parentCtx.parent

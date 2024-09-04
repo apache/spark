@@ -2453,6 +2453,12 @@
     },
     "sqlState" : "42K0K"
   },
+  "INVALID_ITERATE_LABEL_USAGE_FOR_COMPOUND" : {
+    "message" : [
+      "The label <labelName> used in the ITERATE statement cannot belong to compound (BEGIN...END) body."
+    ],
+    "sqlState" : "42K0L"
+  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."

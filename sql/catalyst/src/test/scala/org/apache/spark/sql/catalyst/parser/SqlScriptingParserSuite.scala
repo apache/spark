@@ -719,8 +719,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE_IN_STATEMENT",
-      parameters = Map("labelName" -> "LBL", "statementType" -> "ITERATE"))
+      errorClass = "INVALID_ITERATE_LABEL_USAGE_FOR_COMPOUND",
+      parameters = Map("labelName" -> "LBL"))
   }
 
   test("iterate while loop") {
