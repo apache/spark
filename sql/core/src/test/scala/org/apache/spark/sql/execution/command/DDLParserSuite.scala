@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
@@ -402,15 +402,18 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Invalid interval term should throw AnalysisException") {
     val sql1 = "select interval '42-32' year to month"
+    val fragment1 = "'42-32' year to month"
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        parser.parsePlan(sql1)
-      },
+      exception = parseException(sql1),
       condition = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
       parameters = Map(
         "input" -> "42-32",
         "interval" -> "year-month",
-        "msg" -> "requirement failed: month 32 outside range [0, 11]"))
+        "msg" -> "requirement failed: month 32 outside range [0, 11]"),
+      context = ExpectedContext(
+        fragment = fragment1,
+        start = 16,
+        stop = 36))
 
     val sql2 = "select interval '5 49:12:15' day to second"
     val fragment2 = "'5 49:12:15' day to second"

@@ -147,14 +147,15 @@ object IntervalUtils extends SparkIntervalUtils {
     def checkTargetType(targetStartField: Byte, targetEndField: Byte): Boolean =
       startField == targetStartField && endField == targetEndField
 
-    input.trimAll().toString match {
+    val trimmedInput = input.trimAll().toString
+    trimmedInput match {
       case yearMonthRegex(sign, year, month) if checkTargetType(YM.YEAR, YM.MONTH) =>
-        toYMInterval(year, month, input.trimAll().toString, finalSign(sign))
+        toYMInterval(year, month, trimmedInput, finalSign(sign))
       case yearMonthLiteralRegex(firstSign, secondSign, year, month)
         if checkTargetType(YM.YEAR, YM.MONTH) =>
-        toYMInterval(year, month, input.trimAll().toString, finalSign(firstSign, secondSign))
+        toYMInterval(year, month, trimmedInput, finalSign(firstSign, secondSign))
       case yearMonthIndividualRegex(firstSign, value) =>
-        safeToInterval("year-month", input.trimAll().toString) {
+        safeToInterval("year-month", trimmedInput) {
           val sign = finalSign(firstSign)
           if (endField == YM.YEAR) {
             sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
@@ -166,7 +167,7 @@ object IntervalUtils extends SparkIntervalUtils {
           }
         }
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, unit) =>
-        safeToInterval("year-month", input.trimAll().toString) {
+        safeToInterval("year-month", trimmedInput) {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "YEAR" if checkTargetType(YM.YEAR, YM.YEAR) =>
@@ -287,7 +288,8 @@ object IntervalUtils extends SparkIntervalUtils {
     def checkTargetType(targetStartField: Byte, targetEndField: Byte): Boolean =
       startField == targetStartField && endField == targetEndField
 
-    input.trimAll().toString match {
+    val trimmedInput = input.trimAll().toString
+    trimmedInput match {
       case dayHourRegex(sign, day, hour) if checkTargetType(DT.DAY, DT.HOUR) =>
         toDTInterval(day, hour, "0", "0", finalSign(sign))
       case dayHourLiteralRegex(firstSign, secondSign, day, hour)
@@ -326,7 +328,7 @@ object IntervalUtils extends SparkIntervalUtils {
         toDTInterval(minute, secondAndMicro(second, micro), finalSign(firstSign, secondSign))
 
       case dayTimeIndividualRegex(firstSign, value, suffix) =>
-        safeToInterval("day-time", input.trimAll().toString) {
+        safeToInterval("day-time", trimmedInput) {
           val sign = finalSign(firstSign)
           (startField, endField) match {
             case (DT.DAY, DT.DAY) if suffix == null && value.length <= 9 =>
@@ -345,7 +347,7 @@ object IntervalUtils extends SparkIntervalUtils {
           }
         }
       case dayTimeIndividualLiteralRegex(firstSign, secondSign, value, suffix, unit) =>
-        safeToInterval("day-time", input.trimAll().toString) {
+        safeToInterval("day-time", trimmedInput) {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "DAY" if suffix == null && value.length <= 9 && checkTargetType(DT.DAY, DT.DAY) =>
