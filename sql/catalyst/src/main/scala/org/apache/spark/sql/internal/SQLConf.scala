@@ -3820,17 +3820,6 @@ object SQLConf {
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
-  val ACCURATE_CASE_WHEN_NULLABILITY_CHECK =
-    buildConf("spark.sql.optimizer.accurateCaseWhenNullabilityCheck")
-      .internal()
-      .doc("When true, the optimizer will focus on the nullability of first TrueLiteral value " +
-        "in CASE WHEN branches if there are TrueLiteral branches. It marks expressions like " +
-        "`case when True then 1 else null` as non-nullable, which is being marked as nullable" +
-        " with the flag disabled.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(true)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }

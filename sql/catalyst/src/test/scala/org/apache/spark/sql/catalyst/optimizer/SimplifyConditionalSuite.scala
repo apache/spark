@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 
@@ -298,20 +297,17 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
   test("accurate") {
     val nullLiteral = Literal.create(null, BooleanType)
     val noElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, None)
-    assert(noElseValue.nullable !=
-      SQLConf.get.getConf(SQLConf.ACCURATE_CASE_WHEN_NULLABILITY_CHECK))
+    assert(!noElseValue.nullable)
     val withElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, Some(Literal(1)))
     assert(!withElseValue.nullable)
     val firstTrueNonNullableSecondTrueNullable = CaseWhen(trueBranch ::
       (TrueLiteral, nullLiteral) :: Nil, None)
-    assert(firstTrueNonNullableSecondTrueNullable.nullable != SQLConf.get.getConf(
-      SQLConf.ACCURATE_CASE_WHEN_NULLABILITY_CHECK))
+    assert(!firstTrueNonNullableSecondTrueNullable.nullable)
     val firstTrueNullableSecondTrueNonNullable = CaseWhen((TrueLiteral, nullLiteral) ::
       trueBranch :: Nil, None)
     assert(firstTrueNullableSecondTrueNonNullable.nullable)
     val hasNullInNotTrueBranch = CaseWhen(trueBranch :: (FalseLiteral, nullLiteral) :: Nil, None)
-    assert(hasNullInNotTrueBranch.nullable != SQLConf.get.getConf(
-      SQLConf.ACCURATE_CASE_WHEN_NULLABILITY_CHECK))
+    assert(!hasNullInNotTrueBranch.nullable)
     val noTrueBranch = CaseWhen(normalBranch :: Nil, Literal(1))
     assert(!noTrueBranch.nullable)
   }

@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -190,8 +189,7 @@ case class CaseWhen(
   }
 
   override def nullable: Boolean = {
-    if (SQLConf.get.getConf(SQLConf.ACCURATE_CASE_WHEN_NULLABILITY_CHECK) &&
-      branches.exists(_._1 == TrueLiteral)) {
+    if (branches.exists(_._1 == TrueLiteral)) {
       // if any of the branch is always true
       // nullability check should only be related to branches
       // before the TrueLiteral and value of the first TrueLiteral branch
