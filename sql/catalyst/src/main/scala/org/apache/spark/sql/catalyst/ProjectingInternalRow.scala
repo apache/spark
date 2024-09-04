@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
  * the underlying data.
  */
 case class ProjectingInternalRow(schema: StructType,
-                                 colOrdinals: IndexedSeq[Int]) extends InternalRow {
+    colOrdinals: IndexedSeq[Int]) extends InternalRow {
   assert(schema.size == colOrdinals.size)
 
   private var row: InternalRow = _
