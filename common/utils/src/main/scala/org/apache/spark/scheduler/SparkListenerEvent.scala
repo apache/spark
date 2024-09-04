@@ -14,12 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming
+package org.apache.spark.scheduler
 
-import org.apache.spark.sql.{api, Dataset, SparkSession}
+import com.fasterxml.jackson.annotation.JsonTypeInfo
 
-/** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery[Dataset] {
-  /** @inheritdoc */
-  override def sparkSession: SparkSession
+import org.apache.spark.annotation.DeveloperApi
+
+@DeveloperApi
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
+trait SparkListenerEvent {
+  /* Whether output this event to the event log */
+  protected[spark] def logEvent: Boolean = true
 }
