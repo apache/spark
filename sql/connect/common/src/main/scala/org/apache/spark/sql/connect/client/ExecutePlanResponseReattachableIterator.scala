@@ -107,7 +107,7 @@ class ExecutePlanResponseReattachableIterator(
 
   // Server side session ID, used to detect if the server side session changed. This is set upon
   // receiving the first response from the server.
-  private[connect] var serverSideSessionId: Option[String] = None
+  private var serverSideSessionId: Option[String] = None
 
   override def innerIterator: Iterator[proto.ExecutePlanResponse] = iter match {
     case Some(it) => it.asScala
