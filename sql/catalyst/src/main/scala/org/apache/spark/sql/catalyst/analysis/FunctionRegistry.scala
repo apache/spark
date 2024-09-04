@@ -921,6 +921,7 @@ object FunctionRegistry {
   registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
   registerInternalExpression[FromProtobuf]("from_protobuf")
   registerInternalExpression[ToProtobuf]("to_protobuf")
+  registerInternalExpression[ArrayBinarySearch]("array_binary_search")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

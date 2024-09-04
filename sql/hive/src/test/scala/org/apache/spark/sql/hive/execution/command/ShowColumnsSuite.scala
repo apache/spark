@@ -15,32 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.hive.execution.command
 
-import java.util.UUID
-
-class Observation(name: String) extends ObservationBase(name) {
-
-  /**
-   * Create an Observation instance without providing a name. This generates a random name.
-   */
-  def this() = this(UUID.randomUUID().toString)
-}
+import org.apache.spark.sql.execution.command.v1
 
 /**
- * (Scala-specific) Create instances of Observation via Scala `apply`.
- * @since 4.0.0
+ * The class contains tests for the `SHOW COLUMNS ...` command to check V1 Hive external
+ * table catalog.
  */
-object Observation {
-
-  /**
-   * Observation constructor for creating an anonymous observation.
-   */
-  def apply(): Observation = new Observation()
-
-  /**
-   * Observation constructor for creating a named observation.
-   */
-  def apply(name: String): Observation = new Observation(name)
-
-}
+class ShowColumnsSuite extends v1.ShowColumnsSuiteBase with CommandSuiteBase

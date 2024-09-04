@@ -33,35 +33,38 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
 
   override def stageCreate(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     validateStagedTable(partitions, properties)
     new TestStagedCreateTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
+      new InMemoryTable(s"$name.${ident.quoted}",
+        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
   }
 
   override def stageReplace(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     validateStagedTable(partitions, properties)
     new TestStagedReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
+      new InMemoryTable(s"$name.${ident.quoted}",
+        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
   }
 
   override def stageCreateOrReplace(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     validateStagedTable(partitions, properties)
     new TestStagedCreateOrReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
+      new InMemoryTable(s"$name.${ident.quoted}",
+        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
   }
 
   private def validateStagedTable(

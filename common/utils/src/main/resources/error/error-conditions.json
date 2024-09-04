@@ -2177,6 +2177,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXTERNAL_TYPE" : {
+    "message" : [
+      "The external type <externalType> is not valid for the type <type> at the expression <expr>."
+    ],
+    "sqlState" : "42K0N"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -3865,6 +3871,12 @@
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
     ],
     "sqlState" : "42K08"
+  },
+  "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
+    "message" : [
+      "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
+    ],
+    "sqlState" : "42K05"
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
@@ -5683,11 +5695,6 @@
   "_LEGACY_ERROR_TEMP_1052" : {
     "message" : [
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1057" : {
-    "message" : [
-      "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1058" : {

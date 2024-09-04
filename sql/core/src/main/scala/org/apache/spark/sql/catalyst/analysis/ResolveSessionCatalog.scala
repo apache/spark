@@ -330,7 +330,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val resolver = conf.resolver
       val db = ns match {
         case Some(db) if v1TableName.database.exists(!resolver(_, db.head)) =>
-          throw QueryCompilationErrors.showColumnsWithConflictDatabasesError(db, v1TableName)
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+            Seq(db.head), Seq(v1TableName.database.get))
         case _ => ns.map(_.head)
       }
       ShowColumnsCommand(db, v1TableName, output)
