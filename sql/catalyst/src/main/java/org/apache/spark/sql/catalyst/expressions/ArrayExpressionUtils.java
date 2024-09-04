@@ -116,58 +116,131 @@ public class ArrayExpressionUtils {
     return SQLOrderingUtil.compareDoubles(c1, c2);
   };
 
+  // boolean
+  // foldable optimize
+  public static int binarySearchNullSafe(Boolean[] data, Boolean value) {
+    return Arrays.binarySearch(data, value, booleanComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Boolean value) {
     return Arrays.binarySearch(data.toObjectArray(BooleanType$.MODULE$), value, booleanComp);
+  }
+
+  // byte
+  // foldable optimize
+  public static int binarySearch(byte[] data, byte value) {
+    return Arrays.binarySearch(data, value);
   }
 
   public static int binarySearch(ArrayData data, byte value) {
     return Arrays.binarySearch(data.toByteArray(), value);
   }
 
+  // foldable optimize
+  public static int binarySearchNullSafe(Byte[] data, Byte value) {
+    return Arrays.binarySearch(data, value, byteComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Byte value) {
     return Arrays.binarySearch(data.toObjectArray(ByteType$.MODULE$), value, byteComp);
+  }
+
+  // short
+  // foldable optimize
+  public static int binarySearch(short[] data, short value) {
+    return Arrays.binarySearch(data, value);
   }
 
   public static int binarySearch(ArrayData data, short value) {
     return Arrays.binarySearch(data.toShortArray(), value);
   }
 
+  // foldable optimize
+  public static int binarySearchNullSafe(Short[] data, Short value) {
+    return Arrays.binarySearch(data, value, shortComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Short value) {
     return Arrays.binarySearch(data.toObjectArray(ShortType$.MODULE$), value, shortComp);
+  }
+
+  // int
+  // foldable optimize
+  public static int binarySearch(int[] data, int value) {
+    return Arrays.binarySearch(data, value);
   }
 
   public static int binarySearch(ArrayData data, int value) {
     return Arrays.binarySearch(data.toIntArray(), value);
   }
 
+  // foldable optimize
+  public static int binarySearchNullSafe(Integer[] data, Integer value) {
+    return Arrays.binarySearch(data, value, integerComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Integer value) {
     return Arrays.binarySearch(data.toObjectArray(IntegerType$.MODULE$), value, integerComp);
+  }
+
+  // long
+  // foldable optimize
+  public static int binarySearch(long[] data, long value) {
+    return Arrays.binarySearch(data, value);
   }
 
   public static int binarySearch(ArrayData data, long value) {
     return Arrays.binarySearch(data.toLongArray(), value);
   }
 
+  // foldable optimize
+  public static int binarySearchNullSafe(Long[] data, Long value) {
+    return Arrays.binarySearch(data, value, longComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Long value) {
     return Arrays.binarySearch(data.toObjectArray(LongType$.MODULE$), value, longComp);
+  }
+
+  // float
+  // foldable optimize
+  public static int binarySearch(float[] data, float value) {
+    return Arrays.binarySearch(data, value);
   }
 
   public static int binarySearch(ArrayData data, float value) {
     return Arrays.binarySearch(data.toFloatArray(), value);
   }
 
+  // foldable optimize
+  public static int binarySearchNullSafe(Float[] data, Float value) {
+    return Arrays.binarySearch(data, value, floatComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Float value) {
     return Arrays.binarySearch(data.toObjectArray(FloatType$.MODULE$), value, floatComp);
+  }
+
+  // double
+  // foldable optimize
+  public static int binarySearch(double[] data, double value) {
+    return Arrays.binarySearch(data, value);
   }
 
   public static int binarySearch(ArrayData data, double value) {
     return Arrays.binarySearch(data.toDoubleArray(), value);
   }
 
+  // foldable optimize
+  public static int binarySearchNullSafe(Double[] data, Double value) {
+    return Arrays.binarySearch(data, value, doubleComp);
+  }
+
   public static int binarySearchNullSafe(ArrayData data, Double value) {
     return Arrays.binarySearch(data.toObjectArray(DoubleType$.MODULE$), value, doubleComp);
   }
 
+  // Object
   public static int binarySearch(
     DataType elementType, Comparator<Object> comp, ArrayData data, Object value) {
     Object[] array = data.toObjectArray(elementType);

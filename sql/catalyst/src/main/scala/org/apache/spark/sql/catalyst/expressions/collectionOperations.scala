@@ -1602,6 +1602,7 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
   @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
   @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
     elementType != BooleanType && !resultArrayElementNullable
+  @transient private lazy val arrayIsFoldable: Boolean = array.foldable
 
   @transient private lazy val comp: Comparator[Any] = new Comparator[Any] with Serializable {
     private val ordering = array.dataType match {
@@ -1618,23 +1619,198 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
       }
   }
 
+  // byte
+  // unbox byte
+  @transient private lazy val foldableByteArrayData: Array[Byte] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toByteArray()
+  }
+  @transient private lazy val foldableByteArrayDataObjectType =
+    ObjectType(classOf[Array[Byte]])
+  // boxed byte
+  @transient private lazy val foldableBoxedByteArrayData: Array[java.lang.Byte] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Byte](ByteType)
+  }
+  @transient private lazy val foldableBoxedByteArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Byte]])
+
+  // boolean
+  // boxed boolean
+  @transient private lazy val foldableBoxedBooleanArrayData: Array[java.lang.Boolean] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Boolean](BooleanType)
+  }
+  @transient private lazy val foldableBoxedBooleanArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Boolean]])
+
+  // short
+  // unbox short
+  @transient private lazy val foldableShortArrayData: Array[Short] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toShortArray()
+  }
+  @transient private lazy val foldableShortArrayDataObjectType =
+    ObjectType(classOf[Array[Short]])
+  // boxed short
+  @transient private lazy val foldableBoxedShortArrayData: Array[java.lang.Short] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Short](ShortType)
+  }
+  @transient private lazy val foldableBoxedShortArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Short]])
+
+  // int
+  // unbox int
+  @transient private lazy val foldableIntArrayData: Array[Int] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toIntArray()
+  }
+  @transient private lazy val foldableIntArrayDataObjectType =
+    ObjectType(classOf[Array[Int]])
+  // boxed int
+  @transient private lazy val foldableBoxedIntArrayData: Array[java.lang.Integer] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Integer](IntegerType)
+  }
+  @transient private lazy val foldableBoxedIntArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Integer]])
+
+  // long
+  // unbox long
+  @transient private lazy val foldableLongArrayData: Array[Long] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toLongArray()
+  }
+  @transient private lazy val foldableLongArrayDataObjectType =
+    ObjectType(classOf[Array[Long]])
+  // boxed long
+  @transient private lazy val foldableBoxedLongArrayData: Array[java.lang.Long] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Long](LongType)
+  }
+  @transient private lazy val foldableBoxedLongArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Long]])
+
+  // float
+  // unbox float
+  @transient private lazy val foldableFloatArrayData: Array[Float] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toFloatArray()
+  }
+  @transient private lazy val foldableFloatArrayDataObjectType =
+    ObjectType(classOf[Array[Float]])
+  // boxed float
+  @transient private lazy val foldableBoxedFloatArrayData: Array[java.lang.Float] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Float](FloatType)
+  }
+  @transient private lazy val foldableBoxedFloatArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Float]])
+
+  // double
+  // unbox double
+  @transient private lazy val foldableDoubleArrayData: Array[Double] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toDoubleArray()
+  }
+  @transient private lazy val foldableDoubleArrayDataObjectType =
+    ObjectType(classOf[Array[Double]])
+  // boxed double
+  @transient private lazy val foldableBoxedDoubleArrayData: Array[java.lang.Double] = {
+    assert(array.foldable)
+    array.eval().asInstanceOf[ArrayData].toArray[java.lang.Double](DoubleType)
+  }
+  @transient private lazy val foldableBoxedDoubleArrayDataObjectType =
+    ObjectType(classOf[Array[java.lang.Double]])
+
   @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
-  @transient private lazy val  comparatorObjectType = ObjectType(classOf[Comparator[Object]])
-  override def replacement: Expression =
+  @transient private lazy val comparatorObjectType = ObjectType(classOf[Comparator[Object]])
+
+  private def unboxArgumentsAndInputTypes(): (Seq[Expression], Seq[AbstractDataType]) =
+    elementType match {
+      case ByteType =>
+        (Seq(Literal(foldableByteArrayData, foldableByteArrayDataObjectType), value),
+          Seq(foldableByteArrayDataObjectType, elementType))
+      case ShortType =>
+        (Seq(Literal(foldableShortArrayData, foldableShortArrayDataObjectType), value),
+          Seq(foldableShortArrayDataObjectType, elementType))
+      case IntegerType =>
+        (Seq(Literal(foldableIntArrayData, foldableIntArrayDataObjectType), value),
+          Seq(foldableIntArrayDataObjectType, elementType))
+      case LongType =>
+        (Seq(Literal(foldableLongArrayData, foldableLongArrayDataObjectType), value),
+          Seq(foldableLongArrayDataObjectType, elementType))
+      case FloatType =>
+        (Seq(Literal(foldableFloatArrayData, foldableFloatArrayDataObjectType), value),
+          Seq(foldableFloatArrayDataObjectType, elementType))
+      case DoubleType =>
+        (Seq(Literal(foldableDoubleArrayData, foldableDoubleArrayDataObjectType), value),
+          Seq(foldableDoubleArrayDataObjectType, elementType))
+  }
+
+  private def boxedArgumentsAndInputTypes(): (Seq[Expression], Seq[AbstractDataType]) =
+    elementType match {
+      case BooleanType =>
+        (Seq(Literal(foldableBoxedBooleanArrayData, foldableBoxedBooleanArrayDataObjectType),
+          value),
+          Seq(foldableBoxedBooleanArrayDataObjectType, elementType))
+      case ByteType =>
+        (Seq(Literal(foldableBoxedByteArrayData, foldableBoxedByteArrayDataObjectType), value),
+          Seq(foldableBoxedByteArrayDataObjectType, elementType))
+      case ShortType =>
+        (Seq(Literal(foldableBoxedShortArrayData, foldableBoxedShortArrayDataObjectType), value),
+          Seq(foldableBoxedShortArrayDataObjectType, elementType))
+      case IntegerType =>
+        (Seq(Literal(foldableBoxedIntArrayData, foldableBoxedIntArrayDataObjectType), value),
+          Seq(foldableBoxedIntArrayDataObjectType, elementType))
+      case LongType =>
+        (Seq(Literal(foldableBoxedLongArrayData, foldableBoxedLongArrayDataObjectType), value),
+          Seq(foldableBoxedLongArrayDataObjectType, elementType))
+      case FloatType =>
+        (Seq(Literal(foldableBoxedFloatArrayData, foldableBoxedFloatArrayDataObjectType), value),
+          Seq(foldableBoxedFloatArrayDataObjectType, elementType))
+      case DoubleType =>
+        (Seq(Literal(foldableBoxedDoubleArrayData, foldableBoxedDoubleArrayDataObjectType), value),
+          Seq(foldableBoxedDoubleArrayDataObjectType, elementType))
+    }
+
+  override def replacement: Expression = {
     if (canPerformFastBinarySearch) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(array, value),
-        inputTypes)
+      if (arrayIsFoldable) {
+        val (arguments, inputTypes) = unboxArgumentsAndInputTypes()
+        StaticInvoke(
+          classOf[ArrayExpressionUtils],
+          IntegerType,
+          "binarySearch",
+          arguments,
+          inputTypes)
+      } else {
+        StaticInvoke(
+          classOf[ArrayExpressionUtils],
+          IntegerType,
+          "binarySearch",
+          Seq(array, value),
+          inputTypes)
+      }
     } else if (isPrimitiveType) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearchNullSafe",
-        Seq(array, value),
-        inputTypes)
+      if (arrayIsFoldable) {
+        val (arguments, inputTypes) = boxedArgumentsAndInputTypes()
+        StaticInvoke(
+          classOf[ArrayExpressionUtils],
+          IntegerType,
+          "binarySearchNullSafe",
+          arguments,
+          inputTypes
+        )
+      } else {
+        StaticInvoke(
+          classOf[ArrayExpressionUtils],
+          IntegerType,
+          "binarySearchNullSafe",
+          Seq(array, value),
+          inputTypes)
+      }
     } else {
       StaticInvoke(
         classOf[ArrayExpressionUtils],
@@ -1645,6 +1821,7 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
           array,
           value),
         elementObjectType +: comparatorObjectType +: inputTypes)
+    }
   }
 
   override def prettyName: String = "array_binary_search"

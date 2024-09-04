@@ -137,6 +137,8 @@ class CollectionExpressionsSuite
 
   test("ArrayBinarySearch") {
     // primitive type: boolean、byte、short、int、long、float、double
+    // boolean
+    // boolean foldable
     val a0_0 = Literal.create(Seq(false, true),
       ArrayType(BooleanType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a0_0, Literal(true)), 1)
@@ -144,7 +146,17 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a0_1, Literal(false)), 1)
     val a0_2 = Literal.create(Seq(null, false, true), ArrayType(BooleanType))
     checkEvaluation(ArrayBinarySearch(a0_2, Literal(null, BooleanType)), null)
+    // boolean non-foldable
+    val a0_3 = NonFoldableLiteral.create(Seq(false, true),
+      ArrayType(BooleanType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a0_3, Literal(true)), 1)
+    val a0_4 = NonFoldableLiteral.create(Seq(null, false, true), ArrayType(BooleanType))
+    checkEvaluation(ArrayBinarySearch(a0_4, Literal(false)), 1)
+    val a0_5 = NonFoldableLiteral.create(Seq(null, false, true), ArrayType(BooleanType))
+    checkEvaluation(ArrayBinarySearch(a0_5, Literal(null, BooleanType)), null)
 
+    // byte
+    // byte foldable
     val a1_0 = Literal.create(Seq(1.toByte, 2.toByte, 3.toByte),
       ArrayType(ByteType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a1_0, Literal(3.toByte)), 2)
@@ -155,18 +167,50 @@ class CollectionExpressionsSuite
     val a1_3 = Literal.create(Seq(1.toByte, 3.toByte, 4.toByte),
       ArrayType(ByteType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a1_3, Literal(2.toByte, ByteType)), -2)
+    // byte non-foldable
+    val a1_4 = NonFoldableLiteral.create(Seq(1.toByte, 2.toByte, 3.toByte),
+      ArrayType(ByteType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a1_4, Literal(3.toByte)), 2)
+    val a1_5 = NonFoldableLiteral.create(Seq(null, 1.toByte, 2.toByte, 3.toByte),
+      ArrayType(ByteType))
+    checkEvaluation(ArrayBinarySearch(a1_5, Literal(1.toByte)), 1)
+    val a1_6 = NonFoldableLiteral.create(Seq(null, 1.toByte, 2.toByte, 3.toByte),
+      ArrayType(ByteType))
+    checkEvaluation(ArrayBinarySearch(a1_6, Literal(null, ByteType)), null)
+    val a1_7 = NonFoldableLiteral.create(Seq(1.toByte, 3.toByte, 4.toByte),
+      ArrayType(ByteType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a1_7, Literal(2.toByte, ByteType)), -2)
 
+    // short
+    // short foldable
     val a2_0 = Literal.create(Seq(1.toShort, 2.toShort, 3.toShort),
       ArrayType(ShortType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a2_0, Literal(1.toShort)), 0)
-    val a2_1 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
+    val a2_1 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
+      ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_1, Literal(2.toShort)), 2)
-    val a2_2 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
+    val a2_2 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
+      ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_2, Literal(null, ShortType)), null)
     val a2_3 = Literal.create(Seq(1.toShort, 3.toShort, 4.toShort),
       ArrayType(ShortType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a2_3, Literal(2.toShort, ShortType)), -2)
+    // short non-foldable
+    val a2_4 = NonFoldableLiteral.create(Seq(1.toShort, 2.toShort, 3.toShort),
+      ArrayType(ShortType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a2_4, Literal(1.toShort)), 0)
+    val a2_5 = NonFoldableLiteral.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
+      ArrayType(ShortType))
+    checkEvaluation(ArrayBinarySearch(a2_5, Literal(2.toShort)), 2)
+    val a2_6 = NonFoldableLiteral.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
+      ArrayType(ShortType))
+    checkEvaluation(ArrayBinarySearch(a2_6, Literal(null, ShortType)), null)
+    val a2_7 = NonFoldableLiteral.create(Seq(1.toShort, 3.toShort, 4.toShort),
+      ArrayType(ShortType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a2_7, Literal(2.toShort, ShortType)), -2)
 
+    // int
+    // int foldable
     val a3_0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a3_0, Literal(2)), 1)
     val a3_1 = Literal.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
@@ -175,7 +219,18 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a3_2, Literal(null, IntegerType)), null)
     val a3_3 = Literal.create(Seq(1, 3, 4), ArrayType(IntegerType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a3_3, Literal(2, IntegerType)), -2)
+    // int non-foldable
+    val a3_4 = NonFoldableLiteral.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a3_4, Literal(2)), 1)
+    val a3_5 = NonFoldableLiteral.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
+    checkEvaluation(ArrayBinarySearch(a3_5, Literal(2)), 2)
+    val a3_6 = NonFoldableLiteral.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
+    checkEvaluation(ArrayBinarySearch(a3_6, Literal(null, IntegerType)), null)
+    val a3_7 = NonFoldableLiteral.create(Seq(1, 3, 4), ArrayType(IntegerType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a3_7, Literal(2, IntegerType)), -2)
 
+    // long
+    // long foldable
     val a4_0 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a4_0, Literal(2L)), 1)
     val a4_1 = Literal.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
@@ -184,7 +239,18 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a4_2, Literal(null, LongType)), null)
     val a4_3 = Literal.create(Seq(1L, 3L, 4L), ArrayType(LongType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a4_3, Literal(2L, LongType)), -2)
+    // long non-foldable
+    val a4_4 = NonFoldableLiteral.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a4_4, Literal(2L)), 1)
+    val a4_5 = NonFoldableLiteral.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
+    checkEvaluation(ArrayBinarySearch(a4_5, Literal(2L)), 2)
+    val a4_6 = NonFoldableLiteral.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
+    checkEvaluation(ArrayBinarySearch(a4_6, Literal(null, LongType)), null)
+    val a4_7 = NonFoldableLiteral.create(Seq(1L, 3L, 4L), ArrayType(LongType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a4_7, Literal(2L, LongType)), -2)
 
+    // float
+    // float foldable
     val a5_0 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a5_0, Literal(3.0F)), 2)
     val a5_1 = Literal.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
@@ -193,7 +259,20 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a5_2, Literal(null, FloatType)), null)
     val a5_3 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a5_3, Literal(1.1F, FloatType)), -2)
+    // float non-foldable
+    val a5_4 = NonFoldableLiteral.create(Seq(1.0F, 2.0F, 3.0F),
+      ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_4, Literal(3.0F)), 2)
+    val a5_5 = NonFoldableLiteral.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_5, Literal(1.0F)), 1)
+    val a5_6 = NonFoldableLiteral.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_6, Literal(null, FloatType)), null)
+    val a5_7 = NonFoldableLiteral.create(Seq(1.0F, 2.0F, 3.0F),
+      ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_7, Literal(1.1F, FloatType)), -2)
 
+    // double
+    // double foldable
     val a6_0 = Literal.create(Seq(1.0d, 2.0d, 3.0d), ArrayType(DoubleType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a6_0, Literal(1.0d)), 0)
     val a6_1 = Literal.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
@@ -202,8 +281,20 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a6_2, Literal(null, DoubleType)), null)
     val a6_3 = Literal.create(Seq(1.0d, 2.0d, 3.0d), ArrayType(DoubleType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a6_3, Literal(1.1d, DoubleType)), -2)
+    // double non-foldable
+    val a6_4 = NonFoldableLiteral.create(Seq(1.0d, 2.0d, 3.0d),
+      ArrayType(DoubleType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a6_4, Literal(1.0d)), 0)
+    val a6_5 = NonFoldableLiteral.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayBinarySearch(a6_5, Literal(1.0d)), 1)
+    val a6_6 = NonFoldableLiteral.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayBinarySearch(a6_6, Literal(null, DoubleType)), null)
+    val a6_7 = NonFoldableLiteral.create(Seq(1.0d, 2.0d, 3.0d),
+      ArrayType(DoubleType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a6_7, Literal(1.1d, DoubleType)), -2)
 
     // string
+    // string foldable
     val a7_0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a7_0, Literal("a")), 0)
     val a7_1 = Literal.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
@@ -212,6 +303,17 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a7_2, Literal(null, StringType)), null)
     val a7_3 = Literal.create(Seq("a", "c", "d"), ArrayType(StringType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a7_3, Literal(UTF8String.fromString("b"), StringType)), -2)
+    // string non-foldable
+    val a7_4 = NonFoldableLiteral.create(Seq("a", "b", "c"),
+      ArrayType(StringType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a7_4, Literal("a")), 0)
+    val a7_5 = NonFoldableLiteral.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
+    checkEvaluation(ArrayBinarySearch(a7_5, Literal("c")), 3)
+    val a7_6 = NonFoldableLiteral.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
+    checkEvaluation(ArrayBinarySearch(a7_6, Literal(null, StringType)), null)
+    val a7_7 = NonFoldableLiteral.create(Seq("a", "c", "d"),
+      ArrayType(StringType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a7_7, Literal(UTF8String.fromString("b"), StringType)), -2)
   }
 
   test("MapEntries") {
