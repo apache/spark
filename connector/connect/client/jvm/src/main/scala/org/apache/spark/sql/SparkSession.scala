@@ -18,7 +18,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
@@ -881,15 +881,17 @@ object SparkSession extends Logging {
         .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
         .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
 
-      if (server.isEmpty && remoteString.exists(_.startsWith("local"))) {
-        val sparkHome = System.getenv("SPARK_HOME")
+      val maybeConnectScript =
+        Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
+
+      if (server.isEmpty &&
+        remoteString.exists(_.startsWith("local")) &&
+        maybeConnectScript.exists(Files.exists(_))) {
         server = Some {
-          val args = Seq(
-            Paths.get(sparkHome, "sbin", "start-connect-server.sh").toString,
-            "--master",
-            remoteString.get) ++ sparkOptions
-            .filter(p => !p._1.startsWith("spark.remote"))
-            .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
+          val args =
+            Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
+              .filter(p => !p._1.startsWith("spark.remote"))
+              .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
@@ -904,7 +906,7 @@ object SparkSession extends Logging {
         // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread() {
           override def run(): Unit = if (server.isDefined) {
-            new ProcessBuilder(Paths.get(sparkHome, "sbin", "stop-connect-server.sh").toString)
+            new ProcessBuilder(maybeConnectScript.get.toString)
               .start()
           }
         })
