@@ -436,6 +436,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
     val manager = SparkConnectService.executionManager
     val holder = manager.createExecuteHolder(dummyRequest)
+    holder.eventsManager.postStarted()
     manager.removeExecuteHolder(holder.key)
     withRawBlockingStub { stub =>
       val reattach = stub.reattachExecute(buildReattachExecuteRequest(dummyOpId, None))
