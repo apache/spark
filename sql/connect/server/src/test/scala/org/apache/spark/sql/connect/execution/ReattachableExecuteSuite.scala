@@ -436,15 +436,13 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
     val manager = SparkConnectService.executionManager
     val holder = manager.createExecuteHolder(dummyRequest)
-    assert(!holder.started())
+    manager.removeExecuteHolder(holder.key)
     withRawBlockingStub { stub =>
       val reattach = stub.reattachExecute(buildReattachExecuteRequest(dummyOpId, None))
       val e = intercept[StatusRuntimeException] {
         reattach.hasNext()
       }
-      assert(e.getMessage.contains("INVALID_CURSOR.NOT_REATTACHABLE"))
+      assert(e.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND"))
     }
-    holder.start()
-    assert(holder.started())
   }
 }

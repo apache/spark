@@ -131,11 +131,6 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
-  /** Returns true if execution has started in a background thread. */
-  def started(): Boolean = {
-    runner.started
-  }
-
   def addObservation(name: String, observation: Observation): Unit = synchronized {
     observations += (name -> observation)
   }
@@ -245,7 +240,9 @@ private[connect] class ExecuteHolder(
   def close(): Unit = synchronized {
     if (closedTimeMs.isEmpty) {
       // interrupt execution, if still running.
-      runner.interrupt()
+      if (eventsManager.status != ExecuteStatus.Pending) {
+        runner.interrupt()
+      }
       // Do not wait for the execution to finish, clean up resources immediately.
       runner.processOnCompletion { _ =>
         completionCallbackCalled = true
