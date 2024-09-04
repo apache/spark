@@ -35,10 +35,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     override def reset(): Unit = ()
   }
 
-  case class TestLeaveStatement(labelText: String) extends LeaveStatementExec(labelText)
-
-  case class TestIterateStatement(labelText: String) extends IterateStatementExec(labelText)
-
   case class TestIfElseCondition(condVal: Boolean, description: String)
     extends SingleStatementExec(
       parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
@@ -82,8 +78,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case TestLeafStatement(testVal) => testVal
       case TestIfElseCondition(_, description) => description
       case TestWhileCondition(_, _, description) => description
-      case TestLeaveStatement(label) => label
-      case TestIterateStatement(label) => label
+      case leaveStmt: LeaveStatementExec => leaveStmt.label
+      case iterateStmt: IterateStatementExec => iterateStmt.label
       case _ => fail("Unexpected statement type")
     }
 
@@ -325,7 +321,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val iter = new CompoundBodyExec(
       statements = Seq(
         TestLeafStatement("one"),
-        TestLeaveStatement("lbl")
+        new LeaveStatementExec("lbl")
       ),
       label = Some("lbl")
     ).getTreeIterator
@@ -340,7 +336,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
           body = new CompoundBodyExec(Seq(
             TestLeafStatement("body1"),
-            TestLeaveStatement("lbl"))
+            new LeaveStatementExec("lbl"))
           ),
           label = Some("lbl")
         )
@@ -357,7 +353,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           condition = TestWhileCondition(condVal = true, reps = 2, description = "con1"),
           body = new CompoundBodyExec(Seq(
             TestLeafStatement("body1"),
-            TestIterateStatement("lbl"),
+            new IterateStatementExec("lbl"),
             TestLeafStatement("body2"))
           ),
           label = Some("lbl")
@@ -378,7 +374,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
               condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
               body = new CompoundBodyExec(Seq(
                 TestLeafStatement("body1"),
-                TestLeaveStatement("lbl"))
+                new LeaveStatementExec("lbl"))
               ),
               label = Some("lbl2")
             )
@@ -401,7 +397,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
               condition = TestWhileCondition(condVal = true, reps = 2, description = "con2"),
               body = new CompoundBodyExec(Seq(
                 TestLeafStatement("body1"),
-                TestIterateStatement("lbl"),
+                new IterateStatementExec("lbl"),
                 TestLeafStatement("body2"))
               ),
               label = Some("lbl2")
