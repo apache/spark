@@ -634,11 +634,31 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  testWithAllStateVersions("[SPARK-49474] flatMapGroupsWithState - user error is classified") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count if state is defined, otherwise does not return anything
+  testWithAllStateVersions("[SPARK-49474] flatMapGroupsWithState - user NPE is classified") {
+    // Throws NPE
     val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
-      Iterator(null.asInstanceOf[GroupState[RunningCount]].getCurrentProcessingTimeMs())
+      throw new NullPointerException()
+      // Need to return an iterator for compilation to get types
+      Iterator(1)
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException]()
+    )
+  }
+
+  testWithAllStateVersions(
+    "[SPARK-49474] flatMapGroupsWithState - NPE from user iterator is classified") {
+    // Returns null, will throw NPE when method is called on it
+    val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
+      null.asInstanceOf[Iterator[Int]]
     }
 
     val inputData = MemoryStream[String]
