@@ -71,7 +71,7 @@ object functions {
       messageName: String,
       binaryFileDescriptorSet: Array[Byte],
       options: java.util.Map[String, String]): Column = {
-    Column.internalFnWithOptions(
+    Column.fnWithOptions(
       "from_protobuf",
       options.asScala.iterator,
       data,
@@ -115,7 +115,7 @@ object functions {
   @Experimental
   def from_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    Column.internalFn(
+    Column.fn(
       "from_protobuf",
       data,
       lit(messageName),
@@ -140,7 +140,7 @@ object functions {
    */
   @Experimental
   def from_protobuf(data: Column, messageClassName: String): Column = {
-    Column.internalFn(
+    Column.fn(
       "from_protobuf",
       data,
       lit(messageClassName)
@@ -168,7 +168,7 @@ object functions {
     data: Column,
     messageClassName: String,
     options: java.util.Map[String, String]): Column = {
-    Column.internalFnWithOptions(
+    Column.fnWithOptions(
       "from_protobuf",
       options.asScala.iterator,
       data,
@@ -211,7 +211,7 @@ object functions {
   @Experimental
   def to_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    Column.internalFn(
+    Column.fn(
       "to_protobuf",
       data,
       lit(messageName),
@@ -262,7 +262,7 @@ object functions {
     binaryFileDescriptorSet: Array[Byte],
     options: java.util.Map[String, String]
   ): Column = {
-    Column.internalFnWithOptions(
+    Column.fnWithOptions(
       "to_protobuf",
       options.asScala.iterator,
       data,
@@ -288,7 +288,7 @@ object functions {
    */
   @Experimental
   def to_protobuf(data: Column, messageClassName: String): Column = {
-    Column.internalFn(
+    Column.fn(
       "to_protobuf",
       data,
       lit(messageClassName)
@@ -314,7 +314,7 @@ object functions {
   @Experimental
   def to_protobuf(data: Column, messageClassName: String, options: java.util.Map[String, String])
   : Column = {
-    Column.internalFnWithOptions(
+    Column.fnWithOptions(
       "to_protobuf",
       options.asScala.iterator,
       data,
