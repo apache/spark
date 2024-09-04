@@ -17,8 +17,8 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import java.lang.invoke.{MethodHandle, MethodHandles, MethodType}
-
 import org.apache.spark.SparkException
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
 
 /**
@@ -64,10 +64,8 @@ object KryoSerializationCodec extends (() => Codec[Any, Array[Byte]]) {
     try {
       kryoCodecConstructor.invoke().asInstanceOf[Codec[Any, Array[Byte]]]
     } catch {
-      case e: ClassNotFoundException =>
-        throw SparkException.internalError(
-          "KryoSerializationCodec cannot be loaded. Please note that " +
-            "Kryo serializatio can only be used in Classic.", e)
+      case _: ClassNotFoundException =>
+        throw ExecutionErrors.cannotUseKryoSerialization()
     }
   }
 }
