@@ -140,6 +140,8 @@ class SingleStatementExec(
  * Implements recursive iterator logic over all child execution nodes.
  * @param collection
  *   Collection of child execution nodes.
+ * @param label
+ *   Label set by user or None otherwise.
  */
 abstract class CompoundNestedStatementIteratorExec(
     collection: Seq[CompoundStatementExec],
@@ -148,6 +150,8 @@ abstract class CompoundNestedStatementIteratorExec(
 
   private var localIterator = collection.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+
+  /** Used to stop the iteration in cases when LEAVE statement is encountered. */
   private var stopIteration = false
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
@@ -202,6 +206,7 @@ abstract class CompoundNestedStatementIteratorExec(
     stopIteration = false
   }
 
+  /** Actions to do when LEAVE statement is encountered to stop the execution of this compound. */
   private def handleLeaveStatement(leaveStatement: LeaveStatementExec): Unit = {
     if (!leaveStatement.hasBeenMatched) {
       // Stop the iteration.
@@ -219,6 +224,8 @@ abstract class CompoundNestedStatementIteratorExec(
  * Executable node for CompoundBody.
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
+ * @param label
+ *   Label set by user to CompoundBody or None otherwise.
  */
 class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
   extends CompoundNestedStatementIteratorExec(statements, label)
@@ -302,6 +309,7 @@ class IfElseStatementExec(
  * Executable node for WhileStatement.
  * @param condition Executable node for the condition.
  * @param body Executable node for the body.
+ * @param label Label set to WhileStatement by user or None otherwise.
  * @param session Spark session that SQL script is executed within.
  */
 class WhileStatementExec(
@@ -335,6 +343,7 @@ class WhileStatementExec(
           case WhileState.Body =>
             val retStmt = body.getTreeIterator.next()
 
+            // Handle LEAVE or ITERATE statement if it has been encountered.
             retStmt match {
               case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
                 if (label.contains(leaveStatementExec.label)) {
@@ -372,12 +381,42 @@ class WhileStatementExec(
   }
 }
 
+/**
+ * Executable node for LeaveStatement.
+ * @param label Label of the compound or loop to leave.
+ */
 class LeaveStatementExec(val label: String) extends LeafStatementExec {
+  /**
+   * Label specified in the LEAVE statement might not belong to the immediate surrounding compound,
+   *   but to the any surrounding compound.
+   * Iteration logic is recursive, i.e. when iterating through the compound, if another
+   *   compound is encountered, next() will be called to iterate its body. The same logic
+   *   is applied to any other compound down the traversal tree.
+   * In such cases, when LEAVE statement is encountered (as the leaf of the traversal tree),
+   *   it will be propagated upwards and the logic will try to match it to the labels of
+   *   surrounding compounds.
+   * Once the match is found, this flag is set to true to indicate that search should be stopped.
+   */
   var hasBeenMatched: Boolean = false
   override def reset(): Unit = hasBeenMatched = false
 }
 
+/**
+ * Executable node for ITERATE statement.
+ * @param label Label of the loop to iterate.
+ */
 class IterateStatementExec(val label: String) extends LeafStatementExec {
+  /**
+   * Label specified in the ITERATE statement might not belong to the immediate compound,
+   * but to the any surrounding compound.
+   * Iteration logic is recursive, i.e. when iterating through the compound, if another
+   * compound is encountered, next() will be called to iterate its body. The same logic
+   * is applied to any other compound down the tree.
+   * In such cases, when ITERATE statement is encountered (as the leaf of the traversal tree),
+   * it will be propagated upwards and the logic will try to match it to the labels of
+   * surrounding compounds.
+   * Once the match is found, this flag is set to true to indicate that search should be stopped.
+   */
   var hasBeenMatched: Boolean = false
   override def reset(): Unit = hasBeenMatched = false
 }

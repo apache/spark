@@ -90,6 +90,20 @@ case class WhileStatement(
     body: CompoundBody,
     label: Option[String]) extends CompoundPlanStatement
 
+/**
+ * Logical operator for LEAVE statement.
+ * The statement can be used both for compounds or any kind of loops.
+ * When used, the corresponding body/loop execution is skipped and the execution continues
+ *   with the next statement after the body/loop.
+ * @param label Label of the compound or loop to leave.
+ */
 case class LeaveStatement(label: String) extends CompoundPlanStatement
 
+/**
+ * Logical operator for ITERATE statement.
+ * The statement can be used only for loops.
+ * When used, the rest of the loop is skipped and the loop execution continues
+ *   with the next iteration.
+ * @param label Label of the loop to iterate.
+ */
 case class IterateStatement(label: String) extends CompoundPlanStatement
