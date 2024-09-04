@@ -14,6 +14,7 @@
 package org.apache.spark.io;
 
 import org.apache.spark.storage.StorageUtils;
+import org.apache.spark.unsafe.Platform;
 
 import java.io.File;
 import java.io.IOException;
@@ -39,7 +40,7 @@ public final class NioBufferedFileInputStream extends InputStream {
   private final FileChannel fileChannel;
 
   public NioBufferedFileInputStream(File file, int bufferSizeInBytes) throws IOException {
-    byteBuffer = ByteBuffer.allocateDirect(bufferSizeInBytes);
+    byteBuffer = Platform.allocateDirectBuffer(bufferSizeInBytes);
     fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
     byteBuffer.flip();
   }
