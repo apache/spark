@@ -433,7 +433,7 @@ object SparkBuild extends PomBuild {
     enable(SparkR.settings)(core)
   }
 
-  if (!profiles.contains("opentelemetry")) {
+  if (profiles.contains("opentelemetry")) {
     enable(OpenTelemetry.settings)(core)
   }
 
@@ -1336,7 +1336,8 @@ object Volcano {
 object OpenTelemetry {
   // Exclude all OpenTelemetry files for Compile and Test
   lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "OpenTelemetry*.scala"
+    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "core" / "opentelemetry" / "main" / "scala",
+    Test / unmanagedSourceDirectories += baseDirectory.value / ".." / "core" / "opentelemetry" / "test" / "scala"
   )
 }
 
