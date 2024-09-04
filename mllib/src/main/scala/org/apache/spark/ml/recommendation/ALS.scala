@@ -46,6 +46,7 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql._
+import org.apache.spark.sql.api.python.PythonSQLUtils.collect_top_k
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}

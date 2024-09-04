@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-private[sql] object PythonSQLUtils extends Logging {
+private[spark] object PythonSQLUtils extends Logging {
   private def withInternalRowPickler(f: Pickler => Array[Byte]): Array[Byte] = {
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(true, false)
