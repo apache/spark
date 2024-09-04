@@ -145,6 +145,8 @@ abstract class AbstractCommandBuilder {
 
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
+    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
+    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList(
@@ -176,6 +178,7 @@ abstract class AbstractCommandBuilder {
             "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
             "assembly.");
         }
+        boolean isSparkHiveJarAvailable = isSparkHiveJarAvailable(jarsDir);
         for (String project : projects) {
           // Do not use locally compiled class files for Spark server because it should use shaded
           // dependencies.
@@ -183,6 +186,9 @@ abstract class AbstractCommandBuilder {
             continue;
           }
           if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
+            continue;
+          }
+          if (!isSparkHiveJarAvailable && project.equals("sql/hive")) {
             continue;
           }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
@@ -205,8 +211,6 @@ abstract class AbstractCommandBuilder {
     // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
-    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
-    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (jarsDir != null) {
       // Place slf4j-api-* jar first to be robust
       for (File f: new File(jarsDir).listFiles()) {
@@ -261,6 +265,23 @@ abstract class AbstractCommandBuilder {
         cp.add(entry);
       }
     }
+  }
+
+  /**
+   * Checks if the spark-hive jar file is available in the specified directory.
+   *
+   * @param jarsDir the directory to search for spark-hive jar files
+   * @return true if a file starting with "spark-hive_" is found, false otherwise
+   */
+  private boolean isSparkHiveJarAvailable(String jarsDir) {
+    if(jarsDir != null) {
+      for (File f: new File(jarsDir).listFiles()) {
+        if (f.getName().startsWith("spark-hive_")) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   String getScalaVersion() {
