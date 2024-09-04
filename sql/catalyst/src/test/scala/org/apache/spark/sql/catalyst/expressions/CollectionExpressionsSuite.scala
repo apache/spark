@@ -254,13 +254,15 @@ class CollectionExpressionsSuite
     val a3_7 = CreateArray(Seq(Literal(1), Literal(3), Literal(4)))
     checkEvaluation(ArrayBinarySearch(a3_7, Literal(2, IntegerType)), -2)
     // int non-foldable
-    val a3_8 = NonFoldableLiteral.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val a3_8 = NonFoldableLiteral.create(Seq(1, 2, 3),
+      ArrayType(IntegerType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a3_8, Literal(2)), 1)
     val a3_9 = NonFoldableLiteral.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
     checkEvaluation(ArrayBinarySearch(a3_9, Literal(2)), 2)
     val a3_10 = NonFoldableLiteral.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
     checkEvaluation(ArrayBinarySearch(a3_10, Literal(null, IntegerType)), null)
-    val a3_11 = NonFoldableLiteral.create(Seq(1, 3, 4), ArrayType(IntegerType, containsNull = false))
+    val a3_11 = NonFoldableLiteral.create(Seq(1, 3, 4),
+      ArrayType(IntegerType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a3_11, Literal(2, IntegerType)), -2)
 
     // long
@@ -284,13 +286,15 @@ class CollectionExpressionsSuite
     val a4_7 = CreateArray(Seq(Literal(1L), Literal(3L), Literal(4L)))
     checkEvaluation(ArrayBinarySearch(a4_7, Literal(2L, LongType)), -2)
     // long non-foldable
-    val a4_8 = NonFoldableLiteral.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
+    val a4_8 = NonFoldableLiteral.create(Seq(1L, 2L, 3L),
+      ArrayType(LongType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a4_8, Literal(2L)), 1)
     val a4_9 = NonFoldableLiteral.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
     checkEvaluation(ArrayBinarySearch(a4_9, Literal(2L)), 2)
     val a4_10 = NonFoldableLiteral.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
     checkEvaluation(ArrayBinarySearch(a4_10, Literal(null, LongType)), null)
-    val a4_11 = NonFoldableLiteral.create(Seq(1L, 3L, 4L), ArrayType(LongType, containsNull = false))
+    val a4_11 = NonFoldableLiteral.create(Seq(1L, 3L, 4L),
+      ArrayType(LongType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a4_11, Literal(2L, LongType)), -2)
 
     // float
