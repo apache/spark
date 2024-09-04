@@ -117,13 +117,7 @@ class RelationalGroupedDataset protected[sql](
     columnExprs.map(column)
   }
 
-
-  /**
-   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
-   * of current `RelationalGroupedDataset`.
-   *
-   * @since 3.0.0
-   */
+  /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
     val keyEncoder = encoderFor[K]
     val valueEncoder = encoderFor[T]

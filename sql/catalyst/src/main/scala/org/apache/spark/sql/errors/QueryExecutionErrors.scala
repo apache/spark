@@ -478,6 +478,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def invalidExternalTypeError(
+      actualType: String,
+      expectedType: DataType,
+      childExpression: Expression): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_EXTERNAL_TYPE",
+      messageParameters = Map(
+        "externalType" -> actualType,
+        "type" -> toSQLType(expectedType),
+        "expr" -> toSQLExpr(childExpression)
+      )
+    )
+  }
+
   def notOverrideExpectedMethodsError(
       className: String, m1: String, m2: String): SparkRuntimeException = {
     new SparkRuntimeException(

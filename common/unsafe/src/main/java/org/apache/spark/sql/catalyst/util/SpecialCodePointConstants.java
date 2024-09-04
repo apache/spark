@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql.catalyst.util;
 
-package org.apache.spark.sql.catalyst.analysis
+/**
+ * 'SpecialCodePointConstants' is introduced in order to keep the codepoints used in
+ * 'CollationAwareUTF8String' in one place.
+ */
+public class SpecialCodePointConstants {
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.quoteNameParts
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.util.ArrayImplicits._
-
-class CannotReplaceMissingTableException(
-    tableIdentifier: Identifier,
-    cause: Option[Throwable] = None)
-  extends AnalysisException(
-      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      messageParameters = Map("relationName"
-        -> quoteNameParts((tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
-      cause = cause)
+    public static final int COMBINING_DOT = 0x0307;
+    public static final int ASCII_SMALL_I = 0x0069;
+    public static final int ASCII_SPACE = 0x0020;
+    public static final int GREEK_CAPITAL_SIGMA = 0x03A3;
+    public static final int GREEK_SMALL_SIGMA = 0x03C3;
+    public static final int GREEK_FINAL_SIGMA = 0x03C2;
+    public static final int CAPITAL_I_WITH_DOT_ABOVE = 0x0130;
+}

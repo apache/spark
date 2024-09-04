@@ -19,6 +19,7 @@ from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
+import json
 import threading
 import os
 import warnings
@@ -200,6 +201,26 @@ class SparkSession:
             )
 
         def _apply_options(self, session: "SparkSession") -> None:
+            init_opts = {}
+            for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+                init_opts = json.loads(os.environ[f"PYSPARK_REMOTE_INIT_CONF_{i}"])
+
+            with self._lock:
+                for k, v in init_opts.items():
+                    # the options are applied after session creation,
+                    # so following options always take no effect
+                    if k not in [
+                        "spark.remote",
+                        "spark.master",
+                    ] and k.startswith("spark.sql."):
+                        # Only attempts to set Spark SQL configurations.
+                        # If the configurations are static, it might throw an exception so
+                        # simply ignore it for now.
+                        try:
+                            session.conf.set(k, v)
+                        except Exception:
+                            pass
+
             with self._lock:
                 for k, v in self._options.items():
                     # the options are applied after session creation,
@@ -993,10 +1014,17 @@ class SparkSession:
 
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
+            init_opts = {}
+            for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+                init_opts = json.loads(os.environ[f"PYSPARK_REMOTE_INIT_CONF_{i}"])
+            init_opts.update(opts)
+            opts = init_opts
+
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
             overwrite_conf["spark.local.connect"] = "1"
+            os.environ["SPARK_LOCAL_CONNECT"] = "1"
 
             # Configurations to be set if unset.
             default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
@@ -1030,6 +1058,7 @@ class SparkSession:
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
+                del os.environ["SPARK_LOCAL_CONNECT"]
         else:
             raise PySparkRuntimeError(
                 errorClass="SESSION_OR_CONTEXT_EXISTS",
