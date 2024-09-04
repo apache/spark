@@ -147,6 +147,11 @@ object MimaExcludes {
 
     // SPARK-49425: Create a shared DataFrameWriter interface.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter"),
+
+    // SPARK-49426: Shared DataFrameWriterV2
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CreateTableWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriterV2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WriteConfigMethods"),
   )
 
   // Default exclude rules
