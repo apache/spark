@@ -21,9 +21,9 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * SqlApiConfHelper is created to avoid a deadlock during a concurrent access to SQLConf and
  * SqlApiConf, which is because SQLConf and SqlApiConf tries to load each other upon
- * initializations. SqlApiConfHelper is private to sql package and is not supposed to be
- * accessed by end users. Variables and methods within SqlApiConfHelper are defined to
- * be used by SQLConf and SqlApiConf only.
+ * initializations. SqlApiConfHelper is private to sql package and is not supposed to be accessed
+ * by end users. Variables and methods within SqlApiConfHelper are defined to be used by SQLConf
+ * and SqlApiConf only.
  */
 private[sql] object SqlApiConfHelper {
   // Shared keys.

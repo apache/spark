@@ -24,8 +24,10 @@ import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
 /**
  * Codec for doing conversions between two representations.
  *
- * @tparam I input type (typically the external representation of the data.
- * @tparam O output type (typically the internal representation of the data.
+ * @tparam I
+ *   input type (typically the external representation of the data.
+ * @tparam O
+ *   output type (typically the internal representation of the data.
  */
 trait Codec[I, O] {
   def encode(in: I): O
