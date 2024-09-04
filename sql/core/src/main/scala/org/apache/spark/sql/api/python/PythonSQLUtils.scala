@@ -152,6 +152,9 @@ private[sql] object PythonSQLUtils extends Logging {
   def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
+  def binary_search(e: Column, value: Column): Column =
+    Column.internalFn("array_binary_search", e, value)
+
   def pandasProduct(e: Column, ignoreNA: Boolean): Column =
     Column.internalFn("pandas_product", e, lit(ignoreNA))
 

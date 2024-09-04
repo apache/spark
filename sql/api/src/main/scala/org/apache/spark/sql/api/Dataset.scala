@@ -23,7 +23,7 @@ import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
-import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
+import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -2838,6 +2838,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit
 
   /**
+<<<<<<< HEAD
    * Merges a set of updates, insertions, and deletions based on a source table into
    * a target table.
    *
@@ -2860,6 +2861,27 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 4.0.0
    */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
+=======
+   * Create a write configuration builder for v2 sources.
+   *
+   * This builder is used to configure and execute write operations. For example, to append to an
+   * existing table, run:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").append()
+   * }}}
+   *
+   * This can also be used to create or replace existing tables:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
+   * }}}
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def writeTo(table: String): DataFrameWriterV2[T]
+>>>>>>> apache/master
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
