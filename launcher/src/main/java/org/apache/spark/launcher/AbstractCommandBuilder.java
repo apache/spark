@@ -274,8 +274,8 @@ abstract class AbstractCommandBuilder {
    * @return true if a file starting with "spark-hive_" is found, false otherwise
    */
   private boolean isSparkHiveJarAvailable(String jarsDir) {
-    if(jarsDir != null) {
-      for (File f: new File(jarsDir).listFiles()) {
+    if (jarsDir != null) {
+      for (File f : new File(jarsDir).listFiles()) {
         if (f.getName().startsWith("spark-hive_")) {
           return true;
         }
