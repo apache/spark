@@ -69,7 +69,9 @@ abstract class StatePartitionReaderBase(
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends PartitionReader[InternalRow] with Logging {
-  protected val schemaForValueRow: StructType =
+  // Used primarily as a placeholder for the value schema in the context of
+  // state variables used within the transformWithState operator.
+  private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
   protected val keySchema = SchemaUtil.getSchemaAsDataType(
