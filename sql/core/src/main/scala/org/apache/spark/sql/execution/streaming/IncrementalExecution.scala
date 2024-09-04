@@ -88,7 +88,6 @@ class IncrementalExecution(
 
   override protected def purge(threshold: Long): Unit = {}
 
-
   def stateSchemaDirPath(
       ssw: StateStoreWriter,
       storeName: Option[String] = None): Path = {
