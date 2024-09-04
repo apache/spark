@@ -32,7 +32,6 @@
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
-    <opentelemetry.exclude>**/OpenTelemetry*.scala</opentelemetry.exclude>
   </properties>
   
   <dependencies>
@@ -512,15 +511,6 @@
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
-        <groupId>net.alchim31.maven</groupId>
-        <artifactId>scala-maven-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <exclude>${opentelemetry.exclude}</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
@@ -629,9 +619,6 @@
     </profile>
     <profile>
       <id>opentelemetry</id>
-      <properties>
-        <opentelemetry.exclude></opentelemetry.exclude>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>io.opentelemetry</groupId>
@@ -656,6 +643,40 @@
           <scope>test</scope>
         </dependency>
       </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-opentelemetry-source</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>opentelemetry/src/main/scala</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-opentelemetry-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>opentelemetry/src/test/scala</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <profile>
       <id>sparkr</id>

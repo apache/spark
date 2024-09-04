@@ -1336,8 +1336,8 @@ object Volcano {
 object OpenTelemetry {
   // Exclude all OpenTelemetry files for Compile and Test
   lazy val settings = Seq(
-    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "core" / "opentelemetry" / "main" / "scala",
-    Test / unmanagedSourceDirectories += baseDirectory.value / ".." / "core" / "opentelemetry" / "test" / "scala"
+    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "core" / "opentelemetry" / "src" /"main" / "scala",
+    Test / unmanagedSourceDirectories += baseDirectory.value / ".." / "core" / "opentelemetry" / "src" /"test" / "scala"
   )
 }
 
