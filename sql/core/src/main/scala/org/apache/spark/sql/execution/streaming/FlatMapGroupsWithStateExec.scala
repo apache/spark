@@ -450,17 +450,33 @@ case class FlatMapGroupsWithStateExec(
         hasTimedOut,
         watermarkPresent)
 
-      val mappedIterator = try {
-        // Call function, get the returned objects and convert them to rows
+      def withUserFuncExceptionHandling[T](func: => T): T = {
+        try {
+          func
+        } catch {
+          case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+            throw FlatMapGroupsWithStateUserFuncException(e)
+          case f: Throwable =>
+            throw f
+        }
+      }
+
+      val mappedIterator = withUserFuncExceptionHandling {
         func(keyObj, valueObjIter, groupState).map { obj =>
           numOutputRows += 1
           getOutputRow(obj)
         }
-      } catch {
-        case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
-          throw FlatMapGroupsWithStateUserFuncException(e)
-        case f: Throwable =>
-          throw f
+      }
+
+      // Wrap user-provided fns with error handling
+      val wrappedMappedIterator = new Iterator[InternalRow] {
+        override def hasNext: Boolean = {
+          withUserFuncExceptionHandling(mappedIterator.hasNext)
+        }
+
+        override def next(): InternalRow = {
+          withUserFuncExceptionHandling(mappedIterator.next())
+        }
       }
 
       // When the iterator is consumed, then write changes to state
@@ -482,7 +498,9 @@ case class FlatMapGroupsWithStateExec(
       }
 
       // Return an iterator of rows such that fully consumed, the updated state value will be saved
-      CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIterator, onIteratorCompletion)
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+        wrappedMappedIterator, onIteratorCompletion
+      )
     }
   }
 }

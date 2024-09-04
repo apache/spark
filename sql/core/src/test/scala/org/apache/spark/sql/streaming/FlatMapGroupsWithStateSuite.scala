@@ -655,10 +655,37 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   testWithAllStateVersions(
-    "[SPARK-49474] flatMapGroupsWithState - NPE from user iterator is classified") {
+    "[SPARK-49474] flatMapGroupsWithState - null user iterator error is classified") {
     // Returns null, will throw NPE when method is called on it
     val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
       null.asInstanceOf[Iterator[Int]]
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException]()
+    )
+  }
+
+  testWithAllStateVersions(
+    "[SPARK-49474] flatMapGroupsWithState - NPE from user iterator is classified") {
+    // Returns iterator that throws NPE when next is called
+    val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
+      new Iterator[Int] {
+        override def hasNext: Boolean = {
+          true
+        }
+
+        override def next(): Int = {
+          throw new NullPointerException()
+        }
+      }
     }
 
     val inputData = MemoryStream[String]
