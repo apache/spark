@@ -204,8 +204,8 @@ object Encoders {
   def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
 
   /**
-   * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
-   * This encoder maps T into a single byte array (binary) field.
+   * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo. This
+   * encoder maps T into a single byte array (binary) field.
    *
    * T must be publicly accessible.
    *
@@ -216,8 +216,8 @@ object Encoders {
   }
 
   /**
-   * Creates an encoder that serializes objects of type T using Kryo.
-   * This encoder maps T into a single byte array (binary) field.
+   * Creates an encoder that serializes objects of type T using Kryo. This encoder maps T into a
+   * single byte array (binary) field.
    *
    * T must be publicly accessible.
    *
