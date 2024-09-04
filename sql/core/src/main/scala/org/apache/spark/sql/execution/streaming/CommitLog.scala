@@ -98,13 +98,13 @@ object CommitLog {
  * In the commit log, in addition to nextBatchWatermarkMs, we also store the unique ids of the
  * state store files.
  * @param nextBatchWatermarkMs The watermark of the next batch.
- * @param stateUniqueIds Map[String, Map[String, Map[String, Seq[String]]]] of map
- *                       OperatorId -> PartitionId -> StoreName -> Seq[uniqueId]
+ * @param stateUniqueIds Map[Long, Array[String]] of map
+ *                       OperatorId -> (partitionID -> uniqueID)
  */
 
 case class CommitMetadata(
     nextBatchWatermarkMs: Long = 0,
-    stateUniqueIds: Map[String, Map[String, Map[String, Seq[String]]]] = Map.empty) {
+    stateUniqueIds: Map[Long, Array[String]] = Map.empty) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 

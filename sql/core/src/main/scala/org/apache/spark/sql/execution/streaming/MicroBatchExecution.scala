@@ -514,6 +514,9 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
+              commitMetadata.stateUniqueIds.foreach { case (operatorId, uniqueIds) =>
+                currentCheckpointUniqueId(operatorId) = uniqueIds
+              }
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -953,7 +956,9 @@ class MicroBatchExecution(
       updateCheckpointId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {
-      if (!commitLog.add(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
+      if (!commitLog.add(execCtx.batchId,
+        // TODO: verify compatibility
+        CommitMetadata(watermarkTracker.currentWatermark, currentCheckpointUniqueId.toMap))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }

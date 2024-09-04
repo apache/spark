@@ -150,7 +150,8 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId)
+    hadoopConf, conf.compressionCodec, loggingId = loggingId,
+    checkpointFormatVersion = checkpointFormatVersion)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
   private val acquireLock = new Object
@@ -287,9 +288,16 @@ class RocksDB(
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
         fileManager.copyFileMapping()
-        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
-        loadedVersion = latestSnapshotVersion
+        // [TODO]: latest snapshot version not needed yet (without changelog ckpt)
+//        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
+        val latestSnapshotVersion = version
+//        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        val currMetadata = fileManager.loadCheckpointFromDfs(
+          version, workingDir, checkpointUniqueId)
+        val metadata = currMetadata
+//        val previousSnapshotCheckpointId = currMetadata.checkpointUniqueId
+        loadedVersion = version
+//        loadedVersion = latestSnapshotVersion
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
@@ -326,6 +334,7 @@ class RocksDB(
           } else {
             metadata.numKeys
           }
+        // POC: loadedVersion set to version above
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -667,6 +676,12 @@ class RocksDB(
         }
       }
 
+      if (checkpointFormatVersion >= 2) {
+        LastCommitBasedCheckpointId = loadedCheckpointId
+        lastCommittedCheckpointId = sessionCheckpointId
+        loadedCheckpointId = sessionCheckpointId
+      }
+
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
@@ -698,11 +713,6 @@ class RocksDB(
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
-      if (checkpointFormatVersion >= 2) {
-        LastCommitBasedCheckpointId = loadedCheckpointId
-        lastCommittedCheckpointId = sessionCheckpointId
-        loadedCheckpointId = sessionCheckpointId
-      }
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
         "compact" -> compactTimeMs,
@@ -762,7 +772,8 @@ class RocksDB(
               numKeys,
               capturedFileMappings,
               Some(columnFamilyMapping.toMap),
-              Some(maxColumnFamilyId)
+              Some(maxColumnFamilyId),
+              loadedCheckpointId,
             )
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
@@ -798,6 +809,7 @@ class RocksDB(
 
   def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
+      // TODO: here need to correctly setup loadedId
       uploadSnapshot()
     }
     val cleanupTime = timeTakenMs {

@@ -81,12 +81,10 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("Basic Commit Log V2 SerDe") {
-    val testStateUniqueIds: Map[String, Map[String, Map[String, Seq[String]]]] =
+    val testStateUniqueIds: Map[Long, Array[String]] =
       Map(
-        "0" -> Map("0" -> Map("default" -> Seq("unique_id1", "unique_id2", "unique_id3")),
-          "1" -> Map("default" -> Seq("unique_id4", "unique_id5", "unique_id6"))),
-        "1" -> Map("0" -> Map("default" -> Seq("unique_id7", "unique_id8", "unique_id9")),
-          "1" -> Map("default" -> Seq("unique_id10", "unique_id11", "unique_id12")))
+        0 -> Array("unique_id1", "unique_id2", "unique_id3"),
+          1 -> Array("unique_id4", "unique_id5", "unique_id6")
       )
     val testMetadataV2 = CommitMetadata(0, testStateUniqueIds)
     testSerde(testMetadataV2, testCommitLogV2FilePath)

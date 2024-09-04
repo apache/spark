@@ -38,10 +38,11 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogKeys, Logging, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -128,7 +129,8 @@ class RocksDBFileManager(
     localTempDir: File,
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
-    loggingId: String = "")
+    loggingId: String = "",
+    checkpointFormatVersion: Int = 1)
   extends Logging {
 
   import RocksDBImmutableFile._
@@ -251,7 +253,8 @@ class RocksDBFileManager(
       numKeys: Long,
       capturedFileMappings: RocksDBFileMappings,
       columnFamilyMapping: Option[Map[String, Short]] = None,
-      maxColumnFamilyId: Option[Short] = None): Unit = {
+      maxColumnFamilyId: Option[Short] = None,
+      checkpointUniqueId: Option[String] = None): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
@@ -276,8 +279,9 @@ class RocksDBFileManager(
         rootDirChecked = true
       }
     }
-    zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version))
-    logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)}")
+    zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
+    logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
+      log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
   }
 
   /**
@@ -286,8 +290,12 @@ class RocksDBFileManager(
    * ensures that only the exact files generated during checkpointing will be present in the
    * local directory.
    */
-  def loadCheckpointFromDfs(version: Long, localDir: File): RocksDBCheckpointMetadata = {
-    logInfo(log"Loading checkpoint files for version ${MDC(LogKeys.VERSION_NUM, version)}")
+  def loadCheckpointFromDfs(
+      version: Long,
+      localDir: File,
+      checkpointUniqueId: Option[String] = None): RocksDBCheckpointMetadata = {
+    logInfo(log"Loading checkpoint files for version ${MDC(LogKeys.VERSION_NUM, version)} " +
+      log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
     // The unique ids of SST files are checked when opening a rocksdb instance. The SST files
     // in larger versions can't be reused even if they have the same size and name because
     // they belong to another rocksdb instance.
@@ -300,7 +308,7 @@ class RocksDBFileManager(
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
-      Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version), localDir)
+      Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localDir)
 
       // Copy the necessary immutable files
       val metadataFile = localMetadataFile(localDir)
@@ -487,37 +495,47 @@ class RocksDBFileManager(
     val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file))
     val changelogFiles = allFiles.filter(file => onlyChangelogFiles.accept(file))
     // All versions present in DFS, sorted
-    val sortedSnapshotVersions = snapshotFiles
-      .map(_.getName.stripSuffix(".zip"))
-      .map(_.toLong)
-      .sorted
+    val sortedSnapshotVersionsAndUniqueIds = if (checkpointFormatVersion >= 2) {
+      // Array entries are (version, Some(uuid)) when checkpointFormatVersion is 2
+      snapshotFiles.map(_.getName.stripSuffix(".zip").split("-"))
+        .map { case Array(version, uniqueId) => (version.toLong, Some(uniqueId)) }
+        .sortBy(_._1)
+    } else {
+      // Array entries are (version, None) when checkpointFormatVersion is 1
+        snapshotFiles.map(_.getName.stripSuffix(".zip"))
+          .map(ver => (ver.toLong, None))
+          .sortBy(_._1)
+    }
 
     // Return if no versions generated yet
-    if (sortedSnapshotVersions.isEmpty) return
+    if (sortedSnapshotVersionsAndUniqueIds.isEmpty) return
 
     // Find the versions to delete
-    val maxSnapshotVersionPresent = sortedSnapshotVersions.last
+    val maxSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.last._1
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
     // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
     // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
     // no version gets deleted.
-    val minVersionToRetain = sortedSnapshotVersions
+    val minVersionToRetain = sortedSnapshotVersionsAndUniqueIds
+      .map(_._1)
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
       .foldLeft(0L)(math.max)
 
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
     // We only delete orphan files when there are at least 2 versions,
     // which avoid deleting files for running tasks.
-    val snapshotVersionsToDelete = sortedSnapshotVersions.filter(_ < minVersionToRetain)
-    if (snapshotVersionsToDelete.isEmpty) return
+    val snapshotVersionsAndUniqueIdsToDelete = sortedSnapshotVersionsAndUniqueIds
+      .filter(_._1 < minVersionToRetain)
+    val snapshotVersionsToDelete = snapshotVersionsAndUniqueIdsToDelete.map(_._1)
+    if (snapshotVersionsAndUniqueIdsToDelete.isEmpty) return
 
 
     // Resolve RocksDB files for all the versions and find the max version each file is used
     val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
-    sortedSnapshotVersions.foreach { version =>
+    sortedSnapshotVersionsAndUniqueIds.foreach { case (version, uniqueId) =>
       val files = Option(fileMappings.versionToRocksDBFiles.get(version)).getOrElse {
-        val newResolvedFiles = getImmutableFilesFromVersionZip(version)
+        val newResolvedFiles = getImmutableFilesFromVersionZip(version, uniqueId)
         fileMappings.versionToRocksDBFiles.put(version, newResolvedFiles)
         newResolvedFiles
       }
@@ -561,8 +579,8 @@ class RocksDBFileManager(
     }
 
     // Delete the version files and forget about them
-    snapshotVersionsToDelete.foreach { version =>
-      val versionFile = dfsBatchZipFile(version)
+    sortedSnapshotVersionsAndUniqueIds.foreach { case (version, uniqueId) =>
+      val versionFile = dfsBatchZipFile(version, uniqueId)
       try {
         fm.delete(versionFile)
         fileMappings.versionToRocksDBFiles.remove(version)
@@ -749,10 +767,11 @@ class RocksDBFileManager(
   }
 
   /** Get the SST files required for a version from the version zip file in DFS */
-  private def getImmutableFilesFromVersionZip(version: Long): Seq[RocksDBImmutableFile] = {
+  private def getImmutableFilesFromVersionZip(
+      version: Long, checkpointUniqueId: Option[String] = None): Seq[RocksDBImmutableFile] = {
     Utils.deleteRecursively(localTempDir)
     localTempDir.mkdirs()
-    Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version), localTempDir)
+    Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localTempDir)
     val metadataFile = localMetadataFile(localTempDir)
     val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
     metadata.immutableFiles
@@ -811,10 +830,14 @@ class RocksDBFileManager(
     s"$baseName-${UUID.randomUUID}.$extension"
   }
 
-  private def dfsBatchZipFile(version: Long): Path = new Path(s"$dfsRootDir/$version.zip")
+  private def dfsBatchZipFile(version: Long, checkpointUniqueId: Option[String] = None): Path =
+    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/$version-$id.zip"))
+      .getOrElse(new Path(s"$dfsRootDir/$version.zip"))
   // We use changelog suffix intentionally so that we can tell the difference from changelog file of
   // HDFSBackedStateStore which is named version.delta.
-  private def dfsChangelogFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
+  private def dfsChangelogFile(version: Long, checkpointUniqueId: Option[String] = None): Path =
+    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/$version-$id.changelog"))
+      .getOrElse(new Path(s"$dfsRootDir/$version.changelog"))
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
 
@@ -894,7 +917,8 @@ case class RocksDBCheckpointMetadata(
     logFiles: Seq[RocksDBLogFile],
     numKeys: Long,
     columnFamilyMapping: Option[Map[String, Short]] = None,
-    maxColumnFamilyId: Option[Short] = None) {
+    maxColumnFamilyId: Option[Short] = None,
+    checkpointUniqueId: Option[String] = None) {
 
   require(columnFamilyMapping.isDefined == maxColumnFamilyId.isDefined,
     "columnFamilyMapping and maxColumnFamilyId must either both be defined or both be None")
@@ -924,7 +948,7 @@ case class RocksDBCheckpointMetadata(
 
 /** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = 1
+  val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
 
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 
