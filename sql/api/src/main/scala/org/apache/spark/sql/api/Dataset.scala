@@ -2838,7 +2838,6 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit
 
   /**
-<<<<<<< HEAD
    * Merges a set of updates, insertions, and deletions based on a source table into
    * a target table.
    *
@@ -2861,7 +2860,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 4.0.0
    */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
-=======
+
+  /**
    * Create a write configuration builder for v2 sources.
    *
    * This builder is used to configure and execute write operations. For example, to append to an
@@ -2881,7 +2881,6 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 3.0.0
    */
   def writeTo(table: String): DataFrameWriterV2[T]
->>>>>>> apache/master
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
