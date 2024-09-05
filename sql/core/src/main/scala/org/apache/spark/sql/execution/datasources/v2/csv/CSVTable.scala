@@ -38,11 +38,10 @@ case class CSVTable(
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): CSVScanBuilder = {
-    val finalOptions = this.options.asCaseSensitiveMap().asScala.filterNot {
-      case (k, _) => options.containsKey(k)
-    }.toMap ++ options.asScala.toMap
+    val mergedOptions = this.options.asCaseSensitiveMap().asScala ++
+      options.asCaseSensitiveMap().asScala
     CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema,
-      new CaseInsensitiveStringMap(finalOptions.asJava))
+      new CaseInsensitiveStringMap(mergedOptions.asJava))
   }
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
