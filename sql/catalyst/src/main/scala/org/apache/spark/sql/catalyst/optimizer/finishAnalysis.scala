@@ -84,23 +84,26 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
-      case table: ResolvedInlineTable =>
-        val newRows: Seq[InternalRow] =
-          table.rows.map { row => InternalRow.fromSeq(row.map { e =>
-              try {
-                prepareForEval(e).eval()
-              } catch {
-                case NonFatal(ex) =>
-                  table.failAnalysis(
-                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
-                    cause = ex)
-              }})
-          }
-
-        LocalRelation(table.output, newRows)
+      case table: ResolvedInlineTable => eval(table)
     }
   }
+
+    def eval(table: ResolvedInlineTable): LocalRelation = {
+      val newRows: Seq[InternalRow] =
+        table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+          try {
+            prepareForEval(e).eval()
+          } catch {
+            case NonFatal(ex) =>
+              table.failAnalysis(
+                errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                cause = ex)
+          }})
+        }
+
+      LocalRelation(table.output, newRows)
+    }
 }
 
 /**

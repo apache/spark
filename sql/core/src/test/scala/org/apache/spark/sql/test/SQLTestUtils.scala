@@ -241,6 +241,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected object testImplicits extends SQLImplicits {
     protected override def session: SparkSession = self.spark
+    implicit def toRichColumn(c: Column): SparkSession#RichColumn = session.RichColumn(c)
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
@@ -423,8 +424,9 @@ private[sql] trait SQLTestUtilsBase
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    spark.sessionState.catalog.setCurrentDatabase(db)
-    Utils.tryWithSafeFinally(f)(spark.sessionState.catalog.setCurrentDatabase("default"))
+    spark.sessionState.catalogManager.setCurrentNamespace(Array(db))
+    Utils.tryWithSafeFinally(f)(
+      spark.sessionState.catalogManager.setCurrentNamespace(Array("default")))
   }
 
   /**

@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.MergeIntoWriterImpl
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
@@ -950,7 +951,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
       // an arbitrary merge
       val writer1 = spark.table("source")
-        .mergeInto("dummy", $"col" === $"col")
+        .mergeInto("dummy", $"colA" === $"colB")
         .whenMatched(col("col") === 1)
         .updateAll()
         .whenMatched()
@@ -959,16 +960,15 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         .insertAll()
         .whenNotMatchedBySource(col("col") === 1)
         .delete()
+        .asInstanceOf[MergeIntoWriterImpl[Row]]
       val writer2 = writer1.withSchemaEvolution()
+        .asInstanceOf[MergeIntoWriterImpl[Row]]
 
+      assert(writer1 eq writer2)
       assert(writer1.matchedActions.length === 2)
       assert(writer1.notMatchedActions.length === 1)
       assert(writer1.notMatchedBySourceActions.length === 1)
-
-      assert(writer1.matchedActions === writer2.matchedActions)
-      assert(writer1.notMatchedActions === writer2.notMatchedActions)
-      assert(writer1.notMatchedBySourceActions === writer2.notMatchedBySourceActions)
-      assert(writer2.schemaEvolutionEnabled)
+      assert(writer1.schemaEvolutionEnabled)
     }
   }
 }

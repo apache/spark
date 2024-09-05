@@ -2042,6 +2042,168 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("SPARK-49121: from_protobuf and to_protobuf SQL functions") {
+    withTable("protobuf_test_table") {
+      sql(
+        """
+          |CREATE TABLE protobuf_test_table AS
+          |  SELECT named_struct(
+          |    'id', 1L,
+          |    'string_value', 'test_string',
+          |    'int32_value', 32,
+          |    'int64_value', 64L,
+          |    'double_value', CAST(123.456 AS DOUBLE),
+          |    'float_value', CAST(789.01 AS FLOAT),
+          |    'bool_value', true,
+          |    'bytes_value', CAST('sample_bytes' AS BINARY)
+          |  ) AS complex_struct
+          |""".stripMargin)
+
+      val toProtobufSql =
+        s"""
+           |SELECT
+           |  to_protobuf(
+           |    complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', map()
+           |  ) AS protobuf_data
+           |FROM protobuf_test_table
+           |""".stripMargin
+
+      val protobufResult = spark.sql(toProtobufSql).collect()
+      assert(protobufResult != null)
+
+      val fromProtobufSql =
+        s"""
+           |SELECT
+           |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', map())
+           |FROM
+           |  ($toProtobufSql)
+           |""".stripMargin
+
+      checkAnswer(
+        spark.sql(fromProtobufSql),
+        Seq(Row(Row(1L, "test_string", 32, 64L, 123.456, 789.01F, true, "sample_bytes".getBytes)))
+      )
+
+      // Negative tests for to_protobuf.
+      var fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 42, '$testFileDescFile', map())
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> s"""\"to_protobuf(complex_struct, 42, $testFileDescFile, map())\"""",
+          "msg" -> ("The second argument of the TO_PROTOBUF SQL function must be a constant " +
+            "string representing the Protobuf message name"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> "\"to_protobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
+          "msg" -> ("The third argument of the TO_PROTOBUF SQL function must be a constant " +
+            "string or binary data representing the Protobuf descriptor file path"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())",
+          start = 10,
+          stop = 73))
+      )
+      fragment = s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"""\"to_protobuf(complex_struct, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+          "msg" -> ("The fourth argument of the TO_PROTOBUF SQL function must be a constant " +
+            "map of strings to strings containing the options to use for converting the value " +
+            "to Protobuf format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+
+      // Negative tests for from_protobuf.
+      fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT from_protobuf(protobuf_data, 42, '$testFileDescFile', map())
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> s"""\"from_protobuf(protobuf_data, 42, $testFileDescFile, map())\"""",
+          "msg" -> ("The second argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "string representing the Protobuf message name"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 8,
+          stop = fragment.length + 7))
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> "\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
+          "msg" -> ("The third argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "string or binary data representing the Protobuf descriptor file path"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())",
+          start = 8,
+          stop = 72))
+      )
+      fragment = s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"""\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+          "msg" -> ("The fourth argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "map of strings to strings containing the options to use for converting the value " +
+            "from Protobuf format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+    }
+  }
+
   def testFromProtobufWithOptions(
     df: DataFrame,
     expectedDf: DataFrame,

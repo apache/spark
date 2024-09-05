@@ -98,6 +98,7 @@ DIRECTORY	false
 DISTINCT	true
 DISTRIBUTE	false
 DIV	false
+DO	false
 DOUBLE	false
 DROP	false
 ELSE	true
@@ -162,6 +163,7 @@ INTO	true
 INVOKER	false
 IS	true
 ITEMS	false
+ITERATE	false
 JOIN	true
 KEYS	false
 LANGUAGE	false
@@ -169,6 +171,7 @@ LAST	false
 LATERAL	true
 LAZY	false
 LEADING	true
+LEAVE	false
 LEFT	true
 LIKE	false
 LIMIT	false
@@ -350,6 +353,7 @@ WEEK	false
 WEEKS	false
 WHEN	true
 WHERE	true
+WHILE	false
 WINDOW	false
 WITH	true
 WITHIN	true

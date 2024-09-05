@@ -46,13 +46,14 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * A reserved property to specify the location of the table. The files of the table
-   * should be under this location.
+   * should be under this location. The location is a Hadoop Path string.
    */
   String PROP_LOCATION = "location";
 
   /**
    * A reserved property to indicate that the table location is managed, not user-specified.
-   * If this property is "true", SHOW CREATE TABLE will not generate the LOCATION clause.
+   * If this property is "true", it means it's a managed table even if it has a location. As an
+   * example, SHOW CREATE TABLE will not generate the LOCATION clause.
    */
   String PROP_IS_MANAGED_LOCATION = "is_managed_location";
 
@@ -108,6 +109,26 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
+   * into this table later.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param writePrivileges
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   *
+   * @since 3.5.3
+   */
+  default Table loadTable(
+      Identifier ident,
+      Set<TableWritePrivilege> writePrivileges) throws NoSuchTableException {
+    return loadTable(ident);
+  }
 
   /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
@@ -174,11 +195,13 @@ public interface TableCatalog extends CatalogPlugin {
    * {@link #createTable(Identifier, Column[], Transform[], Map)} instead.
    */
   @Deprecated(since = "3.4.0")
-  Table createTable(
+  default Table createTable(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("createTable");
+  }
 
   /**
    * Create a table in the catalog.

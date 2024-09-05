@@ -58,3 +58,52 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String]) extends CompoundPlanStatement
+
+/**
+ * Logical operator for IF ELSE statement.
+ * @param conditions Collection of conditions. First condition corresponds to IF clause,
+ *                   while others (if any) correspond to following ELSE IF clauses.
+ * @param conditionalBodies Collection of bodies that have a corresponding condition,
+ *                          in IF or ELSE IF branches.
+ * @param elseBody Body that is executed if none of the conditions are met,
+ *                          i.e. ELSE branch.
+ */
+case class IfElseStatement(
+    conditions: Seq[SingleStatement],
+    conditionalBodies: Seq[CompoundBody],
+    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+  assert(conditions.length == conditionalBodies.length)
+}
+
+/**
+ * Logical operator for while statement.
+ * @param condition Any expression evaluating to a Boolean.
+ *                 Body is executed as long as the condition evaluates to true
+ * @param body Compound body is a collection of statements that are executed if condition is true.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the LOOP statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class WhileStatement(
+    condition: SingleStatement,
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement
+
+/**
+ * Logical operator for LEAVE statement.
+ * The statement can be used both for compounds or any kind of loops.
+ * When used, the corresponding body/loop execution is skipped and the execution continues
+ *   with the next statement after the body/loop.
+ * @param label Label of the compound or loop to leave.
+ */
+case class LeaveStatement(label: String) extends CompoundPlanStatement
+
+/**
+ * Logical operator for ITERATE statement.
+ * The statement can be used only for loops.
+ * When used, the rest of the loop is skipped and the loop execution continues
+ *   with the next iteration.
+ * @param label Label of the loop to iterate.
+ */
+case class IterateStatement(label: String) extends CompoundPlanStatement

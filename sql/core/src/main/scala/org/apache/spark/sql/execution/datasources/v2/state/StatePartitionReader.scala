@@ -20,8 +20,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
+import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
 import org.apache.spark.sql.types.StructType
@@ -36,16 +36,21 @@ class StatePartitionReaderFactory(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry]) extends PartitionReaderFactory {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
+  extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, stateStoreMetadata)
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
+        stateStoreColFamilySchemaOpt)
     } else {
       new StatePartitionReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, stateStoreMetadata)
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
+        stateStoreColFamilySchemaOpt)
     }
   }
 }
@@ -59,40 +64,44 @@ abstract class StatePartitionReaderBase(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends PartitionReader[InternalRow] with Logging {
-  private val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
-  private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
+  protected val keySchema = SchemaUtil.getSchemaAsDataType(
+    schema, "key").asInstanceOf[StructType]
+  protected val valueSchema = SchemaUtil.getSchemaAsDataType(
+    schema, "value").asInstanceOf[StructType]
 
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val numColsPrefixKey = if (stateStoreMetadata.isEmpty) {
-      logWarning("Metadata for state store not found, possible cause is this checkpoint " +
-        "is created by older version of spark. If the query has session window aggregation, " +
-        "the state can't be read correctly and runtime exception will be thrown. " +
-        "Run the streaming query in newer spark version to generate state metadata " +
-        "can fix the issue.")
-      0
+
+    val useColFamilies = if (stateVariableInfoOpt.isDefined) {
+      true
     } else {
-      require(stateStoreMetadata.length == 1)
-      stateStoreMetadata.head.numColsPrefixKey
+      false
     }
 
-    // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
-    // added in the future along with state metadata changes.
-    // Filed JIRA here: https://issues.apache.org/jira/browse/SPARK-47524
-    val keyStateEncoderType = if (numColsPrefixKey > 0) {
-      PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
-    } else {
-      NoPrefixKeyStateEncoderSpec(keySchema)
-    }
-
-    StateStoreProvider.createAndInit(
-      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
-      useColumnFamilies = false, storeConf, hadoopConf.value,
+    val provider = StateStoreProvider.createAndInit(
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+      useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
       useMultipleValuesPerKey = false)
+
+    if (useColFamilies) {
+      val store = provider.getStore(partition.sourceOptions.batchId + 1)
+      require(stateStoreColFamilySchemaOpt.isDefined)
+      val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
+      require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
+      store.createColFamilyIfAbsent(
+        stateStoreColFamilySchema.colFamilyName,
+        stateStoreColFamilySchema.keySchema,
+        stateStoreColFamilySchema.valueSchema,
+        stateStoreColFamilySchema.keyStateEncoderSpec.get,
+        useMultipleValuesPerKey = false)
+    }
+    provider
   }
 
   protected val iter: Iterator[InternalRow]
@@ -126,8 +135,11 @@ class StatePartitionReader(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
-  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt) {
 
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
@@ -146,20 +158,39 @@ class StatePartitionReader(
   }
 
   override lazy val iter: Iterator[InternalRow] = {
-    store.iterator().map(pair => unifyStateRowPair((pair.key, pair.value)))
+    val stateVarName = stateVariableInfoOpt
+      .map(_.stateName).getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
+    store
+      .iterator(stateVarName)
+      .map { pair =>
+        stateVariableInfoOpt match {
+          case Some(stateVarInfo) =>
+            val stateVarType = stateVarInfo.stateVariableType
+            val hasTTLEnabled = stateVarInfo.ttlEnabled
+
+            stateVarType match {
+              case StateVariableType.ValueState =>
+                if (hasTTLEnabled) {
+                  SchemaUtil.unifyStateRowPairWithTTL((pair.key, pair.value), valueSchema,
+                    partition.partition)
+                } else {
+                  SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+                }
+
+              case _ =>
+                throw new IllegalStateException(
+                  s"Unsupported state variable type: $stateVarType")
+            }
+
+          case None =>
+            SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+        }
+      }
   }
 
   override def close(): Unit = {
     store.abort()
     super.close()
-  }
-
-  private def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
-    val row = new GenericInternalRow(3)
-    row.update(0, pair._1)
-    row.update(1, pair._2)
-    row.update(2, partition.partition)
-    row
   }
 }
 
@@ -172,8 +203,11 @@ class StateStoreChangeDataPartitionReader(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
-  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt) {
 
   private lazy val changeDataReader:
     NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] = {

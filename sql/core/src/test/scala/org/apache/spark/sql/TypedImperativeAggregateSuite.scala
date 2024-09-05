@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.{column => toColumn, expression}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -88,10 +89,10 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
-    val max = TypedMax($"a".expr)
+    val max = TypedMax($"a")
 
     // Always uses SortAggregateExec
-    val sparkPlan = df.select(Column(max.toAggregateExpression())).queryExecution.sparkPlan
+    val sparkPlan = df.select(max).queryExecution.sparkPlan
     assert(!sparkPlan.isInstanceOf[HashAggregateExec])
   }
 
@@ -211,15 +212,9 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     checkAnswer(query, expected)
   }
 
-  private def typedMax(column: Column): Column = {
-    val max = TypedMax(column.expr, nullable = false)
-    Column(max.toAggregateExpression())
-  }
+  private def typedMax(column: Column): Column = TypedMax(column)
 
-  private def nullableTypedMax(column: Column): Column = {
-    val max = TypedMax(column.expr, nullable = true)
-    Column(max.toAggregateExpression())
-  }
+  private def nullableTypedMax(column: Column): Column = TypedMax(column, nullable = true)
 }
 
 object TypedImperativeAggregateSuite {

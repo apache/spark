@@ -20,8 +20,12 @@ package org.apache.spark.sql.connect.common
 import com.google.protobuf.{CodedInputStream, InvalidProtocolBufferException, Message, Parser}
 
 private[sql] object ProtoUtils {
-  def abbreviate[T <: Message](message: T, maxStringSize: Int = 1024): T = {
-    abbreviate[T](message, Map("STRING" -> maxStringSize))
+  // A partial message can be returned if "maxLevel" is specified.
+  def abbreviate[T <: Message](
+      message: T,
+      maxStringSize: Int = 1024,
+      maxLevel: Int = Int.MaxValue): T = {
+    abbreviate[T](message, Map("STRING" -> maxStringSize, "MAX_LEVEL" -> maxLevel))
   }
 
   def abbreviate[T <: Message](message: T, thresholds: Map[String, Int]): T = {

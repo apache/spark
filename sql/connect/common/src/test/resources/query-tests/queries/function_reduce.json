@@ -29,30 +29,30 @@
                 "functionName": "+",
                 "arguments": [{
                   "unresolvedNamedLambdaVariable": {
-                    "nameParts": ["x"]
+                    "nameParts": ["x_1"]
                   }
                 }, {
                   "unresolvedNamedLambdaVariable": {
-                    "nameParts": ["y"]
+                    "nameParts": ["y_2"]
                   }
                 }]
               }
             },
             "arguments": [{
-              "nameParts": ["x"]
+              "nameParts": ["x_1"]
             }, {
-              "nameParts": ["y"]
+              "nameParts": ["y_2"]
             }]
           }
         }, {
           "lambdaFunction": {
             "function": {
               "unresolvedNamedLambdaVariable": {
-                "nameParts": ["x"]
+                "nameParts": ["x_3"]
               }
             },
             "arguments": [{
-              "nameParts": ["x"]
+              "nameParts": ["x_3"]
             }]
           }
         }]

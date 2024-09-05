@@ -1440,7 +1440,7 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
 }
 
 /**
- * A constructor for creating a pivot, which will later be converted to a [[Project]]
+ * A logical plan node for creating a pivot, which will later be converted to a [[Project]]
  * or an [[Aggregate]] during the query analysis.
  *
  * @param groupByExprsOpt A sequence of group by expressions. This field should be None if coming
@@ -1476,7 +1476,7 @@ case class Pivot(
 
 
 /**
- * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
+ * A logical plan node for creating an Unpivot, which will later be converted to an [[Expand]]
  * during the query analysis.
  *
  * Either ids or values array must be set. The ids array can be empty,
@@ -1582,7 +1582,7 @@ case class Unpivot(
 }
 
 /**
- * A constructor for creating a logical limit, which is split into two separate logical nodes:
+ * A logical plan node for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
  * This muds the water for clean logical/physical separation, and is done for better limit pushdown.

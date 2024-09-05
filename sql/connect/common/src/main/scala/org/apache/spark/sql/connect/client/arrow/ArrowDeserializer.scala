@@ -359,6 +359,13 @@ object ArrowDeserializers {
           }
         }
 
+      case (TransformingEncoder(_, encoder, provider), v) =>
+        new Deserializer[Any] {
+          private[this] val codec = provider()
+          private[this] val deserializer = deserializerFor(encoder, v, timeZoneId)
+          override def get(i: Int): Any = codec.decode(deserializer.get(i))
+        }
+
       case (CalendarIntervalEncoder | VariantEncoder | _: UDTEncoder[_], _) =>
         throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 

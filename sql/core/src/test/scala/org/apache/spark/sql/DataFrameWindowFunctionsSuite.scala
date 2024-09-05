@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, S
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -861,7 +862,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           lead($"value", 2, null, true).over(window),
           lead($"value", 3, null, true).over(window),
           lead(concat($"value", $"key"), 1, null, true).over(window),
-          Column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
+          column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
           lag($"value", 2).over(window),
           lag($"value", 0, null, true).over(window),
           lag($"value", 1, null, true).over(window),

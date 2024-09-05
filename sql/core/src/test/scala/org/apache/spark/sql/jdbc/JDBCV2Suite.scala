@@ -241,6 +241,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
         "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('abc')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('a a a')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "(null)").executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -1769,7 +1778,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary1", false),
-        Row("test", "employee_bonus", false)))
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
@@ -3077,5 +3087,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
     val explained = getNormalizedExplain(df, FormattedMode)
     assert(explained.contains("External engine query:"))
+  }
+
+  test("Test not nullSafeEqual") {
+    val df = sql("SELECT str FROM h2.test.strings_with_nulls WHERE NOT str <=> 'abc'")
+    val rows = df.collect()
+
+    assert(rows.length == 2)
+    assert(rows.contains(Row(null)))
+    assert(rows.contains(Row("a a a")))
   }
 }

@@ -34,34 +34,38 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       case true => Some(request.getClientObservedServerSideSessionId)
       case false => None
     }
-    val holder =
+    doHandle(
+      request,
       SparkConnectService
         .getOrCreateIsolatedSession(
           request.getUserContext.getUserId,
           request.getSessionId,
-          previousSessionId)
-    val session = holder.session
+          previousSessionId))
+  }
 
-    val builder = request.getOperation.getOpTypeCase match {
+  private def doHandle(r: proto.ConfigRequest, h: SessionHolder): Unit = h.withSession { s =>
+    // Make sure we're using the current running session.
+    val builder = r.getOperation.getOpTypeCase match {
       case proto.ConfigRequest.Operation.OpTypeCase.SET =>
-        handleSet(request.getOperation.getSet, session.conf)
+        handleSet(r.getOperation.getSet, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET =>
-        handleGet(request.getOperation.getGet, session.conf)
+        handleGet(r.getOperation.getGet, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_WITH_DEFAULT =>
-        handleGetWithDefault(request.getOperation.getGetWithDefault, session.conf)
+        handleGetWithDefault(r.getOperation.getGetWithDefault, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_OPTION =>
-        handleGetOption(request.getOperation.getGetOption, session.conf)
+        handleGetOption(r.getOperation.getGetOption, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_ALL =>
-        handleGetAll(request.getOperation.getGetAll, session.conf)
+        handleGetAll(r.getOperation.getGetAll, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.UNSET =>
-        handleUnset(request.getOperation.getUnset, session.conf)
+        handleUnset(r.getOperation.getUnset, s.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.IS_MODIFIABLE =>
-        handleIsModifiable(request.getOperation.getIsModifiable, session.conf)
-      case _ => throw new UnsupportedOperationException(s"${request.getOperation} not supported.")
+        handleIsModifiable(r.getOperation.getIsModifiable, s.conf)
+      case _ =>
+        throw new UnsupportedOperationException(s"${r.getOperation} not supported.")
     }
 
-    builder.setSessionId(request.getSessionId)
-    builder.setServerSideSessionId(holder.serverSessionId)
+    builder.setSessionId(r.getSessionId)
+    builder.setServerSideSessionId(h.serverSessionId)
     responseObserver.onNext(builder.build())
     responseObserver.onCompleted()
   }

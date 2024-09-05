@@ -251,6 +251,13 @@ private[spark] object UI {
     .stringConf
     .createOptional
 
+  val MASTER_UI_VISIBLE_ENV_VAR_PREFIXES = ConfigBuilder("spark.master.ui.visibleEnvVarPrefixes")
+    .doc("Comma-separated list of key-prefix strings to show environment variables")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Seq.empty[String])
+
   val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
     .doc("Whether to group sub executions together in SQL UI when they belong to the same " +
       "root execution")

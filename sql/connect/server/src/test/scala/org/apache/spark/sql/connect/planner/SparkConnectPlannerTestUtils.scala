@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import io.grpc.stub.StreamObserver
-
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.SparkConnectTestUtils
@@ -61,11 +58,5 @@ object SparkConnectPlannerTestUtils {
     val executeHolder = SparkConnectService.executionManager.createExecuteHolder(request)
     executeHolder.eventsManager.status_(ExecuteStatus.Started)
     executeHolder
-  }
-
-  private class MockObserver extends StreamObserver[proto.ExecutePlanResponse] {
-    override def onNext(value: ExecutePlanResponse): Unit = {}
-    override def onError(t: Throwable): Unit = {}
-    override def onCompleted(): Unit = {}
   }
 }

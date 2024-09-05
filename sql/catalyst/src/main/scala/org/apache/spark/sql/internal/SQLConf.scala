@@ -759,14 +759,6 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
-  lazy val COLLATION_ENABLED =
-    buildConf("spark.sql.collation.enabled")
-      .doc("Collations feature is under development and its use should be done under this" +
-        "feature flag.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(Utils.isTesting)
-
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -974,6 +966,14 @@ object SQLConf {
       .doc("When true, the query optimizer will propagate a set of distinct attributes from the " +
         "current node and use it to optimize query.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED =
+    buildConf("spark.sql.parser.eagerEvalOfUnresolvedInlineTable")
+      .internal()
+      .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
+        "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1486,6 +1486,13 @@ object SQLConf {
     .version("1.4.0")
     .intConf
     .createWithDefault(200)
+
+  val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
+    buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
+      .internal()
+      .doc("Enable skipping assert when expression in not translated to predicate.")
+      .booleanConf
+      .createWithDefault(!Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -3730,7 +3737,7 @@ object SQLConf {
       .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false) // Disabled for now, see SPARK-46446
+      .createWithDefault(true)
 
   val DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")
@@ -4399,8 +4406,18 @@ object SQLConf {
 
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
+      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +
+        "can be overwritten by the JSON option `useUnsafeRow`.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val VARIANT_ALLOW_DUPLICATE_KEYS =
+    buildConf("spark.sql.variant.allowDuplicateKeys")
       .internal()
-      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser.")
+      .doc("When set to false, parsing variant from JSON will throw an error if there are " +
+        "duplicate keys in the input JSON object. When set to true, the parser will keep the " +
+        "last occurrence of all fields with the same key.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -4614,6 +4631,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_DUPLICATE_BETWEEN_INPUT =
+    buildConf("spark.sql.legacy.duplicateBetweenInput")
+      .internal()
+      .doc("When true, we use legacy between implementation. This is a flag that fixes a " +
+        "problem introduced by a between optimization, see ticket SPARK-49063.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
@@ -4762,7 +4788,7 @@ object SQLConf {
     buildConf("spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled")
       .internal()
       .doc("PySpark's SparkSession.createDataFrame infers the key/value types of a map from all " +
-        "paris in the map by default. If this config is set to true, it restores the legacy " +
+        "pairs in the map by default. If this config is set to true, it restores the legacy " +
         "behavior of only inferring the type from the first non-null pair.")
       .version("4.0.0")
       .booleanConf
@@ -5074,7 +5100,8 @@ object SQLConf {
     .internal()
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
       "encoding or decoding string values. If it is false, such functions support only one of " +
-      "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+      "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', " +
+      "'UTF-32'.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -5403,8 +5430,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
-
-  def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
@@ -5997,6 +6022,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
+  def legacyDuplicateBetweenInput: Boolean =
+    getConf(SQLConf.LEGACY_DUPLICATE_BETWEEN_INPUT)
+
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def supportSecondOffsetFormat: Boolean = getConf(SQLConf.SUPPORT_SECOND_OFFSET_FORMAT)
@@ -6065,7 +6093,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyRaiseErrorWithoutErrorClass: Boolean =
     getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
-  def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
+  override def stackTracesInDataFrameContext: Int =
+    getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
+
+  override def legacyAllowUntypedScalaUDFs: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 

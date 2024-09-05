@@ -20,6 +20,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 
 // scalastyle:off: object.name
@@ -66,14 +67,16 @@ object functions {
    */
   @Experimental
   def from_protobuf(
-    data: Column,
-    messageName: String,
-    binaryFileDescriptorSet: Array[Byte],
-    options: java.util.Map[String, String]): Column = {
-    new Column(
-      ProtobufDataToCatalyst(
-        data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap
-      )
+      data: Column,
+      messageName: String,
+      binaryFileDescriptorSet: Array[Byte],
+      options: java.util.Map[String, String]): Column = {
+    Column.fnWithOptions(
+      "from_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageName),
+      lit(binaryFileDescriptorSet)
     )
   }
 
@@ -93,7 +96,7 @@ object functions {
   @Experimental
   def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
     val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
-    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(fileContent)))
+    from_protobuf(data, messageName, fileContent)
   }
 
   /**
@@ -112,7 +115,12 @@ object functions {
   @Experimental
   def from_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(binaryFileDescriptorSet)))
+    Column.fn(
+      "from_protobuf",
+      data,
+      lit(messageName),
+      lit(binaryFileDescriptorSet)
+    )
   }
 
   /**
@@ -132,7 +140,11 @@ object functions {
    */
   @Experimental
   def from_protobuf(data: Column, messageClassName: String): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageClassName))
+    Column.fn(
+      "from_protobuf",
+      data,
+      lit(messageClassName)
+    )
   }
 
   /**
@@ -156,7 +168,12 @@ object functions {
     data: Column,
     messageClassName: String,
     options: java.util.Map[String, String]): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageClassName, None, options.asScala.toMap))
+    Column.fnWithOptions(
+      "from_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageClassName)
+    )
   }
 
   /**
@@ -194,7 +211,12 @@ object functions {
   @Experimental
   def to_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(binaryFileDescriptorSet)))
+    Column.fn(
+      "to_protobuf",
+      data,
+      lit(messageName),
+      lit(binaryFileDescriptorSet)
+    )
   }
   /**
    * Converts a column into binary of protobuf format. The Protobuf definition is provided
@@ -216,9 +238,7 @@ object functions {
     descFilePath: String,
     options: java.util.Map[String, String]): Column = {
     val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
-    new Column(
-      CatalystDataToProtobuf(data.expr, messageName, Some(fileContent), options.asScala.toMap)
-    )
+    to_protobuf(data, messageName, fileContent, options)
   }
 
   /**
@@ -242,10 +262,12 @@ object functions {
     binaryFileDescriptorSet: Array[Byte],
     options: java.util.Map[String, String]
   ): Column = {
-    new Column(
-      CatalystDataToProtobuf(
-        data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap
-      )
+    Column.fnWithOptions(
+      "to_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageName),
+      lit(binaryFileDescriptorSet)
     )
   }
 
@@ -266,7 +288,11 @@ object functions {
    */
   @Experimental
   def to_protobuf(data: Column, messageClassName: String): Column = {
-    new Column(CatalystDataToProtobuf(data.expr, messageClassName))
+    Column.fn(
+      "to_protobuf",
+      data,
+      lit(messageClassName)
+    )
   }
 
   /**
@@ -288,6 +314,11 @@ object functions {
   @Experimental
   def to_protobuf(data: Column, messageClassName: String, options: java.util.Map[String, String])
   : Column = {
-    new Column(CatalystDataToProtobuf(data.expr, messageClassName, None, options.asScala.toMap))
+    Column.fnWithOptions(
+      "to_protobuf",
+      options.asScala.iterator,
+      data,
+      lit(messageClassName)
+    )
   }
 }

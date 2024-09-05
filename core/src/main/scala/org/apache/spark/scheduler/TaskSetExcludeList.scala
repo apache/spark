@@ -31,6 +31,9 @@ import org.apache.spark.util.Clock
  * which is handled by [[HealthTracker]].  Note that HealthTracker does not know anything
  * about task failures until a taskset completes successfully.
  *
+ * If isDryRun is true, then this class will only function to store information for application
+ * level exclusion, and will not actually exclude any tasks in task/stage level.
+ *
  * THREADING:  This class is a helper to [[TaskSetManager]]; as with the methods in
  * [[TaskSetManager]] this class is designed only to be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
@@ -40,7 +43,8 @@ private[scheduler] class TaskSetExcludelist(
     val conf: SparkConf,
     val stageId: Int,
     val stageAttemptId: Int,
-    val clock: Clock) extends Logging {
+    val clock: Clock,
+    val isDryRun: Boolean = false) extends Logging {
 
   private val MAX_TASK_ATTEMPTS_PER_EXECUTOR = conf.get(config.MAX_TASK_ATTEMPTS_PER_EXECUTOR)
   private val MAX_TASK_ATTEMPTS_PER_NODE = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
@@ -80,13 +84,13 @@ private[scheduler] class TaskSetExcludelist(
    * of the scheduler, where those filters will have already been applied.
    */
   def isExecutorExcludedForTask(executorId: String, index: Int): Boolean = {
-    execToFailures.get(executorId).exists { execFailures =>
+    !isDryRun && execToFailures.get(executorId).exists { execFailures =>
       execFailures.getNumTaskFailures(index) >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
     }
   }
 
   def isNodeExcludedForTask(node: String, index: Int): Boolean = {
-    nodeToExcludedTaskIndexes.get(node).exists(_.contains(index))
+    !isDryRun && nodeToExcludedTaskIndexes.get(node).exists(_.contains(index))
   }
 
   /**
@@ -96,11 +100,11 @@ private[scheduler] class TaskSetExcludelist(
    * scheduler, where those filters will already have been applied.
    */
   def isExecutorExcludedForTaskSet(executorId: String): Boolean = {
-    excludedExecs.contains(executorId)
+    !isDryRun && excludedExecs.contains(executorId)
   }
 
   def isNodeExcludedForTaskSet(node: String): Boolean = {
-    excludedNodes.contains(node)
+    !isDryRun && excludedNodes.contains(node)
   }
 
   private[scheduler] def updateExcludedForFailedTask(
@@ -161,5 +165,20 @@ private[scheduler] class TaskSetExcludelist(
         }
       }
     }
+  }
+}
+
+private[scheduler] object TaskSetExcludelist {
+
+  /**
+   * Returns true if the excludeOnFailure is enabled on the task/stage level,
+   * based on checking the configuration in the following order:
+   * 1. Is taskset level exclusion specifically enabled or disabled?
+   * 2. Is overall exclusion feature enabled or disabled?
+   * 3. Default is off
+   */
+  def isExcludeOnFailureEnabled(conf: SparkConf): Boolean = {
+    conf.get(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE)
+      .orElse(conf.get(config.EXCLUDE_ON_FAILURE_ENABLED)).getOrElse(false)
   }
 }

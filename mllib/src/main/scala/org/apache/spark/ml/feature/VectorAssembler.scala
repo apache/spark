@@ -87,17 +87,17 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Schema transformation.
     val schema = dataset.schema
 
-    val vectorCols = $(inputCols).filter { c =>
-      schema(c).dataType match {
-        case _: VectorUDT => true
-        case _ => false
-      }
+    val inputColsWithField = $(inputCols).map { c =>
+      c -> SchemaUtils.getSchemaField(schema, c)
+    }
+
+    val vectorCols = inputColsWithField.collect {
+      case (c, field) if field.dataType.isInstanceOf[VectorUDT] => c
     }
     val vectorColsLengths = VectorAssembler.getLengths(
       dataset, vectorCols.toImmutableArraySeq, $(handleInvalid))
 
-    val featureAttributesMap = $(inputCols).map { c =>
-      val field = schema(c)
+    val featureAttributesMap = inputColsWithField.map { case (c, field) =>
       field.dataType match {
         case DoubleType =>
           val attribute = Attribute.fromStructField(field)
@@ -144,8 +144,8 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
-    val args = $(inputCols).map { c =>
-      schema(c).dataType match {
+    val args = inputColsWithField.map { case (c, field) =>
+      field.dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
@@ -161,7 +161,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
     val incorrectColumns = inputColNames.flatMap { name =>
-      schema(name).dataType match {
+      SchemaUtils.getSchemaFieldType(schema, name) match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
         case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")
@@ -226,7 +226,8 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
       columns: Seq[String],
       handleInvalid: String): Map[String, Int] = {
     val groupSizes = columns.map { c =>
-      c -> AttributeGroup.fromStructField(dataset.schema(c)).size
+      val field = SchemaUtils.getSchemaField(dataset.schema, c)
+      c -> AttributeGroup.fromStructField(field).size
     }.toMap
     val missingColumns = groupSizes.filter(_._2 == -1).keys.toSeq
     val firstSizes = (missingColumns.nonEmpty, handleInvalid) match {
