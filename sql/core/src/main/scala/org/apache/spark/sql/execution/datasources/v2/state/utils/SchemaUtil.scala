@@ -284,14 +284,14 @@ object SchemaUtil {
     }
   }
 
-  /** Helper functions for map state data source reader
-   * Map state variables are stored in RocksDB state store in format of composite key,
-   * it has the schema of `TransformWithStateKeyValueRowSchemaUtils.getCompositeKeySchema()`;
-   * But for state store reader, we need to return in format of:
-   * "key": groupingKey, "map_value": Map(userKey -> value)
+  /** Helper functions for map state data source reader.
    *
-   * The following helper functions help to translate the schema between composite key and
-   * the schema we want to return to the users.
+   * Map state variables are stored in RocksDB state store has the schema of
+   * `TransformWithStateKeyValueRowSchemaUtils.getCompositeKeySchema()`;
+   * But for state store reader, we need to return in format of:
+   * "key": groupingKey, "map_value": Map(userKey -> value).
+   *
+   * The following functions help to translate between two schema.
   */
   def isMapStateVariable(
       stateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
