@@ -19,11 +19,12 @@ package org.apache.spark.sql.test
 import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
-import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
@@ -184,12 +185,14 @@ object SparkConnectServerUtils {
           .port(port)
           .retryPolicy(RetryPolicy
             .defaultPolicy()
-            .copy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
+            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
           .build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.
-    assert(spark.version == SparkBuildInfo.spark_version)
+    eventually(timeout(1.minute)) {
+      assert(spark.version == SparkBuildInfo.spark_version)
+    }
 
     // Auto-sync dependencies.
     SparkConnectServerUtils.syncTestDependencies(spark)
