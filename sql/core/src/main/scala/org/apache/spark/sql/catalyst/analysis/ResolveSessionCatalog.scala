@@ -285,10 +285,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AnalyzeColumnCommand(ident, columnNames, allColumns)
 
     case RepairTable(
-    ResolvedTableIdentifierInSessionCatalog(ident), addPartitions, dropPartitions) =>
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
+        addPartitions,
+        dropPartitions) =>
       RepairTableCommand(ident, addPartitions, dropPartitions)
 
-    case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
+    case LoadData(
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
+        path,
+        isLocal,
+        isOverwrite,
+        partition) =>
       LoadDataCommand(
         ident,
         path,
@@ -337,7 +344,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       ShowColumnsCommand(db, v1TableName, output)
 
-    case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
+    case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>
       RepairTableCommand(
         ident,
         enableAddPartitions = true,
@@ -366,7 +373,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         retainData = false)
 
     case SetTableSerDeProperties(
-        ResolvedV1TableIdentifier(ident),
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
         serdeClassName,
         serdeProperties,
         partitionSpec) =>
@@ -376,15 +383,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeProperties,
         partitionSpec)
 
-    case SetTableLocation(ResolvedV1TableIdentifier(ident), None, location) =>
+    case SetTableLocation(ResolvedV1TableIdentifierInSessionCatalog(ident), None, location) =>
       AlterTableSetLocationCommand(ident, None, location)
 
     // V2 catalog doesn't support setting partition location yet, we must use v1 command here.
     case SetTableLocation(
-        ResolvedTable(catalog, _, t: V1Table, _),
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
         Some(partitionSpec),
-        location) if isSessionCatalog(catalog) =>
-      AlterTableSetLocationCommand(t.v1Table.identifier, Some(partitionSpec), location)
+        location) =>
+      AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
 
     case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
       AlterViewAsCommand(ident, originalText, query)
@@ -601,7 +608,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  object ResolvedTableIdentifierInSessionCatalog {
+  object ResolvedV1TableIdentifierInSessionCatalog {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedTable(catalog, _, t: V1Table, _) if isSessionCatalog(catalog) =>
         Some(t.catalogTable.identifier)
@@ -693,8 +700,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    (isSessionCatalog(catalog) &&
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty) ||
-    catalog.isInstanceOf[DelegatingCatalogExtension]
+    isSessionCatalog(catalog) && (
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty ||
+        catalog.isInstanceOf[DelegatingCatalogExtension])
   }
 }
