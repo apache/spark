@@ -375,7 +375,9 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      val uniqueId = currMetadata.checkpointUniqueIdLineage.filter(_._1 == version + 1).head._2
+      val uniqueId = currMetadata.checkpointUniqueIdLineage.flatMap(
+        _.filter(_._1 == version + 1).head._2
+      )
       changelogWriter = Some(fileManager.getChangeLogWriter(
         version + 1, useColumnFamilies, uniqueId))
     }
@@ -461,7 +463,7 @@ class RocksDB(
    */
   private def replayChangelog(
       endVersion: Long,
-      checkpointUniqueIdLineage: Option[Array[(Int, Option[String])]] = None): Unit = {
+      checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None): Unit = {
 
     val versionsAndUniqueIds = checkpointUniqueIdLineage match {
       case Some(lineage) => lineage.drop(1) // TODO: assert lineage.head == loadedVersion
@@ -879,7 +881,7 @@ class RocksDB(
   }
 
   /** Get current instantaneous statistics */
-  private def metrics: RocksDBMetmerics = {
+  private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")

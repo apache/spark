@@ -334,13 +334,14 @@ class RocksDBFileManager(
       latestSnapshotVersionsAndUniqueIds: Array[(Long, Option[String])]): (Long, Option[String]) = {
     val metadata = loadCheckpointFromDfs(version, localDir, checkpointUniqueId)
     val lineage = metadata.checkpointUniqueIdLineage
-    lineage.reverse.foreach {
+    lineage.get.reverse.foreach {
       case (version, uniqueId) =>
-        if (latestSnapshotVersionsAndUniqueIds.contains((version, Some(uniqueId)))) {
-          return (version, Some(uniqueId))
+        if (latestSnapshotVersionsAndUniqueIds.contains((version, uniqueId))) {
+          return (version, uniqueId)
         }
     }
-//    throw QueryExecutionErrors.noSnapshotVersionFound(version)
+    // TODO: This error is not precise
+    throw QueryExecutionErrors.cannotReadCheckpoint(version.toString, s"v$version")
   }
 
   // Get latest snapshot version <= version
@@ -356,11 +357,10 @@ class RocksDBFileManager(
         case Some(uniqueId) =>
           val versionAndUniqueIds = fm.list(path, onlyZipFiles)
             .map(_.getPath.getName.stripSuffix(".zip").split("_"))
-            .filter { case Array(ver, uniqueId) =>
+            .filter { case Array(ver, _) =>
               ver.toLong <= version
             }
-            .map { case Array(version, uniqueId) => (version.toLong, Some(uniqueId)) }
-          // TODO: fold left max
+            .map { case Array(version, uniqueId) => (version.toLong, Option(uniqueId)) }
           val maxVersion = versionAndUniqueIds.map(_._1).max
           versionAndUniqueIds.filter(_._1 == maxVersion)
           // If there is only one previous version file, skip the check for uniqueId
@@ -955,7 +955,7 @@ case class RocksDBCheckpointMetadata(
     checkpointUniqueId: Option[String] = None,
     // Array of <version, uniqueId> pairs for lineage of the checkpoint
     // It should be sorted by version in descending order
-    checkpointUniqueIdLineage: Option[Array[(Int, Option[String])]] = None) {
+    checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None) {
 
   require(columnFamilyMapping.isDefined == maxColumnFamilyId.isDefined,
     "columnFamilyMapping and maxColumnFamilyId must either both be defined or both be None")
