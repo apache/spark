@@ -214,7 +214,7 @@
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.15.0</tink.version>
     <datasketches.version>6.0.0</datasketches.version>
-    <netty.version>4.1.112.Final</netty.version>
+    <netty.version>4.1.113.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>75.1</icu4j.version>
     <junit-jupiter.version>5.11.0</junit-jupiter.version>
