@@ -828,6 +828,7 @@ class RocksDB(
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
     release(RollbackStore)
+    // TODO: roll back id?
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
