@@ -286,13 +286,13 @@ public class ExpressionImplUtils {
     Locale locale;
     if (language == null && country == null) {
       locale = Locale.US;
-    } else if (language == null) {
-      assert false : "The parameter `country` must be null, but got: " + country;
-      locale = Locale.US;
-    } else if (country == null) {
-      locale = new Locale(language.toString());
     } else {
-      locale = new Locale(language.toString(), country.toString());
+      assert language != null;
+      if (country == null) {
+        locale = new Locale(language.toString());
+      } else {
+        locale = new Locale(language.toString(), country.toString());
+      }
     }
     String sentences = str.toString();
     BreakIterator sentenceInstance = BreakIterator.getSentenceInstance(locale);
