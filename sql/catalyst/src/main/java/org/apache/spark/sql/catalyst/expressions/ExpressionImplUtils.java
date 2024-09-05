@@ -287,6 +287,7 @@ public class ExpressionImplUtils {
     if (language == null && country == null) {
       locale = Locale.US;
     } else if (language == null) {
+      assert false : "The parameter `country` must be null, but got: " + country;
       locale = Locale.US;
     } else if (country == null) {
       locale = new Locale(language.toString());
