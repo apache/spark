@@ -1475,6 +1475,12 @@
     ],
     "sqlState" : "39000"
   },
+  "FOREACH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach sink. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
   "FOUND_MULTIPLE_DATA_SOURCES" : {
     "message" : [
       "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
