@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import java.lang.invoke.{MethodHandle, MethodHandles, MethodType}
-import org.apache.spark.SparkException
+
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
 
