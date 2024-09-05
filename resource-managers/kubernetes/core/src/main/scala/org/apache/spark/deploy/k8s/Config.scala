@@ -457,7 +457,7 @@ private[spark] object Config extends Logging {
       .doc("Time to wait between each round of executor allocation.")
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
 
   val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =

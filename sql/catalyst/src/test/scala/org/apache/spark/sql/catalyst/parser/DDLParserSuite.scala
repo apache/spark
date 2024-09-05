@@ -39,7 +39,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sql), expected, checkAnalysis = false)
+    // We don't care the write privileges in this suite.
+    val parsed = parsePlan(sql).transform {
+      case u: UnresolvedRelation => u.clearWritePrivileges
+      case i: InsertIntoStatement =>
+        i.table match {
+          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
+          case _ => i
+        }
+    }
+    comparePlans(parsed, expected, checkAnalysis = false)
   }
 
   private def internalException(sqlText: String): SparkThrowable = {
@@ -2397,29 +2406,6 @@ class DDLParserSuite extends AnalysisTest {
       RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE", true)))
   }
 
-  test("show columns") {
-    val sql1 = "SHOW COLUMNS FROM t1"
-    val sql2 = "SHOW COLUMNS IN db1.t1"
-    val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
-
-    val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1"), "SHOW COLUMNS", true), None)
-    val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), None)
-    val parsed3 = parsePlan(sql3)
-    val expected3 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
-    val parsed4 = parsePlan(sql4)
-    val expected4 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-  }
-
   test("alter view: add partition (not supported)") {
     val sql =
       """ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
@@ -2607,12 +2593,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-33474: Support typed literals as partition spec values") {
-    def insertPartitionPlan(part: String): InsertIntoStatement = {
+    def insertPartitionPlan(part: String, optimizeInsertIntoCmds: Boolean): InsertIntoStatement = {
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some(part)),
         Seq.empty[String],
-        UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
+        if (optimizeInsertIntoCmds) {
+          ResolveInlineTables(UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))))
+        } else {
+          UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a"))))
+        },
         overwrite = false, ifPartitionNotExists = false)
     }
     val binaryStr = "Spark SQL"
@@ -2627,15 +2617,27 @@ class DDLParserSuite extends AnalysisTest {
     val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
     val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'$binaryHexStr') VALUES('a')"
 
-    comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-      comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    for (optimizeInsertIntoValues <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+          optimizeInsertIntoValues.toString) {
+        parseCompare(dateTypeSql, insertPartitionPlan(
+          "2019-01-02", optimizeInsertIntoValues))
+        withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+          parseCompare(intervalTypeSql, insertPartitionPlan(
+            interval, optimizeInsertIntoValues))
+        }
+        parseCompare(ymIntervalTypeSql, insertPartitionPlan(
+          "INTERVAL '1-2' YEAR TO MONTH", optimizeInsertIntoValues))
+        parseCompare(dtIntervalTypeSql,
+          insertPartitionPlan(
+            "INTERVAL '1 02:03:04.128462' DAY TO SECOND", optimizeInsertIntoValues))
+        parseCompare(timestampTypeSql, insertPartitionPlan(
+          timestamp, optimizeInsertIntoValues))
+        parseCompare(binaryTypeSql, insertPartitionPlan(
+          binaryStr, optimizeInsertIntoValues))
+      }
     }
-    comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan("INTERVAL '1-2' YEAR TO MONTH"))
-    comparePlans(parsePlan(dtIntervalTypeSql),
-      insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
-    comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
-    comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
@@ -2732,12 +2734,12 @@ class DDLParserSuite extends AnalysisTest {
 
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
-    comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
+    parseCompare("VALUES (1, 2, DEFAULT) AS val",
       SubqueryAlias("val",
         UnresolvedInlineTable(Seq("col1", "col2", "col3"), Seq(Seq(Literal(1), Literal(2),
           UnresolvedAttribute("DEFAULT"))))))
-    comparePlans(parsePlan(
-      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
+    parseCompare(
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)",
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some("2019-01-02")),

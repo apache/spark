@@ -20,6 +20,10 @@ import java.nio.file.Path
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.connect.proto
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.internal.ColumnNodeToProtoConverter
+
 /**
  * The basic testsuite the client tests should extend from.
  */
@@ -48,4 +52,6 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   protected def commonResourcePath: Path = {
     getWorkspaceFilePath("sql", "connect", "common", "src", "test", "resources").toAbsolutePath
   }
+
+  protected def toExpr(c: Column): proto.Expression = ColumnNodeToProtoConverter.toExpr(c)
 }

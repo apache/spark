@@ -42,7 +42,7 @@ private[sql] class SparkResult[T](
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String,
-    setObservationMetricsOpt: Option[(Long, Map[String, Any]) => Unit] = None)
+    setObservationMetricsOpt: Option[(Long, Row) => Unit] = None)
     extends AutoCloseable { self =>
 
   case class StageInfo(
@@ -211,21 +211,21 @@ private[sql] class SparkResult[T](
     metrics.asScala.map { metric =>
       assert(metric.getKeysCount == metric.getValuesCount)
       var schema = new StructType()
-      val keys = mutable.ListBuffer.empty[String]
-      val values = mutable.ListBuffer.empty[Any]
-      (0 until metric.getKeysCount).map { i =>
+      val values = mutable.ArrayBuilder.make[Any]
+      values.sizeHint(metric.getKeysCount)
+      (0 until metric.getKeysCount).foreach { i =>
         val key = metric.getKeys(i)
         val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
         schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
-        keys += key
         values += value
       }
+      val row = new GenericRowWithSchema(values.result(), schema)
       // If the metrics is registered by an Observation object, attach them and unblock any
       // blocked thread.
       setObservationMetricsOpt.foreach { setObservationMetrics =>
-        setObservationMetrics(metric.getPlanId, keys.zip(values).toMap)
+        setObservationMetrics(metric.getPlanId, row)
       }
-      metric.getName -> new GenericRowWithSchema(values.toArray, schema)
+      metric.getName -> row
     }
   }
 

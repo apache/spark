@@ -638,7 +638,7 @@ private[spark] object Utils
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
-        val uc = new URL(url).openConnection()
+        val uc = new URI(url).toURL.openConnection()
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
@@ -1753,12 +1753,6 @@ private[spark] object Utils
     Files.createSymbolicLink(dst.toPath, src.toPath)
   }
 
-
-  /** Return the class name of the given object, removing all dollar signs */
-  def getFormattedClassName(obj: AnyRef): String = {
-    getSimpleName(obj.getClass).replace("$", "")
-  }
-
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
@@ -2587,6 +2581,19 @@ private[spark] object Utils
   }
 
   /**
+   * Utility function to enable or disable structured logging based on system properties.
+   * This is designed for a code path which we cannot use SparkConf yet, and should be used before
+   * the first invocation of `Logging.log()`. For example, this should be used before `initDaemon`.
+   */
+  def resetStructuredLogging(): Unit = {
+    if (System.getProperty(STRUCTURED_LOGGING_ENABLED.key, "false").equals("false")) {
+      Logging.disableStructuredLogging()
+    } else {
+      Logging.enableStructuredLogging()
+    }
+  }
+
+  /**
    * Return the jar files pointed by the "spark.jars" property. Spark internally will distribute
    * these jars through file server. In the YARN mode, it will return an empty list, since YARN
    * has its own mechanism to distribute jars.
@@ -2812,68 +2819,6 @@ private[spark] object Utils
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
-  }
-
-  /**
-   * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
-   * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
-   */
-  def getSimpleName(cls: Class[_]): String = {
-    try {
-      cls.getSimpleName
-    } catch {
-      // TODO: the value returned here isn't even quite right; it returns simple names
-      // like UtilsSuite$MalformedClassObject$MalformedClass instead of MalformedClass
-      // The exact value may not matter much as it's used in log statements
-      case _: InternalError =>
-        stripDollars(stripPackages(cls.getName))
-    }
-  }
-
-  /**
-   * Remove the packages from full qualified class name
-   */
-  private def stripPackages(fullyQualifiedName: String): String = {
-    fullyQualifiedName.split("\\.").takeRight(1)(0)
-  }
-
-  /**
-   * Remove trailing dollar signs from qualified class name,
-   * and return the trailing part after the last dollar sign in the middle
-   */
-  @scala.annotation.tailrec
-  def stripDollars(s: String): String = {
-    val lastDollarIndex = s.lastIndexOf('$')
-    if (lastDollarIndex < s.length - 1) {
-      // The last char is not a dollar sign
-      if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an interpreter
-        // generated class, so we should return the full string
-        s
-      } else {
-        // The class name is interpreter generated,
-        // return the part after the last dollar sign
-        // This is the same behavior as getClass.getSimpleName
-        s.substring(lastDollarIndex + 1)
-      }
-    }
-    else {
-      // The last char is a dollar sign
-      // Find last non-dollar char
-      val lastNonDollarChar = s.findLast(_ != '$')
-      lastNonDollarChar match {
-        case None => s
-        case Some(c) =>
-          val lastNonDollarIndex = s.lastIndexOf(c)
-          if (lastNonDollarIndex == -1) {
-            s
-          } else {
-            // Strip the trailing dollar signs
-            // Invoke stripDollars again to get the simple name
-            stripDollars(s.substring(0, lastNonDollarIndex + 1))
-          }
-      }
-    }
   }
 
   /**

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connector
 
+import java.sql.Timestamp
 import java.util.Collections
 
 import org.apache.spark.SparkConf
@@ -581,6 +582,55 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         checkAnswer(df, Seq.empty)
       }
     }
+  }
+
+  test("SPARK-49205: KeyGroupedPartitioning should inherit HashPartitioningLike") {
+    val items_partitions = Array(days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 44.0, cast('2020-01-15' as timestamp)), " +
+      "(1, 45.0, cast('2020-01-15' as timestamp)), " +
+      "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(
+      s"""
+        |SELECT x, count(*) FROM (
+        | SELECT /*+ broadcast(t2) */ arrive_time as x, * FROM testcat.ns.$items t1
+        | JOIN testcat.ns.$purchases t2 ON t1.arrive_time = t2.time
+        |)
+        |GROUP BY x
+        |""".stripMargin)
+    checkAnswer(df,
+      Seq(Row(Timestamp.valueOf("2020-01-01 00:00:00"), 6),
+        Row(Timestamp.valueOf("2020-01-15 00:00:00"), 2),
+        Row(Timestamp.valueOf("2020-02-01 00:00:00"), 1)))
+    assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty)
+
+    val df2 = sql(
+      s"""
+        |WITH t1 (SELECT * FROM testcat.ns.$items)
+        |SELECT x, count(*) FROM (
+        | SELECT /*+ broadcast(t2) */ t2.time as x FROM t1
+        | JOIN testcat.ns.$purchases t2 ON t1.arrive_time = t2.time
+        | JOIN t1 t3 ON t1.arrive_time = t3.arrive_time
+        |) GROUP BY x
+        |""".stripMargin)
+    checkAnswer(df2,
+      Seq(Row(Timestamp.valueOf("2020-01-01 00:00:00"), 18),
+        Row(Timestamp.valueOf("2020-01-15 00:00:00"), 2),
+        Row(Timestamp.valueOf("2020-02-01 00:00:00"), 1)))
+    assert(collectAllShuffles(df2.queryExecution.executedPlan).isEmpty)
   }
 
   test("SPARK-42038: partially clustered: with same partition keys and one side fully clustered") {

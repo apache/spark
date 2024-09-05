@@ -40,7 +40,7 @@ trait LoggingSuiteBase
   }
 
   // Return the newly added log contents in the log file after executing the function `f`
-  private def captureLogOutput(f: () => Unit): String = {
+  protected def captureLogOutput(f: () => Unit): String = {
     val content = if (logFile.exists()) {
       Files.readString(logFile.toPath)
     } else {
@@ -437,6 +437,44 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     assert(log"\r".message == "\r")
     assert((log"\r" + log"\n" + log"\t" + log"\b").message == "\r\n\t\b")
     assert((log"\r${MDC(LogKeys.EXECUTOR_ID, 1)}\n".message == "\r1\n"))
+  }
+
+  test("disabled structured logging won't log context") {
+    Logging.disableStructuredLogging()
+    val expectedPatternWithoutContext = compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "INFO",
+          "msg": "Lost executor 1.",
+          "logger": "$className"
+        }""")
+
+    Seq(
+      () => logInfo(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."),
+      () => logInfo( // blocked when explicitly constructing the MessageWithContext
+        MessageWithContext(
+          "Lost executor 1.",
+          new java.util.HashMap[String, String] { put(LogKeys.EXECUTOR_ID.name, "1") }
+        )
+      )
+    ).foreach { f =>
+      val logOutput = captureLogOutput(f)
+      assert(expectedPatternWithoutContext.r.matches(logOutput))
+    }
+    Logging.enableStructuredLogging()
+  }
+
+  test("setting to MDC gets logged") {
+    val mdcPattern = s""""${LogKeys.DATA.name}":"some-data""""
+
+    org.slf4j.MDC.put(LogKeys.DATA.name, "some-data")
+    val logOutputWithMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
+    assert(mdcPattern.r.findFirstIn(logOutputWithMDCSet).isDefined)
+
+    org.slf4j.MDC.remove(LogKeys.DATA.name)
+    val logOutputWithoutMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
+    assert(mdcPattern.r.findFirstIn(logOutputWithoutMDCSet).isEmpty)
   }
 }
 

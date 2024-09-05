@@ -271,7 +271,7 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 {% highlight scala %}
 @ import org.apache.spark.sql.SparkSession
-@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").build()
+@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").getOrCreate()
 {% endhighlight %}
 
 </div>
@@ -344,7 +344,7 @@ your Spark server when you create a Spark session, as in this example:
 
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
-val spark = SparkSession.builder().remote("sc://localhost").build()
+val spark = SparkSession.builder().remote("sc://localhost").getOrCreate()
 {% endhighlight %}
 
 
@@ -409,6 +409,6 @@ Majority of the Streaming API is supported, including
 [StreamingQueryListener](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html).
 
 APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
-and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are deprecated in all Spark Connect versions.
+and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are unsupported in Spark Connect.
 
 Support for more APIs is planned for upcoming Spark releases.

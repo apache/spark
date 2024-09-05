@@ -78,7 +78,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
     assert(info.getSource === "built-in")
 
-    val validSources = Seq("built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf")
+    val validSources = Seq(
+      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal")
     validSources.foreach { source =>
       val info = new ExpressionInfo(
         "testClass", null, "testName", null, "", "", "", "", "", "", source)
@@ -228,6 +229,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Requires dynamic class loading not available in this test suite.
       "org.apache.spark.sql.catalyst.expressions.FromAvro",
       "org.apache.spark.sql.catalyst.expressions.ToAvro",
+      "org.apache.spark.sql.catalyst.expressions.FromProtobuf",
+      "org.apache.spark.sql.catalyst.expressions.ToProtobuf",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)
