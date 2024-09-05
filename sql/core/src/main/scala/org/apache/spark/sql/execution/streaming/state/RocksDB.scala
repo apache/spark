@@ -280,6 +280,8 @@ class RocksDB(
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
+    lazy val currMetadata = fileManager.loadCheckpointFromDfs(
+      version, workingDir, checkpointUniqueId)
     try {
       if (loadedVersion != version ||
         (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
@@ -289,15 +291,21 @@ class RocksDB(
         // between maintenance and task threads
         fileManager.copyFileMapping()
         // [TODO]: latest snapshot version not needed yet (without changelog ckpt)
-        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(
-          version, checkpointUniqueId)
-//        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
-        val currMetadata = fileManager.loadCheckpointFromDfs(
-          version, workingDir, checkpointUniqueId)
-        val metadata = currMetadata
-//        val previousSnapshotCheckpointId = currMetadata.checkpointUniqueId
-        loadedVersion = version
-//        loadedVersion = latestSnapshotVersion
+        val latestSnapshotVersionsAndUniqueIds =
+          fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
+        val (latestSnapshotVersion, latestSnapshotUniqueId) =
+          if (latestSnapshotVersionsAndUniqueIds.length == 1) {
+            latestSnapshotVersionsAndUniqueIds.head
+          } else {
+            logInfo("Multiple snapshots found for the version. " +
+              "Loading the latest snapshot from lineage.")
+            // TODO: print the list of snapshots found
+            fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(
+              version, workingDir, checkpointUniqueId, latestSnapshotVersionsAndUniqueIds)
+          }
+        val metadata = fileManager.loadCheckpointFromDfs(
+          latestSnapshotVersion, workingDir, latestSnapshotUniqueId)
+        loadedVersion = latestSnapshotVersion
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
@@ -309,6 +317,7 @@ class RocksDB(
         metadata.maxColumnFamilyId.foreach { maxId =>
           maxColumnFamilyId.set(maxId)
         }
+        // TODO: update loadedUniqueId?
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
@@ -334,8 +343,9 @@ class RocksDB(
           } else {
             metadata.numKeys
           }
-        // POC: loadedVersion set to version above
-        if (loadedVersion != version) replayChangelog(version)
+        if (loadedVersion != version) {
+          replayChangelog(version, currMetadata.checkpointUniqueIdLineage)
+        }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
@@ -351,6 +361,7 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
+      // TODO log uniqueId
       logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
     } catch {
       case t: Throwable =>
@@ -364,7 +375,9 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      val uniqueId = currMetadata.checkpointUniqueIdLineage.filter(_._1 == version + 1).head._2
+      changelogWriter = Some(fileManager.getChangeLogWriter(
+        version + 1, useColumnFamilies, uniqueId))
     }
     this
   }
@@ -446,14 +459,23 @@ class RocksDB(
   /**
    * Replay change log from the loaded version to the target version.
    */
-  private def replayChangelog(endVersion: Long): Unit = {
-    for (v <- loadedVersion + 1 to endVersion) {
+  private def replayChangelog(
+      endVersion: Long,
+      checkpointUniqueIdLineage: Option[Array[(Int, Option[String])]] = None): Unit = {
+
+    val versionsAndUniqueIds = checkpointUniqueIdLineage match {
+      case Some(lineage) => lineage.drop(1) // TODO: assert lineage.head == loadedVersion
+      case None => (loadedVersion + 1 to endVersion).map((_, None)).toArray
+    }
+
+    versionsAndUniqueIds.foreach { case (v, uniqueId) =>
       logInfo(log"replaying changelog from version " +
         log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
         log"${MDC(LogKeys.END_VERSION, endVersion)}")
+      // TODO: Log unique Id
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
+        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies, uniqueId)
         changelogReader.foreach { case (recordType, key, value) =>
           recordType match {
             case RecordType.PUT_RECORD =>
@@ -857,7 +879,7 @@ class RocksDB(
   }
 
   /** Get current instantaneous statistics */
-  private def metrics: RocksDBMetrics = {
+  private def metrics: RocksDBMetmerics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")

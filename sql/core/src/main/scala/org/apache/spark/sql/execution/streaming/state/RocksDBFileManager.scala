@@ -187,8 +187,9 @@ class RocksDBFileManager(
 
   def getChangeLogWriter(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
-    val changelogFile = dfsChangelogFile(version)
+      useColumnFamilies: Boolean = false,
+      checkpointUniqueId: Option[String] = None): StateStoreChangelogWriter = {
+    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
     if (!rootDirChecked) {
       val rootDir = new Path(dfsRootDir)
       if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
@@ -210,8 +211,9 @@ class RocksDBFileManager(
   // Get the changelog file at version
   def getChangelogReader(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
-    val changelogFile = dfsChangelogFile(version)
+      useColumnFamilies: Boolean = false,
+      checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
+    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
 
     // Note that ideally we should get the version for the reader from the
     // changelog itself. However, since we don't record this for v1, we need to
@@ -325,21 +327,53 @@ class RocksDBFileManager(
     metadata
   }
 
+  def getLatestSnapshotVersionAndUniqueIdFromLineage(
+      version: Long,
+      localDir: File,
+      checkpointUniqueId: Option[String] = None,
+      latestSnapshotVersionsAndUniqueIds: Array[(Long, Option[String])]): (Long, Option[String]) = {
+    val metadata = loadCheckpointFromDfs(version, localDir, checkpointUniqueId)
+    val lineage = metadata.checkpointUniqueIdLineage
+    lineage.reverse.foreach {
+      case (version, uniqueId) =>
+        if (latestSnapshotVersionsAndUniqueIds.contains((version, Some(uniqueId)))) {
+          return (version, Some(uniqueId))
+        }
+    }
+//    throw QueryExecutionErrors.noSnapshotVersionFound(version)
+  }
+
   // Get latest snapshot version <= version
-  def getLatestSnapshotVersion(version: Long, checkpointUniqueId: Option[String] = None): Long = {
+  def getLatestSnapshotVersionAndUniqueId(
+      version: Long, checkpointUniqueId: Option[String] = None): Array[(Long, Option[String])] = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
       // If the latest version snapshot exists, we avoid listing.
       if (fm.exists(dfsBatchZipFile(version, checkpointUniqueId))) {
-        return version
+        return Array((version, checkpointUniqueId))
       }
-      fm.list(path, onlyZipFiles)
-        .map(_.getPath.getName.stripSuffix(".zip"))
-        .map(_.toLong)
-        .filter(_ <= version)
-        .foldLeft(0L)(math.max)
+      checkpointUniqueId match {
+        case Some(uniqueId) =>
+          val versionAndUniqueIds = fm.list(path, onlyZipFiles)
+            .map(_.getPath.getName.stripSuffix(".zip").split("_"))
+            .filter { case Array(ver, uniqueId) =>
+              ver.toLong <= version
+            }
+            .map { case Array(version, uniqueId) => (version.toLong, Some(uniqueId)) }
+          // TODO: fold left max
+          val maxVersion = versionAndUniqueIds.map(_._1).max
+          versionAndUniqueIds.filter(_._1 == maxVersion)
+          // If there is only one previous version file, skip the check for uniqueId
+          // TODO decision?
+        case None =>
+          Array((fm.list(path, onlyZipFiles)
+            .map(_.getPath.getName.stripSuffix(".zip"))
+            .map(_.toLong)
+            .filter(_ <= version)
+            .foldLeft(0L)(math.max), None))
+      }
     } else {
-      0
+      Array((0, None))
     }
   }
 
@@ -918,7 +952,10 @@ case class RocksDBCheckpointMetadata(
     numKeys: Long,
     columnFamilyMapping: Option[Map[String, Short]] = None,
     maxColumnFamilyId: Option[Short] = None,
-    checkpointUniqueId: Option[String] = None) {
+    checkpointUniqueId: Option[String] = None,
+    // Array of <version, uniqueId> pairs for lineage of the checkpoint
+    // It should be sorted by version in descending order
+    checkpointUniqueIdLineage: Option[Array[(Int, Option[String])]] = None) {
 
   require(columnFamilyMapping.isDefined == maxColumnFamilyId.isDefined,
     "columnFamilyMapping and maxColumnFamilyId must either both be defined or both be None")
