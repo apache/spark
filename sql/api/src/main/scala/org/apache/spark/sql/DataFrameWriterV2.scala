@@ -14,150 +14,52 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 
-import scala.collection.mutable
-import scala.jdk.CollectionConverters._
+import java.util
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
-import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, LogicalExpressions, NamedReference, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 
 /**
- * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2 API.
+ * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage
+ * using the v2 API.
  *
  * @since 3.0.0
  */
 @Experimental
-final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
-    extends CreateTableWriter[T] {
+abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
+  /** @inheritdoc */
+  override def using(provider: String): this.type
 
-  private val df: DataFrame = ds.toDF()
+  /** @inheritdoc */
+  override def option(key: String, value: Boolean): this.type = option(key, value.toString)
 
-  private val sparkSession = ds.sparkSession
-  import sparkSession.expression
+  /** @inheritdoc */
+  override def option(key: String, value: Long): this.type = option(key, value.toString)
 
-  private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
+  /** @inheritdoc */
+  override def option(key: String, value: Double): this.type = option(key, value.toString)
 
-  private val logicalPlan = df.queryExecution.logical
+  /** @inheritdoc */
+  override def option(key: String, value: String): this.type
 
-  private var provider: Option[String] = None
+  /** @inheritdoc */
+  override def options(options: scala.collection.Map[String, String]): this.type
 
-  private val options = new mutable.HashMap[String, String]()
+  /** @inheritdoc */
+  override def options(options: util.Map[String, String]): this.type
 
-  private val properties = new mutable.HashMap[String, String]()
+  /** @inheritdoc */
+  override def tableProperty(property: String, value: String): this.type
 
-  private var partitioning: Option[Seq[Transform]] = None
-
-  private var clustering: Option[ClusterByTransform] = None
-
-  override def using(provider: String): CreateTableWriter[T] = {
-    this.provider = Some(provider)
-    this
-  }
-
-  override def option(key: String, value: String): DataFrameWriterV2[T] = {
-    this.options.put(key, value)
-    this
-  }
-
-  override def options(options: scala.collection.Map[String, String]): DataFrameWriterV2[T] = {
-    options.foreach {
-      case (key, value) =>
-        this.options.put(key, value)
-    }
-    this
-  }
-
-  override def options(options: java.util.Map[String, String]): DataFrameWriterV2[T] = {
-    this.options(options.asScala)
-    this
-  }
-
-  override def tableProperty(property: String, value: String): CreateTableWriter[T] = {
-    this.properties.put(property, value)
-    this
-  }
-
+  /** @inheritdoc */
   @scala.annotation.varargs
-  override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
-    def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
+  override def partitionedBy(column: Column, columns: Column*): this.type
 
-    val asTransforms = (column +: columns).map(expression).map {
-      case PartitionTransform.YEARS(Seq(attr: Attribute)) =>
-        LogicalExpressions.years(ref(attr.name))
-      case PartitionTransform.MONTHS(Seq(attr: Attribute)) =>
-        LogicalExpressions.months(ref(attr.name))
-      case PartitionTransform.DAYS(Seq(attr: Attribute)) =>
-        LogicalExpressions.days(ref(attr.name))
-      case PartitionTransform.HOURS(Seq(attr: Attribute)) =>
-        LogicalExpressions.hours(ref(attr.name))
-      case PartitionTransform.BUCKET(Seq(Literal(numBuckets: Int, IntegerType), attr: Attribute)) =>
-        LogicalExpressions.bucket(numBuckets, Array(ref(attr.name)))
-      case PartitionTransform.BUCKET(Seq(numBuckets, e)) =>
-        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
-      case attr: Attribute =>
-        LogicalExpressions.identity(ref(attr.name))
-      case expr =>
-        throw QueryCompilationErrors.invalidPartitionTransformationError(expr)
-    }
-
-    this.partitioning = Some(asTransforms)
-    validatePartitioning()
-    this
-  }
-
+  /** @inheritdoc */
   @scala.annotation.varargs
-  override def clusterBy(colName: String, colNames: String*): CreateTableWriter[T] = {
-    this.clustering =
-      Some(ClusterByTransform((colName +: colNames).map(col => FieldReference(col))))
-    validatePartitioning()
-    this
-  }
-
-  /**
-   * Validate that clusterBy is not used with partitionBy.
-   */
-  private def validatePartitioning(): Unit = {
-    if (partitioning.nonEmpty && clustering.nonEmpty) {
-      throw QueryCompilationErrors.clusterByWithPartitionedBy()
-    }
-  }
-
-  override def create(): Unit = {
-    val tableSpec = UnresolvedTableSpec(
-      properties = properties.toMap,
-      provider = provider,
-      optionExpression = OptionList(Seq.empty),
-      location = None,
-      comment = None,
-      serde = None,
-      external = false)
-    runCommand(
-      CreateTableAsSelect(
-        UnresolvedIdentifier(tableName),
-        partitioning.getOrElse(Seq.empty) ++ clustering,
-        logicalPlan,
-        tableSpec,
-        options.toMap,
-        false))
-  }
-
-  override def replace(): Unit = {
-    internalReplace(orCreate = false)
-  }
-
-  override def createOrReplace(): Unit = {
-    internalReplace(orCreate = true)
-  }
-
+  override def clusterBy(colName: String, colNames: String*): this.type
 
   /**
    * Append the contents of the data frame to the output table.
@@ -169,12 +71,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
    */
   @throws(classOf[NoSuchTableException])
-  def append(): Unit = {
-    val append = AppendData.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT)),
-      logicalPlan, options.toMap)
-    runCommand(append)
-  }
+  def append(): Unit
 
   /**
    * Overwrite rows matching the given filter condition with the contents of the data frame in
@@ -187,12 +84,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
    */
   @throws(classOf[NoSuchTableException])
-  def overwrite(condition: Column): Unit = {
-    val overwrite = OverwriteByExpression.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, expression(condition), options.toMap)
-    runCommand(overwrite)
-  }
+  def overwrite(condition: Column): Unit
 
   /**
    * Overwrite all partition for which the data frame contains at least one row with the contents
@@ -208,56 +100,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
    */
   @throws(classOf[NoSuchTableException])
-  def overwritePartitions(): Unit = {
-    val dynamicOverwrite = OverwritePartitionsDynamic.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, options.toMap)
-    runCommand(dynamicOverwrite)
-  }
-
-  /**
-   * Wrap an action to track the QueryExecution and time cost, then report to the user-registered
-   * callback functions.
-   */
-  private def runCommand(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker)
-    qe.assertCommandExecuted()
-  }
-
-  private def internalReplace(orCreate: Boolean): Unit = {
-    val tableSpec = UnresolvedTableSpec(
-      properties = properties.toMap,
-      provider = provider,
-      optionExpression = OptionList(Seq.empty),
-      location = None,
-      comment = None,
-      serde = None,
-      external = false)
-    runCommand(ReplaceTableAsSelect(
-      UnresolvedIdentifier(tableName),
-      partitioning.getOrElse(Seq.empty) ++ clustering,
-      logicalPlan,
-      tableSpec,
-      writeOptions = options.toMap,
-      orCreate = orCreate))
-  }
-}
-
-private object PartitionTransform {
-  class ExtractTransform(name: String) {
-    private val NAMES = Seq(name)
-
-    def unapply(e: Expression): Option[Seq[Expression]] = e match {
-      case UnresolvedFunction(NAMES, children, false, None, false, Nil, true) => Option(children)
-      case _ => None
-    }
-  }
-
-  val HOURS = new ExtractTransform("hours")
-  val DAYS = new ExtractTransform("days")
-  val MONTHS = new ExtractTransform("months")
-  val YEARS = new ExtractTransform("years")
-  val BUCKET = new ExtractTransform("bucket")
+  def overwritePartitions(): Unit
 }
 
 /**

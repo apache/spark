@@ -641,16 +641,7 @@ class SparkSession private(
     artifactManager.addLocalArtifacts(uri.flatMap(Artifact.parseArtifacts))
   }
 
-  /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
   /**

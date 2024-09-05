@@ -339,6 +339,14 @@
       </properties>
     </profile>
 
+    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
+    <profile>
+      <id>jjwt</id>
+      <properties>
+        <jjwt.deps.scope>compile</jjwt.deps.scope>
+      </properties>
+    </profile>
+
     <!--
      Pull in spark-hadoop-cloud and its associated JARs,
     -->

@@ -510,8 +510,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 # If it returns a pd.Series, it should throw an error.
                 if not isinstance(s, pd.DataFrame):
                     raise PySparkValueError(
-                        "A field of type StructType expects a pandas.DataFrame, "
-                        "but got: %s" % str(type(s))
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
                     )
                 arrs.append(self._create_struct_array(s, t))
             else:
