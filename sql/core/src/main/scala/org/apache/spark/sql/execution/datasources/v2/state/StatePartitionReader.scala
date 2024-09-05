@@ -68,10 +68,15 @@ abstract class StatePartitionReaderBase(
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends PartitionReader[InternalRow] with Logging {
-  protected val keySchema = SchemaUtil.getSchemaAsDataType(
-    schema, "key").asInstanceOf[StructType]
-  protected val valueSchema = SchemaUtil.getSchemaAsDataType(
-    schema, "value").asInstanceOf[StructType]
+  protected val keySchema = {
+    if (!SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
+      SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
+    } else SchemaUtil.getCompositeKeySchema(schema)
+  }
+  protected val valueSchema =
+    if (!SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
+      SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
+    } else SchemaUtil.getValueSchema(schema)
 
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
@@ -160,32 +165,37 @@ class StatePartitionReader(
   override lazy val iter: Iterator[InternalRow] = {
     val stateVarName = stateVariableInfoOpt
       .map(_.stateName).getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
-    store
-      .iterator(stateVarName)
-      .map { pair =>
-        stateVariableInfoOpt match {
-          case Some(stateVarInfo) =>
-            val stateVarType = stateVarInfo.stateVariableType
-            val hasTTLEnabled = stateVarInfo.ttlEnabled
+    if (SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
+      SchemaUtil.unifyMapStateRowPair(
+        store.iterator(stateVarName), keySchema, partition.partition)
+    } else {
+      store
+        .iterator(stateVarName)
+        .map { pair =>
+          stateVariableInfoOpt match {
+            case Some(stateVarInfo) =>
+              val stateVarType = stateVarInfo.stateVariableType
+              val hasTTLEnabled = stateVarInfo.ttlEnabled
 
-            stateVarType match {
-              case StateVariableType.ValueState =>
-                if (hasTTLEnabled) {
-                  SchemaUtil.unifyStateRowPairWithTTL((pair.key, pair.value), valueSchema,
-                    partition.partition)
-                } else {
-                  SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
-                }
+              stateVarType match {
+                case StateVariableType.ValueState =>
+                  if (hasTTLEnabled) {
+                    SchemaUtil.unifyStateRowPairWithTTL((pair.key, pair.value), valueSchema,
+                      partition.partition)
+                  } else {
+                    SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+                  }
 
-              case _ =>
-                throw new IllegalStateException(
-                  s"Unsupported state variable type: $stateVarType")
-            }
+                case _ =>
+                  throw new IllegalStateException(
+                    s"Unsupported state variable type: $stateVarType")
+              }
 
-          case None =>
-            SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+            case None =>
+              SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+          }
         }
-      }
+    }
   }
 
   override def close(): Unit = {
