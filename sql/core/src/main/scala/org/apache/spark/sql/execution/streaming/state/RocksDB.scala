@@ -289,8 +289,8 @@ class RocksDB(
         // between maintenance and task threads
         fileManager.copyFileMapping()
         // [TODO]: latest snapshot version not needed yet (without changelog ckpt)
-//        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val latestSnapshotVersion = version
+        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(
+          version, checkpointUniqueId)
 //        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         val currMetadata = fileManager.loadCheckpointFromDfs(
           version, workingDir, checkpointUniqueId)

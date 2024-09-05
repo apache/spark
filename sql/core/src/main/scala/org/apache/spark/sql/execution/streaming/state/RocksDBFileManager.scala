@@ -326,11 +326,11 @@ class RocksDBFileManager(
   }
 
   // Get latest snapshot version <= version
-  def getLatestSnapshotVersion(version: Long): Long = {
+  def getLatestSnapshotVersion(version: Long, checkpointUniqueId: Option[String] = None): Long = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
       // If the latest version snapshot exists, we avoid listing.
-      if (fm.exists(dfsBatchZipFile(version))) {
+      if (fm.exists(dfsBatchZipFile(version, checkpointUniqueId))) {
         return version
       }
       fm.list(path, onlyZipFiles)
