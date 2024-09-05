@@ -453,17 +453,17 @@ We can also use the same data source in streaming reader and writer
 
     query = spark.readStream.format("fake").load().writeStream.format("fake").start("/output_path")
 
-Python Datasource Reader with direct Arrow Batch support for improved performance
------------------------------------------------------------------------------------------
-The Python Datasource Reader now supports direct yielding of Arrow Batches, which can significantly improve data processing performance. By using the efficient Arrow format,
+Python Data Source Reader with direct Arrow Batch support for improved performance
+----------------------------------------------------------------------------------
+The Python Datasource Reader supports direct yielding of Arrow Batches, which can significantly improve data processing performance. By using the efficient Arrow format,
 this feature avoids the overhead of traditional row-by-row data processing, resulting in performance improvements of up to one order of magnitude, especially with large datasets.
 
 **Enabling Arrow Batch Support**:
-To enable this feature, configure your custom DataSource to yield Arrow batches by returning pyarrow.RecordBatch objects within the `read` method of your `DataSourceReader`
+To enable this feature, configure your custom DataSource to yield Arrow batches by returning `pyarrow.RecordBatch` objects within the `read` method of your `DataSourceReader`
 (or `DataSourceStreamReader`) implementation. This method simplifies data handling and reduces the number of I/O operations, particularly beneficial for large-scale data processing tasks.
 
 **Arrow Batch Example**:
-The following example demonstrates how to implement a basic data source using Arrow Batch support.
+The following example demonstrates how to implement a basic Data Source using Arrow Batch support.
 
 .. code-block:: python
 
@@ -474,7 +474,7 @@ The following example demonstrates how to implement a basic data source using Ar
     # Define the ArrowBatchDataSource
     class ArrowBatchDataSource(DataSource):
         """
-        A data source for testing Arrow Batch Serialization
+        A Data Source for testing Arrow Batch Serialization
         """
 
         @classmethod

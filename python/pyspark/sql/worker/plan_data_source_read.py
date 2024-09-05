@@ -65,9 +65,10 @@ def records_to_arrow_batches(
     data_source: DataSource,
 ) -> Iterable[pa.RecordBatch]:
     """
-    First check if the iterator yields pyarrow record batched, if so, yield them directly.
-    Otherwise, convert an iterator of Python tuples to an iterator of pyarrow record batches.
-    For each Python tuple, check the types of each field and append it to the records batch.
+    First check if the iterator yields PyArrow's `pyarrow.RecordBatch`, if so, yield
+    them directly.  Otherwise, convert an iterator of Python tuples to an iterator
+    of pyarrow record batches.  For each Python tuple, check the types of each field
+    and append it to the records batch.
     """
 
     pa_schema = to_arrow_schema(return_type)
@@ -139,7 +140,7 @@ def records_to_arrow_batches(
                         "type": type(result).__name__,
                         "name": data_source.name(),
                         "supported_types": "tuple, list, `pyspark.sql.types.Row`,"
-                        " pyarrow RecordBatch",
+                        " `pyarrow.RecordBatch`",
                     },
                 )
 
@@ -181,7 +182,7 @@ def main(infile: IO, outfile: IO) -> None:
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. Then it calls the `partitions()` method of the reader and
-    constructs a Python Arrow Batch with the data using the `read()` method of the reader.
+    constructs a PyArrow's `RecordBatch` with the data using the `read()` method of the reader.
 
     The partition values and the Arrow Batch are then serialized and sent back to the JVM
     via the socket.
