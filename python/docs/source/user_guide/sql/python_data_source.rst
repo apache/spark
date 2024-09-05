@@ -452,3 +452,67 @@ We can also use the same data source in streaming reader and writer
 .. code-block:: python
 
     query = spark.readStream.format("fake").load().writeStream.format("fake").start("/output_path")
+
+Python Datasource Reader with direct Arrow Batch support for improved performance
+-----------------------------------------------------------------------------------------
+The Python Datasource Reader now supports direct yielding of Arrow Batches, which can significantly improve data processing performance. By using the efficient Arrow format,
+this feature avoids the overhead of traditional row-by-row data processing, resulting in performance improvements of up to one order of magnitude, especially with large datasets.
+
+**Enabling Arrow Batch Support**:
+To enable this feature, configure your custom DataSource to yield Arrow batches by returning pyarrow.RecordBatch objects within the `read` method of your `DataSourceReader`
+(or `DataSourceStreamReader`) implementation. This method simplifies data handling and reduces the number of I/O operations, particularly beneficial for large-scale data processing tasks.
+
+**Arrow Batch Example**:
+The following example demonstrates how to implement a basic data source using Arrow Batch support.
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+    from pyspark.sql import SparkSession
+    import pyarrow as pa
+
+    # Define the ArrowBatchDataSource
+    class ArrowBatchDataSource(DataSource):
+        """
+        A data source for testing Arrow Batch Serialization
+        """
+
+        @classmethod
+        def name(cls):
+            return "arrowbatch"
+
+        def schema(self):
+            return "key int, value string"
+
+        def reader(self, schema: str):
+            return ArrowBatchDataSourceReader(schema, self.options)
+
+    # Define the ArrowBatchDataSourceReader
+    class ArrowBatchDataSourceReader(DataSourceReader):
+        def __init__(self, schema, options):
+            self.schema: str = schema
+            self.options = options
+
+        def read(self, partition):
+            # Create Arrow Record Batch
+            keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
+            values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
+            schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
+            record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
+            yield record_batch
+
+        def partitions(self):
+            # Define the number of partitions
+            num_part = 1
+            return [InputPartition(i) for i in range(num_part)]
+
+    # Initialize the Spark Session
+    spark = SparkSession.builder.appName("ArrowBatchExample").getOrCreate()
+
+    # Register the ArrowBatchDataSource
+    spark.dataSource.register(ArrowBatchDataSource)
+
+    # Load data using the custom data source
+    df = spark.read.format("arrowbatch").load()
+
+    df.show()

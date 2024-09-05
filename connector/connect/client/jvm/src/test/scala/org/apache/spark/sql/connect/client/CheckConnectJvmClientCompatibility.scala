@@ -320,6 +320,14 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.UDFRegistration.initializeLogIfNecessary$default$2"),
 
+      // Protected DataFrameReader methods...
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.DataFrameReader.validateSingleVariantColumn"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.DataFrameReader.validateJsonSchema"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"),
+
       // Datasource V2 partition transforms
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform$"),

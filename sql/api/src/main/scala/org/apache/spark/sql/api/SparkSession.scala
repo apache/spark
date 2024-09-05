@@ -386,6 +386,18 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   def addArtifacts(uri: URI*): Unit
 
   /**
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * `DataFrame`.
+   * {{{
+   *   sparkSession.read.parquet("/path/to/file.parquet")
+   *   sparkSession.read.schema(schema).json("/path/to/file.json")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  def read: DataFrameReader[DS]
+
+  /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
    * available in Scala only and is used primarily for interactive testing and debugging.
    *
