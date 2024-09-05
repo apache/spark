@@ -2453,12 +2453,6 @@
     },
     "sqlState" : "42K0K"
   },
-  "INVALID_ITERATE_LABEL_USAGE_FOR_COMPOUND" : {
-    "message" : [
-      "The label <labelName> used in the ITERATE statement cannot belong to compound (BEGIN...END) body."
-    ],
-    "sqlState" : "42K0L"
-  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
@@ -2495,10 +2489,22 @@
     ],
     "sqlState" : "F0000"
   },
-  "INVALID_LABEL_USAGE_IN_STATEMENT" : {
+  "INVALID_LABEL_USAGE" : {
     "message" : [
-      "The label <labelName> used in the <statementType> statement does not belong to any surrounding block."
+      "The usage of the label <labelName> is invalid."
     ],
+    "subClass" : {
+      "DOES_NOT_EXIST" : {
+        "message" : [
+          "Label was used in the <statementType> statement, but the label does not belong to any surrounding block."
+        ]
+      },
+      "ITERATE_IN_COMPOUND" : {
+        "message" : [
+          "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
+        ]
+      }
+    },
     "sqlState" : "42K0L"
   },
   "INVALID_LAMBDA_FUNCTION_CALL" : {

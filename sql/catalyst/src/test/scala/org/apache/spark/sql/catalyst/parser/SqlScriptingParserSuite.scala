@@ -719,7 +719,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_ITERATE_LABEL_USAGE_FOR_COMPOUND",
+      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
       parameters = Map("labelName" -> "LBL"))
   }
 
@@ -761,7 +761,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE_IN_STATEMENT",
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
   }
 
@@ -776,7 +776,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE_IN_STATEMENT",
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
   }
 

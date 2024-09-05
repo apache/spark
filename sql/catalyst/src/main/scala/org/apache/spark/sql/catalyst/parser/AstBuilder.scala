@@ -291,7 +291,7 @@ class AstBuilder extends DataTypeAstBuilder
         parentCtx = parentCtx.parent
       }
 
-      throw SqlScriptingErrors.invalidLabelUsageInStatement(
+      throw SqlScriptingErrors.labelDoesNotExist(
         CurrentOrigin.get, labelText, "LEAVE")
     }
 
@@ -307,7 +307,7 @@ class AstBuilder extends DataTypeAstBuilder
         parentCtx = parentCtx.parent
       }
 
-      throw SqlScriptingErrors.invalidLabelUsageInStatement(
+      throw SqlScriptingErrors.labelDoesNotExist(
         CurrentOrigin.get, labelText, "ITERATE")
     }
 
