@@ -284,12 +284,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident, columnNames, allColumns)
 
+    // V2 catalog doesn't support REPAIR TABLE yet, we must use v1 command here.
     case RepairTable(
         ResolvedV1TableIdentifierInSessionCatalog(ident),
         addPartitions,
         dropPartitions) =>
       RepairTableCommand(ident, addPartitions, dropPartitions)
 
+    // V2 catalog doesn't support LOAD DATA yet, we must use v1 command here.
     case LoadData(
         ResolvedV1TableIdentifierInSessionCatalog(ident),
         path,
@@ -344,6 +346,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       ShowColumnsCommand(db, v1TableName, output)
 
+    // V2 catalog doesn't support RECOVER PARTITIONS yet, we must use v1 command here.
     case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>
       RepairTableCommand(
         ident,
@@ -372,6 +375,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         purge,
         retainData = false)
 
+    // V2 catalog doesn't support setting serde properties yet, we must use v1 command here.
     case SetTableSerDeProperties(
         ResolvedV1TableIdentifierInSessionCatalog(ident),
         serdeClassName,
@@ -383,7 +387,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeProperties,
         partitionSpec)
 
-    case SetTableLocation(ResolvedV1TableIdentifierInSessionCatalog(ident), None, location) =>
+    case SetTableLocation(ResolvedV1TableIdentifier(ident), None, location) =>
       AlterTableSetLocationCommand(ident, None, location)
 
     // V2 catalog doesn't support setting partition location yet, we must use v1 command here.
