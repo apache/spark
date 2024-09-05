@@ -148,16 +148,16 @@ abstract class FileTable(
   }
 
   /**
-   * Merge the options of FileTable and the table operation
-   * and respect the keys of the table operation.
+   * Merge the options of FileTable and the table operation while respecting the
+   * keys of the table operation.
    *
-   * @param options options of the table operation.
+   * @param options The options of the table operation.
    * @return
    */
   protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val mergedOptions = this.options.asCaseSensitiveMap().asScala ++
+    val finalOptions = this.options.asCaseSensitiveMap().asScala ++
       options.asCaseSensitiveMap().asScala
-    new CaseInsensitiveStringMap(mergedOptions.asJava)
+    new CaseInsensitiveStringMap(finalOptions.asJava)
   }
 }
 
