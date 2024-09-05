@@ -1453,25 +1453,38 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
       SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
       withTempDir { chkptDir =>
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
-
-        testStream(result, OutputMode.Update())(
+        testStream(result1, OutputMode.Update())(
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "1")),
-          StopStream,
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "2")),
-          StopStream,
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          StopStream
+        )
+        val result3 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result3, OutputMode.Update())(
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "1", "str2")),
           StopStream
         )
         val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")

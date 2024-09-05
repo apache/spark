@@ -186,8 +186,8 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
-      // we want to write the new schema file on each new run for state schema v3
-      if (stateSchemaVersion == 3) {
+      // if we have reached this block, the schema has changed in an acceptable way
+      if (newStateSchemaList != existingStateSchemaList) {
         createSchemaFile(newStateSchemaList, stateSchemaVersion)
       }
       false
