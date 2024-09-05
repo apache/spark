@@ -430,20 +430,26 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     assert(abandonedExecutions.forall(_.operationId != dummyOpId))
   }
 
-  test("SPARK-49492: reattach succeeds on an inactive execution holder") {
-    val dummyOpId = UUID.randomUUID().toString
-    val dummyRequest =
-      buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
-    val manager = SparkConnectService.executionManager
-    val holder = manager.createExecuteHolder(dummyRequest)
-    holder.eventsManager.postStarted()
-    manager.removeExecuteHolder(holder.key)
+  test("SPARK-49492: reattach must not succeed on an inactive execution holder") {
     withRawBlockingStub { stub =>
-      val reattach = stub.reattachExecute(buildReattachExecuteRequest(dummyOpId, None))
-      val e = intercept[StatusRuntimeException] {
+      val operationId = UUID.randomUUID().toString
+
+      // supply an invalid plan so that the execute plan handler raises an error
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(proto.Plan.newBuilder().build(), operationId = operationId))
+
+      // expect that the execution fails before spawning an execute thread
+      val ee = intercept[StatusRuntimeException] {
+        iter.next()
+      }
+      assert(ee.getMessage.contains("INTERNAL_ERROR"))
+
+      // reattach must fail
+      val reattach = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+      val re = intercept[StatusRuntimeException] {
         reattach.hasNext()
       }
-      assert(e.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND"))
+      assert(re.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND"))
     }
   }
 }
