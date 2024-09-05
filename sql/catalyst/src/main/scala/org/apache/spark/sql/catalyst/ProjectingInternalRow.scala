@@ -25,7 +25,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
  * the underlying data.
  */
-case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) extends InternalRow {
+case class ProjectingInternalRow(schema: StructType,
+    colOrdinals: IndexedSeq[Int]) extends InternalRow {
   assert(schema.size == colOrdinals.size)
 
   private var row: InternalRow = _
@@ -113,5 +114,11 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
 
   override def get(ordinal: Int, dataType: DataType): AnyRef = {
     row.get(colOrdinals(ordinal), dataType)
+  }
+}
+
+object ProjectingInternalRow {
+  def apply(schema: StructType, colOrdinals: Seq[Int]): ProjectingInternalRow = {
+    new ProjectingInternalRow(schema, colOrdinals.toIndexedSeq)
   }
 }
