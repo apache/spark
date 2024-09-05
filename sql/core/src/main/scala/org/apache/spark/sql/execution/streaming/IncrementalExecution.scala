@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataV2FileManager, OperatorStateMetadataWriter, StateStoreId}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataV2FileManager, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -88,21 +88,6 @@ class IncrementalExecution(
 
   override protected def purge(threshold: Long): Unit = {}
 
-  private def stateSchemaDirPath(
-      ssw: StateStoreWriter,
-      storeName: Option[String] = None): Path = {
-    def stateInfo = ssw.getStateInfo
-    val stateCheckpointPath =
-      new Path(stateInfo.checkpointLocation,
-        s"${stateInfo.operatorId.toString}")
-    storeName match {
-      case Some(storeName) =>
-        new Path(new Path(stateCheckpointPath, "_stateSchema"), storeName)
-      case None =>
-        new Path(new Path(stateCheckpointPath, "_stateSchema"), "default")
-    }
-  }
-
   override protected def purgeStatefulMetadata(statefulOp: StatefulOperator): Unit = {
     statefulOp match {
       case ssw: StateStoreWriter =>
@@ -113,13 +98,10 @@ class IncrementalExecution(
             // commit log path.
             val parentCheckpointLocation = new Path(checkpointLocation).getParent
             val fileManager = new OperatorStateMetadataV2FileManager(
-              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-              stateSchemaDirPath(ssw, Some(StateStoreId.DEFAULT_STORE_NAME)),
-              new CommitLog(
-                sparkSession,
-                new Path(parentCheckpointLocation, "commits").toString
-              ),
-              hadoopConf)
+              parentCheckpointLocation,
+              sparkSession,
+              ssw
+            )
             fileManager.purgeMetadataFiles()
           case _ =>
         }

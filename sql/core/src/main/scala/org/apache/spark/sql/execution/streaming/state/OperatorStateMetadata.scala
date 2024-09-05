@@ -30,7 +30,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog, StatefulOperator}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
@@ -364,17 +364,23 @@ class OperatorStateMetadataV2Reader(
  * This class is used to manage the metadata files for OperatorStateMetadataV2, and
  * provides utils to purge the oldest files such that we only keep the metadata files
  * for which a commit log is present
- * @param stateCheckpointPath The root path of the state checkpoint directory
- * @param stateSchemaPath The path where the schema files are stored
- * @param hadoopConf The Hadoop configuration to create the file manager
+ * @param checkpointLocation The root path of the checkpoint directory
+ * @param sparkSession The sparkSession that is used to access the hadoopConf
+ * @param stateStoreWriter The operator that this fileManager is being created for
  */
 class OperatorStateMetadataV2FileManager(
-    stateCheckpointPath: Path,
-    stateSchemaPath: Path,
-    commitLog: CommitLog,
-    hadoopConf: Configuration) extends Logging {
+    checkpointLocation: Path,
+    sparkSession: SparkSession,
+    stateStoreWriter: StateStoreWriter) extends Logging {
 
-  private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
+  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  private val stateCheckpointPath = new Path(checkpointLocation, "state")
+  private val stateOpIdPath = new Path(
+    stateCheckpointPath, stateStoreWriter.getStateInfo.operatorId.toString)
+  private val commitLog =
+    new CommitLog(sparkSession, new Path(checkpointLocation, "commits").toString)
+  private val stateSchemaPath = stateStoreWriter.stateSchemaDirPath()
+  private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
   protected def isBatchFile(path: Path): Boolean = {
@@ -399,6 +405,7 @@ class OperatorStateMetadataV2FileManager(
     val thresholdBatchId = findThresholdBatchId()
     if (thresholdBatchId != -1) {
       val earliestBatchIdKept = deleteMetadataFiles(thresholdBatchId)
+      // we need to delete everything from 0 to (earliestBatchIdKept - 1), inclusive
       deleteSchemaFiles(earliestBatchIdKept - 1)
     }
   }
@@ -442,28 +449,24 @@ class OperatorStateMetadataV2FileManager(
         highestDeletedBatchId = math.max(highestDeletedBatchId, batchId)
       }
     }
+    // Find the next batch id immediately greater than threshold batchId.
+    // We use this to find the metadata and schema files we want to keep
+    val nextBatchId = sortedBatchIds.find(_ > thresholdBatchId).getOrElse(latestBatchId)
     val latestMetadata = OperatorStateMetadataReader.createReader(
-      stateCheckpointPath,
+      stateOpIdPath,
       hadoopConf,
       2,
-      latestBatchId
+      nextBatchId
     ).read()
 
+    // find the batchId of the earliest schema file we need to keep
     val earliestBatchToKeep = latestMetadata match {
       case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
         val schemaFilePath = stateStoreInfo.head.stateSchemaFilePath
-        schemaFilePath.split("_").head.toLong
-      case None => -1
+        new Path(schemaFilePath).getName.split("_").head.toLong
+      case _ => -1
     }
 
     earliestBatchToKeep
-  }
-
-  private[sql] def listSchemaFiles(): Array[Path] = {
-    fm.list(stateSchemaPath).sorted.map(_.getPath)
-  }
-
-  private[sql] def listMetadataFiles(): Array[Path] = {
-    fm.list(metadataDirPath, batchFilesFilter).sorted.map(_.getPath)
   }
 }

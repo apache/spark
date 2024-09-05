@@ -21,7 +21,7 @@ import java.io.File
 import java.time.Duration
 import java.util.UUID
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
@@ -1427,19 +1427,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  private def getOperatorStateMetadataFileManager(
-      checkpointPath: Path,
-      stateCheckpointPath: Path,
-      stateSchemaPath: Path): OperatorStateMetadataV2FileManager = {
+  private def getFiles(path: Path): Array[FileStatus] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
-    new OperatorStateMetadataV2FileManager(
-      stateCheckpointPath,
-      stateSchemaPath,
-      new CommitLog(
-        spark.cloneSession(),
-        new Path(checkpointPath, "commit").toString
-      ),
-      hadoopConf)
+    val fileManager = CheckpointFileManager.create(path, hadoopConf)
+    fileManager.list(path)
   }
 
   private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
@@ -1490,16 +1481,72 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
         val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
 
-        val fm = getOperatorStateMetadataFileManager(
-          new Path(chkptDir.getCanonicalPath),
-          stateOpIdPath,
-          stateSchemaPath)
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
         // by the end of the test, there have been 3 batches,
         // so the metadata and schema logs, and commitLog has been purged
         // for batch 0, so metadata and schema files should only exist for
         // batches 1 and 2
-        assert(fm.listSchemaFiles().length == 2)
-        assert(fm.listMetadataFiles().length == 2)
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
+      }
+    }
+  }
+
+  test("transformWithState - verify that not all metadata and schema logs are purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "3") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "3", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "4", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "5", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "6", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "7", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "8", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "9", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "10", "str1")),
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "11", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "12", "str1")),
+          StopStream
+        )
+
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // By this time, the commit log only exists for batch 10 onwards
+        // So we only have 1 metadata and schema file to keep
+        assert(getFiles(metadataPath).length == 1)
+        assert(getFiles(stateSchemaPath).length == 1)
       }
     }
   }
