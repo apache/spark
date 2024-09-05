@@ -119,7 +119,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
       transposedDF,
       Row("name") :: Nil
     )
-    assertResult(StringType)(transposedDF.schema("x").dataType)
+    assertResult(StringType)(transposedDF.schema("key").dataType)
   }
 
   test("transpose empty frame w/o column names") {
