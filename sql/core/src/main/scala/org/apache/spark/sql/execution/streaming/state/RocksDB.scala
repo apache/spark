@@ -773,7 +773,7 @@ class RocksDB(
               capturedFileMappings,
               Some(columnFamilyMapping.toMap),
               Some(maxColumnFamilyId),
-              loadedCheckpointId,
+              loadedCheckpointId
             )
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }

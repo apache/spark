@@ -38,7 +38,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.{LogKeys, Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -497,7 +497,7 @@ class RocksDBFileManager(
     // All versions present in DFS, sorted
     val sortedSnapshotVersionsAndUniqueIds = if (checkpointFormatVersion >= 2) {
       // Array entries are (version, Some(uuid)) when checkpointFormatVersion is 2
-      snapshotFiles.map(_.getName.stripSuffix(".zip").split("-"))
+      snapshotFiles.map(_.getName.stripSuffix(".zip").split("_"))
         .map { case Array(version, uniqueId) => (version.toLong, Some(uniqueId)) }
         .sortBy(_._1)
     } else {
@@ -831,12 +831,12 @@ class RocksDBFileManager(
   }
 
   private def dfsBatchZipFile(version: Long, checkpointUniqueId: Option[String] = None): Path =
-    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/$version-$id.zip"))
+    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/${version}_$id.zip"))
       .getOrElse(new Path(s"$dfsRootDir/$version.zip"))
   // We use changelog suffix intentionally so that we can tell the difference from changelog file of
   // HDFSBackedStateStore which is named version.delta.
   private def dfsChangelogFile(version: Long, checkpointUniqueId: Option[String] = None): Path =
-    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/$version-$id.changelog"))
+    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/${version}_$id.changelog"))
       .getOrElse(new Path(s"$dfsRootDir/$version.changelog"))
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
