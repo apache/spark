@@ -735,6 +735,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
     checkAnswer(
+      df.selectExpr("sentences(str, '', null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
       df.selectExpr("sentences(str, null)"),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 

@@ -284,15 +284,12 @@ public class ExpressionImplUtils {
       UTF8String country) {
     if (str == null) return null;
     Locale locale;
-    if (language == null && country == null) {
-      locale = Locale.US;
+    if (language != null && country != null) {
+      locale = new Locale(language.toString(), country.toString());
+    } else if (language != null) {
+      locale = new Locale(language.toString());
     } else {
-      assert language != null;
-      if (country == null) {
-        locale = new Locale(language.toString());
-      } else {
-        locale = new Locale(language.toString(), country.toString());
-      }
+      locale = Locale.US;
     }
     String sentences = str.toString();
     BreakIterator sentenceInstance = BreakIterator.getSentenceInstance(locale);
