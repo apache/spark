@@ -19,9 +19,11 @@ package org.apache.spark.sql.test
 import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
+import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
+import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
