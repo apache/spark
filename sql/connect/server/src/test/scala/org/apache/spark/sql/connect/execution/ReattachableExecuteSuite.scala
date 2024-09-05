@@ -442,7 +442,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val ee = intercept[StatusRuntimeException] {
         iter.next()
       }
-      assert(ee.getMessage.contains("INTERNAL_ERROR"))
+      assert(ee.getMessage.contains("INTERNAL"))
 
       // reattach must fail
       val reattach = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))

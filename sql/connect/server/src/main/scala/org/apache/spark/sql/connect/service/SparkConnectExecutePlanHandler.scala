@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.service
 
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
@@ -35,12 +34,9 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     } catch {
       // Errors raised before the execution holder has finished spawning a thread are considered
       // plan execution failure, and the client should not try reattaching it afterwards.
-      case s: SparkThrowable =>
-        SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-        throw s
       case t: Throwable =>
         SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-        throw SparkException.internalError(t.getMessage(), t)
+        throw t
     }
 
     try {
