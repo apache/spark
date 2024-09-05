@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
 import java.net.ServerSocket
+import java.time.Duration
 
 import scala.collection.mutable
 
@@ -30,7 +31,7 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -153,7 +154,10 @@ class TransformWithStateInPandasStateServer(
       case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
         val stateName = message.getGetValueState.getStateName
         val schema = message.getGetValueState.getSchema
-        initializeValueState(stateName, schema)
+        val ttlDurationMs = if (message.getGetValueState.hasTtl) {
+          Some(message.getGetValueState.getTtl.getDurationMs)
+        } else None
+        initializeValueState(stateName, schema, ttlDurationMs)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -228,10 +232,18 @@ class TransformWithStateInPandasStateServer(
     outputStream.write(responseMessageBytes)
   }
 
-  private def initializeValueState(stateName: String, schemaString: String): Unit = {
+  private def initializeValueState(
+      stateName: String,
+      schemaString: String,
+      ttlDurationMs: Option[Int]): Unit = {
     if (!valueStates.contains(stateName)) {
       val schema = StructType.fromString(schemaString)
-      val state = statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema))
+      val state = if (ttlDurationMs.isEmpty) {
+        statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema))
+      } else {
+        statefulProcessorHandle.getValueState(
+          stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+      }
       val valueRowDeserializer = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
       valueStates.put(stateName, (state, schema, valueRowDeserializer))
       sendResponse(0)
