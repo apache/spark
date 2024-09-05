@@ -31,7 +31,6 @@ import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, 
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCTableCatalog extends TableCatalog
@@ -142,14 +141,6 @@ class JDBCTableCatalog extends TableCatalog
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
     }
-  }
-
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
-    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   override def createTable(

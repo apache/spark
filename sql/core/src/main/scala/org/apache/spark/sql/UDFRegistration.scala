@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.lang.reflect.ParameterizedType
 
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
@@ -28,12 +26,11 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.ToScalaUDF
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -47,8 +44,9 @@ import org.apache.spark.util.Utils
  * @since 1.3.0
  */
 @Stable
-class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends Logging {
-
+class UDFRegistration private[sql] (functionRegistry: FunctionRegistry)
+  extends api.UDFRegistration
+  with Logging {
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
     log.debug(
       s"""
@@ -72,10 +70,10 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @param name the name of the UDAF.
    * @param udaf the UDAF needs to be registered.
    * @return the registered UDAF.
-   *
    * @since 1.5.0
    * @deprecated this method and the use of UserDefinedAggregateFunction are deprecated.
-   * Aggregator[IN, BUF, OUT] should now be registered as a UDF via the functions.udaf(agg) method.
+   *             Aggregator[IN, BUF, OUT] should now be registered as a UDF via the
+   *             functions.udaf(agg) method.
    */
   @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
     " via the functions.udaf(agg) method.", "3.0.0")
@@ -85,332 +83,69 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     udaf
   }
 
-  /**
-   * Registers a user-defined function (UDF), for a UDF that's already defined using the Dataset
-   * API (i.e. of type UserDefinedFunction). To change a UDF to nondeterministic, call the API
-   * `UserDefinedFunction.asNondeterministic()`. To change a UDF to nonNullable, call the API
-   * `UserDefinedFunction.asNonNullable()`.
-   *
-   * Example:
-   * {{{
-   *   val foo = udf(() => Math.random())
-   *   spark.udf.register("random", foo.asNondeterministic())
-   *
-   *   val bar = udf(() => "bar")
-   *   spark.udf.register("stringLit", bar.asNonNullable())
-   * }}}
-   *
-   * @param name the name of the UDF.
-   * @param udf the UDF needs to be registered.
-   * @return the registered UDF.
-   *
-   * @since 2.2.0
-   */
-  def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    udf.withName(name) match {
-      case udaf: UserDefinedAggregator[_, _, _] =>
-        def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
-        functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
-        udaf
-      case other =>
-        def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
-        functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
-        other
-    }
-  }
-
-  private def registerScalaUDF(
+  override protected def register(
       name: String,
-      f: AnyRef,
-      returnTypeTag: TypeTag[_],
-      inputTypeTags: TypeTag[_]*): UserDefinedFunction = {
-    register(name, SparkUserDefinedFunction(f, returnTypeTag, inputTypeTags: _*), "scala_udf")
-  }
-
-  private def registerJavaUDF(
-      name: String,
-      f: AnyRef,
-      returnType: DataType,
-      cardinality: Int): UserDefinedFunction = {
-    val validatedReturnType = CharVarcharUtils.failIfHasCharVarchar(returnType)
-    register(name, SparkUserDefinedFunction(f, validatedReturnType, cardinality), "java_udf")
-  }
-
-  private def register(
-      name: String,
-      udf: SparkUserDefinedFunction,
-      source: String): UserDefinedFunction = {
+      udf: UserDefinedFunction,
+      source: String,
+      validateParameterCount: Boolean): UserDefinedFunction = {
     val named = udf.withName(name)
-    val expectedParameterCount = named.inputEncoders.size
-    val builder: Seq[Expression] => Expression = { children =>
-      val actualParameterCount = children.length
-      if (expectedParameterCount == actualParameterCount) {
-        named.createScalaUDF(children)
-      } else {
-        throw QueryCompilationErrors.wrongNumArgsError(
-          name,
-          expectedParameterCount.toString,
-          actualParameterCount)
-      }
+    val builder: Seq[Expression] => Expression = named match {
+      case udaf: UserDefinedAggregator[_, _, _] =>
+        ScalaAggregator(udaf, _)
+      case udf: SparkUserDefinedFunction if validateParameterCount =>
+        val expectedParameterCount = udf.inputEncoders.size
+        children => {
+          val actualParameterCount = children.length
+          if (expectedParameterCount == actualParameterCount) {
+            toScalaUDF(udf, children)
+          } else {
+            throw QueryCompilationErrors.wrongNumArgsError(
+              name,
+              expectedParameterCount.toString,
+              actualParameterCount)
+          }
+        }
+      case udf: SparkUserDefinedFunction =>
+        toScalaUDF(udf, _)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, source)
     named
   }
 
+
+  /**
+   * Register a Java UDAF class using reflection, for use from pyspark
+   *
+   * @param name      UDAF name
+   * @param className fully qualified class name of UDAF
+   */
+  private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
+    try {
+      val clazz = Utils.classForName[AnyRef](className)
+      if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
+        throw QueryCompilationErrors
+          .classDoesNotImplementUserDefinedAggregateFunctionError(className)
+      }
+      val udaf = clazz.getConstructor().newInstance().asInstanceOf[UserDefinedAggregateFunction]
+      register(name, udaf)
+    } catch {
+      case _: ClassNotFoundException =>
+        throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
+      case _: InstantiationException | _: IllegalArgumentException =>
+        throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
+    }
+  }
+
   // scalastyle:off line.size.limit
-
-  /* register 0-22 were generated by this script
-
-    (0 to 22).foreach { x =>
-      val types = (1 to x).foldRight("RT")((i, s) => s"A$i, $s")
-      val typeSeq = "RT" +: (1 to x).map(i => s"A$i")
-      val typeTags = typeSeq.map(t => s"$t: TypeTag").mkString(", ")
-      val implicitTypeTags = typeSeq.map(t => s"implicitly[TypeTag[$t]]").mkString(", ")
-      println(s"""
-        |/**
-        | * Registers a deterministic Scala closure of $x arguments as user-defined function (UDF).
-        | * @tparam RT return type of UDF.
-        | * @since 1.3.0
-        | */
-        |def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
-        |  registerScalaUDF(name, func, $implicitTypeTags)
-        |}""".stripMargin)
-    }
-
-    (0 to 22).foreach { i =>
-      val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
-      val version = if (i == 0) "2.3.0" else "1.3.0"
-      println(s"""
-        |/**
-        | * Register a deterministic Java UDF$i instance as user-defined function (UDF).
-        | * @since $version
-        | */
-        |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
-        |  registerJavaUDF(name, ToScalaUDF(f), returnType, $i)
-        |}""".stripMargin)
-    }
-    */
-
-  /**
-   * Registers a deterministic Scala closure of 0 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 1 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 2 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 3 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 4 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 5 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 6 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 7 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 8 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 9 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 10 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 11 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 12 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 13 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 14 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 15 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 16 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 17 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 18 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 19 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 20 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]], implicitly[TypeTag[A20]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 21 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]], implicitly[TypeTag[A20]], implicitly[TypeTag[A21]])
-  }
-
-  /**
-   * Registers a deterministic Scala closure of 22 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
-   * @since 1.3.0
-   */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]], implicitly[TypeTag[A20]], implicitly[TypeTag[A21]], implicitly[TypeTag[A22]])
-  }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Register a Java UDF class using reflection, for use from pyspark
    *
-   * @param name   udf name
-   * @param className   fully qualified class name of udf
-   * @param returnDataType  return type of udf. If it is null, spark would try to infer
-   *                        via reflection.
+   * @param name           udf name
+   * @param className      fully qualified class name of udf
+   * @param returnDataType return type of udf. If it is null, spark would try to infer
+   *                       via reflection.
    */
   private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
-
     try {
       val clazz = Utils.classForName[AnyRef](className)
       val udfInterfaces = clazz.getGenericInterfaces
@@ -458,221 +193,13 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
               throw QueryCompilationErrors.udfClassWithTooManyTypeArgumentsError(n)
           }
         } catch {
-          case e @ (_: InstantiationException | _: IllegalArgumentException) =>
+          case _: InstantiationException | _: IllegalArgumentException =>
             throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
         }
       }
     } catch {
-      case e: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
-    }
-
-  }
-
-  /**
-   * Register a Java UDAF class using reflection, for use from pyspark
-   *
-   * @param name     UDAF name
-   * @param className    fully qualified class name of UDAF
-   */
-  private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
-    try {
-      val clazz = Utils.classForName[AnyRef](className)
-      if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
-        throw QueryCompilationErrors.classDoesNotImplementUserDefinedAggregateFunctionError(className)
-      }
-      val udaf = clazz.getConstructor().newInstance().asInstanceOf[UserDefinedAggregateFunction]
-      register(name, udaf)
-    } catch {
-      case e: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
-      case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-        throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
+      case _: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
     }
   }
-
-  /**
-   * Register a deterministic Java UDF0 instance as user-defined function (UDF).
-   * @since 2.3.0
-   */
-  def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 0)
-  }
-
-  /**
-   * Register a deterministic Java UDF1 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF1[_, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 1)
-  }
-
-  /**
-   * Register a deterministic Java UDF2 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF2[_, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 2)
-  }
-
-  /**
-   * Register a deterministic Java UDF3 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF3[_, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 3)
-  }
-
-  /**
-   * Register a deterministic Java UDF4 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF4[_, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 4)
-  }
-
-  /**
-   * Register a deterministic Java UDF5 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF5[_, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 5)
-  }
-
-  /**
-   * Register a deterministic Java UDF6 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF6[_, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 6)
-  }
-
-  /**
-   * Register a deterministic Java UDF7 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 7)
-  }
-
-  /**
-   * Register a deterministic Java UDF8 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 8)
-  }
-
-  /**
-   * Register a deterministic Java UDF9 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 9)
-  }
-
-  /**
-   * Register a deterministic Java UDF10 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 10)
-  }
-
-  /**
-   * Register a deterministic Java UDF11 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 11)
-  }
-
-  /**
-   * Register a deterministic Java UDF12 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 12)
-  }
-
-  /**
-   * Register a deterministic Java UDF13 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 13)
-  }
-
-  /**
-   * Register a deterministic Java UDF14 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 14)
-  }
-
-  /**
-   * Register a deterministic Java UDF15 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 15)
-  }
-
-  /**
-   * Register a deterministic Java UDF16 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 16)
-  }
-
-  /**
-   * Register a deterministic Java UDF17 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 17)
-  }
-
-  /**
-   * Register a deterministic Java UDF18 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 18)
-  }
-
-  /**
-   * Register a deterministic Java UDF19 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 19)
-  }
-
-  /**
-   * Register a deterministic Java UDF20 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 20)
-  }
-
-  /**
-   * Register a deterministic Java UDF21 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 21)
-  }
-
-  /**
-   * Register a deterministic Java UDF22 instance as user-defined function (UDF).
-   * @since 1.3.0
-   */
-  def register(name: String, f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
-    registerJavaUDF(name, ToScalaUDF(f), returnType, 22)
-  }
-
   // scalastyle:on line.size.limit
-
 }

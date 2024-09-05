@@ -19,11 +19,9 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -203,6 +201,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidAlphaParameter(invalidValue: Expression): Throwable = {
     invalidParameter("DOUBLE", "ewm", "alpha", invalidValue)
+  }
+
+  def invalidStringParameter(
+      functionName: String,
+      parameter: String,
+      invalidValue: Expression): Throwable = {
+    invalidParameter("STRING", functionName, parameter, invalidValue)
   }
 
   def invalidParameter(
@@ -1040,13 +1045,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def showColumnsWithConflictDatabasesError(
-      db: Seq[String], v1TableName: TableIdentifier): Throwable = {
+  def showColumnsWithConflictNamespacesError(
+      namespaceA: Seq[String],
+      namespaceB: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1057",
+      errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
       messageParameters = Map(
-        "dbA" -> db.head,
-        "dbB" -> v1TableName.database.get))
+        "namespaceA" -> toSQLId(namespaceA),
+        "namespaceB" -> toSQLId(namespaceB)))
   }
 
   def cannotCreateTableWithBothProviderAndSerdeError(
@@ -2225,12 +2231,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "validColumnNames" -> validColumnNames.mkString(", ")))
   }
 
-  def operationNotSupportPartitioningError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1197",
-      messageParameters = Map("operation" -> operation))
-  }
-
   def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
     new AnalysisException(
       errorClass =
@@ -2959,49 +2959,41 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1270",
-      messageParameters = Map("table" -> table))
-  }
-
-  def showCreateTableFailToExecuteUnsupportedFeatureError(table: CatalogTable): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1271",
-      messageParameters = Map(
-        "unsupportedFeatures" -> table.unsupportedFeatures.map(" - " + _).mkString("\n"),
-        "table" -> table.identifier.toString))
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TEMPORARY_VIEW",
+      messageParameters = Map("tableName" -> toSQLId(table)))
   }
 
   def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1272",
-      messageParameters = Map("table" -> table.identifier.toString))
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
+      messageParameters = Map("tableName" -> toSQLId(table.identifier.nameParts)))
   }
 
   def showCreateTableFailToExecuteUnsupportedConfError(
       table: TableIdentifier,
-      builder: mutable.StringBuilder): Throwable = {
+      configs: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1273",
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION",
       messageParameters = Map(
-        "table" -> table.identifier,
-        "configs" -> builder.toString()))
+        "tableName" -> toSQLId(table.nameParts),
+        "configs" -> configs))
   }
 
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
       table: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1274",
-      messageParameters = Map("table" -> table.toString))
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_DATA_SOURCE_TABLE_WITH_AS_SERDE",
+      messageParameters = Map("tableName" -> toSQLId(table.nameParts)))
   }
 
   def showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
       table: CatalogTable,
-      features: Seq[String]): Throwable = {
+      unsupportedFeatures: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1275",
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
       messageParameters = Map(
-        "table" -> table.identifier.toString,
-        "features" -> features.map(" - " + _).mkString("\n")))
+        "tableName" -> toSQLId(table.identifier.nameParts),
+        "unsupportedFeatures" -> unsupportedFeatures.map(" - " + _).mkString("\n")))
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
@@ -3130,7 +3122,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1285",
+      errorClass = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
       messageParameters = Map.empty)
   }
 
@@ -3244,28 +3236,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "actualColumns" -> relation.output.map(_.name).mkString(", ")))
   }
 
-  def invalidBoundaryStartError(start: Long): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_BOUNDARY.START",
-      messageParameters = Map(
-        "boundary" -> toSQLId("start"),
-        "invalidValue" -> toSQLValue(start, LongType),
-        "longMinValue" -> toSQLValue(Long.MinValue, LongType),
-        "intMinValue" -> toSQLValue(Int.MinValue, IntegerType),
-        "intMaxValue" -> toSQLValue(Int.MaxValue, IntegerType)))
-  }
-
-  def invalidBoundaryEndError(end: Long): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_BOUNDARY.END",
-      messageParameters = Map(
-        "boundary" -> toSQLId("end"),
-        "invalidValue" -> toSQLValue(end, LongType),
-        "longMaxValue" -> toSQLValue(Long.MaxValue, LongType),
-        "intMinValue" -> toSQLValue(Int.MinValue, IntegerType),
-        "intMaxValue" -> toSQLValue(Int.MaxValue, IntegerType)))
-  }
-
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
     new NoSuchTableException(ident)
   }
@@ -3288,13 +3258,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "_LEGACY_ERROR_TEMP_1307",
       messageParameters = Map(
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
-  }
-
-  def invalidSaveModeError(saveMode: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_SAVE_MODE",
-      messageParameters = Map("mode" -> toDSOption(saveMode))
-    )
   }
 
   def invalidSingleVariantColumn(): Throwable = {
@@ -3321,24 +3284,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1310",
       messageParameters = Map("quote" -> quote))
-  }
-
-  def sortByWithoutBucketingError(): Throwable = {
-    new AnalysisException(
-      errorClass = "SORT_BY_WITHOUT_BUCKETING",
-      messageParameters = Map.empty)
-  }
-
-  def bucketByUnsupportedByOperationError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1312",
-      messageParameters = Map("operation" -> operation))
-  }
-
-  def bucketByAndSortByUnsupportedByOperationError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1313",
-      messageParameters = Map("operation" -> operation))
   }
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
@@ -3401,12 +3346,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1322",
       messageParameters = Map("numBuckets" -> numBuckets, "e" -> e))
-  }
-
-  def usingUntypedScalaUDFError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNTYPED_SCALA_UDF",
-      messageParameters = Map.empty)
   }
 
   def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
@@ -4129,6 +4068,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       "createTable(..., Array[Column], ...)")
   }
 
+  def mustOverrideOneMethodError(methodName: String): RuntimeException = {
+    val msg = s"You must override one `$methodName`. It's preferred to not override the " +
+      "deprecated one."
+    new SparkRuntimeException(
+      "INTERNAL_ERROR",
+      Map("message" -> msg))
+  }
+
   def cannotAssignEventTimeColumn(): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
@@ -4143,21 +4090,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def operationNotSupportClusteringError(operation: String): Throwable = {
+  def protobufNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
     new AnalysisException(
-      errorClass = "CLUSTERING_NOT_SUPPORTED",
-      messageParameters = Map("operation" -> operation))
-  }
-
-  def clusterByWithPartitionedBy(): Throwable = {
-    new AnalysisException(
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
-      messageParameters = Map.empty)
-  }
-
-  def clusterByWithBucketing(): Throwable = {
-    new AnalysisException(
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
-      messageParameters = Map.empty)
+      errorClass = "PROTOBUF_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+      messageParameters = Map("functionName" -> functionName)
+    )
   }
 }

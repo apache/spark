@@ -182,6 +182,9 @@ abstract class AbstractCommandBuilder {
           if (project.equals("sql/connect/server") || project.equals("sql/connect/common")) {
             continue;
           }
+          if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
+            continue;
+          }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
         }
@@ -211,7 +214,9 @@ abstract class AbstractCommandBuilder {
           addToClassPath(cp, f.toString());
         }
       }
-      if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
+      // If we're in 'spark.local.connect', it should create a Spark Classic Spark Context
+      // that launches Spark Connect server.
+      if (isRemote && System.getenv("SPARK_LOCAL_CONNECT") == null) {
         for (File f: new File(jarsDir).listFiles()) {
           // Exclude Spark Classic SQL and Spark Connect server jars
           // if we're in Spark Connect Shell. Also exclude Spark SQL API and

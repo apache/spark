@@ -123,6 +123,12 @@ object RocksDBStateEncoder {
     }
   }
 
+  def getColumnFamilyIdBytes(virtualColFamilyId: Short): Array[Byte] = {
+    val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
+    encodedBytes
+  }
+
   /**
    * Encode the UnsafeRow of N bytes as a N+1 byte array.
    * @note This creates a new byte array and memcopies the UnsafeRow to the new array.

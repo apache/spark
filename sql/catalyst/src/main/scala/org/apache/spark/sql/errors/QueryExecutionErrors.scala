@@ -478,6 +478,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def invalidExternalTypeError(
+      actualType: String,
+      expectedType: DataType,
+      childExpression: Expression): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_EXTERNAL_TYPE",
+      messageParameters = Map(
+        "externalType" -> actualType,
+        "type" -> toSQLType(expectedType),
+        "expr" -> toSQLExpr(childExpression)
+      )
+    )
+  }
+
   def notOverrideExpectedMethodsError(
       className: String, m1: String, m2: String): SparkRuntimeException = {
     new SparkRuntimeException(
@@ -1943,27 +1957,27 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotCreateParquetConverterForTypeError(
       t: DecimalType, parquetType: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2238",
+      errorClass = "PARQUET_CONVERSION_FAILURE.WITHOUT_DECIMAL_METADATA",
       messageParameters = Map(
-        "typeName" -> t.typeName,
+        "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))
   }
 
   def cannotCreateParquetConverterForDecimalTypeError(
       t: DecimalType, parquetType: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2239",
+      errorClass = "PARQUET_CONVERSION_FAILURE.DECIMAL",
       messageParameters = Map(
-        "t" -> t.json,
+        "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))
   }
 
   def cannotCreateParquetConverterForDataTypeError(
       t: DataType, parquetType: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2240",
+      errorClass = "PARQUET_CONVERSION_FAILURE.UNSUPPORTED",
       messageParameters = Map(
-        "t" -> t.json,
+        "dataType" -> toSQLType(t),
         "parquetType" -> parquetType))
   }
 

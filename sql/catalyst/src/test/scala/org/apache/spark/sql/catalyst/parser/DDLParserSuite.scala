@@ -39,7 +39,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sql), expected, checkAnalysis = false)
+    // We don't care the write privileges in this suite.
+    val parsed = parsePlan(sql).transform {
+      case u: UnresolvedRelation => u.clearWritePrivileges
+      case i: InsertIntoStatement =>
+        i.table match {
+          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
+          case _ => i
+        }
+    }
+    comparePlans(parsed, expected, checkAnalysis = false)
   }
 
   private def internalException(sqlText: String): SparkThrowable = {
@@ -2397,29 +2406,6 @@ class DDLParserSuite extends AnalysisTest {
       RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE", true)))
   }
 
-  test("show columns") {
-    val sql1 = "SHOW COLUMNS FROM t1"
-    val sql2 = "SHOW COLUMNS IN db1.t1"
-    val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
-
-    val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1"), "SHOW COLUMNS", true), None)
-    val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), None)
-    val parsed3 = parsePlan(sql3)
-    val expected3 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
-    val parsed4 = parsePlan(sql4)
-    val expected4 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-  }
-
   test("alter view: add partition (not supported)") {
     val sql =
       """ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
@@ -2633,22 +2619,22 @@ class DDLParserSuite extends AnalysisTest {
 
     for (optimizeInsertIntoValues <- Seq(true, false)) {
       withSQLConf(
-        SQLConf.OPTIMIZE_INSERT_INTO_VALUES_PARSER.key ->
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
           optimizeInsertIntoValues.toString) {
-        comparePlans(parsePlan(dateTypeSql), insertPartitionPlan(
+        parseCompare(dateTypeSql, insertPartitionPlan(
           "2019-01-02", optimizeInsertIntoValues))
         withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-          comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(
+          parseCompare(intervalTypeSql, insertPartitionPlan(
             interval, optimizeInsertIntoValues))
         }
-        comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan(
+        parseCompare(ymIntervalTypeSql, insertPartitionPlan(
           "INTERVAL '1-2' YEAR TO MONTH", optimizeInsertIntoValues))
-        comparePlans(parsePlan(dtIntervalTypeSql),
+        parseCompare(dtIntervalTypeSql,
           insertPartitionPlan(
             "INTERVAL '1 02:03:04.128462' DAY TO SECOND", optimizeInsertIntoValues))
-        comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(
+        parseCompare(timestampTypeSql, insertPartitionPlan(
           timestamp, optimizeInsertIntoValues))
-        comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(
+        parseCompare(binaryTypeSql, insertPartitionPlan(
           binaryStr, optimizeInsertIntoValues))
       }
     }
@@ -2748,12 +2734,12 @@ class DDLParserSuite extends AnalysisTest {
 
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
-    comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
+    parseCompare("VALUES (1, 2, DEFAULT) AS val",
       SubqueryAlias("val",
         UnresolvedInlineTable(Seq("col1", "col2", "col3"), Seq(Seq(Literal(1), Literal(2),
           UnresolvedAttribute("DEFAULT"))))))
-    comparePlans(parsePlan(
-      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
+    parseCompare(
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)",
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some("2019-01-02")),

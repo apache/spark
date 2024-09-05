@@ -17,6 +17,7 @@
 
 
 import logging
+from pyspark.logger import PySparkLogger
 import os
 from typing import Optional
 
@@ -27,7 +28,7 @@ __all__ = [
 
 def _configure_logging() -> logging.Logger:
     """Configure logging for the Spark Connect clients."""
-    logger = logging.getLogger(__name__)
+    logger = PySparkLogger.getLogger(__name__)
     handler = logging.StreamHandler()
     handler.setFormatter(
         logging.Formatter(fmt="%(asctime)s %(process)d %(levelname)s %(funcName)s %(message)s")

@@ -4887,6 +4887,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))
     }
   }
+
+  test(
+    "SPARK-49250: CheckAnalysis for UnresolvedWindowExpression must produce " +
+    "MISSING_WINDOW_SPECIFICATION error"
+  ) {
+    for (sqlText <- Seq(
+      "SELECT SUM(col1) OVER(unspecified_window) FROM VALUES (1)",
+      "SELECT SUM(col1) OVER(unspecified_window) FROM VALUES (1) GROUP BY col1",
+      "SELECT (SUM(col1) OVER(unspecified_window) / 1) FROM VALUES (1)"
+    )) {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql(sqlText)
+        ),
+        errorClass = "MISSING_WINDOW_SPECIFICATION",
+        parameters = Map(
+          "windowName" -> "unspecified_window",
+          "docroot" -> SPARK_DOC_ROOT
+        )
+      )
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

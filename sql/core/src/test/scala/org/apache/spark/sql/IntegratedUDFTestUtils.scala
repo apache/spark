@@ -28,11 +28,14 @@ import org.scalatest.Assertions._
 import org.apache.spark.TestUtils
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1566,40 +1569,30 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema("col").dataType)
    * }}}
    */
-  class TestInternalScalaUDF(
-      name: String,
-      returnType: Option[DataType] = None) extends SparkUserDefinedFunction(
-    (input: Any) => if (input == null) {
-      null
-    } else {
-      input.toString
-    },
-    StringType,
-    inputEncoders = Seq.fill(1)(None),
-    givenName = Some(name)) {
+  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
+    private val udf: SparkUserDefinedFunction = {
+      val unnamed = functions.udf { (input: Any) =>
+        if (input == null) {
+          null
+        } else {
+          input.toString
+        }
+      }
+      unnamed.withName(name).asInstanceOf[SparkUserDefinedFunction]
+    }
 
-    override def apply(exprs: Column*): Column = {
+    val builder: FunctionRegistry.FunctionBuilder = { exprs =>
       assert(exprs.length == 1, "Defined UDF only has one column")
-      val expr = exprs.head.expr
+      val expr = exprs.head
       val rt = returnType.getOrElse {
         assert(expr.resolved, "column should be resolved to use the same type " +
-            "as input. Try df(name) or df.col(name)")
+          "as input. Try df(name) or df.col(name)")
         expr.dataType
       }
-      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), rt))
+      Cast(toScalaUDF(udf, Cast(expr, StringType) :: Nil), rt)
     }
 
-    override def withName(name: String): TestInternalScalaUDF = {
-      // "withName" should overridden to return TestInternalScalaUDF. Otherwise, the current object
-      // is sliced and the overridden "apply" is not invoked.
-      new TestInternalScalaUDF(name)
-    }
-  }
-
-  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
-    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name, returnType)
-
-    def apply(exprs: Column*): Column = udf(exprs: _*)
+    def apply(exprs: Column*): Column = builder(exprs.map(expression))
 
     val prettyName: String = "Scala UDF"
   }
@@ -1611,7 +1604,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
     case udf: TestPythonUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
-    case udf: TestScalaUDF => session.udf.register(udf.name, udf.udf)
+    case udf: TestScalaUDF =>
+      val registry = session.sessionState.functionRegistry
+      registry.createOrReplaceTempFunction(udf.name, udf.builder, "scala_udf")
     case other => throw new RuntimeException(s"Unknown UDF class [${other.getClass}]")
   }
 
