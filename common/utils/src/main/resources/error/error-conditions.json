@@ -2495,6 +2495,24 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_LABEL_USAGE" : {
+    "message" : [
+      "The usage of the label <labelName> is invalid."
+    ],
+    "subClass" : {
+      "DOES_NOT_EXIST" : {
+        "message" : [
+          "Label was used in the <statementType> statement, but the label does not belong to any surrounding block."
+        ]
+      },
+      "ITERATE_IN_COMPOUND" : {
+        "message" : [
+          "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
+        ]
+      }
+    },
+    "sqlState" : "42K0L"
+  },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
       "Invalid lambda function call."
