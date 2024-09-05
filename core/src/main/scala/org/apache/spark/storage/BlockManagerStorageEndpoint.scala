@@ -64,6 +64,7 @@ class BlockManagerStorageEndpoint(
         if (shuffleManager != null) {
           shuffleManager.unregisterShuffle(shuffleId)
         } else {
+          logDebug(log"Ignore remove shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
           true
         }
       }
