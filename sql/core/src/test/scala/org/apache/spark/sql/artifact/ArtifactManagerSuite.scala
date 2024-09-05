@@ -375,4 +375,17 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val msg = instance.getClass.getMethod("msg").invoke(instance)
     assert(msg == "Hello Talon! Nice to meet you!")
   }
+
+  test("Support Windows style paths") {
+    withTempPath { path =>
+      val stagingPath = path.toPath
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      val remotePath = Paths.get("windows\\abc.txt")
+      artifactManager.addArtifact(remotePath, stagingPath, None)
+      val file = ArtifactManager.artifactRootDirectory
+        .resolve(s"$sessionUUID/windows/abc.txt")
+        .toFile
+      assert(file.exists())
+    }
+  }
 }
