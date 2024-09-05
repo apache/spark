@@ -419,15 +419,12 @@ class OperatorStateMetadataV2FileManager(
 
   private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
-
-    if (schemaFiles.length > 1) {
-      val filesBeforeThreshold = schemaFiles.filter { path =>
-        val batchIdInPath = path.getName.split("_").head.toLong
-        batchIdInPath <= thresholdBatchId
-      }
-      filesBeforeThreshold.foreach { path =>
-        fm.delete(path)
-      }
+    val filesBeforeThreshold = schemaFiles.filter { path =>
+      val batchIdInPath = path.getName.split("_").head.toLong
+      batchIdInPath <= thresholdBatchId
+    }
+    filesBeforeThreshold.foreach { path =>
+      fm.delete(path)
     }
   }
 
