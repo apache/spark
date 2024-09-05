@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.text
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
@@ -35,12 +33,8 @@ case class TextTable(
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
-  override def newScanBuilder(options: CaseInsensitiveStringMap): TextScanBuilder = {
-    val mergedOptions = this.options.asCaseSensitiveMap().asScala ++
-      options.asCaseSensitiveMap().asScala
-    TextScanBuilder(sparkSession, fileIndex, schema, dataSchema,
-      new CaseInsensitiveStringMap(mergedOptions.asJava))
-  }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): TextScanBuilder =
+    TextScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     Some(StructType(Array(StructField("value", StringType))))

@@ -37,12 +37,8 @@ case class OrcTable(
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder = {
-    val mergedOptions = this.options.asCaseSensitiveMap().asScala ++
-      options.asCaseSensitiveMap().asScala
-    OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema,
-      new CaseInsensitiveStringMap(mergedOptions.asJava))
-  }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder =
+    OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     OrcUtils.inferSchema(sparkSession, files, options.asScala.toMap)
