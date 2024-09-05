@@ -431,6 +431,10 @@ class OperatorStateMetadataV2FileManager(
     }
   }
 
+  // Deletes all metadata files that are below a thresholdBatchId, except
+  // for the latest metadata file so that we have at least 1 metadata and schema
+  // file at all times per each stateful query
+  // Returns the batchId of the earliest schema file we want to keep
   private def deleteMetadataFiles(thresholdBatchId: Long): Long = {
     val metadataFiles = fm.list(metadataDirPath, batchFilesFilter)
 
