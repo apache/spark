@@ -57,8 +57,8 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           throw new AnalysisException(
             errorClass = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
             messageParameters = Map(
-              "dt1" -> dt1.toString,
-              "dt2" -> dt2.toString)
+              "dt1" -> dt1.sql,
+              "dt2" -> dt2.sql)
           )
         }
       }
@@ -144,11 +144,11 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       }
 
       // Cast non-index columns to the least common type
-      val nonIndexColumnsAttr = child.output.filterNot(
+      val nonIndexColumns = child.output.filterNot(
         _.exprId == inferredIndexColumn.asInstanceOf[Attribute].exprId)
-      val nonIndexTypes = nonIndexColumnsAttr.map(_.dataType)
+      val nonIndexTypes = nonIndexColumns.map(_.dataType)
       val commonType = leastCommonType(nonIndexTypes)
-      val nonIndexColumnsAsLCT = nonIndexColumnsAttr.map { attr =>
+      val nonIndexColumnsAsLCT = nonIndexColumns.map { attr =>
         Alias(Cast(attr, commonType), attr.name)()
       }
 
@@ -156,7 +156,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       val allCastCols = indexColumnAsString +: nonIndexColumnsAsLCT
       val nonNullChild = Filter(IsNotNull(inferredIndexColumn), child)
       val sortedChild = Sort(
-        Seq(SortOrder(inferredIndexColumn.asInstanceOf[Attribute], Ascending)),
+        Seq(SortOrder(inferredIndexColumn, Ascending)),
         global = true,
         nonNullChild
       )
@@ -170,14 +170,12 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       if (fullCollectedRows.isEmpty) {
         // Return a DataFrame with a single column "key" containing non-index column names
         val keyAttr = AttributeReference("key", StringType, nullable = false)()
-        val keyValues = nonIndexColumnsAttr.map(
-          _.name).map(name => UTF8String.fromString(name))
+        val keyValues = nonIndexColumns.map(col => UTF8String.fromString(col.name))
         val keyRows = keyValues.map(value => InternalRow(value))
 
         Transpose(Seq(keyAttr), keyRows)
       } else {
-        val rowCount = fullCollectedRows.length
-        if (rowCount > maxValues) {
+        if (fullCollectedRows.length > maxValues) {
           throw new AnalysisException(
             errorClass = "TRANSPOSE_EXCEED_ROW_LIMIT",
             messageParameters = Map(
@@ -186,7 +184,7 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         }
 
         // Transpose the matrix
-        val nonIndexColumnNames = nonIndexColumnsAttr.map(_.name)
+        val nonIndexColumnNames = nonIndexColumns.map(_.name)
         val nonIndexColumnDataTypes = projectAllCastCols.output.tail.map(attr => attr.dataType)
         val transposedMatrix = transposeMatrix(
           fullCollectedRows, nonIndexColumnNames, nonIndexColumnDataTypes)

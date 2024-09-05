@@ -114,10 +114,12 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
       StructField("name", StringType)
     ))
     val emptyDF = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+    val transposedDF = emptyDF.transpose()
     checkAnswer(
-      emptyDF.transpose(),
+      transposedDF,
       Row("name") :: Nil
     )
+    assertResult(StringType)(transposedDF.schema("x").dataType)
   }
 
   test("transpose empty frame w/o column names") {
