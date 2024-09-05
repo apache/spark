@@ -30,7 +30,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog, StatefulOperator}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
@@ -391,17 +391,6 @@ class OperatorStateMetadataV2FileManager(
    */
   protected val batchFilesFilter: PathFilter = (path: Path) => isBatchFile(path)
 
-  /** List the available batches on file system. */
-  protected def listBatches: Array[Long] = {
-    val batchIds = fm.list(metadataDirPath, batchFilesFilter)
-      // Batches must be files
-      .filter(f => f.isFile)
-      .map(f => pathToBatchId(f.getPath))
-    logInfo(log"BatchIds found from listing: ${MDC(BATCH_ID, batchIds.sorted.mkString(", "))}")
-
-    batchIds.sorted
-  }
-
   private def pathToBatchId(path: Path): Long = {
     path.getName.toLong
   }
@@ -409,8 +398,8 @@ class OperatorStateMetadataV2FileManager(
   def purgeMetadataFiles(): Unit = {
     val thresholdBatchId = findThresholdBatchId()
     if (thresholdBatchId != -1) {
-      deleteSchemaFiles(thresholdBatchId)
-      deleteMetadataFiles(thresholdBatchId)
+      val earliestBatchIdKept = deleteMetadataFiles(thresholdBatchId)
+      deleteSchemaFiles(earliestBatchIdKept - 1)
     }
   }
 
@@ -435,17 +424,39 @@ class OperatorStateMetadataV2FileManager(
     }
   }
 
-  private def deleteMetadataFiles(thresholdBatchId: Long): Unit = {
+  private def deleteMetadataFiles(thresholdBatchId: Long): Long = {
     val metadataFiles = fm.list(metadataDirPath, batchFilesFilter)
 
-    if (metadataFiles.length > 1) {
-      metadataFiles.foreach { batchFile =>
-        val batchId = pathToBatchId(batchFile.getPath)
-        if (batchId <= thresholdBatchId) {
-          fm.delete(batchFile.getPath)
-        }
+    if (metadataFiles.isEmpty) {
+      return -1L // No files to delete
+    }
+
+    val sortedBatchIds = metadataFiles.map(file => pathToBatchId(file.getPath)).sorted
+    val latestBatchId = sortedBatchIds.last
+    var highestDeletedBatchId = -1L
+
+    metadataFiles.foreach { batchFile =>
+      val batchId = pathToBatchId(batchFile.getPath)
+      if (batchId <= thresholdBatchId && batchId < latestBatchId) {
+        fm.delete(batchFile.getPath)
+        highestDeletedBatchId = math.max(highestDeletedBatchId, batchId)
       }
     }
+    val latestMetadata = OperatorStateMetadataReader.createReader(
+      stateCheckpointPath,
+      hadoopConf,
+      2,
+      latestBatchId
+    ).read()
+
+    val earliestBatchToKeep = latestMetadata match {
+      case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
+        val schemaFilePath = stateStoreInfo.head.stateSchemaFilePath
+        schemaFilePath.split("_").head.toLong
+      case None => -1
+    }
+
+    earliestBatchToKeep
   }
 
   private[sql] def listSchemaFiles(): Array[Path] = {

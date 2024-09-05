@@ -88,7 +88,7 @@ class IncrementalExecution(
 
   override protected def purge(threshold: Long): Unit = {}
 
-  def stateSchemaDirPath(
+  private def stateSchemaDirPath(
       ssw: StateStoreWriter,
       storeName: Option[String] = None): Path = {
     def stateInfo = ssw.getStateInfo
@@ -103,7 +103,7 @@ class IncrementalExecution(
     }
   }
 
-  override protected def purgeOldest(statefulOp: StatefulOperator): Unit = {
+  override protected def purgeStatefulMetadata(statefulOp: StatefulOperator): Unit = {
     statefulOp match {
       case ssw: StateStoreWriter =>
         ssw.operatorStateMetadataVersion match {
@@ -120,7 +120,7 @@ class IncrementalExecution(
                 new Path(parentCheckpointLocation, "commits").toString
               ),
               hadoopConf)
-              fileManager.purgeMetadataFiles()
+            fileManager.purgeMetadataFiles()
           case _ =>
         }
       case _ =>
@@ -128,7 +128,7 @@ class IncrementalExecution(
   }
 
   private def purgeMetadataFiles(statefulOp: StatefulOperator): Unit = {
-    purgeOldestAsync(statefulOp)
+    purgeStatefulMetadataAsync(statefulOp)
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -292,6 +292,8 @@ class IncrementalExecution(
                 ssw.operatorStateMetadataVersion,
                 Some(currentBatchId))
             metadataWriter.write(metadata)
+            // we want to purge the stale metadata files that were written for this operator
+            // on the first batch of each new run
             purgeMetadataFiles(statefulOp)
           case _ =>
         }
