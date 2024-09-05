@@ -96,8 +96,8 @@ object SchemaUtil {
    * and will only return a row for `next()` only if the grouping key in the next row
    * from state store is different (or there are no more rows)
    *
-   * Note that as state rows in RocksDB are ordered, all state rows with the
-   * same grouping key will appear consecutively during the iterator traversal.
+   * Note that all state rows with the same grouping key are co-located so they will
+   * appear consecutively during the iterator traversal.
    */
   def unifyMapStateRowPair(
       stateRows: Iterator[UnsafeRowPair],
@@ -134,8 +134,8 @@ object SchemaUtil {
       row
     }
 
-    // state rows are sorted in rocksDB. So all of the rows with same
-    // grouping key were grouped together consecutively
+    // All of the rows with the same grouping key were co-located and were
+    // grouped together consecutively.
     new Iterator[InternalRow] {
       var curGroupingKey: UnsafeRow = _
       var curStateRowPair: UnsafeRowPair = _
@@ -268,10 +268,9 @@ object SchemaUtil {
         val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
           stateStoreColFamilySchema.keySchema, "key")
         val userKeySchema = stateStoreColFamilySchema.userKeyEncoderSchema.get
-        val valueMapSchema = new MapType(
+        val valueMapSchema = MapType.apply(
           keyType = userKeySchema,
-          valueType = stateStoreColFamilySchema.valueSchema,
-          valueContainsNull = false
+          valueType = stateStoreColFamilySchema.valueSchema
         )
 
         new StructType()
@@ -284,7 +283,8 @@ object SchemaUtil {
     }
   }
 
-  /** Helper functions for map state data source reader.
+  /**
+   * Helper functions for map state data source reader.
    *
    * Map state variables are stored in RocksDB state store has the schema of
    * `TransformWithStateKeyValueRowSchemaUtils.getCompositeKeySchema()`;
@@ -292,15 +292,17 @@ object SchemaUtil {
    * "key": groupingKey, "map_value": Map(userKey -> value).
    *
    * The following functions help to translate between two schema.
-  */
+   */
   def isMapStateVariable(
       stateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
     stateVariableInfoOpt.isDefined &&
       stateVariableInfoOpt.get.stateVariableType == MapState
   }
 
-  /** Given key-value schema generated from `generateSchemaForStateVar()`,
-   *  returns the compositeKey schema that key is stored in the state store */
+  /**
+   * Given key-value schema generated from `generateSchemaForStateVar()`,
+   * returns the compositeKey schema that key is stored in the state store
+   */
   def getCompositeKeySchema(schema: StructType): StructType = {
     val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
       schema, "key").asInstanceOf[StructType]
@@ -317,8 +319,10 @@ object SchemaUtil {
       .add("userKey", userKeySchema.get)
   }
 
-  /** Given key-value schema generated from `generateSchemaForStateVar()`,
-   * returns the value schema that it is stored in the state store */
+  /**
+   * Given key-value schema generated from `generateSchemaForStateVar()`,
+   * returns the value schema that it is stored in the state store
+   */
   def getValueSchema(schema: StructType): StructType = {
     SchemaUtil.getSchemaAsDataType(schema, "map_value").asInstanceOf[MapType]
       .valueType.asInstanceOf[StructType]
