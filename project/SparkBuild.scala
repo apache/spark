@@ -433,10 +433,6 @@ object SparkBuild extends PomBuild {
     enable(SparkR.settings)(core)
   }
 
-  if (!profiles.contains("opentelemetry")) {
-    enable(OpenTelemetry.settings)(core)
-  }
-
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
    * jar.
@@ -1330,13 +1326,6 @@ object Volcano {
   // Exclude all volcano file for Compile and Test
   lazy val settings = Seq(
     unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
-  )
-}
-
-object OpenTelemetry {
-  // Exclude all OpenTelemetry files for Compile and Test
-  lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "OpenTelemetry*.scala"
   )
 }
 
