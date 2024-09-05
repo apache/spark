@@ -36,8 +36,12 @@ case class AvroTable(
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
-  override def newScanBuilder(options: CaseInsensitiveStringMap): AvroScanBuilder =
-    new AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): AvroScanBuilder = {
+    val mergedOptions = this.options.asCaseSensitiveMap().asScala ++
+      options.asCaseSensitiveMap().asScala
+    AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema,
+      new CaseInsensitiveStringMap(mergedOptions.asJava))
+  }
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
