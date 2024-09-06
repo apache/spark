@@ -145,7 +145,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * complexity.
    *
    * @see
-   *   [[org.apache.spark.sql.api.KeyValueGroupedDataset#flatMapGroups]]
+   *   `org.apache.spark.sql.api.KeyValueGroupedDataset#flatMapGroups`
    * @since 3.4.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
@@ -172,7 +172,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * complexity.
    *
    * @see
-   *   [[org.apache.spark.sql.api.KeyValueGroupedDataset#flatMapGroups]]
+   *   `org.apache.spark.sql.api.KeyValueGroupedDataset#flatMapGroups`
    * @since 3.4.0
    */
   def flatMapSortedGroups[U](
@@ -987,7 +987,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * complexity.
    *
    * @see
-   *   [[org.apache.spark.sql.api.KeyValueGroupedDataset#cogroup]]
+   *   `org.apache.spark.sql.api.KeyValueGroupedDataset#cogroup`
    * @since 3.4.0
    */
   def cogroupSorted[U, R: Encoder](other: KVDS[K, U])(thisSortExprs: Column*)(
@@ -1005,7 +1005,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * complexity.
    *
    * @see
-   *   [[org.apache.spark.sql.api.KeyValueGroupedDataset#cogroup]]
+   *   `org.apache.spark.sql.api.KeyValueGroupedDataset#cogroup`
    * @since 3.4.0
    */
   def cogroupSorted[U, R](
