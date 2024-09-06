@@ -24,6 +24,7 @@ import org.apache.spark.sql.types.StructType
 
 /** @inheritdoc */
 abstract class Catalog extends api.Catalog[Dataset] {
+
   /** @inheritdoc */
   override def listDatabases(): Dataset[Database]
 
@@ -164,4 +165,3 @@ abstract class Catalog extends api.Catalog[Dataset] {
       options: util.Map[String, String]): DataFrame =
     super.createTable(tableName, source, schema, description, options)
 }
-
