@@ -45,7 +45,7 @@ import org.apache.spark.tags.ExtendedSQLTest
 class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  test("DataFrame function and SQL functon parity") {
+  test("DataFrame function and SQL function parity") {
     // This test compares the available list of DataFrame functions in
     // org.apache.spark.sql.functions with the SQL function registry. This attempts to verify that
     // the DataFrame functions are a subset of the functions in the SQL function registry (subject
