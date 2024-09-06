@@ -5,7 +5,7 @@ py4j>=0.10.9.7
 numpy>=1.21
 pyarrow>=4.0.0
 six==1.16.0
-pandas>=1.4.4
+pandas>=2.0.0
 scipy
 plotly
 mlflow>=2.3.1
