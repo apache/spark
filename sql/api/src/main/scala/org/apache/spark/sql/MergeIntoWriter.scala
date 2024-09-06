@@ -14,46 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 
-import scala.jdk.CollectionConverters._
-
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{Expression, MergeIntoTableCommand}
-import org.apache.spark.connect.proto.MergeAction
-import org.apache.spark.sql.functions.expr
 
 /**
  * `MergeIntoWriter` provides methods to define and execute merge actions based on specified
  * conditions.
  *
+ * Please note that schema evolution is disabled by default.
+ *
  * @tparam T
  *   the type of data in the Dataset.
- * @param table
- *   the name of the target table for the merge operation.
- * @param ds
- *   the source Dataset to merge into the target table.
- * @param on
- *   the merge condition.
- * @param schemaEvolutionEnabled
- *   whether to enable automatic schema evolution for this merge operation. Default is `false`.
- *
  * @since 4.0.0
  */
 @Experimental
-class MergeIntoWriter[T] private[sql] (
-    table: String,
-    ds: Dataset[T],
-    on: Column,
-    schemaEvolutionEnabled: Boolean = false) {
-  import ds.sparkSession.RichColumn
+abstract class MergeIntoWriter[T] {
+  private var schemaEvolution: Boolean = false
 
-  private[sql] var matchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
-  private[sql] var notMatchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
-  private[sql] var notMatchedBySourceActions: Seq[MergeAction] = Seq.empty[MergeAction]
+  private[sql] def schemaEvolutionEnabled: Boolean = schemaEvolution
 
   /**
    * Initialize a `WhenMatched` action without any condition.
@@ -176,84 +155,39 @@ class MergeIntoWriter[T] private[sql] (
 
   /**
    * Enable automatic schema evolution for this merge operation.
+   *
    * @return
    *   A `MergeIntoWriter` instance with schema evolution enabled.
    */
   def withSchemaEvolution(): MergeIntoWriter[T] = {
-    new MergeIntoWriter[T](this.table, this.ds, this.on, schemaEvolutionEnabled = true)
-      .withNewMatchedActions(this.matchedActions: _*)
-      .withNewNotMatchedActions(this.notMatchedActions: _*)
-      .withNewNotMatchedBySourceActions(this.notMatchedBySourceActions: _*)
+    schemaEvolution = true
+    this
   }
 
   /**
    * Executes the merge operation.
    */
-  def merge(): Unit = {
-    if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
-      throw new SparkRuntimeException(
-        errorClass = "NO_MERGE_ACTION_SPECIFIED",
-        messageParameters = Map.empty)
-    }
+  def merge(): Unit
 
-    val matchedActionExpressions =
-      matchedActions.map(Expression.newBuilder().setMergeAction(_)).map(_.build())
-    val notMatchedActionExpressions =
-      notMatchedActions.map(Expression.newBuilder().setMergeAction(_)).map(_.build())
-    val notMatchedBySourceActionExpressions =
-      notMatchedBySourceActions.map(Expression.newBuilder().setMergeAction(_)).map(_.build())
-    val mergeIntoCommand = MergeIntoTableCommand
-      .newBuilder()
-      .setTargetTableName(table)
-      .setSourceTablePlan(ds.plan.getRoot)
-      .setMergeCondition(on.expr)
-      .addAllMatchActions(matchedActionExpressions.asJava)
-      .addAllNotMatchedActions(notMatchedActionExpressions.asJava)
-      .addAllNotMatchedBySourceActions(notMatchedBySourceActionExpressions.asJava)
-      .setWithSchemaEvolution(schemaEvolutionEnabled)
-      .build()
+  // Action callbacks.
+  protected[sql] def insertAll(condition: Option[Column]): MergeIntoWriter[T]
 
-    ds.sparkSession.execute(
-      proto.Command
-        .newBuilder()
-        .setMergeIntoTableCommand(mergeIntoCommand)
-        .build())
-  }
+  protected[sql] def insert(
+      condition: Option[Column],
+      map: Map[String, Column]): MergeIntoWriter[T]
 
-  private[sql] def withNewMatchedActions(action: MergeAction*): MergeIntoWriter[T] = {
-    this.matchedActions = this.matchedActions :++ action
-    this
-  }
+  protected[sql] def updateAll(
+      condition: Option[Column],
+      notMatchedBySource: Boolean): MergeIntoWriter[T]
 
-  private[sql] def withNewNotMatchedActions(action: MergeAction*): MergeIntoWriter[T] = {
-    this.notMatchedActions = this.notMatchedActions :++ action
-    this
-  }
+  protected[sql] def update(
+      condition: Option[Column],
+      map: Map[String, Column],
+      notMatchedBySource: Boolean): MergeIntoWriter[T]
 
-  private[sql] def withNewNotMatchedBySourceActions(action: MergeAction*): MergeIntoWriter[T] = {
-    this.notMatchedBySourceActions = this.notMatchedBySourceActions :++ action
-    this
-  }
-
-  private[sql] def buildMergeAction(
-      actionType: MergeAction.ActionType,
-      conditionOpt: Option[Column],
-      assignmentsOpt: Option[Map[String, Column]] = None): MergeAction = {
-    val assignmentsProtoOpt = assignmentsOpt.map {
-      _.map { case (k, v) =>
-        MergeAction.Assignment
-          .newBuilder()
-          .setKey(expr(k).expr)
-          .setValue(v.expr)
-          .build()
-      }.toSeq.asJava
-    }
-
-    val builder = MergeAction.newBuilder().setActionType(actionType)
-    conditionOpt.map(c => builder.setCondition(c.expr))
-    assignmentsProtoOpt.map(builder.addAllAssignments)
-    builder.build()
-  }
+  protected[sql] def delete(
+      condition: Option[Column],
+      notMatchedBySource: Boolean): MergeIntoWriter[T]
 }
 
 /**
@@ -265,7 +199,6 @@ class MergeIntoWriter[T] private[sql] (
  * @param condition
  *   An optional condition Expression that specifies when the actions should be applied. If the
  *   condition is None, the actions will be applied to all matched rows.
- *
  * @tparam T
  *   The type of data in the MergeIntoWriter.
  */
@@ -279,11 +212,8 @@ case class WhenMatched[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the update all action configured.
    */
-  def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR, condition))
-  }
+  def updateAll(): MergeIntoWriter[T] =
+    mergeIntoWriter.updateAll(condition, notMatchedBySource = false)
 
   /**
    * Specifies an action to update matched rows in the DataFrame with the provided column
@@ -294,11 +224,8 @@ case class WhenMatched[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the update action configured.
    */
-  def update(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE, condition, Some(map)))
-  }
+  def update(map: Map[String, Column]): MergeIntoWriter[T] =
+    mergeIntoWriter.update(condition, map, notMatchedBySource = false)
 
   /**
    * Specifies an action to delete matched rows from the DataFrame.
@@ -306,10 +233,8 @@ case class WhenMatched[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the delete action configured.
    */
-  def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedActions(
-      mergeIntoWriter.buildMergeAction(MergeAction.ActionType.ACTION_TYPE_DELETE, condition))
-  }
+  def delete(): MergeIntoWriter[T] =
+    mergeIntoWriter.delete(condition, notMatchedBySource = false)
 }
 
 /**
@@ -335,11 +260,8 @@ case class WhenNotMatched[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the insert all action configured.
    */
-  def insertAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_INSERT_STAR, condition))
-  }
+  def insertAll(): MergeIntoWriter[T] =
+    mergeIntoWriter.insertAll(condition)
 
   /**
    * Specifies an action to insert non-matched rows into the DataFrame with the provided column
@@ -350,11 +272,8 @@ case class WhenNotMatched[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the insert action configured.
    */
-  def insert(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_INSERT, condition, Some(map)))
-  }
+  def insert(map: Map[String, Column]): MergeIntoWriter[T] =
+    mergeIntoWriter.insert(condition, map)
 }
 
 /**
@@ -379,11 +298,8 @@ case class WhenNotMatchedBySource[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the update all action configured.
    */
-  def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR, condition))
-  }
+  def updateAll(): MergeIntoWriter[T] =
+    mergeIntoWriter.updateAll(condition, notMatchedBySource = true)
 
   /**
    * Specifies an action to update non-matched rows in the target DataFrame with the provided
@@ -394,11 +310,8 @@ case class WhenNotMatchedBySource[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the update action configured.
    */
-  def update(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_UPDATE, condition, Some(map)))
-  }
+  def update(map: Map[String, Column]): MergeIntoWriter[T] =
+    mergeIntoWriter.update(condition, map, notMatchedBySource = true)
 
   /**
    * Specifies an action to delete non-matched rows from the target DataFrame when not matched by
@@ -407,9 +320,6 @@ case class WhenNotMatchedBySource[T] private[sql] (
    * @return
    *   The MergeIntoWriter instance with the delete action configured.
    */
-  def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceActions(
-      mergeIntoWriter
-        .buildMergeAction(MergeAction.ActionType.ACTION_TYPE_DELETE, condition))
-  }
+  def delete(): MergeIntoWriter[T] =
+    mergeIntoWriter.delete(condition, notMatchedBySource = true)
 }

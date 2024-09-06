@@ -27,9 +27,10 @@ import org.apache.spark.sql.streaming.GroupState
  * org.apache.spark.api.java.function.* to scala functions.
  *
  * Please note that this class is being used in Spark Connect Scala UDFs. We need to be careful
- * with any modifications to this class, otherwise we will break backwards compatibility. Concretely
- * this means you can only add methods to this class. You cannot rename the class, move it, change
- * its `serialVersionUID`, remove methods, change method signatures, or change method semantics.
+ * with any modifications to this class, otherwise we will break backwards compatibility.
+ * Concretely this means you can only add methods to this class. You cannot rename the class, move
+ * it, change its `serialVersionUID`, remove methods, change method signatures, or change method
+ * semantics.
  */
 @SerialVersionUID(2019907615267866045L)
 private[sql] object ToScalaUDF extends Serializable {
@@ -42,8 +43,8 @@ private[sql] object ToScalaUDF extends Serializable {
   def apply[K, V, U](f: MapGroupsFunction[K, V, U]): (K, Iterator[V]) => U =
     (key, values) => f.call(key, values.asJava)
 
-  def apply[K, V, S, U](f: MapGroupsWithStateFunction[K, V, S, U])
-    : (K, Iterator[V], GroupState[S]) => U =
+  def apply[K, V, S, U](
+      f: MapGroupsWithStateFunction[K, V, S, U]): (K, Iterator[V], GroupState[S]) => U =
     (key, values, state) => f.call(key, values.asJava, state)
 
   def apply[V, U](f: MapPartitionsFunction[V, U]): Iterator[V] => Iterator[U] =
@@ -53,11 +54,11 @@ private[sql] object ToScalaUDF extends Serializable {
     (key, values) => f.call(key, values.asJava).asScala
 
   def apply[K, V, S, U](f: FlatMapGroupsWithStateFunction[K, V, S, U])
-    : (K, Iterator[V], GroupState[S]) => Iterator[U] =
+      : (K, Iterator[V], GroupState[S]) => Iterator[U] =
     (key, values, state) => f.call(key, values.asJava, state).asScala
 
-  def apply[K, V, U, R](f: CoGroupFunction[K, V, U, R])
-    : (K, Iterator[V], Iterator[U]) => Iterator[R] =
+  def apply[K, V, U, R](
+      f: CoGroupFunction[K, V, U, R]): (K, Iterator[V], Iterator[U]) => Iterator[R] =
     (key, left, right) => f.call(key, left.asJava, right.asJava).asScala
 
   def apply[V](f: ForeachFunction[V]): V => Unit = f.call
@@ -83,13 +84,13 @@ private[sql] object ToScalaUDF extends Serializable {
         |  $funcCall
         |}""".stripMargin)
     }
-    */
+   */
 
   /**
    * Create a scala.Function0 wrapper for a org.apache.spark.sql.api.java.UDF0 instance.
    */
-  def apply(f: UDF0[_]): () => Any = {
-    () => f.asInstanceOf[UDF0[Any]].call()
+  def apply(f: UDF0[_]): () => Any = { () =>
+    f.asInstanceOf[UDF0[Any]].call()
   }
 
   /**
@@ -124,126 +125,633 @@ private[sql] object ToScalaUDF extends Serializable {
    * Create a scala.Function5 wrapper for a org.apache.spark.sql.api.java.UDF5 instance.
    */
   def apply(f: UDF5[_, _, _, _, _, _]): (Any, Any, Any, Any, Any) => Any = {
-    f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
+    f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any)
   }
 
   /**
    * Create a scala.Function6 wrapper for a org.apache.spark.sql.api.java.UDF6 instance.
    */
   def apply(f: UDF6[_, _, _, _, _, _, _]): (Any, Any, Any, Any, Any, Any) => Any = {
-    f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+    f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
   }
 
   /**
    * Create a scala.Function7 wrapper for a org.apache.spark.sql.api.java.UDF7 instance.
    */
   def apply(f: UDF7[_, _, _, _, _, _, _, _]): (Any, Any, Any, Any, Any, Any, Any) => Any = {
-    f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+    f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
   }
 
   /**
    * Create a scala.Function8 wrapper for a org.apache.spark.sql.api.java.UDF8 instance.
    */
-  def apply(f: UDF8[_, _, _, _, _, _, _, _, _]): (Any, Any, Any, Any, Any, Any, Any, Any) => Any = {
-    f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(
+      f: UDF8[_, _, _, _, _, _, _, _, _]): (Any, Any, Any, Any, Any, Any, Any, Any) => Any = {
+    f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
   }
 
   /**
    * Create a scala.Function9 wrapper for a org.apache.spark.sql.api.java.UDF9 instance.
    */
-  def apply(f: UDF9[_, _, _, _, _, _, _, _, _, _]): (Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any = {
-    f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF9[_, _, _, _, _, _, _, _, _, _])
+      : (Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any = {
+    f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
   }
 
   /**
    * Create a scala.Function10 wrapper for a org.apache.spark.sql.api.java.UDF10 instance.
    */
-  def apply(f: UDF10[_, _, _, _, _, _, _, _, _, _, _]): Function10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF10[_, _, _, _, _, _, _, _, _, _, _])
+      : Function10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
+    f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
   }
 
   /**
    * Create a scala.Function11 wrapper for a org.apache.spark.sql.api.java.UDF11 instance.
    */
-  def apply(f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _]): Function11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _])
+      : Function11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
+    f.asInstanceOf[UDF11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function12 wrapper for a org.apache.spark.sql.api.java.UDF12 instance.
    */
-  def apply(f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]): Function12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _])
+      : Function12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
+    f.asInstanceOf[UDF12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function13 wrapper for a org.apache.spark.sql.api.java.UDF13 instance.
    */
-  def apply(f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _])
+      : Function13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
+    f.asInstanceOf[UDF13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function14 wrapper for a org.apache.spark.sql.api.java.UDF14 instance.
    */
-  def apply(f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _])
+      : Function14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
+    f.asInstanceOf[
+      UDF14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function15 wrapper for a org.apache.spark.sql.api.java.UDF15 instance.
    */
-  def apply(f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function15[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[
+      UDF15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function16 wrapper for a org.apache.spark.sql.api.java.UDF16 instance.
    */
-  def apply(f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function16[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[
+      UDF16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function17 wrapper for a org.apache.spark.sql.api.java.UDF17 instance.
    */
-  def apply(f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function17[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[UDF17[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function18 wrapper for a org.apache.spark.sql.api.java.UDF18 instance.
    */
-  def apply(f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function18[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[UDF18[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function19 wrapper for a org.apache.spark.sql.api.java.UDF19 instance.
    */
-  def apply(f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function19[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[UDF19[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function20 wrapper for a org.apache.spark.sql.api.java.UDF20 instance.
    */
-  def apply(f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function20[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[UDF20[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function21 wrapper for a org.apache.spark.sql.api.java.UDF21 instance.
    */
-  def apply(f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(
+      f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function21[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[UDF21[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
 
   /**
    * Create a scala.Function22 wrapper for a org.apache.spark.sql.api.java.UDF22 instance.
    */
-  def apply(f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any] = {
-    f.asInstanceOf[UDF22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def apply(
+      f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): Function22[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any] = {
+    f.asInstanceOf[UDF22[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
   }
   // scalastyle:on line.size.limit
 }
@@ -253,9 +761,10 @@ private[sql] object ToScalaUDF extends Serializable {
  * foreachPartition.
  *
  * Please note that this class is being used in Spark Connect Scala UDFs. We need to be careful
- * with any modifications to this class, otherwise we will break backwards compatibility. Concretely
- * this means you can only add methods to this class. You cannot rename the class, move it, change
- * its `serialVersionUID`, remove methods, change method signatures, or change method semantics.
+ * with any modifications to this class, otherwise we will break backwards compatibility.
+ * Concretely this means you can only add methods to this class. You cannot rename the class, move
+ * it, change its `serialVersionUID`, remove methods, change method signatures, or change method
+ * semantics.
  */
 @SerialVersionUID(0L) // TODO
 object UDFAdaptors extends Serializable {
@@ -285,7 +794,8 @@ object UDFAdaptors extends Serializable {
   def iterableOnceToSeq[A, B](f: A => IterableOnce[B]): A => Seq[B] =
     value => f(value).iterator.toSeq
 
-  def mapGroupsToFlatMapGroups[K, V, U](f: (K, Iterator[V]) => U): (K, Iterator[V]) => Iterator[U] =
+  def mapGroupsToFlatMapGroups[K, V, U](
+      f: (K, Iterator[V]) => U): (K, Iterator[V]) => Iterator[U] =
     (key, values) => Iterator.single(f(key, values))
 
   def mapGroupsWithStateToFlatMapWithState[K, V, S, U](
@@ -309,8 +819,8 @@ object UDFAdaptors extends Serializable {
   }
 
   def flatMapGroupsWithMappedValues[K, IV, V, R](
-     f: (K, Iterator[V]) => IterableOnce[R],
-     valueMapFunc: Option[IV => V]): (K, Iterator[IV]) => IterableOnce[R] = valueMapFunc match {
+      f: (K, Iterator[V]) => IterableOnce[R],
+      valueMapFunc: Option[IV => V]): (K, Iterator[IV]) => IterableOnce[R] = valueMapFunc match {
     case Some(mapValue) => (k, values) => f(k, values.map(mapValue))
     case None => f.asInstanceOf[(K, Iterator[IV]) => IterableOnce[R]]
   }

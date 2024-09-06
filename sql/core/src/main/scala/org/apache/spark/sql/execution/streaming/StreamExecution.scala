@@ -42,7 +42,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
-import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
+import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
@@ -346,9 +346,11 @@ abstract class StreamExecution(
         getLatestExecutionContext().updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
-        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException]) {
+        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException] ||
+          e.isInstanceOf[ForeachUserFuncException]) {
           // We want to maintain the current way users get the causing exception
-          // from the StreamingQueryException. Hence the ForeachBatch exception is unwrapped here.
+          // from the StreamingQueryException.
+          // Hence the ForeachBatch/Foreach exception is unwrapped here.
           e.getCause
         } else {
           e
@@ -728,6 +730,7 @@ object StreamExecution {
           if e2.getCause != null =>
         isInterruptionException(e2.getCause, sc)
       case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
+      case fes: ForeachUserFuncException => isInterruptionException(fes.getCause, sc)
       case se: SparkException =>
         if (se.getCause == null) {
           isCancelledJobGroup(se.getMessage)
