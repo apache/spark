@@ -3333,9 +3333,16 @@ case class FormatNumber(x: Expression, d: Expression)
 
 /**
  * Splits a string into arrays of sentences, where each sentence is an array of words.
- * The `lang` and `country` arguments are optional,
- * if they are both omitted, the default locale (the lang is 'en' and the country is 'US') is used.
- * if the `country` is omitted, the default `country` ('') is used.
+ * The `lang` and `country` arguments are optional, their default values are all '',
+ *  - When they are omitted:
+ *    1. If they are both omitted, the `locale(language='', country='')` is used.
+ *    2. If the `country` is omitted, the `locale(language, country='')` is used.
+ *  - When they are null:
+ *    1. If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+ *    2. If the `language` is null and the `country` is not null,
+ *       the `Locale.US - locale(language='en', country='US')` is used.
+ *    3. If the `language` is not null and the `country` is null, the `locale(language)` is used.
+ *    4. If neither is `null`, the `locale(language, country)` is used.
  */
 @ExpressionDescription(
   usage = "_FUNC_(str[, lang[, country]]) - Splits `str` into an array of array of words.",
