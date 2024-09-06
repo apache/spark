@@ -51,6 +51,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var totalExecutorCores: String = null
   var propertiesFile: String = null
   private var loadSparkDefaults: Boolean = false
+  var yarnDockerImage: String = null;
+  var yarnDockerMounts: String = null;
+  var executorDockerImage: String = null;
+  var executorDockerMounts: String = null;
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -228,6 +232,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME")).orNull
     }
 
+    yarnDockerImage = Option(yarnDockerImage).orNull
+    yarnDockerMounts = Option(yarnDockerMounts).orNull
+    executorDockerImage = Option(executorDockerImage).orNull
+    executorDockerMounts = Option(executorDockerMounts).orNull
+
     // Set name from main class if not given
     name = Option(name).orElse(Option(mainClass)).orNull
     if (name == null && primaryResource != null) {
@@ -324,6 +333,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  driverExtraClassPath    $driverExtraClassPath
     |  driverExtraLibraryPath  $driverExtraLibraryPath
     |  driverExtraJavaOptions  $driverExtraJavaOptions
+    |  yarnDockerImage         $yarnDockerImage
+    |  yarnDockerMounts        $yarnDockerMounts
+    |  executorDockerImage     $executorDockerImage
+    |  executorDockerMounts    $executorDockerMounts
     |  supervise               $supervise
     |  queue                   $queue
     |  numExecutors            $numExecutors
@@ -393,6 +406,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case DRIVER_LIBRARY_PATH =>
         driverExtraLibraryPath = value
+
+      case YARN_DOCKER_IMAGE =>
+        yarnDockerImage = value
+
+      case YARN_DOCKER_MOUNTS =>
+        yarnDockerMounts = value
+
+      case EXECUTOR_DOCKER_IMAGE =>
+        executorDockerImage = value
+
+      case EXECUTOR_DOCKER_MOUNTS =>
+        executorDockerMounts = value
 
       case PROPERTIES_FILE =>
         propertiesFile = value
@@ -556,6 +581,16 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              classpath.
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+        |
+        |  --yarn-docker-image         The docker image to use for YARN app master - also sets
+        |                              the YARN app master runtime to docker.
+        |
+        |  --yarn-docker-mounts        The volumes to mount on the YARN docker container.
+        |
+        |  --executor-docker-image     The docker image to use for the executors - also sets the
+        |                              executor runtime to docker.
+        |
+        |  --executor-docker-mounts    The volumes to mount on the executor docker containers.
         |
         |  --proxy-user NAME           User to impersonate when submitting the application.
         |                              This argument does not work with --principal / --keytab.

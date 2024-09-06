@@ -689,6 +689,24 @@ private[spark] class SparkSubmit extends Logging {
         mergeFn = Some(mergeFileLists(_, _))),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives",
         mergeFn = Some(mergeFileLists(_, _))),
+      OptionAssigner(
+        if (args.yarnDockerImage != null) "docker" else "",
+        YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_TYPE"),
+      OptionAssigner(
+        args.yarnDockerImage, YARN, ALL_DEPLOY_MODES,
+        confKey = "spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE"),
+      OptionAssigner(
+        args.yarnDockerMounts, YARN, ALL_DEPLOY_MODES,
+        confKey = "spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_MOUNTS"),
+      OptionAssigner(
+        if (args.executorDockerImage != null) "docker" else "",
+        YARN, ALL_DEPLOY_MODES, confKey = "spark.executorEnv.YARN_CONTAINER_RUNTIME_TYPE"),
+      OptionAssigner(
+        args.executorDockerImage, YARN, ALL_DEPLOY_MODES,
+        confKey = "spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE"),
+      OptionAssigner(
+        args.executorDockerMounts, YARN, ALL_DEPLOY_MODES,
+        confKey = "spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_MOUNTS"),
 
       // Other options
       OptionAssigner(args.numExecutors, YARN | KUBERNETES, ALL_DEPLOY_MODES,
