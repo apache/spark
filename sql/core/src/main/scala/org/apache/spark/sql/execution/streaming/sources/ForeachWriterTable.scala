@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -146,6 +149,9 @@ class ForeachDataWriter[T](
     try {
       writer.process(rowConverter(record))
     } catch {
+      case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+        errorOrNull = e
+        throw ForeachUserFuncException(e)
       case t: Throwable =>
         errorOrNull = t
         throw t
@@ -172,3 +178,12 @@ class ForeachDataWriter[T](
  * An empty [[WriterCommitMessage]]. [[ForeachWriter]] implementations have no global coordination.
  */
 case object ForeachWriterCommitMessage extends WriterCommitMessage
+
+/**
+ * Exception that wraps the exception thrown in the user provided function in Foreach sink.
+ */
+private[sql] case class ForeachUserFuncException(cause: Throwable)
+  extends SparkException(
+    errorClass = "FOREACH_USER_FUNCTION_ERROR",
+    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    cause = cause)

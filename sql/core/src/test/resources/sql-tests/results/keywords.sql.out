@@ -163,6 +163,7 @@ INTO	false
 INVOKER	false
 IS	false
 ITEMS	false
+ITERATE	false
 JOIN	false
 KEYS	false
 LANGUAGE	false
@@ -170,6 +171,7 @@ LAST	false
 LATERAL	false
 LAZY	false
 LEADING	false
+LEAVE	false
 LEFT	false
 LIKE	false
 LIMIT	false

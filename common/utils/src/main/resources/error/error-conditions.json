@@ -1463,6 +1463,12 @@
     ],
     "sqlState" : "42704"
   },
+  "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in flatMapGroupsWithState. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
@@ -1472,6 +1478,12 @@
   "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
     "message" : [
       "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
+  "FOREACH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
   },
@@ -2494,6 +2506,24 @@
       "The value of the config \"<bufferSizeConfKey>\" must be less than 2048 MiB, but got <bufferSizeConfValue> MiB."
     ],
     "sqlState" : "F0000"
+  },
+  "INVALID_LABEL_USAGE" : {
+    "message" : [
+      "The usage of the label <labelName> is invalid."
+    ],
+    "subClass" : {
+      "DOES_NOT_EXIST" : {
+        "message" : [
+          "Label was used in the <statementType> statement, but the label does not belong to any surrounding block."
+        ]
+      },
+      "ITERATE_IN_COMPOUND" : {
+        "message" : [
+          "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
+        ]
+      }
+    },
+    "sqlState" : "42K0L"
   },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
