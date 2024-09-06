@@ -228,6 +228,14 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * ------------------------- */
 
   /**
+   * Interface through which the user may create, drop, alter or query underlying databases,
+   * tables, functions etc.
+   *
+   * @since 2.0.0
+   */
+  def catalog: Catalog[DS]
+
+  /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
    * reading and the returned DataFrame is the batch scan query plan of this table. If it's a
    * view, the returned DataFrame is simply the query plan of the view, which can either be a
