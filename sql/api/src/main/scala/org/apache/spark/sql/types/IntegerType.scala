@@ -25,7 +25,8 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class IntegerType private() extends IntegralType {
+class IntegerType private () extends IntegralType {
+
   /**
    * The default size of a value of the IntegerType is 4 bytes.
    */
