@@ -439,25 +439,26 @@ class OperatorStateMetadataV2FileManager(
       return -1L // No files to delete
     }
 
-    val sortedBatchIds = metadataFiles.map(file => pathToBatchId(file.getPath)).sorted
+    // get all the metadata files for which we don't have commit logs
+    val sortedBatchIds = metadataFiles
+      .map(file => pathToBatchId(file.getPath))
+      .filter(_ < thresholdBatchId)
+      .sorted
+
+    // we don't want to delete the batchId right before the last one
     val latestBatchId = sortedBatchIds.last
-    var highestDeletedBatchId = -1L
 
     metadataFiles.foreach { batchFile =>
       val batchId = pathToBatchId(batchFile.getPath)
-      if (batchId <= thresholdBatchId && batchId < latestBatchId) {
+      if (batchId < latestBatchId) {
         fm.delete(batchFile.getPath)
-        highestDeletedBatchId = math.max(highestDeletedBatchId, batchId)
       }
     }
-    // Find the next batch id immediately greater than threshold batchId.
-    // We use this to find the metadata and schema files we want to keep
-    val nextBatchId = sortedBatchIds.find(_ > thresholdBatchId).getOrElse(latestBatchId)
     val latestMetadata = OperatorStateMetadataReader.createReader(
       stateOpIdPath,
       hadoopConf,
       2,
-      nextBatchId
+      latestBatchId
     ).read()
 
     // find the batchId of the earliest schema file we need to keep
