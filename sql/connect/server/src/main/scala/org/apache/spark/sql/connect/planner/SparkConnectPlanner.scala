@@ -3044,12 +3044,13 @@ class SparkConnectPlanner(
       sessionHolder.streamingServersideListenerHolder.streamingQueryStartedEventCache.remove(
         query.runId.toString))
     queryStartedEvent.foreach {
-      logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
-        log"[UserId: ${MDC(LogKeys.USER_ID, userId)}] " +
-        log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
-        log"[query id: ${MDC(LogKeys.QUERY_ID, query.id)}]" +
-        log"[query runId: ${MDC(LogKeys.QUERY_RUN_ID, query.runId)}] " +
-        log"Adding QueryStartedEvent to response")
+      logInfo(
+        log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+          log"[UserId: ${MDC(LogKeys.USER_ID, userId)}] " +
+          log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
+          log"[query id: ${MDC(LogKeys.QUERY_ID, query.id)}]" +
+          log"[query runId: ${MDC(LogKeys.QUERY_RUN_ID, query.runId)}] " +
+          log"Adding QueryStartedEvent to response")
       e => resultBuilder.setQueryStartedEventJson(e.json)
     }
 
