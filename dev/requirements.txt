@@ -3,7 +3,7 @@ py4j>=0.10.9.7
 
 # PySpark dependencies (optional)
 numpy>=1.21
-pyarrow>=4.0.0
+pyarrow>=10.0.0
 six==1.16.0
 pandas>=1.4.4
 scipy
