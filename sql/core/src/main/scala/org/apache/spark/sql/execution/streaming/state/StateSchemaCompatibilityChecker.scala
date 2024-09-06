@@ -186,11 +186,7 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
-      // if we have reached this block, the schema has changed in an acceptable way and
-      // want to write this schema file out
-      if (stateSchemaVersion == 3 && newStateSchemaList != existingStateSchemaList) {
-        createSchemaFile(newStateSchemaList, stateSchemaVersion)
-      }
+      // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
       false
     }
   }

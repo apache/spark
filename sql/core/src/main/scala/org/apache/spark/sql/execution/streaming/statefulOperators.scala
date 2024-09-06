@@ -166,6 +166,9 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics
 
+  // This method is only used to fetch the state schema directory path for
+  // operators that use StateSchemaV3, as prior versions only use a single
+  // set file path.
   def stateSchemaDirPath(
       storeName: Option[String] = None): Path = {
     val stateCheckpointPath =

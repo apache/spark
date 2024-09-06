@@ -1444,6 +1444,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
       SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
       withTempDir { chkptDir =>
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
         val inputData = MemoryStream[(String, String)]
         val result1 = inputData.toDS()
           .groupByKey(x => x._1)
@@ -1478,6 +1480,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1", "str2")),
           StopStream
         )
+        // because we don't change the schema for this run, there won't
+        // be a new schema file written.
         testStream(result3, OutputMode.Update())(
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
           AddData(inputData, ("a", "str4")),
@@ -1490,15 +1494,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
         // by the end of the test, there have been 4 batches,
         // so the metadata and schema logs, and commitLog has been purged
-        // for batch 0, so metadata and schema files should only exist for
-        // batches 1 and 2, and the schema hasn't evolved for the last batch
-        assert(getFiles(metadataPath).length == 3)
-        assert(getFiles(stateSchemaPath).length == 2)
+        // for batches 0 and 1 so metadata and schema files exist for batches 0, 1, 2, 3
+        // and we only need to keep metadata files for batches 2, 3, and the since schema
+        // hasn't changed between batches 2, 3, we only keep the schema file for batch 2
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 1)
       }
     }
   }
 
-  test("transformWithState - verify that not all metadata and schema logs are purged") {
+  test("transformWithState - verify that all metadata and schema logs are not purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1554,6 +1559,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
 
         // Metadata files exist for batches 0, 12, and the thresholdBatchId is 8
+        // as this is the earliest batchId for which the commit log is not present,
         // so we need to keep metadata files for batch 0 so we can read the commit
         // log correspondingly
         assert(getFiles(metadataPath).length == 2)

@@ -403,7 +403,7 @@ class OperatorStateMetadataV2FileManager(
 
   def purgeMetadataFiles(): Unit = {
     val thresholdBatchId = findThresholdBatchId()
-    if (thresholdBatchId != -1) {
+    if (thresholdBatchId != 0) {
       val earliestBatchIdKept = deleteMetadataFiles(thresholdBatchId)
       // we need to delete everything from 0 to (earliestBatchIdKept - 1), inclusive
       deleteSchemaFiles(earliestBatchIdKept - 1)
@@ -414,7 +414,7 @@ class OperatorStateMetadataV2FileManager(
   // log is present, so we will delete any file that precedes the batch for the oldest
   // commit log
   private def findThresholdBatchId(): Long = {
-    commitLog.listBatchesOnDisk.headOption.getOrElse(0L) - 1L
+    commitLog.listBatchesOnDisk.headOption.getOrElse(0L)
   }
 
   private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
@@ -470,7 +470,7 @@ class OperatorStateMetadataV2FileManager(
       case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
         val schemaFilePath = stateStoreInfo.head.stateSchemaFilePath
         new Path(schemaFilePath).getName.split("_").head.toLong
-      case _ => -1
+      case _ => 0
     }
 
     earliestBatchToKeep

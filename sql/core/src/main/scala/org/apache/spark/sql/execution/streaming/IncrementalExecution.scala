@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataV2FileManager, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -58,7 +58,7 @@ class IncrementalExecution(
     val offsetSeqMetadata: OffsetSeqMetadata,
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean)
-  extends QueryExecution(sparkSession, logicalPlan) with Logging with AsyncLogPurge {
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
@@ -78,39 +78,6 @@ class IncrementalExecution(
       StreamingGlobalLimitStrategy(outputMode) ::
       StreamingTransformWithStateStrategy ::
       TransformWithStateInPandasStrategy :: Nil
-  }
-
-  // Methods to enable the use of AsyncLogPurge
-  protected val minLogEntriesToMaintain: Int =
-    sparkSession.sessionState.conf.minBatchesToRetain
-
-  val errorNotifier: ErrorNotifier = new ErrorNotifier()
-
-  override protected def purge(threshold: Long): Unit = {}
-
-  override protected def purgeStatefulMetadata(statefulOp: StatefulOperator): Unit = {
-    statefulOp match {
-      case ssw: StateStoreWriter =>
-        ssw.operatorStateMetadataVersion match {
-          case 2 =>
-            // checkpointLocation of the operator is runId/state, and commitLog path is
-            // runId/commits, so we want the parent of the checkpointLocation to get the
-            // commit log path.
-            val parentCheckpointLocation = new Path(checkpointLocation).getParent
-            val fileManager = new OperatorStateMetadataV2FileManager(
-              parentCheckpointLocation,
-              sparkSession,
-              ssw
-            )
-            fileManager.purgeMetadataFiles()
-          case _ =>
-        }
-      case _ =>
-    }
-  }
-
-  private def purgeMetadataFiles(statefulOp: StatefulOperator): Unit = {
-    purgeStatefulMetadataAsync(statefulOp)
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -274,9 +241,6 @@ class IncrementalExecution(
                 ssw.operatorStateMetadataVersion,
                 Some(currentBatchId))
             metadataWriter.write(metadata)
-            // we want to purge the stale metadata files that were written for this operator
-            // on the first batch of each new run
-            purgeMetadataFiles(statefulOp)
           case _ =>
         }
         statefulOp
