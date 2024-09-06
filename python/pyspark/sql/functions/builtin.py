@@ -7306,7 +7306,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     +---+---+
     >>> w = Window.partitionBy("c1").orderBy("c2")
     >>> df.withColumn("previous_value", lag("c2").over(w)).show()
-    +---+---+-------------+
+    +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
     |  a|  1|          NULL|
@@ -7316,7 +7316,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  8|             2|
     +---+---+--------------+
     >>> df.withColumn("previous_value", lag("c2", 1, 0).over(w)).show()
-    +---+---+-------------+
+    +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
     |  a|  1|             0|
@@ -7326,7 +7326,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  8|             2|
     +---+---+--------------+
     >>> df.withColumn("previous_value", lag("c2", 2, -1).over(w)).show()
-    +---+---+-------------+
+    +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
     |  a|  1|            -1|
