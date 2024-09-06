@@ -301,16 +301,16 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("static SQL conf comes from SparkConf") {
-    val previousValue = sqlConf.getConf(GLOBAL_TEMP_DATABASE)
+    val previousValue = sparkContext.conf.get(GLOBAL_TEMP_DATABASE)
     try {
-      sqlConf.setConf(GLOBAL_TEMP_DATABASE, "a")
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, "a")
       val newSession = new SparkSession(sparkContext)
-      assert(sqlConf.getConf(GLOBAL_TEMP_DATABASE) == "a")
+      assert(newSession.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) == "a")
       checkAnswer(
         newSession.sql(s"SET ${GLOBAL_TEMP_DATABASE.key}"),
         Row(GLOBAL_TEMP_DATABASE.key, "a"))
     } finally {
-      sqlConf.setConf(GLOBAL_TEMP_DATABASE, previousValue)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, previousValue)
     }
   }
 
