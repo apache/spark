@@ -55,7 +55,11 @@ object AliasResolution {
       case e if !e.resolved => u
       case g: Generator => MultiAlias(g, Nil)
       case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
-      case se @ ScopedExpression(ne: NamedExpression, _) => Alias(se, ne.name)()
+      case se @ ScopedExpression(e: Expression, _) =>
+        resolve(UnresolvedAlias(e, optGenAliasFunc)) match {
+          case ne: NamedExpression => Alias(se, ne.name)()
+          case _ => se
+        }
       case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
       case e if optGenAliasFunc.isDefined =>
         Alias(child, optGenAliasFunc.get.apply(e))()
