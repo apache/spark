@@ -1478,15 +1478,21 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1", "str2")),
           StopStream
         )
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str4")),
+          CheckNewAnswer(("a", "2", "str3")),
+          StopStream
+        )
         val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
         val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
 
         val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
-        // by the end of the test, there have been 3 batches,
+        // by the end of the test, there have been 4 batches,
         // so the metadata and schema logs, and commitLog has been purged
         // for batch 0, so metadata and schema files should only exist for
-        // batches 1 and 2
-        assert(getFiles(metadataPath).length == 2)
+        // batches 1 and 2, and the schema hasn't evolved for the last batch
+        assert(getFiles(metadataPath).length == 3)
         assert(getFiles(stateSchemaPath).length == 2)
       }
     }
@@ -1527,14 +1533,18 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "9", "str1")),
           AddData(inputData, ("a", "str1")),
           CheckNewAnswer(("a", "10", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "11", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "12", "str1")),
           StopStream
         )
         testStream(result1, OutputMode.Update())(
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
           AddData(inputData, ("a", "str1")),
-          CheckNewAnswer(("a", "11", "str1")),
+          CheckNewAnswer(("a", "13", "str1")),
           AddData(inputData, ("a", "str1")),
-          CheckNewAnswer(("a", "12", "str1")),
+          CheckNewAnswer(("a", "14", "str1")),
           StopStream
         )
 
@@ -1543,9 +1553,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
 
-        // By this time, the commit log only exists for batch 10 onwards
-        // So we only have 1 metadata and schema file to keep
-        assert(getFiles(metadataPath).length == 1)
+        // Metadata files exist for batches 0, 12, and the thresholdBatchId is 8
+        // so we need to keep metadata files for batch 0 so we can read the commit
+        // log correspondingly
+        assert(getFiles(metadataPath).length == 2)
         assert(getFiles(stateSchemaPath).length == 1)
       }
     }

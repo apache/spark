@@ -442,8 +442,12 @@ class OperatorStateMetadataV2FileManager(
     // get all the metadata files for which we don't have commit logs
     val sortedBatchIds = metadataFiles
       .map(file => pathToBatchId(file.getPath))
-      .filter(_ < thresholdBatchId)
+      .filter(_ <= thresholdBatchId)
       .sorted
+
+    if (sortedBatchIds.isEmpty) {
+      return -1L
+    }
 
     // we don't want to delete the batchId right before the last one
     val latestBatchId = sortedBatchIds.last
