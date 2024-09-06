@@ -1906,9 +1906,13 @@ class SessionCatalog(
   /**
    * List all built-in collation's meta with the given pattern.
    */
-  def listCollations(pattern: String): Seq[Collation] = {
-    CollationFactory.listCollations(
-      DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA, pattern).asScala.toSeq
+  def listCollations(pattern: Option[String]): Seq[Collation] = {
+    val collationIdentifiers = CollationFactory.listCollations(
+      DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA).asScala.toSeq
+    val filteredCollationNames = StringUtils.filterPattern(
+      collationIdentifiers.map(_.getName), pattern.getOrElse("*"))
+    val nameToIdentifiers = collationIdentifiers.map(ident => ident.getName -> ident).toMap
+    filteredCollationNames.map(name => nameToIdentifiers(name)).map(CollationFactory.loadCollation)
   }
 
   // -----------------

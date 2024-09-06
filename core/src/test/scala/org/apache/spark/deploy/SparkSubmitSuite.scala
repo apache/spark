@@ -1802,6 +1802,23 @@ class SparkSubmitSuite
     val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
     assert(classpath.contains("."))
   }
+
+  // Requires Python dependencies for Spark Connect. Should be enabled by default.
+  ignore("Spark Connect application submission (Python)") {
+    val pyFile = File.createTempFile("remote_test", ".py")
+    pyFile.deleteOnExit()
+    val content =
+      "from pyspark.sql import SparkSession;" +
+        "spark = SparkSession.builder.getOrCreate();" +
+        "assert 'connect' in str(type(spark));" +
+        "assert spark.range(1).first()[0] == 0"
+    FileUtils.write(pyFile, content, StandardCharsets.UTF_8)
+    val args = Seq(
+      "--name", "testPyApp",
+      "--remote", "local",
+      pyFile.getAbsolutePath)
+    runSparkSubmit(args)
+  }
 }
 
 object JarCreationTest extends Logging {

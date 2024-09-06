@@ -17,11 +17,13 @@
 package org.apache.spark.sql
 
 import java.net.URI
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
@@ -212,16 +214,7 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(this)
 
   /**
@@ -390,77 +383,30 @@ class SparkSession private[sql] (
     execute(command)
   }
 
-  /**
-   * Add a single artifact to the client session.
-   *
-   * Currently only local files with extensions .jar and .class are supported.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(path: String): Unit = client.addArtifact(path)
+  override def addArtifact(path: String): Unit = client.addArtifact(path)
 
-  /**
-   * Add a single artifact to the client session.
-   *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(uri: URI): Unit = client.addArtifact(uri)
+  override def addArtifact(uri: URI): Unit = client.addArtifact(uri)
 
-  /**
-   * Add a single in-memory artifact to the session while preserving the directory structure
-   * specified by `target` under the session's working directory of that particular file
-   * extension.
-   *
-   * Supported target file extensions are .jar and .class.
-   *
-   * ==Example==
-   * {{{
-   *  addArtifact(bytesBar, "foo/bar.class")
-   *  addArtifact(bytesFlat, "flat.class")
-   *  // Directory structure of the session's working directory for class files would look like:
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
-   * }}}
-   *
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(bytes: Array[Byte], target: String): Unit = client.addArtifact(bytes, target)
+  override def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    client.addArtifact(bytes, target)
+  }
 
-  /**
-   * Add a single artifact to the session while preserving the directory structure specified by
-   * `target` under the session's working directory of that particular file extension.
-   *
-   * Supported target file extensions are .jar and .class.
-   *
-   * ==Example==
-   * {{{
-   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
-   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
-   *  // Directory structure of the session's working directory for class files would look like:
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
-   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
-   * }}}
-   *
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @Experimental
-  def addArtifact(source: String, target: String): Unit = client.addArtifact(source, target)
+  override def addArtifact(source: String, target: String): Unit = {
+    client.addArtifact(source, target)
+  }
 
-  /**
-   * Add one or more artifacts to the session.
-   *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @Experimental
   @scala.annotation.varargs
-  def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
+  override def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
 
   /**
    * Register a ClassFinder for dynamically generated classes.
@@ -616,17 +562,14 @@ class SparkSession private[sql] (
   private[sql] var releaseSessionOnClose = true
 
   private[sql] def registerObservation(planId: Long, observation: Observation): Unit = {
-    if (observationRegistry.putIfAbsent(planId, observation) != null) {
-      throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
-    }
+    observation.markRegistered()
+    observationRegistry.putIfAbsent(planId, observation)
   }
 
-  private[sql] def setMetricsAndUnregisterObservation(
-      planId: Long,
-      metrics: Map[String, Any]): Unit = {
+  private[sql] def setMetricsAndUnregisterObservation(planId: Long, metrics: Row): Unit = {
     val observationOrNull = observationRegistry.remove(planId)
     if (observationOrNull != null) {
-      observationOrNull.setMetricsAndNotify(Some(metrics))
+      observationOrNull.setMetricsAndNotify(metrics)
     }
   }
 
@@ -641,6 +584,10 @@ class SparkSession private[sql] (
 object SparkSession extends Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
+  private var server: Option[Process] = None
+  private[sql] val sparkOptions = sys.props.filter { p =>
+    p._1.startsWith("spark.") && p._2.nonEmpty
+  }.toMap
 
   private val sessions = CacheBuilder
     .newBuilder()
@@ -671,6 +618,51 @@ object SparkSession extends Logging {
     if (getActiveSession.isEmpty) {
       setActiveSession(session)
     }
+  }
+
+  /**
+   * Create a new Spark Connect server to connect locally.
+   */
+  private[sql] def withLocalConnectServer[T](f: => T): T = {
+    synchronized {
+      val remoteString = sparkOptions
+        .get("spark.remote")
+        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+
+      val maybeConnectScript =
+        Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
+
+      if (server.isEmpty &&
+        remoteString.exists(_.startsWith("local")) &&
+        maybeConnectScript.exists(Files.exists(_))) {
+        server = Some {
+          val args =
+            Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
+              .filter(p => !p._1.startsWith("spark.remote"))
+              .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
+          val pb = new ProcessBuilder(args: _*)
+          // So don't exclude spark-sql jar in classpath
+          pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.start()
+        }
+
+        // Let the server start. We will directly request to set the configurations
+        // and this sleep makes less noisy with retries.
+        Thread.sleep(2000L)
+        System.setProperty("spark.remote", "sc://localhost")
+
+        // scalastyle:off runtimeaddshutdownhook
+        Runtime.getRuntime.addShutdownHook(new Thread() {
+          override def run(): Unit = if (server.isDefined) {
+            new ProcessBuilder(maybeConnectScript.get.toString)
+              .start()
+          }
+        })
+        // scalastyle:on runtimeaddshutdownhook
+      }
+    }
+    f
   }
 
   /**
@@ -815,6 +807,16 @@ object SparkSession extends Logging {
     }
 
     private def applyOptions(session: SparkSession): Unit = {
+      // Only attempts to set Spark SQL configurations.
+      // If the configurations are static, it might throw an exception so
+      // simply ignore it for now.
+      sparkOptions
+        .filter { case (k, _) =>
+          k.startsWith("spark.sql.")
+        }
+        .foreach { case (key, value) =>
+          Try(session.conf.set(key, value))
+        }
       options.foreach { case (key, value) =>
         session.conf.set(key, value)
       }
@@ -837,7 +839,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def create(): SparkSession = {
+    def create(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
@@ -857,7 +859,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def getOrCreate(): SparkSession = {
+    def getOrCreate(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse({
           var existingSession = sessions.get(builder.configuration)

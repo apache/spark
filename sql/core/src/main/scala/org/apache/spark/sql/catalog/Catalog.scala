@@ -667,12 +667,4 @@ abstract class Catalog {
    * @since 3.5.0
    */
   def listCatalogs(pattern: String): Dataset[CatalogMetadata]
-
-  /**
-   * Returns a list of collations which name match the specify pattern and
-   * available in this session.
-   *
-   * @since 4.0.0
-   */
-  def listCollations(pattern: String): Dataset[CollationMetadata]
 }

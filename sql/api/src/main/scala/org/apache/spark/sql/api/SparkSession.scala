@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import _root_.java.io.Closeable
 import _root_.java.lang
+import _root_.java.net.URI
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -311,6 +312,90 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 2.0.0
    */
   def sql(sqlText: String): DS[Row] = sql(sqlText, Map.empty[String, Any])
+
+  /**
+   * Add a single artifact to the current session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(path: String): Unit
+
+  /**
+   * Add a single artifact to the current session.
+   *
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(uri: URI): Unit
+
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(bytes: Array[Byte], target: String): Unit
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(source: String, target: String): Unit
+
+  /**
+   * Add one or more artifacts to the session.
+   *
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  @scala.annotation.varargs
+  def addArtifacts(uri: URI*): Unit
+
+  /**
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * `DataFrame`.
+   * {{{
+   *   sparkSession.read.parquet("/path/to/file.parquet")
+   *   sparkSession.read.schema(schema).json("/path/to/file.json")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  def read: DataFrameReader[DS]
 
   /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is

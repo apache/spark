@@ -43,7 +43,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -78,9 +78,8 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
 import org.apache.spark.sql.internal.ExpressionUtils.column
-import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1178,8 +1177,10 @@ class SparkConnectPlanner(
     if (input.isStreaming || executeHolderOpt.isEmpty) {
       CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     } else {
+      // TODO this might be too complex for no good reason. It might
+      //  be easier to inspect the plan after it completes.
       val observation = Observation(name)
-      observation.register(session, planId)
+      session.observationManager.register(observation, planId)
       executeHolderOpt.get.addObservation(name, observation)
       CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     }
@@ -1861,65 +1862,13 @@ class SparkConnectPlanner(
         }
         Some(CatalystDataToAvro(children.head, jsonFormatSchema))
 
-      // Protobuf-specific functions
-      case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
-        Some(ProtobufDataToCatalyst(children(0), msgName, desc, options))
-
-      case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
-        Some(CatalystDataToProtobuf(children(0), msgName, desc, options))
-
       case _ => None
     }
-  }
-
-  private def extractProtobufArgs(children: Seq[Expression]) = {
-    val msgName = extractString(children(1), "MessageClassName")
-    var desc = Option.empty[Array[Byte]]
-    var options = Map.empty[String, String]
-    if (children.length == 3) {
-      children(2) match {
-        case b: Literal => desc = Some(extractBinary(b, "binaryFileDescriptorSet"))
-        case o => options = extractMapData(o, "options")
-      }
-    } else if (children.length == 4) {
-      desc = Some(extractBinary(children(2), "binaryFileDescriptorSet"))
-      options = extractMapData(children(3), "options")
-    }
-    (msgName, desc, options)
-  }
-
-  private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
-    case Literal(bool: Boolean, BooleanType) => bool
-    case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
-  }
-
-  private def extractDouble(expr: Expression, field: String): Double = expr match {
-    case Literal(double: Double, DoubleType) => double
-    case other => throw InvalidPlanInput(s"$field should be a literal double, but got $other")
-  }
-
-  private def extractInteger(expr: Expression, field: String): Int = expr match {
-    case Literal(int: Int, IntegerType) => int
-    case other => throw InvalidPlanInput(s"$field should be a literal integer, but got $other")
-  }
-
-  private def extractLong(expr: Expression, field: String): Long = expr match {
-    case Literal(long: Long, LongType) => long
-    case other => throw InvalidPlanInput(s"$field should be a literal long, but got $other")
   }
 
   private def extractString(expr: Expression, field: String): String = expr match {
     case Literal(s, StringType) if s != null => s.toString
     case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
-  }
-
-  private def extractBinary(expr: Expression, field: String): Array[Byte] = expr match {
-    case Literal(b: Array[Byte], BinaryType) if b != null => b
-    case other => throw InvalidPlanInput(s"$field should be a literal binary, but got $other")
   }
 
   @scala.annotation.tailrec
@@ -1928,23 +1877,6 @@ class SparkConnectPlanner(
     case UnresolvedFunction(Seq("map"), args, _, _, _, _, _) =>
       extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
-  }
-
-  // Extract the schema from a literal string representing a JSON-formatted schema
-  private def extractDataTypeFromJSON(exp: proto.Expression): Option[DataType] = {
-    exp.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.LITERAL =>
-        exp.getLiteral.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            try {
-              Some(DataType.fromJson(exp.getLiteral.getString))
-            } catch {
-              case _: Exception => None
-            }
-          case _ => None
-        }
-      case _ => None
-    }
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -3494,16 +3426,14 @@ class SparkConnectPlanner(
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
     val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
-    var mergeInto = sourceDs
+    val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, column(transformExpression(cmd.getMergeCondition)))
-      .withNewMatchedActions(matchedActions: _*)
-      .withNewNotMatchedActions(notMatchedActions: _*)
-      .withNewNotMatchedBySourceActions(notMatchedBySourceActions: _*)
-
-    mergeInto = if (cmd.getWithSchemaEvolution) {
+      .asInstanceOf[MergeIntoWriterImpl[Row]]
+    mergeInto.matchedActions ++= matchedActions
+    mergeInto.notMatchedActions ++= notMatchedActions
+    mergeInto.notMatchedBySourceActions ++= notMatchedBySourceActions
+    if (cmd.getWithSchemaEvolution) {
       mergeInto.withSchemaEvolution()
-    } else {
-      mergeInto
     }
     mergeInto.merge()
     executeHolder.eventsManager.postFinished()

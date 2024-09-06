@@ -422,6 +422,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def showCollationsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.SHOW_COLLATIONS_INVALID_SCOPE",
+      messageParameters = Map("scope" -> toSQLId(identifier)),
+      ctx)
+  }
+
   def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",

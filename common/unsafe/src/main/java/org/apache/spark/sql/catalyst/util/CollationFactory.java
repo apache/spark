@@ -23,8 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
 
 import com.ibm.icu.text.CollationKey;
@@ -385,25 +383,18 @@ public final class CollationFactory {
 
       protected abstract Collation buildCollation();
 
-      static List<Collation> listCollations(String catalog, String schema, String pattern) {
+      static List<CollationIdentifier> listCollations(String catalog, String schema) {
         return Stream.concat(
-          CollationSpecUTF8.listCollations(catalog, schema, pattern).stream(),
-          CollationSpecICU.listCollations(catalog, schema, pattern).stream()).toList();
+          CollationSpecUTF8.listCollations(catalog, schema).stream(),
+          CollationSpecICU.listCollations(catalog, schema).stream()).toList();
       }
 
-      static List<String> filterPattern(List<String> names, String pattern) {
-        Set<String> filteredNames = new TreeSet<>();
-        for (String subPattern : pattern.trim().split("\\|")) {
-          try {
-            Pattern regex = Pattern.compile(
-              "(?i)" + subPattern.replaceAll("\\*", ".*"));
-            filteredNames.addAll(
-              names.stream().filter(name -> regex.matcher(name).matches()).toList());
-          } catch (PatternSyntaxException ignored) {
-            // ignore
-          }
+      static Collation loadCollation(CollationIdentifier collationIdentifier) {
+        Collation collationSpecUTF8 = CollationSpecUTF8.loadCollation(collationIdentifier);
+        if (collationSpecUTF8 == null) {
+          return CollationSpecICU.loadCollation(collationIdentifier);
         }
-        return filteredNames.stream().toList();
+        return collationSpecUTF8;
       }
     }
 
@@ -521,21 +512,23 @@ public final class CollationFactory {
         }
       }
 
-      static List<Collation> listCollations(String catalog, String schema, String pattern) {
-        List<Collation> collations = new ArrayList<>();
-        List<String> filteredCollationNames = filterPattern(
-          Arrays.asList(UTF8_BINARY_COLLATION_NAME, UTF8_LCASE_COLLATION_NAME), pattern);
-        filteredCollationNames.forEach(collationName -> {
-          try {
-            int collationId = CollationSpecUTF8.collationNameToId(
-              collationName, collationName.toUpperCase());
-            Collation collation = CollationSpecUTF8.fromCollationId(collationId).buildCollation();
-            collations.add(collation);
-          } catch (SparkException ignored) {
-            // ignore
-          }
-        });
-        return collations;
+      static List<CollationIdentifier> listCollations(String catalog, String schema) {
+        CollationIdentifier UTF8_BINARY_COLLATION_IDENT =
+          new CollationIdentifier(PROVIDER_SPARK, UTF8_BINARY_COLLATION_NAME, null);
+        CollationIdentifier UTF8_LCASE_COLLATION_IDENT =
+          new CollationIdentifier(PROVIDER_SPARK, UTF8_LCASE_COLLATION_NAME, null);
+        return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
+      }
+
+      static Collation loadCollation(CollationIdentifier collationIdentifier) {
+        try {
+          int collationId = CollationSpecUTF8.collationNameToId(
+            collationIdentifier.name, collationIdentifier.name.toUpperCase());
+          return CollationSpecUTF8.fromCollationId(collationId).buildCollation();
+        } catch (SparkException ignored) {
+          // ignore
+          return null;
+        }
       }
     }
 
@@ -847,21 +840,20 @@ public final class CollationFactory {
         return collationNames;
       }
 
-      static List<Collation> listCollations(String catalog, String schema, String pattern) {
-        List<Collation> collations = new ArrayList<>();
-        List<String> filteredCollationNames = filterPattern(allCollationNames(), pattern);
-        for (String collationName: filteredCollationNames) {
-          try {
-            int collationId = CollationSpecICU.collationNameToId(
-              collationName, collationName.toUpperCase());
-            Collation collation = CollationSpecICU.fromCollationId(collationId).buildCollation();
-            collations.add(collation);
-          } catch (SparkException ignored) {
-            // ignore
-          }
-        }
+      static List<CollationIdentifier> listCollations(String catalog, String schema) {
+        return allCollationNames().stream().map(name ->
+          new CollationIdentifier(PROVIDER_ICU, name, VersionInfo.ICU_VERSION.toString())).toList();
+      }
 
-        return collations;
+      static Collation loadCollation(CollationIdentifier collationIdentifier) {
+        try {
+          int collationId = CollationSpecICU.collationNameToId(
+            collationIdentifier.name, collationIdentifier.name.toUpperCase());
+          return CollationSpecICU.fromCollationId(collationId).buildCollation();
+        } catch (SparkException ignored) {
+          // ignore
+          return null;
+        }
       }
     }
 
@@ -1085,8 +1077,11 @@ public final class CollationFactory {
     return String.join(", ", suggestions);
   }
 
-  public static List<Collation> listCollations(
-      String catalog, String schema, String pattern) {
-    return Collation.CollationSpec.listCollations(catalog, schema, pattern);
+  public static List<CollationIdentifier> listCollations(String catalog, String schema) {
+    return Collation.CollationSpec.listCollations(catalog, schema);
+  }
+
+  public static Collation loadCollation(CollationIdentifier collationIdentifier) {
+    return Collation.CollationSpec.loadCollation(collationIdentifier);
   }
 }

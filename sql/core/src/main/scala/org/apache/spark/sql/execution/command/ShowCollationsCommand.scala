@@ -18,7 +18,10 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CollationFactory.Collation
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -26,10 +29,15 @@ import org.apache.spark.sql.types.StringType
  *
  * The syntax of this command is:
  * {{{
- *    SHOW COLLATIONS (LIKE? pattern)?;
+ *    SHOW identifier? COLLATIONS ((FROM | IN) ns=identifierReference)? (LIKE? pattern=stringLit);
  * }}}
  */
-case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCommand {
+case class ShowCollationsCommand(
+    ns: LogicalPlan,
+    userScope: Boolean,
+    systemScope: Boolean,
+    pattern: Option[String]) extends UnaryRunnableCommand {
+
   override val output: Seq[Attribute] = Seq(
     AttributeReference("COLLATION_CATALOG", StringType, nullable = false)(),
     AttributeReference("COLLATION_SCHEMA", StringType, nullable = false)(),
@@ -42,7 +50,18 @@ case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCo
     AttributeReference("ICU_VERSION", StringType)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.listCollations(pattern.getOrElse("*")).map(m => Row(
+    val ResolvedNamespace(catalog, ns, _) = child
+
+    val systemCollations: Seq[Collation] = if (systemScope) {
+      sparkSession.sessionState.catalog.listCollations(pattern)
+    } else Seq.empty
+
+    val userCollations: Seq[Collation] = if (userScope) {
+      // TODO add user scope collation
+      Seq.empty
+    } else Seq.empty
+
+    (systemCollations ++ userCollations).distinct.sortBy(_.collationName).map(m => Row(
       m.catalog,
       m.schema,
       m.collationName,
@@ -54,4 +73,10 @@ case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCo
       m.icuVersion
     ))
   }
+
+  override def child: LogicalPlan = ns
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): ShowCollationsCommand =
+    copy(ns = newChild)
 }

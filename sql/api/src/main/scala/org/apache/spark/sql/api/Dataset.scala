@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.api
 
-import scala.annotation.varargs
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -24,7 +23,8 @@ import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
-import org.apache.spark.sql.{functions, AnalysisException, Column, Encoder, Row, TypedColumn}
+import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
+import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -252,7 +252,6 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = if (extended) {
-    // TODO move ExplainMode?
     explain("extended")
   } else {
     explain("simple")
@@ -539,6 +538,18 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    */
   // scalastyle:off println
   def show(numRows: Int, truncate: Int, vertical: Boolean): Unit
+
+  /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 1.6.0
+   */
+  def na: DataFrameNaFunctions[DS]
 
   /**
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
@@ -1373,7 +1384,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group action
    * @since 1.6.0
    */
-  def reduce(func: ReduceFunction[T]): T = reduce(func.call)
+  def reduce(func: ReduceFunction[T]): T = reduce(ToScalaUDF(func))
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -1518,8 +1529,30 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   * @group typedrel
   * @since 3.0.0
   */
-  @varargs
+  @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): DS[T]
+
+  /**
+   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance. This method
+   * does not support streaming datasets.
+   *
+   * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
+   *
+   * {{{
+   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
+   *   val observation = Observation("my_metrics")
+   *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
+   *   observed_ds.write.parquet("ds.parquet")
+   *   val metrics = observation.get
+   * }}}
+   *
+   * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
+   *
+   * @group typedrel
+   * @since 3.3.0
+   */
+  @scala.annotation.varargs
+  def observe(observation: Observation, expr: Column, exprs: Column*): DS[T]
 
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function
@@ -2404,7 +2437,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): DS[U]
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): DS[U] =
+    mapPartitions(ToScalaUDF(f))(encoder)
 
   /**
    * (Scala-specific)
@@ -2415,7 +2449,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def flatMap[U: Encoder](func: T => IterableOnce[U]): DS[U] =
-    mapPartitions(_.flatMap(func))
+    mapPartitions(UDFAdaptors.flatMapToMapPartitions[T, U](func))
 
   /**
    * (Java-specific)
@@ -2426,8 +2460,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): DS[U] = {
-    val func: T => Iterator[U] = x => f.call(x).asScala
-    flatMap(func)(encoder)
+    mapPartitions(UDFAdaptors.flatMapToMapPartitions(f))(encoder)
   }
 
   /**
@@ -2436,7 +2469,9 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit
+  def foreach(f: T => Unit): Unit = {
+    foreachPartition(UDFAdaptors.foreachToForeachPartition(f))
+  }
 
   /**
    * (Java-specific)
@@ -2445,7 +2480,9 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @group action
    * @since 1.6.0
    */
-  def foreach(func: ForeachFunction[T]): Unit = foreach(func.call)
+  def foreach(func: ForeachFunction[T]): Unit = {
+    foreachPartition(UDFAdaptors.foreachToForeachPartition(func))
+  }
 
   /**
    * Applies a function `f` to each partition of this Dataset.
@@ -2463,7 +2500,7 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
-    foreachPartition((it: Iterator[T]) => func.call(it.asJava))
+    foreachPartition(ToScalaUDF(func))
   }
 
   /**
@@ -2801,6 +2838,51 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit
 
   /**
+   * Merges a set of updates, insertions, and deletions based on a source table into
+   * a target table.
+   *
+   * Scala Examples:
+   * {{{
+   *   spark.table("source")
+   *     .mergeInto("target", $"source.id" === $"target.id")
+   *     .whenMatched($"salary" === 100)
+   *     .delete()
+   *     .whenNotMatched()
+   *     .insertAll()
+   *     .whenNotMatchedBySource($"salary" === 100)
+   *     .update(Map(
+   *       "salary" -> lit(200)
+   *     ))
+   *     .merge()
+   * }}}
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
+
+  /**
+   * Create a write configuration builder for v2 sources.
+   *
+   * This builder is used to configure and execute write operations. For example, to append to an
+   * existing table, run:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").append()
+   * }}}
+   *
+   * This can also be used to create or replace existing tables:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
+   * }}}
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def writeTo(table: String): DataFrameWriterV2[T]
+
+  /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
    *
    * @since 2.0.0
@@ -2840,4 +2922,12 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    */
   @DeveloperApi
   def semanticHash(): Int
+
+  /**
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  def write: DataFrameWriter[T]
 }

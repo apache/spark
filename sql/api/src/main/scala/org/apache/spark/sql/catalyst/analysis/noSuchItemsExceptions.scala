@@ -201,3 +201,12 @@ class NoSuchIndexException private(
     this("INDEX_NOT_FOUND", Map("indexName" -> indexName, "tableName" -> tableName), cause)
   }
 }
+
+class CannotReplaceMissingTableException(
+    tableIdentifier: Identifier,
+    cause: Option[Throwable] = None)
+  extends AnalysisException(
+    errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+    messageParameters = Map("relationName"
+      -> quoteNameParts((tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
+    cause = cause)
