@@ -1843,6 +1843,13 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val DATAFRAME_TRANSPOSE_MAX_VALUES = buildConf("spark.sql.transposeMaxValues")
+    .doc("When doing a transpose without specifying values for the index column this is" +
+      " the maximum number of values that will be transposed without error.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(500)
+
   val RUN_SQL_ON_FILES = buildConf("spark.sql.runSQLOnFiles")
     .internal()
     .doc("When true, we could use `datasource`.`path` as table in SQL query.")
@@ -5711,6 +5718,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
+
+  def dataFrameTransposeMaxValues: Int = getConf(DATAFRAME_TRANSPOSE_MAX_VALUES)
 
   def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 

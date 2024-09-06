@@ -489,6 +489,14 @@ class Dataset[T] private[sql] (
     }
   }
 
+  private def buildTranspose(indices: Seq[Column]): DataFrame =
+    sparkSession.newDataFrame { builder =>
+      val transpose = builder.getTransposeBuilder.setInput(plan.getRoot)
+      indices.foreach { indexColumn =>
+        transpose.addIndexColumns(indexColumn.expr)
+      }
+    }
+
   /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
@@ -581,6 +589,14 @@ class Dataset[T] private[sql] (
       valueColumnName: String): DataFrame = {
     buildUnpivot(ids, None, variableColumnName, valueColumnName)
   }
+
+  /** @inheritdoc */
+  def transpose(indexColumn: Column): DataFrame =
+    buildTranspose(Seq(indexColumn))
+
+  /** @inheritdoc */
+  def transpose(): DataFrame =
+    buildTranspose(Seq.empty)
 
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>

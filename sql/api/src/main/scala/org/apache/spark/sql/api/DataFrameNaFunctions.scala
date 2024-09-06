@@ -42,16 +42,16 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values.
    *
-   * If `how` is "any", then drop rows containing any null or NaN values.
-   * If `how` is "all", then drop rows only if every column is null or NaN for that row.
+   * If `how` is "any", then drop rows containing any null or NaN values. If `how` is "all", then
+   * drop rows only if every column is null or NaN for that row.
    *
    * @since 1.3.1
    */
   def drop(how: String): DS[Row] = drop(toMinNonNulls(how))
 
   /**
-   * Returns a new `DataFrame` that drops rows containing any null or NaN values
-   * in the specified columns.
+   * Returns a new `DataFrame` that drops rows containing any null or NaN values in the specified
+   * columns.
    *
    * @since 1.3.1
    */
@@ -66,8 +66,8 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   def drop(cols: Seq[String]): DS[Row] = drop(cols.size, cols)
 
   /**
-   * Returns a new `DataFrame` that drops rows containing null or NaN values
-   * in the specified columns.
+   * Returns a new `DataFrame` that drops rows containing null or NaN values in the specified
+   * columns.
    *
    * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
    * If `how` is "all", then drop rows only if every specified column is null or NaN for that row.
@@ -77,8 +77,8 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   def drop(how: String, cols: Array[String]): DS[Row] = drop(how, cols.toImmutableArraySeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values
-   * in the specified columns.
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values in
+   * the specified columns.
    *
    * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
    * If `how` is "all", then drop rows only if every specified column is null or NaN for that row.
@@ -88,16 +88,16 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   def drop(how: String, cols: Seq[String]): DS[Row] = drop(toMinNonNulls(how), cols)
 
   /**
-   * Returns a new `DataFrame` that drops rows containing
-   * less than `minNonNulls` non-null and non-NaN values.
+   * Returns a new `DataFrame` that drops rows containing less than `minNonNulls` non-null and
+   * non-NaN values.
    *
    * @since 1.3.1
    */
   def drop(minNonNulls: Int): DS[Row] = drop(Option(minNonNulls))
 
   /**
-   * Returns a new `DataFrame` that drops rows containing
-   * less than `minNonNulls` non-null and non-NaN values in the specified columns.
+   * Returns a new `DataFrame` that drops rows containing less than `minNonNulls` non-null and
+   * non-NaN values in the specified columns.
    *
    * @since 1.3.1
    */
@@ -105,8 +105,8 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
     drop(minNonNulls, cols.toImmutableArraySeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that drops rows containing less than
-   * `minNonNulls` non-null and non-NaN values in the specified columns.
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing less than `minNonNulls`
+   * non-null and non-NaN values in the specified columns.
    *
    * @since 1.3.1
    */
@@ -145,16 +145,16 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   def fill(value: String): DS[Row]
 
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
-   * If a specified column is not a numeric column, it is ignored.
+   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns. If a
+   * specified column is not a numeric column, it is ignored.
    *
    * @since 2.2.0
    */
   def fill(value: Long, cols: Array[String]): DS[Row] = fill(value, cols.toImmutableArraySeq)
 
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
-   * If a specified column is not a numeric column, it is ignored.
+   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns. If a
+   * specified column is not a numeric column, it is ignored.
    *
    * @since 1.3.1
    */
@@ -176,18 +176,17 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
    */
   def fill(value: Double, cols: Seq[String]): DS[Row]
 
-
   /**
-   * Returns a new `DataFrame` that replaces null values in specified string columns.
-   * If a specified column is not a string column, it is ignored.
+   * Returns a new `DataFrame` that replaces null values in specified string columns. If a
+   * specified column is not a string column, it is ignored.
    *
    * @since 1.3.1
    */
   def fill(value: String, cols: Array[String]): DS[Row] = fill(value, cols.toImmutableArraySeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that replaces null values in
-   * specified string columns. If a specified column is not a string column, it is ignored.
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified string
+   * columns. If a specified column is not a string column, it is ignored.
    *
    * @since 1.3.1
    */
@@ -201,16 +200,16 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   def fill(value: Boolean): DS[Row]
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
-   * boolean columns. If a specified column is not a boolean column, it is ignored.
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified boolean
+   * columns. If a specified column is not a boolean column, it is ignored.
    *
    * @since 2.3.0
    */
   def fill(value: Boolean, cols: Seq[String]): DS[Row]
 
   /**
-   * Returns a new `DataFrame` that replaces null values in specified boolean columns.
-   * If a specified column is not a boolean column, it is ignored.
+   * Returns a new `DataFrame` that replaces null values in specified boolean columns. If a
+   * specified column is not a boolean column, it is ignored.
    *
    * @since 2.3.0
    */
@@ -219,13 +218,12 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   /**
    * Returns a new `DataFrame` that replaces null values.
    *
-   * The key of the map is the column name, and the value of the map is the replacement value.
-   * The value must be of the following type:
-   * `Integer`, `Long`, `Float`, `Double`, `String`, `Boolean`.
-   * Replacement values are cast to the column data type.
+   * The key of the map is the column name, and the value of the map is the replacement value. The
+   * value must be of the following type: `Integer`, `Long`, `Float`, `Double`, `String`,
+   * `Boolean`. Replacement values are cast to the column data type.
    *
-   * For example, the following replaces null values in column "A" with string "unknown", and
-   * null values in column "B" with numeric value 1.0.
+   * For example, the following replaces null values in column "A" with string "unknown", and null
+   * values in column "B" with numeric value 1.0.
    * {{{
    *   import com.google.common.collect.ImmutableMap;
    *   df.na.fill(ImmutableMap.of("A", "unknown", "B", 1.0));
@@ -238,12 +236,12 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values.
    *
-   * The key of the map is the column name, and the value of the map is the replacement value.
-   * The value must be of the following type: `Int`, `Long`, `Float`, `Double`, `String`, `Boolean`.
+   * The key of the map is the column name, and the value of the map is the replacement value. The
+   * value must be of the following type: `Int`, `Long`, `Float`, `Double`, `String`, `Boolean`.
    * Replacement values are cast to the column data type.
    *
-   * For example, the following replaces null values in column "A" with string "unknown", and
-   * null values in column "B" with numeric value 1.0.
+   * For example, the following replaces null values in column "A" with string "unknown", and null
+   * values in column "B" with numeric value 1.0.
    * {{{
    *   df.na.fill(Map(
    *     "A" -> "unknown",
@@ -273,11 +271,12 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
    *   df.na.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param col name of the column to apply the value replacement. If `col` is "*",
-   *            replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param col
+   *   name of the column to apply the value replacement. If `col` is "*", replacement is applied
+   *   on all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -298,11 +297,12 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
    *   df.na.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param cols list of columns to apply the value replacement. If `col` is "*",
-   *             replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param cols
+   *   list of columns to apply the value replacement. If `col` is "*", replacement is applied on
+   *   all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -324,11 +324,12 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
    *   df.na.replace("*", Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param col name of the column to apply the value replacement. If `col` is "*",
-   *            replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param col
+   *   name of the column to apply the value replacement. If `col` is "*", replacement is applied
+   *   on all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -345,11 +346,12 @@ abstract class DataFrameNaFunctions[DS[U] <: Dataset[U, DS]] {
    *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param cols list of columns to apply the value replacement. If `col` is "*",
-   *             replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param cols
+   *   list of columns to apply the value replacement. If `col` is "*", replacement is applied on
+   *   all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    *
    * @since 1.3.1
    */

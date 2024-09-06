@@ -1849,6 +1849,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def toPandas(self) -> "PandasDataFrameLike":
         return PandasConversionMixin.toPandas(self)
 
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
+        if indexColumn is not None:
+            return DataFrame(self._jdf.transpose(_to_java_column(indexColumn)), self.sparkSession)
+        else:
+            return DataFrame(self._jdf.transpose(), self.sparkSession)
+
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         raise PySparkValueError(
