@@ -22,6 +22,9 @@ import java.time.Duration
 import java.util.UUID
 
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.scalatest.matchers.must.Matchers.be
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
@@ -1456,6 +1459,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
           AddData(inputData, ("a", "str1")),
           CheckNewAnswer(("a", "1", "")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
           StopStream
         )
         val result2 = inputData.toDS()
@@ -1467,6 +1475,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
           AddData(inputData, ("a", "str2")),
           CheckNewAnswer(("a", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
           StopStream
         )
         val result3 = inputData.toDS()
@@ -1478,6 +1491,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
           AddData(inputData, ("a", "str3")),
           CheckNewAnswer(("a", "1", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
           StopStream
         )
         // because we don't change the schema for this run, there won't
@@ -1486,6 +1504,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
           AddData(inputData, ("a", "str4")),
           CheckNewAnswer(("a", "2", "str3")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
           StopStream
         )
         val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
@@ -1542,6 +1565,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "11", "str1")),
           AddData(inputData, ("a", "str1")),
           CheckNewAnswer(("a", "12", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
           StopStream
         )
         testStream(result1, OutputMode.Update())(
@@ -1550,6 +1578,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "13", "str1")),
           AddData(inputData, ("a", "str1")),
           CheckNewAnswer(("a", "14", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
           StopStream
         )
 
