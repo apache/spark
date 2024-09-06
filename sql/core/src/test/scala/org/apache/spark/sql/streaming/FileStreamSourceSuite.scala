@@ -1162,7 +1162,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   private def testThresholdLogic(option: String): Unit = {
-    withTempDir { src =>
+    withTempDir { case src =>
       var lastFileModTime: Option[Long] = None
 
       /** Create a text file with a single data item */
@@ -1258,7 +1258,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   private def testIncorrectThresholdValues(option: String): Unit = {
     val testTable = s"${option}_test"
     withTable(testTable) {
-      withTempDir { src =>
+      withTempDir { case src =>
         def testIncorrectValue(value: String): Unit = {
           val df = spark.readStream.option(option, value).text(src.getCanonicalPath)
           val e = intercept[StreamingQueryException] {
@@ -1287,7 +1287,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   testQuietly("SPARK-46641: max bytes per trigger & max files per trigger - both set") {
     val testTable = "maxBytesPerTrigger_maxFilesPerTrigger_test"
     withTable(testTable) {
-      withTempDir { src =>
+      withTempDir { case src =>
         val df = spark.readStream
           .option("maxBytesPerTrigger", "1")
           .option("maxFilesPerTrigger", "1")

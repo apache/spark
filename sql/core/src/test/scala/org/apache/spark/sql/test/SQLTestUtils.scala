@@ -83,17 +83,6 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   }
 
   /**
-   * Creates a temporary directory with the provided prefix, which is then passed to `f` and will
-   * be deleted after `f` returns.
-   */
-  protected override def withTempDir(prefix: String)(f: File => Unit): Unit = {
-    super.withTempDir(prefix) { dir =>
-      f(dir)
-      waitForTasksToFinish()
-    }
-  }
-
-  /**
    * A helper function for turning off/on codegen.
    */
   protected def testWithWholeStageCodegenOnAndOff(testName: String)(f: String => Unit): Unit = {
