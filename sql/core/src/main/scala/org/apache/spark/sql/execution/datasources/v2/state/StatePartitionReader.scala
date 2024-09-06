@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
@@ -68,15 +69,23 @@ abstract class StatePartitionReaderBase(
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends PartitionReader[InternalRow] with Logging {
+  // Used primarily as a placeholder for the value schema in the context of
+  // state variables used within the transformWithState operator.
+  private val schemaForValueRow: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
+
   protected val keySchema = {
     if (!SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     } else SchemaUtil.getCompositeKeySchema(schema)
   }
-  protected val valueSchema =
-    if (!SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
-      SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
-    } else SchemaUtil.getValueSchema(schema)
+
+  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
+    schemaForValueRow
+  } else {
+    SchemaUtil.getSchemaAsDataType(
+      schema, "value").asInstanceOf[StructType]
+  }
 
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
@@ -89,10 +98,17 @@ abstract class StatePartitionReaderBase(
       false
     }
 
+    val useMultipleValuesPerKey = if (stateVariableInfoOpt.isDefined &&
+      stateVariableInfoOpt.get.stateVariableType == StateVariableType.ListState) {
+      true
+    } else {
+      false
+    }
+
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
-      useMultipleValuesPerKey = false)
+      useMultipleValuesPerKey = useMultipleValuesPerKey)
 
     if (useColFamilies) {
       val store = provider.getStore(partition.sourceOptions.batchId + 1)
@@ -104,7 +120,7 @@ abstract class StatePartitionReaderBase(
         stateStoreColFamilySchema.keySchema,
         stateStoreColFamilySchema.valueSchema,
         stateStoreColFamilySchema.keyStateEncoderSpec.get,
-        useMultipleValuesPerKey = false)
+        useMultipleValuesPerKey = useMultipleValuesPerKey)
     }
     provider
   }
@@ -175,16 +191,22 @@ class StatePartitionReader(
           stateVariableInfoOpt match {
             case Some(stateVarInfo) =>
               val stateVarType = stateVarInfo.stateVariableType
-              val hasTTLEnabled = stateVarInfo.ttlEnabled
 
               stateVarType match {
                 case StateVariableType.ValueState =>
-                  if (hasTTLEnabled) {
-                    SchemaUtil.unifyStateRowPairWithTTL((pair.key, pair.value), valueSchema,
-                      partition.partition)
-                  } else {
-                    SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+                  SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+
+                case StateVariableType.ListState =>
+                  val key = pair.key
+                  val result = store.valuesIterator(key, stateVarName)
+                  var unsafeRowArr: Seq[UnsafeRow] = Seq.empty
+                  result.foreach { entry =>
+                    unsafeRowArr = unsafeRowArr :+ entry.copy()
                   }
+                  // convert the list of values to array type
+                  val arrData = new GenericArrayData(unsafeRowArr.toArray)
+                  SchemaUtil.unifyStateRowPairWithMultipleValues((pair.key, arrData),
+                    partition.partition)
 
                 case _ =>
                   throw new IllegalStateException(

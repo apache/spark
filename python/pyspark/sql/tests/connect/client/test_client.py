@@ -417,6 +417,18 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         for b in parameters:
             not_found_fails(b)
 
+    def test_observed_session_id(self):
+        stub = self._stub_with([self.response, self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+        session_id = "test-session-id"
+
+        reattach = ite._create_reattach_execute_request()
+        self.assertEqual(reattach.client_observed_server_side_session_id, "")
+
+        self.request.client_observed_server_side_session_id = session_id
+        reattach = ite._create_reattach_execute_request()
+        self.assertEqual(reattach.client_observed_server_side_session_id, session_id)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.client.test_client import *  # noqa: F401

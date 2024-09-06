@@ -120,7 +120,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
     val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
     val start = DayTimeIntervalType.stringToField(startStr)
-    if (ctx.to != null ) {
+    if (ctx.to != null) {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = DayTimeIntervalType.stringToField(endStr)
       if (end <= start) {

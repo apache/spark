@@ -556,6 +556,7 @@ Below is a list of all the keywords in Spark SQL.
 |INVOKER|non-reserved|non-reserved|non-reserved|
 |IS|reserved|non-reserved|reserved|
 |ITEMS|non-reserved|non-reserved|non-reserved|
+|ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
@@ -563,6 +564,7 @@ Below is a list of all the keywords in Spark SQL.
 |LATERAL|reserved|strict-non-reserved|reserved|
 |LAZY|non-reserved|non-reserved|non-reserved|
 |LEADING|reserved|non-reserved|reserved|
+|LEAVE|non-reserved|non-reserved|non-reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
 |LIKE|non-reserved|non-reserved|reserved|
 |ILIKE|non-reserved|non-reserved|non-reserved|

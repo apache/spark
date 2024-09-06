@@ -214,16 +214,7 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(this)
 
   /**
@@ -239,12 +230,7 @@ class SparkSession private[sql] (
 
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying databases,
-   * tables, functions etc.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   lazy val catalog: Catalog = new CatalogImpl(this)
 
   /** @inheritdoc */

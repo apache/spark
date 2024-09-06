@@ -350,10 +350,11 @@ class DataSourceReader(ABC):
 
         Returns
         -------
-        iterator of tuples or pyarrow RecordBatch
+        iterator of tuples or PyArrow's `RecordBatch`
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
-            It can also return an iterator of pyarrow RecordBatch if the data source supports it.
+            It can also return an iterator of PyArrow's `RecordBatch` if the data source
+            supports it.
 
         Examples
         --------
@@ -471,10 +472,11 @@ class DataSourceStreamReader(ABC):
 
         Returns
         -------
-        iterator of tuples or pyarrow RecordBatch
+        iterator of tuples or PyArrow's `RecordBatch`
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
-            It can also return an iterator of pyarrow RecordBatch if the data source supports it.
+            It can also return an iterator of PyArrow's `RecordBatch` if the data source
+            supports it.
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",

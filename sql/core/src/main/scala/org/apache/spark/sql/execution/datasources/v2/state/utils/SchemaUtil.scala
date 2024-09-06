@@ -21,12 +21,12 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceErrors, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.StateVariableType._
 import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
 import org.apache.spark.sql.execution.streaming.state.{StateStoreColFamilySchema, UnsafeRowPair}
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 object SchemaUtil {
@@ -74,15 +74,13 @@ object SchemaUtil {
     row
   }
 
-  def unifyStateRowPairWithTTL(
-      pair: (UnsafeRow, UnsafeRow),
-      valueSchema: StructType,
+  def unifyStateRowPairWithMultipleValues(
+      pair: (UnsafeRow, GenericArrayData),
       partition: Int): InternalRow = {
-    val row = new GenericInternalRow(4)
+    val row = new GenericInternalRow(3)
     row.update(0, pair._1)
-    row.update(1, pair._2.get(0, valueSchema))
-    row.update(2, pair._2.get(1, LongType))
-    row.update(3, partition)
+    row.update(1, pair._2)
+    row.update(2, partition)
     row
   }
 
@@ -201,24 +199,23 @@ object SchemaUtil {
       "change_type" -> classOf[StringType],
       "key" -> classOf[StructType],
       "value" -> classOf[StructType],
+      "single_value" -> classOf[StructType],
+      "list_value" -> classOf[ArrayType],
       "map_value" -> classOf[MapType],
-      "partition_id" -> classOf[IntegerType],
-      "expiration_timestamp" -> classOf[LongType])
+      "partition_id" -> classOf[IntegerType])
 
     val expectedFieldNames = if (sourceOptions.readChangeFeed) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
     } else if (transformWithStateVariableInfoOpt.isDefined) {
       val stateVarInfo = transformWithStateVariableInfoOpt.get
-      val hasTTLEnabled = stateVarInfo.ttlEnabled
       val stateVarType = stateVarInfo.stateVariableType
 
       stateVarType match {
         case ValueState =>
-          if (hasTTLEnabled) {
-            Seq("key", "value", "expiration_timestamp", "partition_id")
-          } else {
-            Seq("key", "value", "partition_id")
-          }
+          Seq("key", "single_value", "partition_id")
+
+        case ListState =>
+          Seq("key", "list_value", "partition_id")
 
         case MapState =>
           Seq("key", "map_value", "partition_id")
@@ -245,24 +242,19 @@ object SchemaUtil {
       stateVarInfo: TransformWithStateVariableInfo,
       stateStoreColFamilySchema: StateStoreColFamilySchema): StructType = {
     val stateVarType = stateVarInfo.stateVariableType
-    val hasTTLEnabled = stateVarInfo.ttlEnabled
 
     stateVarType match {
-      case ValueState =>
-        if (hasTTLEnabled) {
-          val ttlValueSchema = SchemaUtil.getSchemaAsDataType(
-            stateStoreColFamilySchema.valueSchema, "value").asInstanceOf[StructType]
-          new StructType()
-            .add("key", stateStoreColFamilySchema.keySchema)
-            .add("value", ttlValueSchema)
-            .add("expiration_timestamp", LongType)
-            .add("partition_id", IntegerType)
-        } else {
-          new StructType()
-            .add("key", stateStoreColFamilySchema.keySchema)
-            .add("value", stateStoreColFamilySchema.valueSchema)
-            .add("partition_id", IntegerType)
-        }
+      case StateVariableType.ValueState =>
+        new StructType()
+          .add("key", stateStoreColFamilySchema.keySchema)
+          .add("single_value", stateStoreColFamilySchema.valueSchema)
+          .add("partition_id", IntegerType)
+
+      case StateVariableType.ListState =>
+        new StructType()
+          .add("key", stateStoreColFamilySchema.keySchema)
+          .add("list_value", ArrayType(stateStoreColFamilySchema.valueSchema))
+          .add("partition_id", IntegerType)
 
       case MapState =>
         val groupingKeySchema = SchemaUtil.getSchemaAsDataType(

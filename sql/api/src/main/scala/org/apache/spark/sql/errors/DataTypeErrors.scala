@@ -25,9 +25,9 @@ import org.apache.spark.sql.types.{DataType, Decimal, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Object for grouping error messages from (most) exceptions thrown during query execution.
- * This does not include exceptions thrown during the eager execution of commands, which are
- * grouped into [[CompilationErrors]].
+ * Object for grouping error messages from (most) exceptions thrown during query execution. This
+ * does not include exceptions thrown during the eager execution of commands, which are grouped
+ * into [[CompilationErrors]].
  */
 private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
@@ -35,13 +35,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(
-      precision: Int, maxPrecision: Int): SparkArithmeticException = {
+      precision: Int,
+      maxPrecision: Int): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      messageParameters = Map(
-        "precision" -> precision.toString,
-        "maxPrecision" -> maxPrecision.toString
-      ),
+      messageParameters =
+        Map("precision" -> precision.toString, "maxPrecision" -> maxPrecision.toString),
       context = Array.empty,
       summary = "")
   }
@@ -53,8 +52,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
-      messageParameters = Map(
-        "value" -> str.toString),
+      messageParameters = Map("value" -> str.toString),
       context = Array.empty,
       summary = "")
   }
@@ -68,25 +66,20 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2226",
-      messageParameters = Map(
-        "name" -> name))
+      messageParameters = Map("name" -> name))
   }
 
   def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2227",
-      messageParameters = Map(
-        "name" -> name,
-        "userClass" -> userClass),
+      messageParameters = Map("name" -> name, "userClass" -> userClass),
       cause = null)
   }
 
   def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2228",
-      messageParameters = Map(
-        "name" -> name,
-        "userClass" -> userClass),
+      messageParameters = Map("name" -> name, "userClass" -> userClass),
       cause = null)
   }
 
@@ -99,50 +92,42 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
-      messageParameters = Map(
-        "inputSchema" -> toSQLSchema(schema),
-        "reason" -> e.getMessage
-      ),
+      messageParameters = Map("inputSchema" -> toSQLSchema(schema), "reason" -> e.getMessage),
       cause = Some(e))
   }
 
   def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1224",
-      messageParameters = Map(
-        "startFieldName" -> startFieldName,
-        "endFieldName" -> endFieldName))
+      messageParameters = Map("startFieldName" -> startFieldName, "endFieldName" -> endFieldName))
   }
 
   def invalidDayTimeField(field: Byte, supportedIds: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1223",
-      messageParameters = Map(
-        "field" -> field.toString,
-        "supportedIds" -> supportedIds.mkString(", ")))
+      messageParameters =
+        Map("field" -> field.toString, "supportedIds" -> supportedIds.mkString(", ")))
   }
 
   def invalidYearMonthField(field: Byte, supportedIds: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1225",
-      messageParameters = Map(
-        "field" -> field.toString,
-        "supportedIds" -> supportedIds.mkString(", ")))
+      messageParameters =
+        Map("field" -> field.toString, "supportedIds" -> supportedIds.mkString(", ")))
   }
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1228",
-      messageParameters = Map(
-        "scale" -> scale.toString,
-        "precision" -> precision.toString))
+      messageParameters = Map("scale" -> scale.toString, "precision" -> precision.toString))
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     val sqlConf = QuotingUtils.toSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
-    SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
-      s" Set the config ${sqlConf}" +
-      " to \"true\" to allow it.")
+    SparkException.internalError(
+      s"Negative scale is not allowed: ${scale.toString}." +
+        s" Set the config ${sqlConf}" +
+        " to \"true\" to allow it.")
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {
@@ -154,19 +139,17 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
     new SparkException(
       errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-      messageParameters = Map(
-        "left" -> toSQLType(left),
-        "right" -> toSQLType(right)),
+      messageParameters = Map("left" -> toSQLType(left), "right" -> toSQLType(right)),
       cause = null)
   }
 
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
-      leftScale: Int, rightScale: Int): Throwable = {
+      leftScale: Int,
+      rightScale: Int): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2124",
-      messageParameters = Map(
-        "leftScale" -> leftScale.toString(),
-        "rightScale" -> rightScale.toString()),
+      messageParameters =
+        Map("leftScale" -> leftScale.toString(), "rightScale" -> rightScale.toString()),
       cause = null)
   }
 
@@ -179,9 +162,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
-      messageParameters = Map(
-        "fieldName" -> toSQLId(fieldName),
-        "path" -> toSQLId(path)),
+      messageParameters = Map("fieldName" -> toSQLId(fieldName), "path" -> toSQLId(path)),
       origin = context)
   }
 
@@ -234,12 +215,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def ambiguousColumnOrFieldError(
-      name: Seq[String], numMatches: Int, context: Origin): Throwable = {
+      name: Seq[String],
+      numMatches: Int,
+      context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Map(
-        "name" -> toSQLId(name),
-        "n" -> numMatches.toString),
+      messageParameters = Map("name" -> toSQLId(name), "n" -> numMatches.toString),
       origin = context)
   }
 
@@ -267,15 +248,13 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "methodName" -> "fieldIndex",
         "className" -> "Row",
-        "fieldName" -> toSQLId(fieldName))
-    )
+        "fieldName" -> toSQLId(fieldName)))
   }
 
   def valueIsNullError(index: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "ROW_VALUE_IS_NULL",
-      messageParameters = Map(
-        "index" -> index.toString),
+      messageParameters = Map("index" -> index.toString),
       cause = null)
   }
 
