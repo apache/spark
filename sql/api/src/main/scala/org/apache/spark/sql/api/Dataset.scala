@@ -1556,12 +1556,12 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * columns of the DataFrame.
    *
    * Please note:
-   *   - All columns except the index column must share a least common data type. Unless they
-   *   are the same data type, all columns are cast to the nearest common data type.
-   *   - The name of the column into which the original column names are transposed defaults
-   *   to "key".
-   *   - null values in the index column are excluded from the column names for the
-   *   transposed table, which are ordered in ascending order.
+   *   - All columns except the index column must share a least common data type. Unless they are
+   *     the same data type, all columns are cast to the nearest common data type.
+   *   - The name of the column into which the original column names are transposed defaults to
+   *     "key".
+   *   - null values in the index column are excluded from the column names for the transposed
+   *     table, which are ordered in ascending order.
    *
    * {{{
    *   val df = Seq(("A", 1, 2), ("B", 3, 4)).toDF("id", "val1", "val2")
@@ -1604,9 +1604,9 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * }}}
    *
    * @param indexColumn
-   *   The single column that will be treated as the index for the transpose operation. This column
-   *   will be used to pivot the data, transforming the DataFrame such that the values of the
-   *   indexColumn become the new columns in the transposed DataFrame.
+   *   The single column that will be treated as the index for the transpose operation. This
+   *   column will be used to pivot the data, transforming the DataFrame such that the values of
+   *   the indexColumn become the new columns in the transposed DataFrame.
    *
    * @group untypedrel
    * @since 4.0.0
@@ -1614,8 +1614,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   def transpose(indexColumn: Column): DS[Row]
 
   /**
-   * Transposes a DataFrame, switching rows to columns. This function transforms the DataFrame such
-   * that the values in the first column become the new columns of the DataFrame.
+   * Transposes a DataFrame, switching rows to columns. This function transforms the DataFrame
+   * such that the values in the first column become the new columns of the DataFrame.
    *
    * This is equivalent to calling `Dataset#transpose(Column)` where `indexColumn` is set to the
    * first column.
@@ -1632,27 +1632,24 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    */
   def transpose(): DS[Row]
 
- /**
-  * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
-  * that returns the same result as the input, with the following guarantees:
-  * <ul>
-  *   <li>It will compute the defined aggregates (metrics) on all the data that is flowing through
-  *   the Dataset at that point.</li>
-  *   <li>It will report the value of the defined aggregate columns as soon as we reach a completion
-  *   point. A completion point is either the end of a query (batch mode) or the end of a streaming
-  *   epoch. The value of the aggregates only reflects the data processed since the previous
-  *   completion point.</li>
-  * </ul>
-  * Please note that continuous execution is currently not supported.
-  *
-  * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
-  * more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
-  * contain references to the input Dataset's columns must always be wrapped in an aggregate
-  * function.
-  *
-  * @group typedrel
-  * @since 3.0.0
-  */
+  /**
+   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
+   * that returns the same result as the input, with the following guarantees: <ul> <li>It will
+   * compute the defined aggregates (metrics) on all the data that is flowing through the Dataset
+   * at that point.</li> <li>It will report the value of the defined aggregate columns as soon as
+   * we reach a completion point. A completion point is either the end of a query (batch mode) or
+   * the end of a streaming epoch. The value of the aggregates only reflects the data processed
+   * since the previous completion point.</li> </ul> Please note that continuous execution is
+   * currently not supported.
+   *
+   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
+   * more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
+   * contain references to the input Dataset's columns must always be wrapped in an aggregate
+   * function.
+   *
+   * @group typedrel
+   * @since 3.0.0
+   */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): DS[T]
 
@@ -2962,8 +2959,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit
 
   /**
-   * Merges a set of updates, insertions, and deletions based on a source table into
-   * a target table.
+   * Merges a set of updates, insertions, and deletions based on a source table into a target
+   * table.
    *
    * Scala Examples:
    * {{{

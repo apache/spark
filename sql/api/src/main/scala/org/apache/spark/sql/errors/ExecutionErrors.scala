@@ -215,9 +215,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def cannotUseKryoSerialization(): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "CANNOT_USE_KRYO",
-      messageParameters = Map.empty)
+    new SparkRuntimeException(errorClass = "CANNOT_USE_KRYO", messageParameters = Map.empty)
   }
 }
 
