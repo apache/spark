@@ -434,6 +434,12 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_USE_KRYO" : {
+    "message" : [
+      "Cannot load Kryo serialization codec. Kryo serialization cannot be used in the Spark Connect client. Use Java serialization, provide a custom Codec, or use Spark Classic instead."
+    ],
+    "sqlState" : "22KD3"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
