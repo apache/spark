@@ -20,7 +20,6 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parseScript
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -575,7 +574,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        runSqlScript(sqlScriptText)
       },
       errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
       parameters = Map("labelName" -> "LBL"))
@@ -614,7 +613,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        runSqlScript(sqlScriptText)
       },
       errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
@@ -629,7 +628,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        runSqlScript(sqlScriptText)
       },
       errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
