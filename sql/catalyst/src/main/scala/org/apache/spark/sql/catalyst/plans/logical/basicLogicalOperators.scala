@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -1472,6 +1472,24 @@ case class Pivot(
   final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
+}
+
+/**
+ * A logical plan node for transpose, which will later be converted to a [[LocalRelation]]
+ * at ReplaceTranspose during the query optimization.
+ *
+ * The result of the transpose operation is held in the `data` field, and the corresponding
+ * schema is stored in the `output` field. The `Transpose` node does not depend on any child
+ * logical plans after the data has been collected and transposed.
+ *
+ * @param output A sequence of output attributes representing the schema of the transposed data.
+ * @param data A sequence of [[InternalRow]] containing the transposed data.
+ */
+case class Transpose(
+    output: Seq[Attribute],
+    data: Seq[InternalRow] = Nil
+) extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
 }
 
 

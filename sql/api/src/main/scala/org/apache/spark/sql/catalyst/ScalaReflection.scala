@@ -55,9 +55,8 @@ object ScalaReflection extends ScalaReflection {
   import scala.collection.Map
 
   /**
-   * Synchronize to prevent concurrent usage of `<:<` operator.
-   * This operator is not thread safe in any current version of scala; i.e.
-   * (2.11.12, 2.12.10, 2.13.0-M5).
+   * Synchronize to prevent concurrent usage of `<:<` operator. This operator is not thread safe
+   * in any current version of scala; i.e. (2.11.12, 2.12.10, 2.13.0-M5).
    *
    * See https://github.com/scala/bug/issues/10766
    */
@@ -91,11 +90,11 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Workaround for [[https://github.com/scala/bug/issues/12190 Scala bug #12190]]
    *
-   * `ClassSymbol.selfType` can throw an exception in case of cyclic annotation reference
-   * in Java classes. A retry of this operation will succeed as the class which defines the
-   * cycle is now resolved. It can however expose further recursive annotation references, so
-   * we keep retrying until we exhaust our retry threshold. Default threshold is set to 5
-   * to allow for a few level of cyclic references.
+   * `ClassSymbol.selfType` can throw an exception in case of cyclic annotation reference in Java
+   * classes. A retry of this operation will succeed as the class which defines the cycle is now
+   * resolved. It can however expose further recursive annotation references, so we keep retrying
+   * until we exhaust our retry threshold. Default threshold is set to 5 to allow for a few level
+   * of cyclic references.
    */
   @tailrec
   private def selfType(clsSymbol: ClassSymbol, tries: Int = 5): Type = {
@@ -107,7 +106,7 @@ object ScalaReflection extends ScalaReflection {
         // Retry on Symbols#CyclicReference if we haven't exhausted our retry limit
         selfType(clsSymbol, tries - 1)
       case Failure(e: RuntimeException)
-        if e.getMessage.contains("illegal cyclic reference") && tries > 1 =>
+          if e.getMessage.contains("illegal cyclic reference") && tries > 1 =>
         // UnPickler.unpickle wraps the original Symbols#CyclicReference exception into a runtime
         // exception and does not set the cause, so we inspect the message. The previous case
         // statement is useful for Java classes while this one is for Scala classes.
@@ -131,14 +130,14 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Returns the full class name for a type. The returned name is the canonical
-   * Scala name, where each component is separated by a period. It is NOT the
-   * Java-equivalent runtime name (no dollar signs).
+   * Returns the full class name for a type. The returned name is the canonical Scala name, where
+   * each component is separated by a period. It is NOT the Java-equivalent runtime name (no
+   * dollar signs).
    *
-   * In simple cases, both the Scala and Java names are the same, however when Scala
-   * generates constructs that do not map to a Java equivalent, such as singleton objects
-   * or nested classes in package objects, it uses the dollar sign ($) to create
-   * synthetic classes, emulating behaviour in Java bytecode.
+   * In simple cases, both the Scala and Java names are the same, however when Scala generates
+   * constructs that do not map to a Java equivalent, such as singleton objects or nested classes
+   * in package objects, it uses the dollar sign ($) to create synthetic classes, emulating
+   * behaviour in Java bytecode.
    */
   def getClassNameFromType(tpe: `Type`): String = {
     erasure(tpe).dealias.typeSymbol.asClass.fullName
@@ -152,20 +151,25 @@ object ScalaReflection extends ScalaReflection {
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
-  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
+  /**
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   */
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
 
-  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
+  /**
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   */
   def schemaFor(tpe: `Type`): Schema = {
     val enc = encoderFor(tpe)
     Schema(enc.dataType, enc.nullable)
   }
 
   /**
-   * Finds an accessible constructor with compatible parameters. This is a more flexible search than
-   * the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
+   * Finds an accessible constructor with compatible parameters. This is a more flexible search
+   * than the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
    * matching constructor is returned if it exists. Otherwise, we check for additional compatible
-   * constructors defined in the companion object as `apply` methods. Otherwise, it returns `None`.
+   * constructors defined in the companion object as `apply` methods. Otherwise, it returns
+   * `None`.
    */
   def findConstructor[T](cls: Class[T], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => T] = {
     Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
@@ -174,24 +178,28 @@ object ScalaReflection extends ScalaReflection {
         val companion = mirror.staticClass(cls.getName).companion
         val moduleMirror = mirror.reflectModule(companion.asModule)
         val applyMethods = companion.asTerm.typeSignature
-          .member(universe.TermName("apply")).asTerm.alternatives
-        applyMethods.find { method =>
-          val params = method.typeSignature.paramLists.head
-          // Check that the needed params are the same length and of matching types
-          params.size == paramTypes.size &&
-          params.zip(paramTypes).forall { case(ps, pc) =>
-            ps.typeSignature.typeSymbol == mirror.classSymbol(pc)
+          .member(universe.TermName("apply"))
+          .asTerm
+          .alternatives
+        applyMethods
+          .find { method =>
+            val params = method.typeSignature.paramLists.head
+            // Check that the needed params are the same length and of matching types
+            params.size == paramTypes.size &&
+            params.zip(paramTypes).forall { case (ps, pc) =>
+              ps.typeSignature.typeSymbol == mirror.classSymbol(pc)
+            }
           }
-        }.map { applyMethodSymbol =>
-          val expectedArgsCount = applyMethodSymbol.typeSignature.paramLists.head.size
-          val instanceMirror = mirror.reflect(moduleMirror.instance)
-          val method = instanceMirror.reflectMethod(applyMethodSymbol.asMethod)
-          (_args: Seq[AnyRef]) => {
-            // Drop the "outer" argument if it is provided
-            val args = if (_args.size == expectedArgsCount) _args else _args.tail
-            method.apply(args: _*).asInstanceOf[T]
+          .map { applyMethodSymbol =>
+            val expectedArgsCount = applyMethodSymbol.typeSignature.paramLists.head.size
+            val instanceMirror = mirror.reflect(moduleMirror.instance)
+            val method = instanceMirror.reflectMethod(applyMethodSymbol.asMethod)
+            (_args: Seq[AnyRef]) => {
+              // Drop the "outer" argument if it is provided
+              val args = if (_args.size == expectedArgsCount) _args else _args.tail
+              method.apply(args: _*).asInstanceOf[T]
+            }
           }
-        }
     }
   }
 
@@ -201,8 +209,10 @@ object ScalaReflection extends ScalaReflection {
   def definedByConstructorParams(tpe: Type): Boolean = cleanUpReflectionObjects {
     tpe.dealias match {
       // `Option` is a `Product`, but we don't wanna treat `Option[Int]` as a struct type.
-      case t if isSubtype(t, localTypeOf[Option[_]]) => definedByConstructorParams(t.typeArgs.head)
-      case _ => isSubtype(tpe.dealias, localTypeOf[Product]) ||
+      case t if isSubtype(t, localTypeOf[Option[_]]) =>
+        definedByConstructorParams(t.typeArgs.head)
+      case _ =>
+        isSubtype(tpe.dealias, localTypeOf[Product]) ||
         isSubtype(tpe.dealias, localTypeOf[DefinedByConstructorParams])
     }
   }
@@ -214,16 +224,15 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Create an [[AgnosticEncoder]] from a [[TypeTag]].
    *
-   * If the given type is not supported, i.e. there is no encoder can be built for this type,
-   * an [[SparkUnsupportedOperationException]] will be thrown with detailed error message to
-   * explain the type path walked so far and which class we are not supporting.
-   * There are 4 kinds of type path:
-   *  * the root type: `root class: "abc.xyz.MyClass"`
-   *  * the value type of [[Option]]: `option value class: "abc.xyz.MyClass"`
-   *  * the element type of [[Array]] or [[Seq]]: `array element class: "abc.xyz.MyClass"`
-   *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
+   * If the given type is not supported, i.e. there is no encoder can be built for this type, an
+   * [[SparkUnsupportedOperationException]] will be thrown with detailed error message to explain
+   * the type path walked so far and which class we are not supporting. There are 4 kinds of type
+   * path: * the root type: `root class: "abc.xyz.MyClass"` * the value type of [[Option]]:
+   * `option value class: "abc.xyz.MyClass"` * the element type of [[Array]] or [[Seq]]: `array
+   * element class: "abc.xyz.MyClass"` * the field of [[Product]]: `field (class:
+   * "abc.xyz.MyClass", name: "myField")`
    */
-  def encoderFor[E : TypeTag]: AgnosticEncoder[E] = {
+  def encoderFor[E: TypeTag]: AgnosticEncoder[E] = {
     encoderFor(typeTag[E].in(mirror).tpe).asInstanceOf[AgnosticEncoder[E]]
   }
 
@@ -239,13 +248,12 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Create an [[AgnosticEncoder]] for a [[Type]].
    */
-  def encoderFor(
-     tpe: `Type`,
-     isRowEncoderSupported: Boolean = false): AgnosticEncoder[_] = cleanUpReflectionObjects {
-    val clsName = getClassNameFromType(tpe)
-    val walkedTypePath = WalkedTypePath().recordRoot(clsName)
-    encoderFor(tpe, Set.empty, walkedTypePath, isRowEncoderSupported)
-  }
+  def encoderFor(tpe: `Type`, isRowEncoderSupported: Boolean = false): AgnosticEncoder[_] =
+    cleanUpReflectionObjects {
+      val clsName = getClassNameFromType(tpe)
+      val walkedTypePath = WalkedTypePath().recordRoot(clsName)
+      encoderFor(tpe, Set.empty, walkedTypePath, isRowEncoderSupported)
+    }
 
   private def encoderFor(
       tpe: `Type`,
@@ -327,14 +335,22 @@ object ScalaReflection extends ScalaReflection {
 
       // UDT encoders
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
-        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().
-          getConstructor().newInstance().asInstanceOf[UserDefinedType[Any]]
+        val udt = getClassFromType(t)
+          .getAnnotation(classOf[SQLUserDefinedType])
+          .udt()
+          .getConstructor()
+          .newInstance()
+          .asInstanceOf[UserDefinedType[Any]]
         val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
         UDTEncoder(udt, udtClass)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
-          newInstance().asInstanceOf[UserDefinedType[Any]]
+        val udt = UDTRegistration
+          .getUDTFor(getClassNameFromType(t))
+          .get
+          .getConstructor()
+          .newInstance()
+          .asInstanceOf[UserDefinedType[Any]]
         UDTEncoder(udt, udt.getClass)
 
       // Complex encoders
@@ -380,20 +396,17 @@ object ScalaReflection extends ScalaReflection {
         if (seenTypeSet.contains(t)) {
           throw ExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
-        val params = getConstructorParameters(t).map {
-          case (fieldName, fieldType) =>
-            if (SourceVersion.isKeyword(fieldName) ||
-              !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
-              throw ExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
-                fieldName,
-                path)
-            }
-            val encoder = encoderFor(
-              fieldType,
-              seenTypeSet + t,
-              path.recordField(getClassNameFromType(fieldType), fieldName),
-              isRowEncoderSupported)
-            EncoderField(fieldName, encoder, encoder.nullable, Metadata.empty)
+        val params = getConstructorParameters(t).map { case (fieldName, fieldType) =>
+          if (SourceVersion.isKeyword(fieldName) ||
+            !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
+            throw ExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(fieldName, path)
+          }
+          val encoder = encoderFor(
+            fieldType,
+            seenTypeSet + t,
+            path.recordField(getClassNameFromType(fieldType), fieldName),
+            isRowEncoderSupported)
+          EncoderField(fieldName, encoder, encoder.nullable, Metadata.empty)
         }
         val cls = getClassFromType(t)
         ProductEncoder(ClassTag(cls), params, Option(OuterScopes.getOuterScope(cls)))
@@ -404,10 +417,11 @@ object ScalaReflection extends ScalaReflection {
 }
 
 /**
- * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
+ * Support for generating catalyst schemas for scala objects. Note that unlike its companion
  * object, this trait able to work in both the runtime and the compile time (macro) universe.
  */
 trait ScalaReflection extends Logging {
+
   /** The universe we work in (runtime or macro) */
   val universe: scala.reflect.api.Universe
 
@@ -421,7 +435,8 @@ trait ScalaReflection extends Logging {
    * clean up the Scala reflection garbage automatically. Otherwise, it will leak some objects to
    * `scala.reflect.runtime.JavaUniverse.undoLog`.
    *
-   * @see https://github.com/scala/bug/issues/8302
+   * @see
+   *   https://github.com/scala/bug/issues/8302
    */
   def cleanUpReflectionObjects[T](func: => T): T = {
     universe.asInstanceOf[scala.reflect.runtime.JavaUniverse].undoLog.undo(func)
@@ -430,12 +445,13 @@ trait ScalaReflection extends Logging {
   /**
    * Return the Scala Type for `T` in the current classloader mirror.
    *
-   * Use this method instead of the convenience method `universe.typeOf`, which
-   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
-   * That's not necessarily the case when running using Eclipse launchers or even
-   * Sbt console or test (without `fork := true`).
+   * Use this method instead of the convenience method `universe.typeOf`, which assumes that all
+   * types can be found in the classloader that loaded scala-reflect classes. That's not
+   * necessarily the case when running using Eclipse launchers or even Sbt console or test
+   * (without `fork := true`).
    *
-   * @see SPARK-5281
+   * @see
+   *   SPARK-5281
    */
   def localTypeOf[T: TypeTag]: `Type` = {
     val tag = implicitly[TypeTag[T]]
@@ -474,8 +490,8 @@ trait ScalaReflection extends Logging {
   }
 
   /**
-   * If our type is a Scala trait it may have a companion object that
-   * only defines a constructor via `apply` method.
+   * If our type is a Scala trait it may have a companion object that only defines a constructor
+   * via `apply` method.
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
     def throwUnsupportedOperation = {
@@ -483,10 +499,11 @@ trait ScalaReflection extends Logging {
     }
     tpe.typeSymbol.asClass.companion match {
       case NoSymbol => throwUnsupportedOperation
-      case sym => sym.asTerm.typeSignature.member(universe.TermName("apply")) match {
-        case NoSymbol => throwUnsupportedOperation
-        case constructorSym => constructorSym
-      }
+      case sym =>
+        sym.asTerm.typeSignature.member(universe.TermName("apply")) match {
+          case NoSymbol => throwUnsupportedOperation
+          case constructorSym => constructorSym
+        }
     }
   }
 
@@ -499,8 +516,9 @@ trait ScalaReflection extends Logging {
       constructorSymbol.asMethod.paramLists
     } else {
       // Find the primary constructor, and use its parameter ordering.
-      val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
-        s => s.isMethod && s.asMethod.isPrimaryConstructor)
+      val primaryConstructorSymbol: Option[Symbol] =
+        constructorSymbol.asTerm.alternatives.find(s =>
+          s.isMethod && s.asMethod.isPrimaryConstructor)
       if (primaryConstructorSymbol.isEmpty) {
         throw ExecutionErrors.primaryConstructorNotFoundError(tpe.getClass)
       } else {

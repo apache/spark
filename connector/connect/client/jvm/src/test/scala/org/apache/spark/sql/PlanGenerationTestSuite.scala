@@ -552,6 +552,14 @@ class PlanGenerationTestSuite
       valueColumnName = "value")
   }
 
+  test("transpose index_column") {
+    simple.transpose(indexColumn = fn.col("id"))
+  }
+
+  test("transpose no_index_column") {
+    simple.transpose()
+  }
+
   test("offset") {
     simple.offset(1000)
   }

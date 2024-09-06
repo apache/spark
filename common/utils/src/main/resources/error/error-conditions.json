@@ -434,6 +434,12 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_USE_KRYO" : {
+    "message" : [
+      "Cannot load Kryo serialization codec. Kryo serialization cannot be used in the Spark Connect client. Use Java serialization, provide a custom Codec, or use Spark Classic instead."
+    ],
+    "sqlState" : "22KD3"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -4355,6 +4361,24 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TRANSPOSE_EXCEED_ROW_LIMIT" : {
+    "message" : [
+      "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
+    ],
+    "sqlState" : "54006"
+  },
+  "TRANSPOSE_INVALID_INDEX_COLUMN" : {
+    "message" : [
+      "Invalid index column for TRANSPOSE because: <reason>"
+    ],
+    "sqlState" : "42804"
+  },
+  "TRANSPOSE_NO_LEAST_COMMON_TYPE" : {
+    "message" : [
+      "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
+    ],
+    "sqlState" : "42K09"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [

@@ -38,13 +38,14 @@ import org.apache.spark.util.SparkThreadUtils
  *   val metrics = observation.get
  * }}}
  *
- * This collects the metrics while the first action is executed on the observed dataset. Subsequent
- * actions do not modify the metrics returned by [[get]]. Retrieval of the metric via [[get]]
- * blocks until the first action has finished and metrics become available.
+ * This collects the metrics while the first action is executed on the observed dataset.
+ * Subsequent actions do not modify the metrics returned by [[get]]. Retrieval of the metric via
+ * [[get]] blocks until the first action has finished and metrics become available.
  *
  * This class does not support streaming datasets.
  *
- * @param name name of the metric
+ * @param name
+ *   name of the metric
  * @since 3.3.0
  */
 class Observation(val name: String) {
@@ -65,23 +66,27 @@ class Observation(val name: String) {
   val future: Future[Map[String, Any]] = promise.future
 
   /**
-   * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish
-   * its first action. Only the result of the first action is available. Subsequent actions do not
+   * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish its
+   * first action. Only the result of the first action is available. Subsequent actions do not
    * modify the result.
    *
-   * @return the observed metrics as a `Map[String, Any]`
-   * @throws InterruptedException interrupted while waiting
+   * @return
+   *   the observed metrics as a `Map[String, Any]`
+   * @throws InterruptedException
+   *   interrupted while waiting
    */
   @throws[InterruptedException]
   def get: Map[String, Any] = SparkThreadUtils.awaitResult(future, Duration.Inf)
 
   /**
-   * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish
-   * its first action. Only the result of the first action is available. Subsequent actions do not
+   * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish its
+   * first action. Only the result of the first action is available. Subsequent actions do not
    * modify the result.
    *
-   * @return the observed metrics as a `java.util.Map[String, Object]`
-   * @throws InterruptedException interrupted while waiting
+   * @return
+   *   the observed metrics as a `java.util.Map[String, Object]`
+   * @throws InterruptedException
+   *   interrupted while waiting
    */
   @throws[InterruptedException]
   def getAsJava: java.util.Map[String, Any] = get.asJava
@@ -89,7 +94,8 @@ class Observation(val name: String) {
   /**
    * Get the observed metrics. This returns the metrics if they are available, otherwise an empty.
    *
-   * @return the observed metrics as a `Map[String, Any]`
+   * @return
+   *   the observed metrics as a `Map[String, Any]`
    */
   @throws[InterruptedException]
   private[sql] def getOrEmpty: Map[String, Any] = {
@@ -108,7 +114,8 @@ class Observation(val name: String) {
   /**
    * Set the observed metrics and notify all waiting threads to resume.
    *
-   * @return `true` if all waiting threads were notified, `false` if otherwise.
+   * @return
+   *   `true` if all waiting threads were notified, `false` if otherwise.
    */
   private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
     val metricsMap = metrics.getValuesMap(metrics.schema.map(_.name))
