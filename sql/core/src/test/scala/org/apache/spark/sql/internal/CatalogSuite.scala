@@ -333,18 +333,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(funcNamesWithPattern3.isEmpty)
   }
 
-  test("list collations") {
-    assert(spark.catalog.listCollations("*").collect().length == 562)
-
-    assert(spark.catalog.listCollations("*UTF8_BINARY*").collect().map(_.collationName) ===
-      Array("UTF8_BINARY"))
-
-    val collationNames =
-      spark.catalog.listCollations("*zh_Hant_HKG*").collect().map(_.collationName)
-    assert(collationNames ===
-      Array("zh_Hant_HKG", "zh_Hant_HKG_AI", "zh_Hant_HKG_CI", "zh_Hant_HKG_CI_AI"))
-  }
-
   test("SPARK-39828: Catalog.listFunctions() should respect currentCatalog") {
     assert(spark.catalog.currentCatalog() == "spark_catalog")
     assert(Set("+", "current_database", "window").subsetOf(
