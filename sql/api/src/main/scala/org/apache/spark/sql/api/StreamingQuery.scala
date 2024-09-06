@@ -96,7 +96,8 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
   def recentProgress: Array[StreamingQueryProgress]
 
   /**
-   * Returns the most recent [[StreamingQueryProgress]] update of this streaming query.
+   * Returns the most recent [[org.apache.spark.sql.streaming.StreamingQueryProgress]] update of
+   * this streaming query.
    *
    * @since 2.1.0
    */
@@ -110,7 +111,7 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
    * immediately (if the query was terminated by `stop()`), or throw the exception immediately (if
    * the query has terminated with exception).
    *
-   * @throws StreamingQueryException
+   * @throws org.apache.spark.sql.streaming.StreamingQueryException
    *   if the query has terminated with an exception.
    *
    * @since 2.0.0
@@ -127,7 +128,7 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException
+   * @throws org.apache.spark.sql.streaming.StreamingQueryException
    *   if the query has terminated with an exception
    *
    * @since 2.0.0
