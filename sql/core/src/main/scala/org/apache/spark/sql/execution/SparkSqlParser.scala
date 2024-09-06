@@ -1117,7 +1117,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[ShowCollationsCommand]] command.
    * Expected format:
    * {{{
-   *   SHOW COLLATIONS (LIKE? pattern)?;
+   *   SHOW identifier? COLLATIONS ((FROM | IN) ns=identifierReference)? (LIKE? pattern=stringLit);
    * }}}
    */
   override def visitShowCollations(ctx: ShowCollationsContext): LogicalPlan = withOrigin(ctx) {

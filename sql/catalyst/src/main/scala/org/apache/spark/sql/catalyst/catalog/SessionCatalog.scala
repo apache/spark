@@ -1904,7 +1904,7 @@ class SessionCatalog(
   }
 
   /**
-   * List all built-in collation's meta with the given pattern.
+   * List all built-in collations with the given pattern.
    */
   def listCollations(pattern: Option[String]): Seq[Collation] = {
     val collationIdentifiers = CollationFactory.listCollations(
