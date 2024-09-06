@@ -19,16 +19,13 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import java.util
-
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -43,7 +40,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -63,6 +60,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf, ToScalaUDF}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
+import org.apache.spark.sql.scripting.SqlScriptingContext
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -89,6 +87,16 @@ private[sql] object Dataset {
     }
     dataset
   }
+
+  def ofRows(
+      sparkSession: SparkSession,
+      logicalPlan: LogicalPlan,
+      sc: SqlScriptingContext): DataFrame =
+    sparkSession.withActive {
+      val qe = sparkSession.sessionState.executePlan(logicalPlan, sc)
+      qe.assertAnalyzed()
+      new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+    }
 
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {

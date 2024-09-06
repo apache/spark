@@ -52,7 +52,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *   Iterator through collection of statements to be executed.
    */
   private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
+    val context = new SqlScriptingContext()
+    transformTreeIntoExecutable(compound, context).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
@@ -76,7 +77,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    * @return
    *   Executable statement.
    */
-  private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
+  private def transformTreeIntoExecutable(
+      node: CompoundPlanStatement,
+      context: SqlScriptingContext): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
@@ -86,30 +89,35 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true))
+          .map(new SingleStatementExec(_, Origin(), context, isInternal = true))
           .reverse
         new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
-          session)
+          body.collection.map(st => transformTreeIntoExecutable(st, context)) ++ dropVariables,
+          session, context)
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
-          new SingleStatementExec(condition.parsedPlan, condition.origin))
+          new SingleStatementExec(condition.parsedPlan, condition.origin, context))
         val conditionalBodiesExec = conditionalBodies.map(body =>
-          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body, context).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
-          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body, context).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
       case WhileStatement(condition, body, _) =>
         val conditionExec =
-          new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false)
+          new SingleStatementExec(
+            condition.parsedPlan,
+            condition.origin,
+            context,
+            isInternal = false)
         val bodyExec =
-          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec]
+          transformTreeIntoExecutable(body, context).asInstanceOf[CompoundBodyExec]
         new WhileStatementExec(conditionExec, bodyExec, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
+          context,
           shouldCollectResult = true)
     }
 

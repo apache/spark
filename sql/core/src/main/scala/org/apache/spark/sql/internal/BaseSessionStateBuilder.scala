@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
-import org.apache.spark.sql.scripting.SqlScriptingInterpreter
+import org.apache.spark.sql.scripting.{SqlScriptingContext, SqlScriptingInterpreter}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -353,8 +353,8 @@ abstract class BaseSessionStateBuilder(
    * Create a query execution object.
    */
   protected def createQueryExecution:
-    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) => new QueryExecution(session, plan, mode = mode)
+    (LogicalPlan, CommandExecutionMode.Value, SqlScriptingContext) => QueryExecution =
+      (plan, mode, sc) => new QueryExecution(session, plan, sc, mode = mode)
 
   /**
    * Interface to start and stop streaming queries.

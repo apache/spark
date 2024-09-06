@@ -20,11 +20,8 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
@@ -45,6 +42,7 @@ import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.scripting.SqlScriptingContext
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -59,6 +57,7 @@ import org.apache.spark.util.Utils
 class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
+    val sc: SqlScriptingContext = null,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {

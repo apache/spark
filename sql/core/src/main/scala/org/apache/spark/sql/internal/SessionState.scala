@@ -19,10 +19,8 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.artifact.ArtifactManager
@@ -36,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.datasources.DataSourceManager
-import org.apache.spark.sql.scripting.SqlScriptingInterpreter
+import org.apache.spark.sql.scripting.{SqlScriptingContext, SqlScriptingInterpreter}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
@@ -89,7 +87,8 @@ private[sql] class SessionState(
     val streamingQueryManagerBuilder: () => StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
-    createQueryExecution: (LogicalPlan, CommandExecutionMode.Value) => QueryExecution,
+    createQueryExecution:
+      (LogicalPlan, CommandExecutionMode.Value, SqlScriptingContext) => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState,
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
@@ -138,8 +137,9 @@ private[sql] class SessionState(
 
   def executePlan(
       plan: LogicalPlan,
+      sc: SqlScriptingContext = null,
       mode: CommandExecutionMode.Value = CommandExecutionMode.ALL): QueryExecution =
-    createQueryExecution(plan, mode)
+    createQueryExecution(plan, mode, sc)
 }
 
 private[sql] object SessionState {

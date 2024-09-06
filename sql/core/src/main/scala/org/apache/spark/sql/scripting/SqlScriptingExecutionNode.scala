@@ -109,6 +109,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Logical plan of the parsed statement.
  * @param origin
  *   Origin descriptor for the statement.
+ * @param context
+ *   SQL scripting context.
  * @param isInternal
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
@@ -120,6 +122,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
+    val context: SqlScriptingContext,
     override val isInternal: Boolean = false,
     val shouldCollectResult: Boolean = false)
   extends LeafStatementExec with WithOrigin {
@@ -158,7 +161,8 @@ class SingleStatementExec(
  */
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
-    session: SparkSession)
+    session: SparkSession,
+    context: SqlScriptingContext)
   extends NonLeafStatementExec {
 
   private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
