@@ -14,20 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.encoders
 
+import java.nio.ByteBuffer
 
-package org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.expressions.objects.SerializerSupport
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.quoteNameParts
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.util.ArrayImplicits._
+/**
+ * A codec that uses Kryo to (de)serialize arbitrary objects to and from a byte array.
+ */
+class KryoSerializationCodecImpl extends Codec [Any, Array[Byte]] {
+  private val serializer = SerializerSupport.newSerializer(useKryo = true)
+  override def encode(in: Any): Array[Byte] =
+    serializer.serialize(in).array()
 
-class CannotReplaceMissingTableException(
-    tableIdentifier: Identifier,
-    cause: Option[Throwable] = None)
-  extends AnalysisException(
-      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      messageParameters = Map("relationName"
-        -> quoteNameParts((tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
-      cause = cause)
+  override def decode(out: Array[Byte]): Any =
+    serializer.deserialize(ByteBuffer.wrap(out))
+}

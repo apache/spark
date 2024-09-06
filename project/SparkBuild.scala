@@ -420,21 +420,12 @@ object SparkBuild extends PomBuild {
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
-  if (!profiles.contains("volcano")) {
-    enable(Volcano.settings)(kubernetes)
-    enable(Volcano.settings)(kubernetesIntegrationTests)
-  }
-
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
   enable(YARN.settings)(yarn)
 
   if (profiles.contains("sparkr")) {
     enable(SparkR.settings)(core)
-  }
-
-  if (!profiles.contains("opentelemetry")) {
-    enable(OpenTelemetry.settings)(core)
   }
 
   /**
@@ -1323,20 +1314,6 @@ object SparkR {
         c
       }
     }).value
-  )
-}
-
-object Volcano {
-  // Exclude all volcano file for Compile and Test
-  lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
-  )
-}
-
-object OpenTelemetry {
-  // Exclude all OpenTelemetry files for Compile and Test
-  lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "OpenTelemetry*.scala"
   )
 }
 

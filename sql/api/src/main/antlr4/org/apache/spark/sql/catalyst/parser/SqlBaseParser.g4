@@ -65,6 +65,8 @@ compoundStatement
     | beginEndCompoundBlock
     | ifElseStatement
     | whileStatement
+    | leaveStatement
+    | iterateStatement
     ;
 
 setStatementWithOptionalVarKeyword
@@ -81,6 +83,14 @@ ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
         (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
         (ELSE elseBody=compoundBody)? END IF
+    ;
+
+leaveStatement
+    : LEAVE multipartIdentifier
+    ;
+
+iterateStatement
+    : ITERATE multipartIdentifier
     ;
 
 singleStatement
@@ -1578,10 +1588,12 @@ ansiNonReserved
     | INTERVAL
     | INVOKER
     | ITEMS
+    | ITERATE
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
+    | LEAVE
     | LIKE
     | ILIKE
     | LIMIT
@@ -1927,11 +1939,13 @@ nonReserved
     | INVOKER
     | IS
     | ITEMS
+    | ITERATE
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
     | LEADING
+    | LEAVE
     | LIKE
     | LONG
     | ILIKE

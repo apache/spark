@@ -39,6 +39,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -954,6 +955,74 @@ class DataFrameTestsMixin:
         with io.StringIO() as buf, redirect_stdout(buf):
             self.spark.range(1).localCheckpoint().explain()
             self.assertIn("ExistingRDD", buf.getvalue())
+
+    def test_transpose(self):
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
+
+        # default index column
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("x", StringType(), True)]
+        )
+        expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
+        expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
+
+        # specified index column
+        transposed_df = df.transpose("c")
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("z", StringType(), True)]
+        )
+        expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
+        expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
+
+        # enforce transpose max values
+        with self.sql_conf({"spark.sql.transposeMaxValues": 0}):
+            with self.assertRaises(AnalysisException) as pe:
+                df.transpose().collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="TRANSPOSE_EXCEED_ROW_LIMIT",
+                messageParameters={"maxValues": "0", "config": "spark.sql.transposeMaxValues"},
+            )
+
+        # enforce ascending order based on index column values for transposed columns
+        df = self.spark.createDataFrame([{"a": "z"}, {"a": "y"}, {"a": "x"}])
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [
+                StructField("key", StringType(), False),
+                StructField("x", StringType(), True),
+                StructField("y", StringType(), True),
+                StructField("z", StringType(), True),
+            ]
+        )  # z, y, x -> x, y, z
+        expected_df = self.spark.createDataFrame([], schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
+
+        # enforce AtomicType Attribute for index column values
+        df = self.spark.createDataFrame([{"a": ["x", "x"], "b": "y", "c": "z"}])
+        with self.assertRaises(AnalysisException) as pe:
+            df.transpose().collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="TRANSPOSE_INVALID_INDEX_COLUMN",
+            messageParameters={
+                "reason": "Index column must be of atomic type, "
+                "but found: ArrayType(StringType,true)"
+            },
+        )
+
+        # enforce least common type for non-index columns
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": 1}])
+        with self.assertRaises(AnalysisException) as pe:
+            df.transpose().collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="TRANSPOSE_NO_LEAST_COMMON_TYPE",
+            messageParameters={"dt1": "STRING", "dt2": "BIGINT"},
+        )
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):

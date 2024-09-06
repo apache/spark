@@ -50,9 +50,12 @@ abstract class UDFRegistration {
    *   spark.udf.register("stringLit", bar.asNonNullable())
    * }}}
    *
-   * @param name the name of the UDF.
-   * @param udf the UDF needs to be registered.
-   * @return the registered UDF.
+   * @param name
+   *   the name of the UDF.
+   * @param udf
+   *   the UDF needs to be registered.
+   * @return
+   *   the registered UDF.
    *
    * @since 2.2.0
    */
@@ -117,11 +120,12 @@ abstract class UDFRegistration {
         |  registerJavaUDF(name, ToScalaUDF(f), returnType, $i)
         |}""".stripMargin)
     }
-    */
+   */
 
   /**
    * Registers a deterministic Scala closure of 0 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
@@ -130,200 +134,964 @@ abstract class UDFRegistration {
 
   /**
    * Registers a deterministic Scala closure of 1 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT]): UserDefinedFunction = {
+  def register[RT: TypeTag, A1: TypeTag](
+      name: String,
+      func: Function1[A1, RT]): UserDefinedFunction = {
     registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]])
   }
 
   /**
    * Registers a deterministic Scala closure of 2 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]])
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](
+      name: String,
+      func: Function2[A1, A2, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]])
   }
 
   /**
    * Registers a deterministic Scala closure of 3 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]])
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](
+      name: String,
+      func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]])
   }
 
   /**
    * Registers a deterministic Scala closure of 4 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]])
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](
+      name: String,
+      func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]])
   }
 
   /**
    * Registers a deterministic Scala closure of 5 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]])
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](
+      name: String,
+      func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]])
   }
 
   /**
    * Registers a deterministic Scala closure of 6 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag](
+      name: String,
+      func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]])
   }
 
   /**
    * Registers a deterministic Scala closure of 7 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag](
+      name: String,
+      func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]])
   }
 
   /**
    * Registers a deterministic Scala closure of 8 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag](
+      name: String,
+      func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]])
   }
 
   /**
    * Registers a deterministic Scala closure of 9 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag](
+      name: String,
+      func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]])
   }
 
   /**
    * Registers a deterministic Scala closure of 10 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag](
+      name: String,
+      func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]])
   }
 
   /**
    * Registers a deterministic Scala closure of 11 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag](
+      name: String,
+      func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]])
   }
 
   /**
    * Registers a deterministic Scala closure of 12 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag](
+      name: String,
+      func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT])
+      : UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]])
   }
 
   /**
    * Registers a deterministic Scala closure of 13 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag](
+      name: String,
+      func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT])
+      : UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]])
   }
 
   /**
    * Registers a deterministic Scala closure of 14 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag](
+      name: String,
+      func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT])
+      : UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]])
   }
 
   /**
    * Registers a deterministic Scala closure of 15 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag](
+      name: String,
+      func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT])
+      : UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]])
   }
 
   /**
    * Registers a deterministic Scala closure of 16 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag](
+      name: String,
+      func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT])
+      : UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]])
   }
 
   /**
    * Registers a deterministic Scala closure of 17 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag,
+      A17: TypeTag](
+      name: String,
+      func: Function17[
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+        A6,
+        A7,
+        A8,
+        A9,
+        A10,
+        A11,
+        A12,
+        A13,
+        A14,
+        A15,
+        A16,
+        A17,
+        RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]],
+      implicitly[TypeTag[A17]])
   }
 
   /**
    * Registers a deterministic Scala closure of 18 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag,
+      A17: TypeTag,
+      A18: TypeTag](
+      name: String,
+      func: Function18[
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+        A6,
+        A7,
+        A8,
+        A9,
+        A10,
+        A11,
+        A12,
+        A13,
+        A14,
+        A15,
+        A16,
+        A17,
+        A18,
+        RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]],
+      implicitly[TypeTag[A17]],
+      implicitly[TypeTag[A18]])
   }
 
   /**
    * Registers a deterministic Scala closure of 19 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag,
+      A17: TypeTag,
+      A18: TypeTag,
+      A19: TypeTag](
+      name: String,
+      func: Function19[
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+        A6,
+        A7,
+        A8,
+        A9,
+        A10,
+        A11,
+        A12,
+        A13,
+        A14,
+        A15,
+        A16,
+        A17,
+        A18,
+        A19,
+        RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]],
+      implicitly[TypeTag[A17]],
+      implicitly[TypeTag[A18]],
+      implicitly[TypeTag[A19]])
   }
 
   /**
    * Registers a deterministic Scala closure of 20 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]], implicitly[TypeTag[A20]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag,
+      A17: TypeTag,
+      A18: TypeTag,
+      A19: TypeTag,
+      A20: TypeTag](
+      name: String,
+      func: Function20[
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+        A6,
+        A7,
+        A8,
+        A9,
+        A10,
+        A11,
+        A12,
+        A13,
+        A14,
+        A15,
+        A16,
+        A17,
+        A18,
+        A19,
+        A20,
+        RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]],
+      implicitly[TypeTag[A17]],
+      implicitly[TypeTag[A18]],
+      implicitly[TypeTag[A19]],
+      implicitly[TypeTag[A20]])
   }
 
   /**
    * Registers a deterministic Scala closure of 21 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]], implicitly[TypeTag[A20]], implicitly[TypeTag[A21]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag,
+      A17: TypeTag,
+      A18: TypeTag,
+      A19: TypeTag,
+      A20: TypeTag,
+      A21: TypeTag](
+      name: String,
+      func: Function21[
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+        A6,
+        A7,
+        A8,
+        A9,
+        A10,
+        A11,
+        A12,
+        A13,
+        A14,
+        A15,
+        A16,
+        A17,
+        A18,
+        A19,
+        A20,
+        A21,
+        RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]],
+      implicitly[TypeTag[A17]],
+      implicitly[TypeTag[A18]],
+      implicitly[TypeTag[A19]],
+      implicitly[TypeTag[A20]],
+      implicitly[TypeTag[A21]])
   }
 
   /**
    * Registers a deterministic Scala closure of 22 arguments as user-defined function (UDF).
-   * @tparam RT return type of UDF.
+   * @tparam RT
+   *   return type of UDF.
    * @since 1.3.0
    */
-  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT]): UserDefinedFunction = {
-    registerScalaUDF(name, func, implicitly[TypeTag[RT]], implicitly[TypeTag[A1]], implicitly[TypeTag[A2]], implicitly[TypeTag[A3]], implicitly[TypeTag[A4]], implicitly[TypeTag[A5]], implicitly[TypeTag[A6]], implicitly[TypeTag[A7]], implicitly[TypeTag[A8]], implicitly[TypeTag[A9]], implicitly[TypeTag[A10]], implicitly[TypeTag[A11]], implicitly[TypeTag[A12]], implicitly[TypeTag[A13]], implicitly[TypeTag[A14]], implicitly[TypeTag[A15]], implicitly[TypeTag[A16]], implicitly[TypeTag[A17]], implicitly[TypeTag[A18]], implicitly[TypeTag[A19]], implicitly[TypeTag[A20]], implicitly[TypeTag[A21]], implicitly[TypeTag[A22]])
+  def register[
+      RT: TypeTag,
+      A1: TypeTag,
+      A2: TypeTag,
+      A3: TypeTag,
+      A4: TypeTag,
+      A5: TypeTag,
+      A6: TypeTag,
+      A7: TypeTag,
+      A8: TypeTag,
+      A9: TypeTag,
+      A10: TypeTag,
+      A11: TypeTag,
+      A12: TypeTag,
+      A13: TypeTag,
+      A14: TypeTag,
+      A15: TypeTag,
+      A16: TypeTag,
+      A17: TypeTag,
+      A18: TypeTag,
+      A19: TypeTag,
+      A20: TypeTag,
+      A21: TypeTag,
+      A22: TypeTag](
+      name: String,
+      func: Function22[
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+        A6,
+        A7,
+        A8,
+        A9,
+        A10,
+        A11,
+        A12,
+        A13,
+        A14,
+        A15,
+        A16,
+        A17,
+        A18,
+        A19,
+        A20,
+        A21,
+        A22,
+        RT]): UserDefinedFunction = {
+    registerScalaUDF(
+      name,
+      func,
+      implicitly[TypeTag[RT]],
+      implicitly[TypeTag[A1]],
+      implicitly[TypeTag[A2]],
+      implicitly[TypeTag[A3]],
+      implicitly[TypeTag[A4]],
+      implicitly[TypeTag[A5]],
+      implicitly[TypeTag[A6]],
+      implicitly[TypeTag[A7]],
+      implicitly[TypeTag[A8]],
+      implicitly[TypeTag[A9]],
+      implicitly[TypeTag[A10]],
+      implicitly[TypeTag[A11]],
+      implicitly[TypeTag[A12]],
+      implicitly[TypeTag[A13]],
+      implicitly[TypeTag[A14]],
+      implicitly[TypeTag[A15]],
+      implicitly[TypeTag[A16]],
+      implicitly[TypeTag[A17]],
+      implicitly[TypeTag[A18]],
+      implicitly[TypeTag[A19]],
+      implicitly[TypeTag[A20]],
+      implicitly[TypeTag[A21]],
+      implicitly[TypeTag[A22]])
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -405,7 +1173,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF9 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF9[_, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 9)
   }
 
@@ -413,7 +1184,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF10 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF10[_, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 10)
   }
 
@@ -421,7 +1195,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF11 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 11)
   }
 
@@ -429,7 +1206,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF12 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 12)
   }
 
@@ -437,7 +1217,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF13 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 13)
   }
 
@@ -445,7 +1228,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF14 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 14)
   }
 
@@ -453,7 +1239,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF15 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 15)
   }
 
@@ -461,7 +1250,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF16 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 16)
   }
 
@@ -469,7 +1261,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF17 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 17)
   }
 
@@ -477,7 +1272,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF18 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 18)
   }
 
@@ -485,7 +1283,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF19 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 19)
   }
 
@@ -493,7 +1294,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF20 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 20)
   }
 
@@ -501,7 +1305,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF21 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 21)
   }
 
@@ -509,7 +1316,10 @@ abstract class UDFRegistration {
    * Register a deterministic Java UDF22 instance as user-defined function (UDF).
    * @since 1.3.0
    */
-  def register(name: String, f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+  def register(
+      name: String,
+      f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
     registerJavaUDF(name, ToScalaUDF(f), returnType, 22)
   }
 

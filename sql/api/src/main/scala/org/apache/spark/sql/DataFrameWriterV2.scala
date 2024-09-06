@@ -14,111 +14,80 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 
-import scala.collection.mutable
-import scala.jdk.CollectionConverters._
+import java.util
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 
 /**
- * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2
+ * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage using the v2
  * API.
  *
- * @since 3.4.0
+ * @since 3.0.0
  */
 @Experimental
-final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
-    extends CreateTableWriter[T] {
-  import ds.sparkSession.RichColumn
+abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
 
-  private var provider: Option[String] = None
+  /** @inheritdoc */
+  override def using(provider: String): this.type
 
-  private val options = new mutable.HashMap[String, String]()
+  /** @inheritdoc */
+  override def option(key: String, value: Boolean): this.type = option(key, value.toString)
 
-  private val properties = new mutable.HashMap[String, String]()
+  /** @inheritdoc */
+  override def option(key: String, value: Long): this.type = option(key, value.toString)
 
-  private var partitioning: Option[Seq[proto.Expression]] = None
+  /** @inheritdoc */
+  override def option(key: String, value: Double): this.type = option(key, value.toString)
 
-  private var clustering: Option[Seq[String]] = None
+  /** @inheritdoc */
+  override def option(key: String, value: String): this.type
 
-  private var overwriteCondition: Option[proto.Expression] = None
+  /** @inheritdoc */
+  override def options(options: scala.collection.Map[String, String]): this.type
 
-  override def using(provider: String): CreateTableWriter[T] = {
-    this.provider = Some(provider)
-    this
-  }
+  /** @inheritdoc */
+  override def options(options: util.Map[String, String]): this.type
 
-  override def option(key: String, value: String): DataFrameWriterV2[T] = {
-    this.options.put(key, value)
-    this
-  }
+  /** @inheritdoc */
+  override def tableProperty(property: String, value: String): this.type
 
-  override def options(options: scala.collection.Map[String, String]): DataFrameWriterV2[T] = {
-    options.foreach { case (key, value) =>
-      this.options.put(key, value)
-    }
-    this
-  }
-
-  override def options(options: java.util.Map[String, String]): DataFrameWriterV2[T] = {
-    this.options(options.asScala)
-    this
-  }
-
-  override def tableProperty(property: String, value: String): CreateTableWriter[T] = {
-    this.properties.put(property, value)
-    this
-  }
-
+  /** @inheritdoc */
   @scala.annotation.varargs
-  override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
-    val asTransforms = (column +: columns).map(_.expr)
-    this.partitioning = Some(asTransforms)
-    this
-  }
+  override def partitionedBy(column: Column, columns: Column*): this.type
 
+  /** @inheritdoc */
   @scala.annotation.varargs
-  override def clusterBy(colName: String, colNames: String*): CreateTableWriter[T] = {
-    this.clustering = Some(colName +: colNames)
-    this
-  }
-
-  override def create(): Unit = {
-    executeWriteOperation(proto.WriteOperationV2.Mode.MODE_CREATE)
-  }
-
-  override def replace(): Unit = {
-    executeWriteOperation(proto.WriteOperationV2.Mode.MODE_REPLACE)
-  }
-
-  override def createOrReplace(): Unit = {
-    executeWriteOperation(proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
-  }
+  override def clusterBy(colName: String, colNames: String*): this.type
 
   /**
    * Append the contents of the data frame to the output table.
    *
-   * If the output table does not exist, this operation will fail. The data frame will be
+   * If the output table does not exist, this operation will fail with
+   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
+   *
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
-  def append(): Unit = {
-    executeWriteOperation(proto.WriteOperationV2.Mode.MODE_APPEND)
-  }
+  @throws(classOf[NoSuchTableException])
+  def append(): Unit
 
   /**
    * Overwrite rows matching the given filter condition with the contents of the data frame in the
    * output table.
    *
-   * If the output table does not exist, this operation will fail. The data frame will be
+   * If the output table does not exist, this operation will fail with
+   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
+   *
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
-  def overwrite(condition: Column): Unit = {
-    overwriteCondition = Some(condition.expr)
-    executeWriteOperation(proto.WriteOperationV2.Mode.MODE_OVERWRITE)
-  }
+  @throws(classOf[NoSuchTableException])
+  def overwrite(condition: Column): Unit
 
   /**
    * Overwrite all partition for which the data frame contains at least one row with the contents
@@ -127,85 +96,64 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
    * This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
    * partitions dynamically depending on the contents of the data frame.
    *
-   * If the output table does not exist, this operation will fail. The data frame will be
+   * If the output table does not exist, this operation will fail with
+   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
+   *
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
-  def overwritePartitions(): Unit = {
-    executeWriteOperation(proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
-  }
-
-  private def executeWriteOperation(mode: proto.WriteOperationV2.Mode): Unit = {
-    val builder = proto.WriteOperationV2.newBuilder()
-
-    builder.setInput(ds.plan.getRoot)
-    builder.setTableName(table)
-    provider.foreach(builder.setProvider)
-
-    partitioning.foreach(columns => builder.addAllPartitioningColumns(columns.asJava))
-    clustering.foreach(columns => builder.addAllClusteringColumns(columns.asJava))
-
-    options.foreach { case (k, v) =>
-      builder.putOptions(k, v)
-    }
-    properties.foreach { case (k, v) =>
-      builder.putTableProperties(k, v)
-    }
-
-    builder.setMode(mode)
-
-    overwriteCondition.foreach(builder.setOverwriteCondition)
-
-    ds.sparkSession.execute(proto.Command.newBuilder().setWriteOperationV2(builder).build())
-  }
+  @throws(classOf[NoSuchTableException])
+  def overwritePartitions(): Unit
 }
 
 /**
  * Configuration methods common to create/replace operations and insert/overwrite operations.
  * @tparam R
  *   builder type to return
- * @since 3.4.0
+ * @since 3.0.0
  */
 trait WriteConfigMethods[R] {
 
   /**
    * Add a write option.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def option(key: String, value: String): R
 
   /**
    * Add a boolean output option.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def option(key: String, value: Boolean): R = option(key, value.toString)
 
   /**
    * Add a long output option.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def option(key: String, value: Long): R = option(key, value.toString)
 
   /**
    * Add a double output option.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def option(key: String, value: Double): R = option(key, value.toString)
 
   /**
    * Add write options from a Scala Map.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def options(options: scala.collection.Map[String, String]): R
 
   /**
    * Add write options from a Java Map.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def options(options: java.util.Map[String, String]): R
 }
@@ -213,7 +161,7 @@ trait WriteConfigMethods[R] {
 /**
  * Trait to restrict calls to create and replace operations.
  *
- * @since 3.4.0
+ * @since 3.0.0
  */
 trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
 
@@ -223,8 +171,13 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * The new table's schema, partition layout, properties, and other configuration will be based
    * on the configuration set on this writer.
    *
-   * If the output table exists, this operation will fail.
+   * If the output table exists, this operation will fail with
+   * [[org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException]].
+   *
+   * @throws org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+   *   If the table already exists
    */
+  @throws(classOf[TableAlreadyExistsException])
   def create(): Unit
 
   /**
@@ -233,8 +186,13 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * The existing table's schema, partition layout, properties, and other configuration will be
    * replaced with the contents of the data frame and the configuration set on this writer.
    *
-   * If the output table does not exist, this operation will fail.
+   * If the output table does not exist, this operation will fail with
+   * [[org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException]].
+   *
+   * @throws org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
+   *   If the table does not exist
    */
+  @throws(classOf[CannotReplaceMissingTableException])
   def replace(): Unit
 
   /**
@@ -260,7 +218,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * predicates on the partitioned columns. In order for partitioning to work well, the number of
    * distinct values in each column should typically be less than tens of thousands.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   @scala.annotation.varargs
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
@@ -282,7 +240,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * Specifies a provider for the underlying output data source. Spark's default catalog supports
    * "parquet", "json", etc.
    *
-   * @since 3.4.0
+   * @since 3.0.0
    */
   def using(provider: String): CreateTableWriter[T]
 

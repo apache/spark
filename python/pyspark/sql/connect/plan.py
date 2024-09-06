@@ -1329,6 +1329,27 @@ class Unpivot(LogicalPlan):
         return plan
 
 
+class Transpose(LogicalPlan):
+    """Logical plan object for a transpose operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        index_columns: Sequence[Column],
+    ) -> None:
+        super().__init__(child)
+        self.index_columns = index_columns
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.transpose.input.CopyFrom(self._child.plan(session))
+        if self.index_columns is not None and len(self.index_columns) > 0:
+            for index_column in self.index_columns:
+                plan.transpose.index_columns.append(index_column.to_plan(session))
+        return plan
+
+
 class CollectMetrics(LogicalPlan):
     """Logical plan object for a CollectMetrics operation."""
 
