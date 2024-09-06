@@ -287,7 +287,7 @@ _options: List[Option] = [
         doc=(
             "'plotting.sample_ratio' sets the proportion of data that will be plotted for sample-"
             "based plots such as `plot.line` and `plot.area`. "
-            "If not set, it is derived from ‘plotting.max_rows’, by calculating the ratio of "
+            "If not set, it is derived from 'plotting.max_rows', by calculating the ratio of "
             "'plotting.max_rows' to the total dataset size."
         ),
         default=None,
