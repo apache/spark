@@ -19,11 +19,6 @@ import unittest
 import pyspark.sql.plot  # noqa: F401
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
 
-if have_plotly:
-    from plotly import express
-    from plotly.graph_objs._figure import Figure
-    import plotly.graph_objs as go
-
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
 class DataFramePlotPlotlyTestsMixin:
