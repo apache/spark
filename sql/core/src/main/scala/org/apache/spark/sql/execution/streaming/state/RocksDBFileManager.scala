@@ -262,7 +262,7 @@ class RocksDBFileManager(
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
     val rocksDBFiles = saveImmutableFilesToDfs(version, localImmutableFiles, capturedFileMappings)
     val metadata = RocksDBCheckpointMetadata(
-      rocksDBFiles, numKeys, columnFamilyMapping, maxColumnFamilyId)
+      rocksDBFiles, numKeys, columnFamilyMapping, maxColumnFamilyId, checkpointUniqueId, None)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
     logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
@@ -1037,6 +1037,26 @@ object RocksDBCheckpointMetadata {
       numKeys,
       columnFamilyMapping,
       maxColumnFamilyId
+    )
+  }
+
+  def apply(
+      rocksDBFiles: Seq[RocksDBImmutableFile],
+      numKeys: Long,
+      columnFamilyMapping: Option[Map[String, Short]],
+      maxColumnFamilyId: Option[Short],
+      checkpointUniqueId: Option[String],
+      checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]]):
+      RocksDBCheckpointMetadata = {
+    val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
+    new RocksDBCheckpointMetadata(
+      sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
+      logFiles.map(_.asInstanceOf[RocksDBLogFile]),
+      numKeys,
+      columnFamilyMapping,
+      maxColumnFamilyId,
+      checkpointUniqueId,
+      checkpointUniqueIdLineage
     )
   }
 

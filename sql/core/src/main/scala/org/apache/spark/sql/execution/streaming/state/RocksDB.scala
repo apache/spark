@@ -280,6 +280,7 @@ class RocksDB(
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
+    // TODO: this might not be a zip file?
     lazy val currMetadata = fileManager.loadCheckpointFromDfs(
       version, workingDir, checkpointUniqueId)
     try {
@@ -781,6 +782,8 @@ class RocksDB(
     }
     localCheckpoint match {
       case Some(
+        // TODO: this snapshot should store the lineage
+        // and you construct a new one with loadedCheckpointUniqueId
         RocksDBSnapshot(
           localDir,
           version,
