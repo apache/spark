@@ -84,6 +84,7 @@ case class SqlScriptingInterpreter() {
         new CompoundBodyExec(
           collection.map(st => transformTreeIntoExecutable(st, session)) ++ dropVariables,
           label)
+
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
@@ -93,22 +94,27 @@ case class SqlScriptingInterpreter() {
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+
       case WhileStatement(condition, body, label) =>
         val conditionExec =
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false)
         val bodyExec =
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
         new WhileStatementExec(conditionExec, bodyExec, label, session)
-      case RepeatStatement(condition, body, _) =>
+
+      case RepeatStatement(condition, body, label) =>
         val conditionExec =
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false)
         val bodyExec =
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
-        new RepeatStatementExec(conditionExec, bodyExec, session)
+        new RepeatStatementExec(conditionExec, bodyExec, label, session)
+
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)
+
       case iterateStatement: IterateStatement =>
         new IterateStatementExec(iterateStatement.label)
+
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,

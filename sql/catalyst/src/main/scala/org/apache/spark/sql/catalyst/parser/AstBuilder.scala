@@ -289,6 +289,10 @@ class AstBuilder extends DataTypeAstBuilder
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
         => true
+      case c: RepeatStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+      => true
       case _ => false
     }
   }

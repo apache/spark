@@ -81,8 +81,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   case class TestRepeat(
     condition: TestLoopCondition,
-    body: CompoundBodyExec)
-    extends RepeatStatementExec(condition, body, spark) {
+    body: CompoundBodyExec,
+    label: Option[String] = None)
+    extends RepeatStatementExec(condition, body, label, spark) {
 
     private val evaluator = new LoopBooleanConditionEvaluator(condition)
 
@@ -422,6 +423,23 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq("con1", "body1", "lbl"))
   }
 
+  test("leave repeat loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestLeafStatement("body1"),
+            new LeaveStatementExec("lbl"))
+          ),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "lbl"))
+  }
+
   test("iterate while loop") {
     val iter = new CompoundBodyExec(
       statements = Seq(
@@ -438,6 +456,25 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1", "lbl", "con1", "body1", "lbl", "con1"))
+  }
+
+  test("iterate repeat loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestLeafStatement("body1"),
+            new IterateStatementExec("lbl"),
+            TestLeafStatement("body2"))
+          ),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(
+      statements === Seq("body1", "lbl", "con1", "body1", "lbl", "con1", "body1", "lbl", "con1"))
   }
 
   test("leave outer loop from nested while loop") {
@@ -461,6 +498,29 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body1", "lbl"))
+  }
+
+  test("leave outer loop from nested repeat loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestRepeat(
+              condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
+              body = new CompoundBodyExec(Seq(
+                TestLeafStatement("body1"),
+                new LeaveStatementExec("lbl"))
+              ),
+              label = Some("lbl2")
+            )
+          )),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "lbl"))
   }
 
   test("iterate outer loop from nested while loop") {
@@ -488,5 +548,32 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "con1", "con2", "body1", "lbl",
       "con1", "con2", "body1", "lbl",
       "con1"))
+  }
+
+  test("iterate outer loop from nested repeat loop") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+          body = new CompoundBodyExec(Seq(
+            TestRepeat(
+              condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
+              body = new CompoundBodyExec(Seq(
+                TestLeafStatement("body1"),
+                new IterateStatementExec("lbl"),
+                TestLeafStatement("body2"))
+              ),
+              label = Some("lbl2")
+            )
+          )),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq(
+      "body1", "lbl", "con1",
+      "body1", "lbl", "con1",
+      "body1", "lbl", "con1"))
   }
 }

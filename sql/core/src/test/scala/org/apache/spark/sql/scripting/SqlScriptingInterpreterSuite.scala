@@ -651,68 +651,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(commands, expected)
     }
   }
-//
-//  test("nested while") {
-//    val commands =
-//      """
-//        |BEGIN
-//        | DECLARE i = 0;
-//        | DECLARE j = 0;
-//        | WHILE i < 2 DO
-//        |   SET VAR j = 0;
-//        |   WHILE j < 2 DO
-//        |     SELECT i, j;
-//        |     SET VAR j = j + 1;
-//        |   END WHILE;
-//        |   SET VAR i = i + 1;
-//        | END WHILE;
-//        |END
-//        |""".stripMargin
-//
-//    val expected = Seq(
-//      Seq.empty[Row], // declare i
-//      Seq.empty[Row], // declare j
-//      Seq.empty[Row], // set j to 0
-//      Seq(Row(0, 0)), // select i, j
-//      Seq.empty[Row], // increase j
-//      Seq(Row(0, 1)), // select i, j
-//      Seq.empty[Row], // increase j
-//      Seq.empty[Row], // increase i
-//      Seq.empty[Row], // set j to 0
-//      Seq(Row(1, 0)), // select i, j
-//      Seq.empty[Row], // increase j
-//      Seq(Row(1, 1)), // select i, j
-//      Seq.empty[Row], // increase j
-//      Seq.empty[Row], // increase i
-//      Seq.empty[Row], // drop j
-//      Seq.empty[Row] // drop i
-//    )
-//    verifySqlScriptResult(commands, expected)
-//  }
-//
-//  test("while with count") {
-//    withTable("t") {
-//      val commands =
-//        """
-//          |BEGIN
-//          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
-//          |WHILE (SELECT COUNT(*) < 2 FROM t) DO
-//          |  SELECT 42;
-//          |  INSERT INTO t VALUES (1, 'a', 1.0);
-//          |END WHILE;
-//          |END
-//          |""".stripMargin
-//
-//      val expected = Seq(
-//        Seq.empty[Row], // create table
-//        Seq(Row(42)), // select
-//        Seq.empty[Row], // insert
-//        Seq(Row(42)), // select
-//        Seq.empty[Row] // insert
-//      )
-//      verifySqlScriptResult(commands, expected)
-//    }
-//  }
 
   test("leave compound block") {
     val sqlScriptText =

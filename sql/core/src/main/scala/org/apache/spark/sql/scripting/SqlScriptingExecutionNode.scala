@@ -414,6 +414,7 @@ class WhileStatementExec(
 class RepeatStatementExec(
   condition: SingleStatementExec,
   body: CompoundBodyExec,
+  label: Option[String],
   session: SparkSession) extends NonLeafStatementExec {
 
   private object RepeatState extends Enumeration {
@@ -440,6 +441,25 @@ class RepeatStatementExec(
           condition
         case RepeatState.Body =>
           val retStmt = body.getTreeIterator.next()
+
+          retStmt match {
+            case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
+              if (label.contains(leaveStatementExec.label)) {
+                leaveStatementExec.hasBeenMatched = true
+              }
+              curr = None
+              return retStmt
+            case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+              if (label.contains(iterStatementExec.label)) {
+                iterStatementExec.hasBeenMatched = true
+              }
+              state = RepeatState.Condition
+              curr = Some(condition)
+              condition.reset()
+              return retStmt
+            case _ =>
+          }
+
           if (!body.getTreeIterator.hasNext) {
             state = RepeatState.Condition
             curr = Some(condition)
