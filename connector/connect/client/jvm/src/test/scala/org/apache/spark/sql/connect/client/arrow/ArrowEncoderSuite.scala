@@ -30,7 +30,7 @@ import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{sql, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{sql, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
@@ -777,13 +777,13 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("kryo serialization") {
-    val e = intercept[SparkException] {
+    val e = intercept[SparkRuntimeException] {
       val encoder = sql.encoderFor(Encoders.kryo[(Int, String)])
       roundTripAndCheckIdentical(encoder) { () =>
         Iterator.tabulate(10)(i => (i, "itr_" + i))
       }
     }
-    assert(e.getCause.isInstanceOf[ClassNotFoundException])
+    assert(e.getErrorClass == "CANNOT_USE_KRYO")
   }
 
   test("transforming encoder") {
