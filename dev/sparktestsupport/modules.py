@@ -324,9 +324,9 @@ connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf],
     source_file_regexes=[
+        "sql/connect",
         "connector/connect",
     ],
-    build_profile_flags=["-Pconnect"],
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
@@ -483,6 +483,7 @@ pyspark_sql = Module(
         "pyspark.sql.group",
         "pyspark.sql.functions.builtin",
         "pyspark.sql.functions.partitioning",
+        "pyspark.sql.merge",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming.query",
         "pyspark.sql.streaming.readwriter",
@@ -997,6 +998,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
         "pyspark.sql.connect.column",
+        "pyspark.sql.connect.merge",
         "pyspark.sql.connect.readwriter",
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions.builtin",
@@ -1421,6 +1423,18 @@ pyspark_errors = Module(
         "pyspark.errors.tests.test_errors",
     ],
 )
+
+pyspark_logging = Module(
+    name="pyspark-logger",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/logger"],
+    python_test_goals=[
+        # unittests
+        "pyspark.logger.tests.test_logger",
+        "pyspark.logger.tests.connect.test_parity_logger",
+    ],
+)
+
 
 sparkr = Module(
     name="sparkr",

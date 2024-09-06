@@ -131,6 +131,7 @@ DataFrame
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
+    DataFrame.mergeInto
     DataFrame.pandas_api
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill

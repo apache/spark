@@ -846,6 +846,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -863,6 +864,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -880,6 +882,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -897,6 +900,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`encode`",
     "parameter" : "`charset`"
   }
@@ -1140,6 +1144,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1157,6 +1162,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1206,6 +1212,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }
@@ -1223,6 +1230,7 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
+    "charsets" : "utf-8, utf-16be, iso-8859-1, utf-16le, utf-16, utf-32, us-ascii",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
   }

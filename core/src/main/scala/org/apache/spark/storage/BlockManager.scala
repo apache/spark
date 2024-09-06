@@ -2164,7 +2164,10 @@ private[spark] class BlockManager(
     diskBlockManager.stop()
     rpcEnv.stop(storageEndpoint)
     blockInfoManager.clear()
-    memoryStore.clear()
+    // The memoryManager may be null if the driver plugin fails to initialize
+    if (memoryManager != null) {
+      memoryStore.clear()
+    }
     futureExecutionContext.shutdownNow()
     logInfo("BlockManager stopped")
   }

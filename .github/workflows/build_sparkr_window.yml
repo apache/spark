@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-name: "Build / SparkR-only (master, 4.4.0, windows-2022)"
+name: "Build / SparkR-only (master, 4.4.1, windows-2022)"
 
 on:
   schedule:
@@ -50,10 +50,10 @@ jobs:
       with:
         distribution: zulu
         java-version: 17
-    - name: Install R 4.4.0
+    - name: Install R 4.4.1
       uses: r-lib/actions/setup-r@v2
       with:
-        r-version: 4.4.0
+        r-version: 4.4.1
     - name: Install R dependencies
       run: |
         Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'xml2'), repos='https://cloud.r-project.org/')"
@@ -85,6 +85,7 @@ jobs:
       shell: cmd
       env:
         NOT_CRAN: true
+        SPARKR_SUPPRESS_DEPRECATION_WARNING: 1
         # See SPARK-27848. Currently installing some dependent packages causes
         # "(converted from warning) unable to identify current timezone 'C':" for an unknown reason.
         # This environment variable works around to test SparkR against a higher version.

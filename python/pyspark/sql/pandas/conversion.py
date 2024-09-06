@@ -673,8 +673,8 @@ class SparkConversionMixin:
                     if isinstance(field_type, pa.StructType):
                         if len(field_type) == 0:
                             raise PySparkValueError(
-                                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                                message_parameters={},
+                                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                                messageParameters={},
                             )
                         arrow_type = field_type.field(0).type
                         spark_type = MapType(
@@ -697,8 +697,8 @@ class SparkConversionMixin:
             spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                message_parameters={"data_type": str(schema)},
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                messageParameters={"data_type": str(schema)},
             )
         else:
             # Any timestamps must be coerced to be compatible with Spark

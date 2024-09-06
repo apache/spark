@@ -597,6 +597,8 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeNumberField("Executor Run Time", taskMetrics.executorRunTime)
     g.writeNumberField("Executor CPU Time", taskMetrics.executorCpuTime)
     g.writeNumberField("Peak Execution Memory", taskMetrics.peakExecutionMemory)
+    g.writeNumberField("Peak On Heap Execution Memory", taskMetrics.peakOnHeapExecutionMemory)
+    g.writeNumberField("Peak Off Heap Execution Memory", taskMetrics.peakOffHeapExecutionMemory)
     g.writeNumberField("Result Size", taskMetrics.resultSize)
     g.writeNumberField("JVM GC Time", taskMetrics.jvmGCTime)
     g.writeNumberField("Result Serialization Time", taskMetrics.resultSerializationTime)
@@ -1254,6 +1256,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     // The "Peak Execution Memory" field was added in Spark 3.0.0:
     metrics.setPeakExecutionMemory(
       jsonOption(json.get("Peak Execution Memory")).map(_.extractLong).getOrElse(0))
+    metrics.setPeakOnHeapExecutionMemory(
+      jsonOption(json.get("Peak On Heap Execution Memory")).map(_.extractLong).getOrElse(0))
+    metrics.setPeakOffHeapExecutionMemory(
+      jsonOption(json.get("Peak Off Heap Execution Memory")).map(_.extractLong).getOrElse(0))
     metrics.setResultSize(json.get("Result Size").extractLong)
     metrics.setJvmGCTime(json.get("JVM GC Time").extractLong)
     metrics.setResultSerializationTime(json.get("Result Serialization Time").extractLong)
@@ -1379,7 +1385,7 @@ private[spark] object JsonProtocol extends JsonUtils {
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
           .map(_.extractElements.map(accumulableInfoFromJson).toArray.toImmutableArraySeq)
           .getOrElse(taskMetricsFromJson(json.get("Metrics")).accumulators().map(acc => {
-            acc.toInfo(Some(acc.value), None)
+            acc.toInfoUpdate
           }).toArray.toImmutableArraySeq)
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost

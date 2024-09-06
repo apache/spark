@@ -225,6 +225,10 @@ Package   Supported version Note
 `pyarrow` >=10.0.0          Required for Spark SQL
 ========= ================= ======================
 
+Additional libraries that enhance functionality but are not included in the installation packages:
+
+- **flameprof**: Provide the default renderer for UDF performance profiling.
+
 
 Pandas API on Spark
 ^^^^^^^^^^^^^^^^^^^

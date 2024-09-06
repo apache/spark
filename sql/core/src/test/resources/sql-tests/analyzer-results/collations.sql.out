@@ -159,9 +159,9 @@ DropTable false, false
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Except false
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -169,9 +169,9 @@ Except false
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Except All true
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -180,9 +180,9 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+   :- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    :  +- LocalRelation [col1#x]
-   +- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+   +- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
       +- LocalRelation [col1#x]
 
 
@@ -190,9 +190,9 @@ Distinct
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Union false, false
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -200,9 +200,9 @@ Union false, false
 select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Intersect false
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -254,138 +254,325 @@ DropTable false, false
 -- !query
 select array_contains(ARRAY('aaa' collate utf8_lcase),'AAA' collate utf8_lcase)
 -- !query analysis
-Project [array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase)) AS array_contains(array(collate(aaa)), collate(AAA))#x]
+Project [array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase)) AS array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_position(ARRAY('aaa' collate utf8_lcase, 'bbb' collate utf8_lcase),'BBB' collate utf8_lcase)
 -- !query analysis
-Project [array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase)) AS array_position(array(collate(aaa), collate(bbb)), collate(BBB))#xL]
+Project [array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase)) AS array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase))#xL]
 +- OneRowRelation
 
 
 -- !query
 select nullif('aaa' COLLATE utf8_lcase, 'AAA' COLLATE utf8_lcase)
 -- !query analysis
-Project [nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)) AS nullif(collate(aaa), collate(AAA))#x]
+Project [nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)) AS nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))#x]
 +- OneRowRelation
 
 
 -- !query
 select least('aaa' COLLATE utf8_lcase, 'AAA' collate utf8_lcase, 'a' collate utf8_lcase)
 -- !query analysis
-Project [least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase)) AS least(collate(aaa), collate(AAA), collate(a))#x]
+Project [least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase)) AS least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase))#x]
 +- OneRowRelation
 
 
 -- !query
 select arrays_overlap(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS arrays_overlap(array(collate(aaa)), array(collate(AAA)))#x]
+Project [arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_distinct(array('aaa' collate utf8_lcase, 'AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))) AS array_distinct(array(collate(aaa), collate(AAA)))#x]
+Project [array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))) AS array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_union(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_union(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_intersect(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_intersect(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_except(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_except(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode < 'A'
 -- !query analysis
-Project [(collate(a, unicode) < cast(A as string collate UNICODE)) AS (collate(a) < A)#x]
+Project [(collate(a, unicode) < cast(A as string collate UNICODE)) AS (collate(a, unicode) < A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ci = 'A'
 -- !query analysis
-Project [(collate(a, unicode_ci) = cast(A as string collate UNICODE_CI)) AS (collate(a) = A)#x]
+Project [(collate(a, unicode_ci) = cast(A as string collate UNICODE_CI)) AS (collate(a, unicode_ci) = A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ai = 'å'
 -- !query analysis
-Project [(collate(a, unicode_ai) = cast(å as string collate UNICODE_AI)) AS (collate(a) = å)#x]
+Project [(collate(a, unicode_ai) = cast(å as string collate UNICODE_AI)) AS (collate(a, unicode_ai) = å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ci_ai = 'Å'
 -- !query analysis
-Project [(collate(a, unicode_ci_ai) = cast(Å as string collate UNICODE_CI_AI)) AS (collate(a) = Å)#x]
+Project [(collate(a, unicode_ci_ai) = cast(Å as string collate UNICODE_CI_AI)) AS (collate(a, unicode_ci_ai) = Å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en < 'A'
 -- !query analysis
-Project [(collate(a, en) < cast(A as string collate en)) AS (collate(a) < A)#x]
+Project [(collate(a, en) < cast(A as string collate en)) AS (collate(a, en) < A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ci = 'A'
 -- !query analysis
-Project [(collate(a, en_ci) = cast(A as string collate en_CI)) AS (collate(a) = A)#x]
+Project [(collate(a, en_ci) = cast(A as string collate en_CI)) AS (collate(a, en_ci) = A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ai = 'å'
 -- !query analysis
-Project [(collate(a, en_ai) = cast(å as string collate en_AI)) AS (collate(a) = å)#x]
+Project [(collate(a, en_ai) = cast(å as string collate en_AI)) AS (collate(a, en_ai) = å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ci_ai = 'Å'
 -- !query analysis
-Project [(collate(a, en_ci_ai) = cast(Å as string collate en_CI_AI)) AS (collate(a) = Å)#x]
+Project [(collate(a, en_ci_ai) = cast(Å as string collate en_CI_AI)) AS (collate(a, en_ci_ai) = Å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'Kypper' collate sv < 'Köpfe'
 -- !query analysis
-Project [(collate(Kypper, sv) < cast(Köpfe as string collate sv)) AS (collate(Kypper) < Köpfe)#x]
+Project [(collate(Kypper, sv) < cast(Köpfe as string collate sv)) AS (collate(Kypper, sv) < Köpfe)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'Kypper' collate de > 'Köpfe'
 -- !query analysis
-Project [(collate(Kypper, de) > cast(Köpfe as string collate de)) AS (collate(Kypper) > Köpfe)#x]
+Project [(collate(Kypper, de) > cast(Köpfe as string collate de)) AS (collate(Kypper, de) > Köpfe)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'I' collate tr_ci = 'ı'
 -- !query analysis
-Project [(collate(I, tr_ci) = cast(ı as string collate tr_CI)) AS (collate(I) = ı)#x]
+Project [(collate(I, tr_ci) = cast(ı as string collate tr_CI)) AS (collate(I, tr_ci) = ı)#x]
 +- OneRowRelation
+
+
+-- !query
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase, keyValueDelim string collate utf8_binary) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
+
+
+-- !query
+insert into t4 values('a:1,b:2,c:3', ',', ':')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t4], Append, `spark_catalog`.`default`.`t4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t4), [text, pairDelim, keyValueDelim]
++- Project [cast(col1#x as string) AS text#x, cast(col2#x as string collate UTF8_LCASE) AS pairDelim#x, cast(col3#x as string) AS keyValueDelim#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select str_to_map(text, pairDelim, keyValueDelim) from t4
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4
+-- !query analysis
+Project [str_to_map(collate(text#x, utf8_binary), collate(pairDelim#x, utf8_binary), collate(keyValueDelim#x, utf8_binary)) AS str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), collate(keyValueDelim, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t4
+   +- Relation spark_catalog.default.t4[text#x,pairDelim#x,keyValueDelim#x] parquet
+
+
+-- !query
+drop table t4
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4
+
+
+-- !query
+create table t5(str string collate utf8_binary, delimiter string collate utf8_lcase, partNum int) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t5`, false
+
+
+-- !query
+insert into t5 values('11AB12AB13', 'AB', 2)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [str, delimiter, partNum]
++- Project [cast(col1#x as string) AS str#x, cast(col2#x as string collate UTF8_LCASE) AS delimiter#x, cast(col3#x as int) AS partNum#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select split_part(str, delimiter, partNum) from t5
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select split_part(str collate utf8_binary, delimiter collate utf8_lcase, partNum) from t5
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select split_part(str collate utf8_binary, delimiter collate utf8_binary, partNum) from t5
+-- !query analysis
+Project [split_part(collate(str#x, utf8_binary), collate(delimiter#x, utf8_binary), partNum#x) AS split_part(collate(str, utf8_binary), collate(delimiter, utf8_binary), partNum)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[str#x,delimiter#x,partNum#x] parquet
+
+
+-- !query
+drop table t5
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t5
+
+
+-- !query
+create table t6 (utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase, threshold int) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t6`, false
+
+
+-- !query
+insert into t6 values('kitten', 'sitting', 2)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t6, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t6], Append, `spark_catalog`.`default`.`t6`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t6), [utf8_binary, utf8_lcase, threshold]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x, cast(col3#x as int) AS threshold#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t6
+-- !query analysis
+Project [levenshtein(collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_binary), None) AS levenshtein(collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t6
+   +- Relation spark_catalog.default.t6[utf8_binary#x,utf8_lcase#x,threshold#x] parquet
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase, threshold) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase, threshold) from t6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary, threshold) from t6
+-- !query analysis
+Project [levenshtein(collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_binary), Some(threshold#x)) AS levenshtein(collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary), threshold)#x]
++- SubqueryAlias spark_catalog.default.t6
+   +- Relation spark_catalog.default.t6[utf8_binary#x,utf8_lcase#x,threshold#x] parquet
+
+
+-- !query
+drop table t6
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t6

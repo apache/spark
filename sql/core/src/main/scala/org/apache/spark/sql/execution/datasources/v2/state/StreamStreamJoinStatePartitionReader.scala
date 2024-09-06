@@ -117,7 +117,8 @@ class StreamStreamJoinStatePartitionReader(
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,
-        snapshotStartVersion = partition.sourceOptions.snapshotStartBatchId.map(_ + 1)
+        snapshotStartVersion =
+          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1)
       )
     }
 

@@ -45,34 +45,33 @@ trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("test basic ALTER TABLE with clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id INT, data STRING) $defaultUsing CLUSTER BY (id, data)")
+      sql(s"CREATE TABLE $tbl (id INT, data STRING) $defaultUsing CLUSTER BY (id, data)")
       validateClusterBy(tbl, Seq("id", "data"))
-      spark.sql(s"ALTER TABLE $tbl CLUSTER BY (data, id)")
+      sql(s"ALTER TABLE $tbl CLUSTER BY (data, id)")
       validateClusterBy(tbl, Seq("data", "id"))
-      spark.sql(s"ALTER TABLE $tbl CLUSTER BY NONE")
+      sql(s"ALTER TABLE $tbl CLUSTER BY NONE")
       validateClusterBy(tbl, Seq.empty)
-      spark.sql(s"ALTER TABLE $tbl CLUSTER BY (id)")
+      sql(s"ALTER TABLE $tbl CLUSTER BY (id)")
       validateClusterBy(tbl, Seq("id"))
     }
   }
 
   test("test clustering columns with comma") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (`i,d` INT, data STRING) $defaultUsing " +
-        "CLUSTER BY (`i,d`, data)")
+      sql(s"CREATE TABLE $tbl (`i,d` INT, data STRING) $defaultUsing CLUSTER BY (`i,d`, data)")
       validateClusterBy(tbl, Seq("`i,d`", "data"))
-      spark.sql(s"ALTER TABLE $tbl CLUSTER BY (data, `i,d`)")
+      sql(s"ALTER TABLE $tbl CLUSTER BY (data, `i,d`)")
       validateClusterBy(tbl, Seq("data", "`i,d`"))
     }
   }
 
   test("test nested clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl " +
+      sql(s"CREATE TABLE $tbl " +
         s"($nestedColumnSchema) " +
         s"$defaultUsing CLUSTER BY (${nestedClusteringColumns.mkString(",")})")
       validateClusterBy(tbl, nestedClusteringColumns)
-      spark.sql(s"ALTER TABLE $tbl CLUSTER BY (${nestedClusteringColumnsNew.mkString(",")})")
+      sql(s"ALTER TABLE $tbl CLUSTER BY (${nestedClusteringColumnsNew.mkString(",")})")
       validateClusterBy(tbl, nestedClusteringColumnsNew)
     }
   }
@@ -80,10 +79,18 @@ trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
   test("clustering columns not defined in schema") {
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing CLUSTER BY (id)")
-      val err = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tbl CLUSTER BY (unknown)")
-      }
-      assert(err.message.contains("Couldn't find column unknown in:"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tbl CLUSTER BY (unknown)")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3060",
+        parameters = Map("i" -> "unknown",
+          "schema" ->
+            """root
+              | |-- id: long (nullable = true)
+              | |-- data: string (nullable = true)
+              |""".stripMargin)
+      )
     }
   }
 

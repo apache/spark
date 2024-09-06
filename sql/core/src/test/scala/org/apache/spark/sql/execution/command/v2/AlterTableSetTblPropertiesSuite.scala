@@ -47,4 +47,8 @@ class AlterTableSetTblPropertiesSuite
     val actualTblProps = getTableMetadata(tableIdent).properties.asScala.toMap
     assert(normalizeTblProps(actualTblProps) === expectedTblProps)
   }
+
+  override def getTblPropertyValue(tableIdent: TableIdentifier, key: String): String = {
+    getTableMetadata(tableIdent).properties.asScala.toMap.getOrElse(key, null)
+  }
 }

@@ -4613,6 +4613,24 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0L": {
+        "description": "Invalid usage of labels.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0M": {
+        "description": "Invalid variable declaration.",
+        "origin": "Spark,",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0N": {
+        "description": "Invalid external type.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",

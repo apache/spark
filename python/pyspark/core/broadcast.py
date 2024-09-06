@@ -59,8 +59,8 @@ def _from_id(bid: int) -> "Broadcast[Any]":
 
     if bid not in _broadcastRegistry:
         raise PySparkRuntimeError(
-            error_class="BROADCAST_VARIABLE_NOT_LOADED",
-            message_parameters={
+            errorClass="BROADCAST_VARIABLE_NOT_LOADED",
+            messageParameters={
                 "variable": str(bid),
             },
         )
@@ -299,8 +299,8 @@ class Broadcast(Generic[T]):
         """
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
-                error_class="INVALID_BROADCAST_OPERATION",
-                message_parameters={"operation": "unpersisted"},
+                errorClass="INVALID_BROADCAST_OPERATION",
+                messageParameters={"operation": "unpersisted"},
             )
         self._jbroadcast.unpersist(blocking)
 
@@ -329,8 +329,8 @@ class Broadcast(Generic[T]):
         """
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
-                error_class="INVALID_BROADCAST_OPERATION",
-                message_parameters={"operation": "destroyed"},
+                errorClass="INVALID_BROADCAST_OPERATION",
+                messageParameters={"operation": "destroyed"},
             )
         self._jbroadcast.destroy(blocking)
         os.unlink(self._path)
@@ -338,8 +338,8 @@ class Broadcast(Generic[T]):
     def __reduce__(self) -> Tuple[Callable[[int], "Broadcast[T]"], Tuple[int]]:
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
-                error_class="INVALID_BROADCAST_OPERATION",
-                message_parameters={"operation": "serialized"},
+                errorClass="INVALID_BROADCAST_OPERATION",
+                messageParameters={"operation": "serialized"},
             )
         assert self._pickle_registry is not None
         self._pickle_registry.add(self)

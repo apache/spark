@@ -20,25 +20,24 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.net.Socket
 import java.nio.channels.Channels
-import java.util.Locale
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -142,56 +141,60 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+  def castTimestampNTZToLong(c: Column): Column =
+    Column.internalFn("timestamp_ntz_to_long", c)
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(EWM(e.expr, alpha, ignoreNA))
+    Column.internalFn("ewm", e, lit(alpha), lit(ignoreNA))
 
-  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
+  def nullIndex(e: Column): Column = Column.internalFn("null_index", e)
 
-  def makeInterval(unit: String, e: Column): Column = {
-    val zero = MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
-      days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
+  def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
-    unit.toUpperCase(Locale.ROOT) match {
-      case "YEAR" => Column(zero.copy(years = e.expr))
-      case "MONTH" => Column(zero.copy(months = e.expr))
-      case "WEEK" => Column(zero.copy(weeks = e.expr))
-      case "DAY" => Column(zero.copy(days = e.expr))
-      case "HOUR" => Column(zero.copy(hours = e.expr))
-      case "MINUTE" => Column(zero.copy(mins = e.expr))
-      case "SECOND" => Column(zero.copy(secs = e.expr))
-      case _ => throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
-    }
+  def binary_search(e: Column, value: Column): Column =
+    Column.internalFn("array_binary_search", e, value)
+
+  def pandasProduct(e: Column, ignoreNA: Boolean): Column =
+    Column.internalFn("pandas_product", e, lit(ignoreNA))
+
+  def pandasStddev(e: Column, ddof: Int): Column =
+    Column.internalFn("pandas_stddev", e, lit(ddof))
+
+  def pandasVariance(e: Column, ddof: Int): Column =
+    Column.internalFn("pandas_var", e, lit(ddof))
+
+  def pandasSkewness(e: Column): Column =
+    Column.internalFn("pandas_skew", e)
+
+  def pandasKurtosis(e: Column): Column =
+    Column.internalFn("pandas_kurt", e)
+
+  def pandasMode(e: Column, ignoreNA: Boolean): Column =
+    Column.internalFn("pandas_mode", e, lit(ignoreNA))
+
+  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
+    Column.internalFn("pandas_covar", col1, col2, lit(ddof))
+
+  def unresolvedNamedLambdaVariable(name: String): Column =
+    Column(internal.UnresolvedNamedLambdaVariable.apply(name))
+
+  @scala.annotation.varargs
+  def lambdaFunction(function: Column, variables: Column*): Column = {
+    val arguments = variables.map(_.node.asInstanceOf[internal.UnresolvedNamedLambdaVariable])
+    Column(internal.LambdaFunction(function.node, arguments))
   }
 
-  def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))
+  def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
+
+  def distributedIndex(): Column = {
+    val expr = MonotonicallyIncreasingID()
+    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
+    expr
   }
 
-  def pandasStddev(e: Column, ddof: Int): Column = {
-    Column(PandasStddev(e.expr, ddof).toAggregateExpression(false))
-  }
-
-  def pandasVariance(e: Column, ddof: Int): Column = {
-    Column(PandasVariance(e.expr, ddof).toAggregateExpression(false))
-  }
-
-  def pandasSkewness(e: Column): Column = {
-    Column(PandasSkewness(e.expr).toAggregateExpression(false))
-  }
-
-  def pandasKurtosis(e: Column): Column = {
-    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
-  }
-
-  def pandasMode(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
-  }
-
-  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
-    Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
-  }
+  @scala.annotation.varargs
+  def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 }
 
 /**

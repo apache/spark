@@ -17,8 +17,9 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from pyspark.sql.column import Column
+from pyspark.sql import Column, functions as F
 from pyspark.sql.utils import is_remote
+from typing import Union
 
 
 def product(col: Column, dropna: bool) -> Column:
@@ -171,3 +172,42 @@ def null_index(col: Column) -> Column:
 
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))
+
+
+def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.collect_top_k(col._jc, num, reverse))
+
+
+def binary_search(col: Column, value: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns("array_binary_search", col, value)
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.binary_search(col._jc, value._jc))
+
+
+def make_interval(unit: str, e: Union[Column, int, float]) -> Column:
+    unit_mapping = {
+        "YEAR": "years",
+        "MONTH": "months",
+        "WEEK": "weeks",
+        "DAY": "days",
+        "HOUR": "hours",
+        "MINUTE": "mins",
+        "SECOND": "secs",
+    }
+    return F.make_interval(**{unit_mapping[unit]: F.lit(e)})

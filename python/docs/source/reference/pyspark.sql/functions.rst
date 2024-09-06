@@ -48,9 +48,11 @@ Conditional Functions
     ifnull
     nanvl
     nullif
+    nullifzero
     nvl
     nvl2
     when
+    zeroifnull
 
 
 Predicate Functions
@@ -142,8 +144,8 @@ Mathematical Functions
     tanh
     try_add
     try_divide
+    try_mod
     try_multiply
-    try_remainder
     try_subtract
     unhex
     width_bucket
@@ -580,6 +582,7 @@ URL Functions
     parse_url
     url_decode
     url_encode
+    try_url_decode
 
 
 Misc Functions

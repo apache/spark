@@ -118,15 +118,28 @@ case class BatchScanExec(
 
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
-      case k: KeyGroupedPartitioning if spjParams.commonPartitionValues.isDefined =>
-        // We allow duplicated partition values if
-        // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true
-        val newPartValues = spjParams.commonPartitionValues.get.flatMap {
-          case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
-        }
+      case k: KeyGroupedPartitioning =>
         val expressions = spjParams.joinKeyPositions match {
           case Some(projectionPositions) => projectionPositions.map(i => k.expressions(i))
           case _ => k.expressions
+        }
+
+        val newPartValues = spjParams.commonPartitionValues match {
+          case Some(commonPartValues) =>
+            // We allow duplicated partition values if
+            // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true
+             commonPartValues.flatMap {
+               case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
+             }
+          case None =>
+            spjParams.joinKeyPositions match {
+              case Some(projectionPositions) => k.partitionValues.map{r =>
+                val projectedRow = KeyGroupedPartitioning.project(expressions,
+                  projectionPositions, r)
+                InternalRowComparableWrapper(projectedRow, expressions)
+              }.distinct.map(_.row)
+              case _ => k.partitionValues
+            }
         }
         k.copy(expressions = expressions, numPartitions = newPartValues.length,
           partitionValues = newPartValues)
@@ -187,7 +200,12 @@ case class BatchScanExec(
                 .get
                 .map(t => (InternalRowComparableWrapper(t._1, partExpressions), t._2))
                 .toMap
-            val nestGroupedPartitions = finalGroupedPartitions.map { case (partValue, splits) =>
+            val filteredGroupedPartitions = finalGroupedPartitions.filter {
+              case (partValues, _) =>
+               commonPartValuesMap.keySet.contains(
+                InternalRowComparableWrapper(partValues, partExpressions))
+            }
+            val nestGroupedPartitions = filteredGroupedPartitions.map { case (partValue, splits) =>
               // `commonPartValuesMap` should contain the part value since it's the super set.
               val numSplits = commonPartValuesMap
                   .get(InternalRowComparableWrapper(partValue, partExpressions))
@@ -279,7 +297,8 @@ case class StoragePartitionJoinParams(
     case other: StoragePartitionJoinParams =>
       this.commonPartitionValues == other.commonPartitionValues &&
       this.replicatePartitions == other.replicatePartitions &&
-      this.applyPartialClustering == other.applyPartialClustering
+      this.applyPartialClustering == other.applyPartialClustering &&
+      this.joinKeyPositions == other.joinKeyPositions
     case _ =>
       false
   }

@@ -46,48 +46,25 @@ def build_spark_if_necessary
   $spark_package_is_built = true
 end
 
-def build_scala_and_java_docs
-  build_spark_if_necessary
+def copy_and_update_scala_docs(source, dest)
+    puts "Making directory " + dest
+    mkdir_p dest
 
-  print_header "Building Scala and Java API docs."
-  cd(SPARK_PROJECT_ROOT)
+    puts "cp -r " + source + "/. " + dest
+    cp_r(source + "/.", dest)
 
-  command = "build/sbt -Pkinesis-asl unidoc"
-  puts "Running '#{command}'..."
-  system(command) || raise("Unidoc generation failed")
+    # Append custom JavaScript
+    js = File.readlines("./js/api-docs.js")
+    js_file = dest + "/lib/template.js"
+    File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
 
-  puts "Moving back into docs dir."
-  cd("docs")
+    # Append custom CSS
+    css = File.readlines("./css/api-docs.css")
+    css_file = dest + "/lib/template.css"
+    File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
+end
 
-  puts "Removing old docs"
-  system("rm -rf api")
-
-  # Copy over the unified ScalaDoc for all projects to api/scala.
-  # This directory will be copied over to _site when `jekyll` command is run.
-  source = "../target/scala-2.13/unidoc"
-  dest = "api/scala"
-
-  puts "Making directory " + dest
-  mkdir_p dest
-
-  # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
-  puts "cp -r " + source + "/. " + dest
-  cp_r(source + "/.", dest)
-
-  # Append custom JavaScript
-  js = File.readlines("./js/api-docs.js")
-  js_file = dest + "/lib/template.js"
-  File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
-
-  # Append custom CSS
-  css = File.readlines("./css/api-docs.css")
-  css_file = dest + "/lib/template.css"
-  File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
-
-  # Copy over the unified JavaDoc for all projects to api/java.
-  source = "../target/javaunidoc"
-  dest = "api/java"
-
+def copy_and_update_java_docs(source, dest, scala_source)
   puts "Making directory " + dest
   mkdir_p dest
 
@@ -123,20 +100,47 @@ def build_scala_and_java_docs
   # End updating JavaDoc files for badge post-processing
 
   puts "Copying jquery.min.js from Scala API to Java API for page post-processing of badges"
-  jquery_src_file = "./api/scala/lib/jquery.min.js"
-  jquery_dest_file = "./api/java/lib/jquery.min.js"
-  mkdir_p("./api/java/lib")
+  jquery_src_file = scala_source + "/lib/jquery.min.js"
+  jquery_dest_file = dest + "/lib/jquery.min.js"
+  mkdir_p(dest + "/lib")
   cp(jquery_src_file, jquery_dest_file)
 
   puts "Copying api_javadocs.js to Java API for page post-processing of badges"
   api_javadocs_src_file = "./js/api-javadocs.js"
-  api_javadocs_dest_file = "./api/java/lib/api-javadocs.js"
+  api_javadocs_dest_file = dest + "/lib/api-javadocs.js"
   cp(api_javadocs_src_file, api_javadocs_dest_file)
 
   puts "Appending content of api-javadocs.css to JavaDoc stylesheet.css for badge styles"
   css = File.readlines("./css/api-javadocs.css")
   css_file = dest + "/stylesheet.css"
   File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
+end
+
+
+def build_scala_and_java_docs
+  build_spark_if_necessary
+
+  print_header "Building Scala and Java API docs."
+  cd(SPARK_PROJECT_ROOT)
+
+  command = "build/sbt -Pkinesis-asl unidoc"
+  puts "Running '#{command}'..."
+  system(command) || raise("Unidoc generation failed")
+
+  puts "Moving back into docs dir."
+  cd("docs")
+
+  puts "Removing old docs"
+  system("rm -rf api")
+
+  # Copy over the unified ScalaDoc for all projects to api/scala.
+  # This directory will be copied over to _site when `jekyll` command is run.
+  copy_and_update_scala_docs("../target/scala-2.13/unidoc", "api/scala")
+  # copy_and_update_scala_docs("../connector/connect/client/jvm/target/scala-2.13/unidoc", "api/connect/scala")
+
+  # Copy over the unified JavaDoc for all projects to api/java.
+  copy_and_update_java_docs("../target/javaunidoc", "api/java", "api/scala")
+  # copy_and_update_java_docs("../connector/connect/client/jvm/target/javaunidoc", "api/connect/java", "api/connect/scala")
 end
 
 def build_python_docs
@@ -153,6 +157,7 @@ def build_python_docs
   mkdir_p "api/python"
 
   puts "cp -r ../python/docs/build/html/. api/python"
+  rm_r("../python/docs/build/html/_sources")
   cp_r("../python/docs/build/html/.", "api/python")
 end
 
@@ -190,11 +195,18 @@ end
 
 def build_error_docs
   print_header "Building error docs."
-  system("python '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+
+  if !system("which python3 >/dev/null 2>&1")
+    raise("Missing python3 in your path, stopping error doc generation")
+  end
+
+  system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
 
-build_error_docs
+if not (ENV['SKIP_ERRORDOC'] == '1')
+  build_error_docs
+end
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')

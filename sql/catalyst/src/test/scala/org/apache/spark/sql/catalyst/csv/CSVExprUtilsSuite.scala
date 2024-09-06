@@ -93,8 +93,6 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // tab in the middle of some other letters
     ("""ba\tr""", Some("ba\tr"), None),
     // null character, expressed in Unicode literal syntax
-    ("\u0000", Some("\u0000"), None),
-    // and specified directly
     ("\u0000", Some("\u0000"), None)
   )
 

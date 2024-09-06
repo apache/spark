@@ -118,6 +118,18 @@
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-impl</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-jackson</artifactId>
+    </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
          and inlined into spark-core jar -->
@@ -597,6 +609,12 @@
       </activation>
       <properties>
         <script.extension>.sh</script.extension>
+      </properties>
+    </profile>
+    <profile>
+      <id>jjwt</id>
+      <properties>
+        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
     <profile>

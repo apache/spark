@@ -211,6 +211,11 @@ abstract class RDD[T: ClassTag](
    * @return This RDD.
    */
   def unpersist(blocking: Boolean = false): this.type = {
+    if (isLocallyCheckpointed) {
+      // This means its lineage has been truncated and cannot be recomputed once unpersisted.
+      logWarning(log"RDD ${MDC(RDD_ID, id)} was locally checkpointed, its lineage has been" +
+        log" truncated and cannot be recomputed after unpersisting")
+    }
     logInfo(log"Removing RDD ${MDC(RDD_ID, id)} from persistence list")
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE

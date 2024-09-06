@@ -27,11 +27,12 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
@@ -218,7 +219,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   test("SPARK-25403 refresh the table after inserting data") {
     withTable("t") {
       val catalog = spark.sessionState.catalog
-      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+      val table = FullQualifiedTableName(
+        CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
       sql("CREATE TABLE t (a INT) USING parquet")
       sql("INSERT INTO TABLE t VALUES (1)")
       assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
@@ -231,7 +233,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTable("t") {
       withTempDir { dir =>
         val catalog = spark.sessionState.catalog
-        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+        val table = FullQualifiedTableName(
+          CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
         val p1 = s"${dir.getCanonicalPath}/p1"
         val p2 = s"${dir.getCanonicalPath}/p2"
         sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
@@ -326,27 +329,6 @@ trait DDLSuiteBase extends SQLTestUtils {
 abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   protected val reversedProperties = Seq(PROP_OWNER)
-
-  test("alter table: unset properties (datasource table)") {
-    testUnsetProperties(isDatasourceTable = true)
-  }
-
-  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
-    val tableName = "test_table"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map(
-          "properties" -> "`test_prop1`, `test_prop2`",
-          "table" -> "`spark_catalog`.`default`.`test_table`")
-      )
-    }
-  }
 
   test("alter table: change column (datasource table)") {
     testChangeColumn(isDatasourceTable = true)
@@ -1113,52 +1095,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
   }
 
-  protected def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    def getProps: Map[String, String] = {
-      if (isUsingHiveMetastore) {
-        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
-      } else {
-        catalog.getTableMetadata(tableIdent).properties
-      }
-    }
-    // unset table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
-    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
-    assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
-    // unset table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
-    assert(getProps == Map("c" -> "lan", "x" -> "y"))
-    // table to alter does not exist
-    val sql1 = "ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')"
-    checkError(
-      exception = intercept[ParseException] {
-        sql(sql1)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values should not be specified for key(s): [c]"),
-      context = ExpectedContext(fragment = sql1, start = 0, stop = 59)
-    )
-    // property to unset does not exist
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
-      },
-      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      parameters = Map("properties" -> "`xyz`", "table" -> "`spark_catalog`.`dbx`.`tab1`")
-    )
-    // property to unset does not exist, but "IF EXISTS" is specified
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
-    assert(getProps == Map("x" -> "y"))
-  }
-
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {
     if (!isUsingHiveMetastore) {
       assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
@@ -1436,39 +1372,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       checkAnswer(
         sql("select a, b, c from partitionedTable"),
         Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
-      )
-    }
-  }
-
-  test("show columns - negative test") {
-    // When case sensitivity is true, the user supplied database name in table identifier
-    // should match the supplied database name in case sensitive way.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      withTempDatabase { db =>
-        val tabName = s"$db.showcolumn"
-        withTable(tabName) {
-          sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
-            },
-            errorClass = "_LEGACY_ERROR_TEMP_1057",
-            parameters = Map("dbA" -> db.toUpperCase(Locale.ROOT), "dbB" -> db)
-          )
-        }
-      }
-    }
-  }
-
-  test("show columns - invalid db name") {
-    withTable("tbl") {
-      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SHOW COLUMNS IN tbl FROM a.b.c")
-        },
-        errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
-        parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> "`a`.`b`.`c`")
       )
     }
   }

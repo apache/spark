@@ -374,7 +374,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_subtract`: identical to the add operator `-`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_multiply`: identical to the add operator `*`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
-  - `try_remainder`: identical to the remainder operator `%`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
+  - `try_mod`: identical to the remainder operator `%`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_sum`: identical to the function `sum`, except that it returns `NULL` result instead of throwing an exception on integral/decimal/interval value overflow.
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.
@@ -492,6 +492,7 @@ Below is a list of all the keywords in Spark SQL.
 |DISTINCT|reserved|non-reserved|reserved|
 |DISTRIBUTE|non-reserved|non-reserved|non-reserved|
 |DIV|non-reserved|non-reserved|not a keyword|
+|DO|non-reserved|non-reserved|non-reserved|
 |DOUBLE|non-reserved|non-reserved|reserved|
 |DROP|non-reserved|non-reserved|reserved|
 |ELSE|reserved|non-reserved|reserved|
@@ -555,6 +556,7 @@ Below is a list of all the keywords in Spark SQL.
 |INVOKER|non-reserved|non-reserved|non-reserved|
 |IS|reserved|non-reserved|reserved|
 |ITEMS|non-reserved|non-reserved|non-reserved|
+|ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
@@ -562,6 +564,7 @@ Below is a list of all the keywords in Spark SQL.
 |LATERAL|reserved|strict-non-reserved|reserved|
 |LAZY|non-reserved|non-reserved|non-reserved|
 |LEADING|reserved|non-reserved|reserved|
+|LEAVE|non-reserved|non-reserved|non-reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
 |LIKE|non-reserved|non-reserved|reserved|
 |ILIKE|non-reserved|non-reserved|non-reserved|
@@ -748,6 +751,7 @@ Below is a list of all the keywords in Spark SQL.
 |WEEKS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|
 |WHERE|reserved|non-reserved|reserved|
+|WHILE|non-reserved|non-reserved|non-reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|

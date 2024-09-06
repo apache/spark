@@ -36,11 +36,12 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, ExpressionInfo, NamedExpression, UpCast}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -196,7 +197,7 @@ class SessionCatalog(
     }
   }
 
-  private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
+  private val tableRelationCache: Cache[FullQualifiedTableName, LogicalPlan] = {
     var builder = CacheBuilder.newBuilder()
       .maximumSize(cacheSize)
 
@@ -204,33 +205,34 @@ class SessionCatalog(
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
     }
 
-    builder.build[QualifiedTableName, LogicalPlan]()
+    builder.build[FullQualifiedTableName, LogicalPlan]()
   }
 
   /** This method provides a way to get a cached plan. */
-  def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
+  def getCachedPlan(t: FullQualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
     tableRelationCache.get(t, c)
   }
 
   /** This method provides a way to get a cached plan if the key exists. */
-  def getCachedTable(key: QualifiedTableName): LogicalPlan = {
+  def getCachedTable(key: FullQualifiedTableName): LogicalPlan = {
     tableRelationCache.getIfPresent(key)
   }
 
   /** This method provides a way to cache a plan. */
-  def cacheTable(t: QualifiedTableName, l: LogicalPlan): Unit = {
+  def cacheTable(t: FullQualifiedTableName, l: LogicalPlan): Unit = {
     tableRelationCache.put(t, l)
   }
 
   /** This method provides a way to invalidate a cached plan. */
-  def invalidateCachedTable(key: QualifiedTableName): Unit = {
+  def invalidateCachedTable(key: FullQualifiedTableName): Unit = {
     tableRelationCache.invalidate(key)
   }
 
   /** This method discards any cached table relation plans for the given table identifier. */
   def invalidateCachedTable(name: TableIdentifier): Unit = {
     val qualified = qualifyIdentifier(name)
-    invalidateCachedTable(QualifiedTableName(qualified.database.get, qualified.table))
+    invalidateCachedTable(FullQualifiedTableName(
+      qualified.catalog.get, qualified.database.get, qualified.table))
   }
 
   /** This method provides a way to invalidate all the cached plans. */
@@ -250,7 +252,7 @@ class SessionCatalog(
 
   private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
+      throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, db))
     }
   }
 
@@ -291,14 +293,15 @@ class SessionCatalog(
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = format(db)
     if (dbName == DEFAULT_DATABASE) {
-      throw QueryCompilationErrors.cannotDropDefaultDatabaseError(dbName)
+      throw QueryCompilationErrors.cannotDropDefaultDatabaseError(
+        Seq(CatalogManager.SESSION_CATALOG_NAME, dbName))
     }
     if (!ignoreIfNotExists) {
       requireDbExists(dbName)
     }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
-        invalidateCachedTable(QualifiedTableName(dbName, t.table))
+        invalidateCachedTable(FullQualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
@@ -333,12 +336,16 @@ class SessionCatalog(
   def getCurrentDatabase: String = synchronized { currentDb }
 
   def setCurrentDatabase(db: String): Unit = {
+    setCurrentDatabaseWithNameCheck(db, requireDbExists)
+  }
+
+  def setCurrentDatabaseWithNameCheck(db: String, nameCheck: String => Unit): Unit = {
     val dbName = format(db)
     if (dbName == globalTempDatabase) {
       throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
         globalTempDatabase)
     }
-    requireDbExists(dbName)
+    nameCheck(dbName)
     synchronized { currentDb = dbName }
   }
 
@@ -527,7 +534,7 @@ class SessionCatalog(
    * We replace char/varchar with "annotated" string type in the table schema, as the query
    * engine doesn't support char/varchar yet.
    */
-  @throws[NoSuchDatabaseException]
+  @throws[NoSuchNamespaceException]
   @throws[NoSuchTableException]
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val t = getTableRawMetadata(name)
@@ -538,7 +545,7 @@ class SessionCatalog(
    * Retrieve the metadata of an existing permanent table/view. If no database is specified,
    * assume the table/view is in the current database.
    */
-  @throws[NoSuchDatabaseException]
+  @throws[NoSuchNamespaceException]
   @throws[NoSuchTableException]
   def getTableRawMetadata(name: TableIdentifier): CatalogTable = {
     val qualifiedIdent = qualifyIdentifier(name)
@@ -556,7 +563,7 @@ class SessionCatalog(
    * For example, if none of the requested tables could be retrieved, an empty list is returned.
    * There is no guarantee of ordering of the returned tables.
    */
-  @throws[NoSuchDatabaseException]
+  @throws[NoSuchNamespaceException]
   def getTablesByName(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
     if (names.nonEmpty) {
       val qualifiedIdents = names.map(qualifyIdentifier)
@@ -961,19 +968,14 @@ class SessionCatalog(
       throw SparkException.internalError("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
-    val origin = Origin(
+    val origin = CurrentOrigin.get.copy(
       objectType = Some("VIEW"),
       objectName = Some(metadata.qualifiedName)
     )
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
-      try {
         CurrentOrigin.withOrigin(origin) {
           parser.parseQuery(viewText)
         }
-      } catch {
-        case _: ParseException =>
-          throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)
-      }
     }
     val schemaMode = metadata.viewSchemaMode
     if (schemaMode == SchemaEvolution) {
@@ -1056,7 +1058,6 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
-        case _: NoSuchDatabaseException => false
         case _: NoSuchNamespaceException => false
       }
     }
@@ -1182,7 +1183,8 @@ class SessionCatalog(
   def refreshTable(name: TableIdentifier): Unit = synchronized {
     getLocalOrGlobalTempView(name).map(_.refresh()).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
-      val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
+      val qualifiedTableName = FullQualifiedTableName(
+        qualifiedIdent.catalog.get, qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
     }
   }

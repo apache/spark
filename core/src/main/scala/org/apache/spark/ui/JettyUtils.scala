@@ -150,7 +150,10 @@ private[spark] object JettyUtils extends Logging {
       private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
-        val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
+        val requestURL = new URI(request.getRequestURL.toString).toURL
+        // scalastyle:off URLConstructor
+        val newUrl = new URL(requestURL, prefixedDestPath).toString
+        // scalastyle:on URLConstructor
         response.sendRedirect(newUrl)
       }
       // SPARK-5983 ensure TRACE is not supported

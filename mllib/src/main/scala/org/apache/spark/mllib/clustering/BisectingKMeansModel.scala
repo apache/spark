@@ -179,7 +179,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
           ~ ("rootId" -> model.root.index)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
         node.centerWithNorm.vector, node.centerWithNorm.norm, node.cost, node.height,
@@ -215,7 +215,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
           ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
         node.centerWithNorm.vector, node.centerWithNorm.norm, node.cost, node.height,
@@ -253,7 +253,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
           ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)
           ~ ("trainingCost" -> model.trainingCost)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
         node.centerWithNorm.vector, node.centerWithNorm.norm, node.cost, node.height,

@@ -547,13 +547,55 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
-    checkExceptionInExpression[RuntimeException](
+    checkExceptionInExpression[SparkRuntimeException](
       ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         DoubleType,
         DoubleType),
       InternalRow.fromSeq(Seq(Row(1))),
-      "java.lang.Integer is not a valid external type for schema of double")
+      "The external type java.lang.Integer is not valid for the type \"DOUBLE\"")
+  }
+
+  test("SPARK-49044 ValidateExternalType should return child in error") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    Seq(
+      (true, BooleanType),
+      (2.toByte, ByteType),
+      (5.toShort, ShortType),
+      (23, IntegerType),
+      (61L, LongType),
+      (1.0f, FloatType),
+      (10.0, DoubleType),
+      ("abcd".getBytes, BinaryType),
+      ("abcd", StringType),
+      (BigDecimal.valueOf(10), DecimalType.IntDecimal),
+      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
+        CalendarIntervalType),
+      (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
+      (Array(3, 2, 1), ArrayType(IntegerType))
+    ).foreach { case (input, dt) =>
+      val enc = RowEncoder.encoderForDataType(dt, lenient = false)
+      val validateType = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        dt,
+        EncoderUtils.lenientExternalDataTypeFor(enc))
+      checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
+    }
+
+    checkErrorInExpression[SparkRuntimeException](
+      expression = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        DoubleType,
+        DoubleType),
+      inputRow = InternalRow.fromSeq(Seq(Row(1))),
+      errorClass = "INVALID_EXTERNAL_TYPE",
+      parameters = Map[String, String](
+        "externalType" -> "java.lang.Integer",
+        "type" -> "\"DOUBLE\"",
+        "expr" -> ("\"getexternalrowfield(input[0, org.apache.spark.sql.Row, true], " +
+          "0, c0)\"")
+      )
+    )
   }
 
   private def javaMapSerializerFor(

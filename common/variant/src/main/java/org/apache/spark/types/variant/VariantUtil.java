@@ -120,6 +120,14 @@ public class VariantUtil {
   // Long string value. The content is (4-byte little-endian unsigned integer representing the
   // string size) + (size bytes of string content).
   public static final int LONG_STR = 16;
+  // year-month interval value. The content is one byte representing the start and end field values
+  // (1 bit each starting at least significant bits) and a 4-byte little-endian signed integer.
+  // A field value of 0 indicates year and a field value of 1 indicates month.
+  public static final int YEAR_MONTH_INTERVAL = 19;
+  // day-time interval value. The content is one byte representing the start and end field values
+  // (2 bits each starting at least significant bits) and an 8-byte little-endian signed integer.
+  // A field value of 0 indicates day, 1 indicates hour, 2 indicates minute, and 3 indicates second.
+  public static final int DAY_TIME_INTERVAL = 20;
 
   public static final byte VERSION = 1;
   // The lower 4 bits of the first metadata byte contain the version.
@@ -169,6 +177,12 @@ public class VariantUtil {
   static SparkRuntimeException malformedVariant() {
     return new SparkRuntimeException("MALFORMED_VARIANT",
         Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+  }
+
+  static SparkRuntimeException unknownPrimitiveTypeInVariant(int id) {
+    return new SparkRuntimeException("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
+            new scala.collection.immutable.Map.Map1<>("id", Integer.toString(id)), null,
+            new QueryContext[]{}, "");
   }
 
   // An exception indicating that an external caller tried to call the Variant constructor with
@@ -233,6 +247,13 @@ public class VariantUtil {
     TIMESTAMP_NTZ,
     FLOAT,
     BINARY,
+    YEAR_MONTH_INTERVAL,
+    DAY_TIME_INTERVAL,
+  }
+
+  public static int getTypeInfo(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    return (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
   }
 
   // Get the value type of variant value `value[pos...]`. It is only legal to call `get*` if
@@ -280,8 +301,12 @@ public class VariantUtil {
             return Type.BINARY;
           case LONG_STR:
             return Type.STRING;
+          case YEAR_MONTH_INTERVAL:
+            return Type.YEAR_MONTH_INTERVAL;
+          case DAY_TIME_INTERVAL:
+            return Type.DAY_TIME_INTERVAL;
           default:
-            throw malformedVariant();
+            throw unknownPrimitiveTypeInVariant(typeInfo);
         }
     }
   }
@@ -322,8 +347,10 @@ public class VariantUtil {
           case TIMESTAMP:
           case TIMESTAMP_NTZ:
             return 9;
+          case YEAR_MONTH_INTERVAL:
           case DECIMAL4:
             return 6;
+          case DAY_TIME_INTERVAL:
           case DECIMAL8:
             return 10;
           case DECIMAL16:
@@ -332,7 +359,7 @@ public class VariantUtil {
           case LONG_STR:
             return 1 + U32_SIZE + readUnsigned(value, pos + 1, U32_SIZE);
           default:
-            throw malformedVariant();
+            throw unknownPrimitiveTypeInVariant(typeInfo);
         }
     }
   }
@@ -355,9 +382,12 @@ public class VariantUtil {
 
   // Get a long value from variant value `value[pos...]`.
   // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIMESTAMP/
-  // TIMESTAMP_NTZ`. If the type is `DATE`, the return value is guaranteed to fit into an int and
-  // represents the number of days from the Unix epoch. If the type is `TIMESTAMP/TIMESTAMP_NTZ`,
-  // the return value represents the number of microseconds from the Unix epoch.
+  // TIMESTAMP_NTZ/YEAR_MONTH_INTERVAL/DAY_TIME_INTERVAL`. If the type is `DATE`, the return value
+  // is guaranteed to fit into an int and represents the number of days from the Unix epoch.
+  // If the type is `TIMESTAMP/TIMESTAMP_NTZ`, the return value represents the number of
+  // microseconds from the Unix epoch. If the type is `YEAR_MONTH_INTERVAL`, the return value
+  // is guaranteed to fit in an int and represents the number of months in the interval. If the type
+  // is `DAY_TIME_INTERVAL`, the return value represents the number of microseconds in the interval.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
     checkIndex(pos, value.length);
@@ -377,9 +407,60 @@ public class VariantUtil {
       case TIMESTAMP:
       case TIMESTAMP_NTZ:
         return readLong(value, pos + 1, 8);
+      case YEAR_MONTH_INTERVAL:
+        return readLong(value, pos + 2, 4);
+      case DAY_TIME_INTERVAL:
+        return readLong(value, pos + 2, 8);
       default:
         throw new IllegalStateException(exceptionMessage);
     }
+  }
+
+  // Class used to pass around start and end fields of year-month and day-time interval values.
+  public static class IntervalFields {
+    public IntervalFields(byte startField, byte endField) {
+      this.startField = startField;
+      this.endField = endField;
+    }
+
+    public final byte startField;
+    public final byte endField;
+  }
+
+  // Get the start and end fields of a variant value representing a year-month interval value. The
+  // returned array contains the start field at the zeroth index and the end field at the first
+  // index.
+  public static IntervalFields getYearMonthIntervalFields(byte[] value, int pos) {
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != YEAR_MONTH_INTERVAL) {
+      throw unexpectedType(Type.YEAR_MONTH_INTERVAL);
+    }
+    long fieldInfo = readLong(value, pos + 1, 1);
+    IntervalFields intervalFields = new IntervalFields((byte) (fieldInfo & 0x1),
+            (byte) ((fieldInfo >> 1) & 0x1));
+    if (intervalFields.endField < intervalFields.startField) {
+      throw malformedVariant();
+    }
+    return intervalFields;
+  }
+
+  // Get the start and end fields of a variant value representing a day time interval value. The
+  // returned array contains the start field at the zeroth index and the end field at the first
+  // index.
+  public static IntervalFields getDayTimeIntervalFields(byte[] value, int pos) {
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != DAY_TIME_INTERVAL) {
+      throw unexpectedType(Type.DAY_TIME_INTERVAL);
+    }
+    long fieldInfo = readLong(value, pos + 1, 1);
+    IntervalFields intervalFields = new IntervalFields((byte) (fieldInfo & 0x3),
+            (byte) ((fieldInfo >> 2) & 0x3));
+    if (intervalFields.endField < intervalFields.startField) {
+      throw malformedVariant();
+    }
+    return intervalFields;
   }
 
   // Get a double value from variant value `value[pos...]`.

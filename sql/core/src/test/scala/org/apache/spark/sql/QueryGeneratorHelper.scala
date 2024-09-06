@@ -82,9 +82,22 @@ trait QueryGeneratorHelper {
   case class Equals(expr: Expression, rightSideExpr: Expression) extends Predicate {
     override def toString: String = f"$expr = $rightSideExpr"
   }
+  case class NotEquals(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr <> $rightSideExpr"
+  }
   case class LessThan(expr: Expression, rightSideExpr: Expression) extends Predicate {
     override def toString: String = f"$expr < $rightSideExpr"
   }
+  case class LessThanOrEquals(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr <= $rightSideExpr"
+  }
+  case class GreaterThan(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr > $rightSideExpr"
+  }
+  case class GreaterThanOrEquals(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr >= $rightSideExpr"
+  }
+
   case class In(expr: Expression, inner: Operator)
     extends Predicate {
     override def toString: String = f"$expr IN ($inner)"
@@ -96,7 +109,10 @@ trait QueryGeneratorHelper {
     // Subquery to be treated as a Relation.
     val RELATION = Value
     // Subquery is a Predicate - types of predicate subqueries.
-    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_LESS_THAN, IN, NOT_IN, EXISTS, NOT_EXISTS = Value
+    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_NOT_EQUALS,
+      SCALAR_PREDICATE_LESS_THAN, SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+      SCALAR_PREDICATE_GREATER_THAN, SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
+      IN, NOT_IN, EXISTS, NOT_EXISTS = Value
   }
 
   trait SubqueryExpression extends Expression {
@@ -169,8 +185,16 @@ trait QueryGeneratorHelper {
       f"groupingExpr=[${groupingExpressions.mkString(",")}])"
   }
 
-  case class Limit(limitValue: Int) extends Operator with Clause {
-    override def toString: String = f"LIMIT $limitValue"
+  case class LimitAndOffset(limitValue: Int, offsetValue: Int) extends Operator with Clause {
+    override def toString: String = {
+      val limitClause = if (limitValue > 0) { s"LIMIT $limitValue" } else { "" }
+      val offsetClause = if (offsetValue > 0) { s"OFFSET $offsetValue" } else { "" }
+      if (limitClause.nonEmpty && offsetClause.nonEmpty) {
+        s"$limitClause $offsetClause"
+      } else {
+        s"$limitClause$offsetClause"
+      }
+    }
   }
 
   object SubqueryLocation extends Enumeration {
@@ -207,7 +231,7 @@ trait QueryGeneratorHelper {
       whereClause: Option[WhereClause] = None,
       groupByClause: Option[GroupByClause] = None,
       orderByClause: Option[OrderByClause] = None,
-      limitClause: Option[Limit] = None
+      limitAndOffsetClause: Option[LimitAndOffset] = None
   ) extends Operator {
 
     override def toString: String = {
@@ -216,7 +240,7 @@ trait QueryGeneratorHelper {
 
       f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
         f"${getOptionClauseString(groupByClause)}${getOptionClauseString(orderByClause)}" +
-        f"${getOptionClauseString(limitClause)}"
+        f"${getOptionClauseString(limitAndOffsetClause)}"
     }
   }
 }

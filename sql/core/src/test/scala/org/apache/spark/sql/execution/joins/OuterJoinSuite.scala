@@ -26,10 +26,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
-class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
+class OuterJoinSuite extends SparkPlanTest with SharedSparkSession with SQLTestData {
+  import testImplicits.toRichColumn
+  setupTestData()
 
   private val EnsureRequirements = new EnsureRequirements()
 
@@ -325,4 +327,21 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       (null, null, 7, 7.0)
     )
   )
+
+  testWithWholeStageCodegenOnAndOff(
+    "SPARK-46037: ShuffledHashJoin build left with left outer join, codegen off") { _ =>
+    def join(hint: String): DataFrame = {
+      sql(
+        s"""
+          |SELECT /*+ $hint */ *
+          |FROM testData t1
+          |LEFT OUTER JOIN
+          |testData2 t2
+          |ON key = a AND concat(value, b) = '12'
+          |""".stripMargin)
+    }
+    val df1 = join("SHUFFLE_HASH(t1)")
+    val df2 = join("SHUFFLE_MERGE(t1)")
+    checkAnswer(df1, identity, df2.collect().toSeq)
+  }
 }

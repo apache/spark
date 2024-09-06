@@ -315,8 +315,8 @@ class Column:
     @dispatch_col_method
     def __contains__(self, item: Any) -> None:
         raise PySparkValueError(
-            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
-            message_parameters={},
+            errorClass="CANNOT_APPLY_IN_FOR_COLUMN",
+            messageParameters={},
         )
 
     # bitwise operators

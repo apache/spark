@@ -118,8 +118,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": pdf1.to_string(),
                 "left_dtype": str(pdf1.dtypes),
                 "right": pdf2.to_string(),
@@ -136,8 +136,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_SERIES",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_SERIES",
+            messageParameters={
                 "left": series1.to_string(),
                 "left_dtype": str(series1.dtype),
                 "right": series2.to_string(),
@@ -154,8 +154,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_INDEX",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_INDEX",
+            messageParameters={
                 "left": index1,
                 "left_dtype": str(index1.dtype),
                 "right": index2,
@@ -174,8 +174,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_MULTIINDEX",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_MULTIINDEX",
+            messageParameters={
                 "left": multiindex1,
                 "left_dtype": str(multiindex1.dtype),
                 "right": multiindex2,

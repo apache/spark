@@ -20,6 +20,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -30,11 +31,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -79,6 +80,9 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
+  // dummy value schema, the real schema will get during state variable init time
+  private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
       // TODO: check if we can return true only if actual timers are registered, or there is
@@ -90,6 +94,47 @@ case class TransformWithStateExec(
     } else {
       false
     }
+  }
+
+  override def operatorStateMetadataVersion: Int = 2
+
+  /**
+   * We initialize this processor handle in the driver to run the init function
+   * and fetch the schemas of the state variables initialized in this processor.
+   * @return a new instance of the driver processor handle
+   */
+  private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    driverProcessorHandle
+  }
+
+  /**
+   * Fetching the columnFamilySchemas from the StatefulProcessorHandle
+   * after init is called.
+   */
+  private def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    closeProcessorHandle()
+    columnFamilySchemas
+  }
+
+  private def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
+    closeProcessorHandle()
+    stateVariableInfos
+  }
+
+  /**
+   * This method is used for the driver-side stateful processor after we
+   * have collected all the necessary schemas.
+   * This instance of the stateful processor won't be used again.
+   */
+  private def closeProcessorHandle(): Unit = {
+    statefulProcessor.close()
+    statefulProcessor.setHandle(null)
   }
 
   /**
@@ -115,8 +160,13 @@ case class TransformWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
-    copy(child = newLeft, initialState = newRight)
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec = {
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+  }
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
@@ -140,6 +190,44 @@ case class TransformWithStateExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
+  // Wrapper to ensure that the implicit key is set when the methods on the iterator
+  // are called. We process all the values for a particular key at a time, so we
+  // only have to set the implicit key when the first call to the iterator is made, and
+  // we have to remove it when the iterator is closed.
+  //
+  // Note: if we ever start to interleave the processing of the iterators we get back
+  // from handleInputRows (i.e. we don't process each iterator all at once), then this
+  // iterator will need to set/unset the implicit key every time hasNext/next is called,
+  // not just at the first and last calls to hasNext.
+  private def iteratorWithImplicitKeySet(
+      key: Any,
+      iter: Iterator[InternalRow],
+      onClose: () => Unit = () => {}
+  ): Iterator[InternalRow] = {
+    new NextIterator[InternalRow] {
+      var hasStarted = false
+
+      override protected def getNext(): InternalRow = {
+        if (!hasStarted) {
+          hasStarted = true
+          ImplicitGroupingKeyTracker.setImplicitKey(key)
+        }
+
+        if (!iter.hasNext) {
+          finished = true
+          null
+        } else {
+          iter.next()
+        }
+      }
+
+      override protected def close(): Unit = {
+        onClose()
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+    }
+  }
+
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
     val getKeyObj =
@@ -151,8 +239,14 @@ case class TransformWithStateExec(
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     val keyObj = getKeyObj(keyRow)  // convert key to objects
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
+
+    // The statefulProcessor's handleInputRows method may create an eager iterator,
+    // and in that case, the implicit key needs to be set now. However, it could return
+    // a lazy iterator, in which case the implicit key should be set when the actual
+    // methods on the iterator are invoked. This is done with the wrapper class
+    // at the end of this method.
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val mappedIterator = statefulProcessor.handleInputRows(
       keyObj,
       valueObjIter,
@@ -161,7 +255,8 @@ case class TransformWithStateExec(
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    iteratorWithImplicitKeySet(keyObj, mappedIterator)
   }
 
   private def processInitialStateRows(
@@ -213,9 +308,11 @@ case class TransformWithStateExec(
       new ExpiredTimerInfoImpl(isValid = true, Some(expiryTimestampMs))).map { obj =>
       getOutputRow(obj)
     }
-    processorHandle.deleteTimer(expiryTimestampMs)
     ImplicitGroupingKeyTracker.removeImplicitKey()
-    mappedIterator
+
+    iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
+      processorHandle.deleteTimer(expiryTimestampMs)
+    })
   }
 
   private def processTimers(
@@ -340,11 +437,88 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
-    // TODO: transformWithState is special because we don't have the schema of the state directly
-    // within the passed args. We need to gather this after running the init function
-    // within the stateful processor on the driver. This also requires a schema format change
-    // when recording this information persistently.
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    assert(stateSchemaVersion >= 3)
+    val newSchemas = getColFamilySchemas()
+    val stateSchemaDir = stateSchemaDirPath()
+    val newStateSchemaFilePath =
+      new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
+    val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
+    val metadataReader = OperatorStateMetadataReader.createReader(
+      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
+    val operatorStateMetadata = try {
+      metadataReader.read()
+    } catch {
+        // If this is the first time we are running the query, there will be no metadata
+        // and this error is expected. In this case, we return None.
+        case ex: Exception if batchId == 0 =>
+          None
+    }
+
+    val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
+      case Some(metadata) =>
+        metadata match {
+          case v2: OperatorStateMetadataV2 =>
+            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
+          case _ => None
+        }
+      case None => None
+    }
+    List(StateSchemaCompatibilityChecker.
+      validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newSchemas.values.toList, session.sessionState, stateSchemaVersion,
+      storeName = StateStoreId.DEFAULT_STORE_NAME,
+      oldSchemaFilePath = oldStateSchemaFilePath,
+      newSchemaFilePath = Some(newStateSchemaFilePath)))
+  }
+
+  /** Metadata of this stateful operator and its states stores. */
+  override def operatorStateMetadata(
+      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    // stateSchemaFilePath should be populated at this point
+    val stateStoreInfo =
+      Array(StateStoreMetadataV2(
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+
+    val operatorProperties = TransformWithStateOperatorProperties(
+      timeMode.toString,
+      outputMode.toString,
+      getStateVariableInfos().values.toList
+    )
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
+  }
+
+  private def stateSchemaDirPath(): Path = {
+    val storeName = StateStoreId.DEFAULT_STORE_NAME
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation,
+        s"${getStateInfo.operatorId.toString}")
+
+    val stateSchemaPath = new Path(stateCheckpointPath, "_stateSchema")
+    val storeNamePath = new Path(stateSchemaPath, storeName)
+    storeNamePath
+  }
+
+  override def validateNewMetadata(
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    (oldOperatorMetadata, newOperatorMetadata) match {
+      case (
+        oldMetadataV2: OperatorStateMetadataV2,
+        newMetadataV2: OperatorStateMetadataV2) =>
+        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          oldMetadataV2.operatorPropertiesJson)
+        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          newMetadataV2.operatorPropertiesJson)
+        TransformWithStateOperatorProperties.validateOperatorProperties(
+          oldOperatorProps, newOperatorProps)
+      case (_, _) =>
+    }
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -370,9 +544,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              KEY_ROW_SCHEMA,
-              VALUE_ROW_SCHEMA,
-              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+              keyEncoder.schema,
+              DUMMY_VALUE_ROW_SCHEMA,
+              NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
               storeConf = storeConf,
@@ -390,9 +564,9 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          keyEncoder.schema,
+          DUMMY_VALUE_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true
@@ -440,9 +614,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+      keyEncoder.schema,
+      DUMMY_VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
@@ -572,4 +746,3 @@ object TransformWithStateExec {
   }
 }
 // scalastyle:on argcount
-

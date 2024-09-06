@@ -585,7 +585,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
       (resolved.map(r => (r, currentDepth)), true)
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, currentDepth + 1)
+      val children = p match {
+        // treat Union node as the leaf node
+        case _: Union => Seq.empty[LogicalPlan]
+        case _ => p.children
+      }
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, children, currentDepth + 1)
     }
 
     // In self join case like:

@@ -1,0 +1,59 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "aggregate": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "groupType": "GROUP_TYPE_CUBE",
+    "groupingExpressions": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "a",
+        "planId": "0"
+      }
+    }, {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "b",
+        "planId": "0"
+      }
+    }],
+    "aggregateExpressions": [{
+      "unresolvedFunction": {
+        "functionName": "grouping",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "grouping",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "grouping_id",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }]
+  }
+}

@@ -813,6 +813,13 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         case (key, None) => sparkSession.conf.unset(key)
       }
       sparkSession.streams.removeListener(listener)
+      // The state store is stopped here to unload all state stores and terminate all maintenance
+      // threads. It is necessary because the temp directory used by the checkpoint directory
+      // may be deleted soon after, and the maintenance thread may see unexpected error and
+      // cause unexpected behavior. Doing it after a test finishes might be too late because
+      // sometimes the checkpoint directory is under `withTempDir`, and in this case the temp
+      // directory is deleted before the test finishes.
+      StateStore.stop()
     }
   }
 

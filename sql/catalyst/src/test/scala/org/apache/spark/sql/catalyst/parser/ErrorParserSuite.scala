@@ -93,24 +93,6 @@ class ErrorParserSuite extends AnalysisTest {
       exception = parseException(
         """
           |ALTER TABLE t
-          |RENAME COLUMN
-          |test-col TO test
-        """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-col"))
-    checkError(
-      exception = parseException(
-        """
-          |ALTER TABLE t
-          |RENAME COLUMN
-          |test TO test-col
-        """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-col"))
-    checkError(
-      exception = parseException(
-        """
-          |ALTER TABLE t
           |DROP COLUMN
           |test-col, test
         """.stripMargin),
@@ -159,10 +141,6 @@ class ErrorParserSuite extends AnalysisTest {
       exception = parseException("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\""),
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-db"))
-    checkError(
-      exception = parseException("SHOW COLUMNS IN t FROM test-db"),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-db"))
     checkError(
       exception = parseException("DESC SCHEMA EXTENDED test-db"),
       errorClass = "INVALID_IDENTIFIER",

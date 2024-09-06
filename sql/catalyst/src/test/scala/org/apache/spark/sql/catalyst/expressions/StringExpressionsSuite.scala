@@ -356,6 +356,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
+    checkEvaluation(SubstringIndex(
+      Literal("www.apache.org"), Literal("."), Literal.create(null, IntegerType)), null)
   }
 
   test("SPARK-40213: ascii for Latin-1 Supplement characters") {
@@ -465,6 +467,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val b = $"b".binary.at(0)
     val bytes = Array[Byte](1, 2, 3, 4)
 
+    assert(!Base64(Literal(bytes)).nullable)
+    assert(Base64(Literal.create(null, BinaryType)).nullable)
+    assert(Base64(Literal(bytes).castNullable()).nullable)
+    assert(!UnBase64(Literal("AQIDBA==")).nullable)
+    assert(UnBase64(Literal.create(null, StringType)).nullable)
+    assert(UnBase64(Literal("AQIDBA==").castNullable()).nullable)
+
     checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
@@ -507,6 +516,23 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of charset
     GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")).replacement :: Nil)
     GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")).replacement :: Nil)
+  }
+
+  test("SPARK-47307: base64 encoding without chunking") {
+    val longString = "a" * 58
+    val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "false") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), encoded)
+    }
+    val chunkEncoded =
+      s"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh\r\nYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "true") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), chunkEncoded)
+    }
+
+    // check if unbase64 works well for chunked and non-chunked encoded strings
+    checkEvaluation(StringDecode(UnBase64(Literal(encoded)), Literal("utf-8")), longString)
+    checkEvaluation(StringDecode(UnBase64(Literal(chunkEncoded)), Literal("utf-8")), longString)
   }
 
   test("initcap unit test") {

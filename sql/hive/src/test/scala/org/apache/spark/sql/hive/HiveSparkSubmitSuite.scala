@@ -733,7 +733,7 @@ object SPARK_9757 extends QueryTest {
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
-    import hiveContext.implicits._
+    import hiveContext.sparkSession.implicits._
 
     val dir = Utils.createTempDir()
     dir.delete()

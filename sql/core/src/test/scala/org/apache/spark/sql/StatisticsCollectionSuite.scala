@@ -850,7 +850,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`db_not_exists`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`db_not_exists`"))
   }
 
   test("SPARK-43383: Add rowCount statistics to LocalRelation") {

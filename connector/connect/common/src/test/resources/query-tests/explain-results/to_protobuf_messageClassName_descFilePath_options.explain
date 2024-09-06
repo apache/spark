@@ -1,2 +1,0 @@
-Project [to_protobuf(bytes#0, StorageLevel, Some([B), (recursive.fields.max.depth,2)) AS to_protobuf(bytes)#0]
-+- LocalRelation <empty>, [id#0L, bytes#0]

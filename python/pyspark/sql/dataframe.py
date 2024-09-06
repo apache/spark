@@ -1887,7 +1887,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.dropDuplicates
+        DataFrame.dropDuplicates : Remove duplicate rows from this DataFrame.
 
         Examples
         --------
@@ -2951,7 +2951,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.summary
+        DataFrame.summary : Computes summary statistics for numeric and string columns.
         """
         ...
 
@@ -3022,7 +3022,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.display
+        DataFrame.describe : Computes basic statistics for numeric and string columns.
         """
         ...
 
@@ -3790,7 +3790,7 @@ class DataFrame:
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":
         """
-        Create multi-dimensional aggregation for the current `class`:DataFrame using the specified
+        Create multi-dimensional aggregation for the current :class:`DataFrame` using the specified
         grouping sets, so we can run aggregation on them.
 
         .. versionadded:: 4.0.0
@@ -3873,7 +3873,7 @@ class DataFrame:
 
         See Also
         --------
-        GroupedData
+        DataFrame.rollup : Compute hierarchical summaries at multiple levels.
         """
         ...
 
@@ -4570,7 +4570,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -4586,9 +4586,6 @@ class DataFrame:
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
-
-        .. versionchanged:: 4.0.0
-            Supports variable-length argument
 
         Parameters
         ----------
@@ -4621,7 +4618,7 @@ class DataFrame:
 
         Deduplicate values on 'name' and 'height' columns.
 
-        >>> df.dropDuplicates('name', 'height').show()
+        >>> df.dropDuplicates(['name', 'height']).show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4631,7 +4628,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> "DataFrame":
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
@@ -4647,9 +4644,6 @@ class DataFrame:
         Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
-
-         .. versionchanged:: 4.0.0
-            Supports variable-length argument
 
          Parameters
          ----------
@@ -4680,7 +4674,7 @@ class DataFrame:
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
         """
         ...
 
@@ -4691,7 +4685,7 @@ class DataFrame:
         thresh: Optional[int] = None,
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
-        """Returns a new :class:`DataFrame` omitting rows with null values.
+        """Returns a new :class:`DataFrame` omitting rows with null or NaN values.
         :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are
         aliases of each other.
 
@@ -4720,50 +4714,50 @@ class DataFrame:
         --------
         >>> from pyspark.sql import Row
         >>> df = spark.createDataFrame([
-        ...     Row(age=10, height=80, name="Alice"),
-        ...     Row(age=5, height=None, name="Bob"),
+        ...     Row(age=10, height=80.0, name="Alice"),
+        ...     Row(age=5, height=float("nan"), name="Bob"),
         ...     Row(age=None, height=None, name="Tom"),
-        ...     Row(age=None, height=None, name=None),
+        ...     Row(age=None, height=float("nan"), name=None),
         ... ])
 
-        Example 1: Drop the row if it contains any nulls.
+        Example 1: Drop the row if it contains any null or NaN.
 
         >>> df.na.drop().show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
+        | 10|  80.0|Alice|
         +---+------+-----+
 
-        Example 2: Drop the row only if all its values are null.
+        Example 2: Drop the row only if all its values are null or NaN.
 
         >>> df.na.drop(how='all').show()
         +----+------+-----+
         | age|height| name|
         +----+------+-----+
-        |  10|    80|Alice|
-        |   5|  NULL|  Bob|
+        |  10|  80.0|Alice|
+        |   5|   NaN|  Bob|
         |NULL|  NULL|  Tom|
         +----+------+-----+
 
-        Example 3: Drop rows that have less than `thresh` non-null values.
+        Example 3: Drop rows that have less than `thresh` non-null and non-NaN values.
 
         >>> df.na.drop(thresh=2).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
-        |  5|  NULL|  Bob|
+        | 10|  80.0|Alice|
+        |  5|   NaN|  Bob|
         +---+------+-----+
 
-        Example 4: Drop rows with non-null values in the specified columns.
+        Example 4: Drop rows with null and NaN values in the specified columns.
 
         >>> df.na.drop(subset=['age', 'name']).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
-        |  5|  NULL|  Bob|
+        | 10|  80.0|Alice|
+        |  5|   NaN|  Bob|
         +---+------+-----+
         """
         ...
@@ -5420,7 +5414,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnsRenamed`
+        DataFrame.withColumnsRenamed
 
         Examples
         --------
@@ -5480,7 +5474,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnRenamed`
+        DataFrame.withColumnRenamed
 
         Examples
         --------
@@ -5937,17 +5931,11 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def drop_duplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
+    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect
-
-        .. versionchanged:: 4.0.0
-            Supports variable-length argument
         """
         ...
 
@@ -6018,6 +6006,10 @@ class DataFrame:
         ...     .whenNotMatched().insertAll()
         ...     .whenNotMatchedBySource().delete()
         ...     .merge())
+
+        Notes
+        -----
+        This method does not support streaming queries.
         """
         ...
 
@@ -6183,6 +6175,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
+        DataFrame.mapInArrow
         """
         ...
 
@@ -6259,7 +6252,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
-        pyspark.sql.DataFrame.mapInPandas
+        DataFrame.mapInPandas
         """
         ...
 
@@ -6318,12 +6311,78 @@ class DataFrame:
         """
         ...
 
+    @dispatch_df_method
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> "DataFrame":
+        """
+        Transposes a DataFrame such that the values in the specified index column become the new
+        columns of the DataFrame. If no index column is provided, the first column is used as
+        the default.
+
+        Please note:
+        - All columns except the index column must share a least common data type. Unless they
+        are the same data type, all columns are cast to the nearest common data type.
+        - The name of the column into which the original column names are transposed defaults
+        to "key".
+        - null values in the index column are excluded from the column names for the
+        transposed table, which are ordered in ascending order.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        indexColumn : str or :class:`Column`, optional
+            The single column that will be treated as the index for the transpose operation. This
+            column will be used to transform the DataFrame such that the values of the indexColumn
+            become the new columns in the transposed DataFrame. If not provided, the first column of
+            the DataFrame will be used as the default.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transposed DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [("A", 1, 2), ("B", 3, 4)],
+        ...     ["id", "val1", "val2"],
+        ... )
+        >>> df.show()
+        +---+----+----+
+        | id|val1|val2|
+        +---+----+----+
+        |  A|   1|   2|
+        |  B|   3|   4|
+        +---+----+----+
+
+        >>> df.transpose().show()
+        +----+---+---+
+        | key|  A|  B|
+        +----+---+---+
+        |val1|  1|  3|
+        |val2|  2|  4|
+        +----+---+---+
+
+        >>> df.transpose(df.id).show()
+        +----+---+---+
+        | key|  A|  B|
+        +----+---+---+
+        |val1|  1|  3|
+        |val2|  2|  4|
+        +----+---+---+
+        """
+        ...
+
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         """
-        Returns a QueryExecution object after the query was executed.
+        Returns a ExecutionInfo object after the query was executed.
 
-        The queryExecution method allows to introspect information about the actual
+        The executionInfo method allows to introspect information about the actual
         query execution after the successful execution. Accessing this member before
         the query execution will return None.
 
@@ -6334,7 +6393,7 @@ class DataFrame:
 
         Returns
         -------
-        An instance of QueryExecution or None when the value is not set yet.
+        An instance of ExecutionInfo or None when the value is not set yet.
 
         Notes
         -----

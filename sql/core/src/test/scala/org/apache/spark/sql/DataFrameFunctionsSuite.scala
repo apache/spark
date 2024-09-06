@@ -17,22 +17,22 @@
 
 package org.apache.spark.sql
 
-import java.io.File
 import java.lang.reflect.Modifier
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -331,6 +331,66 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(nullif(lit(5), lit(5))), Seq(Row(null)))
   }
 
+  test("nullifzero function") {
+    withTable("t") {
+      // Here we exercise a non-nullable, non-foldable column.
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(df.select(nullifzero($"col")), Seq(Row(null)))
+    }
+    // Here we exercise invalid cases including types that do not support ordering.
+    val df = Seq((0)).toDF("a")
+    var expr = nullifzero(map(lit(1), lit("a")))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = Map(
+        "left" -> "\"MAP<INT, STRING>\"",
+        "right" -> "\"INT\"",
+        "sqlExpr" -> "\"(map(1, a) = 0)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "nullifzero",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = nullifzero(array(lit(1), lit(2)))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = Map(
+        "left" -> "\"ARRAY<INT>\"",
+        "right" -> "\"INT\"",
+        "sqlExpr" -> "\"(array(1, 2) = 0)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "nullifzero",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = nullifzero(Literal.create(20201231, DateType))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = Map(
+        "left" -> "\"DATE\"",
+        "right" -> "\"INT\"",
+        "sqlExpr" ->  "\"(DATE '+57279-02-03' = 0)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "nullifzero",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+  }
+
   test("nvl") {
     val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
     checkAnswer(df.selectExpr("nvl(a, b)"), Seq(Row(8)))
@@ -347,6 +407,66 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("nvl2(b, a, c)"), Seq(Row(null)))
     checkAnswer(df.select(nvl2(col("b"), col("a"), col("c"))), Seq(Row(null)))
+  }
+
+  test("zeroifnull function") {
+    withTable("t") {
+      // Here we exercise a non-nullable, non-foldable column.
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(df.select(zeroifnull($"col")), Seq(Row(0)))
+    }
+    // Here we exercise invalid cases including types that do not support ordering.
+    val df = Seq((0)).toDF("a")
+    var expr = zeroifnull(map(lit(1), lit("a")))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`coalesce`",
+        "dataType" -> "(\"MAP<INT, STRING>\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(map(1, a), 0)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "zeroifnull",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = zeroifnull(array(lit(1), lit(2)))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`coalesce`",
+        "dataType" -> "(\"ARRAY<INT>\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(array(1, 2), 0)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "zeroifnull",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = zeroifnull(Literal.create(20201231, DateType))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`coalesce`",
+        "dataType" -> "(\"DATE\" or \"INT\")",
+        "sqlExpr" -> "\"coalesce(DATE '+57279-02-03', 0)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "zeroifnull",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
   }
 
   test("misc md5 function") {
@@ -974,75 +1094,40 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35876: arrays_zip should retain field names") {
-    withTempDir { dir =>
-      val df = spark.sparkContext.parallelize(
-        Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6)))).toDF("val1", "val2")
-      val qualifiedDF = df.as("foo")
+    val df = Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6))).toDF("val1", "val2")
+    val qualifiedDF = df.as("foo")
 
-      // Fields are UnresolvedAttribute
-      val zippedDF1 =
-        qualifiedDF.select(Column(ArraysZip(Seq($"foo.val1".expr, $"foo.val2".expr))) as "zipped")
-      val maybeAlias1 = zippedDF1.queryExecution.logical.expressions.head
-      assert(maybeAlias1.isInstanceOf[Alias])
-      val maybeArraysZip1 = maybeAlias1.children.head
-      assert(maybeArraysZip1.isInstanceOf[ArraysZip])
-      assert(maybeArraysZip1.children.forall(_.isInstanceOf[UnresolvedAttribute]))
-      val file1 = new File(dir, "arrays_zip1")
-      zippedDF1.write.parquet(file1.getAbsolutePath)
-      val restoredDF1 = spark.read.parquet(file1.getAbsolutePath)
-      val fieldNames1 = restoredDF1.schema.head.dataType.asInstanceOf[ArrayType]
-        .elementType.asInstanceOf[StructType].fieldNames
-      assert(fieldNames1.toSeq === Seq("val1", "val2"))
+    // Fields are UnresolvedAttribute
+    val zippedDF1 = qualifiedDF.select(arrays_zip($"foo.val1", $"foo.val2") as "zipped")
+    val zippedDF1expectedSchema = new StructType()
+      .add("zipped", ArrayType(new StructType()
+        .add("val1", IntegerType)
+        .add("val2", IntegerType)))
+    val zippedDF1Schema = zippedDF1.queryExecution.executedPlan.schema.toNullable
+    assert(zippedDF1Schema == zippedDF1expectedSchema)
 
-      // Fields are resolved NamedExpression
-      val zippedDF2 =
-        df.select(Column(ArraysZip(Seq(df("val1").expr, df("val2").expr))) as "zipped")
-      val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
-      assert(maybeAlias2.isInstanceOf[Alias])
-      val maybeArraysZip2 = maybeAlias2.children.head
-      assert(maybeArraysZip2.isInstanceOf[ArraysZip])
-      assert(maybeArraysZip2.children.forall(
-        e => e.isInstanceOf[AttributeReference] && e.resolved))
-      val file2 = new File(dir, "arrays_zip2")
-      zippedDF2.write.parquet(file2.getAbsolutePath)
-      val restoredDF2 = spark.read.parquet(file2.getAbsolutePath)
-      val fieldNames2 = restoredDF2.schema.head.dataType.asInstanceOf[ArrayType]
-        .elementType.asInstanceOf[StructType].fieldNames
-      assert(fieldNames2.toSeq === Seq("val1", "val2"))
+    // Fields are resolved NamedExpression
+    val zippedDF2 = df.select(arrays_zip(df("val1"), df("val2")) as "zipped")
+    val zippedDF2Schema = zippedDF2.queryExecution.executedPlan.schema.toNullable
+    assert(zippedDF1Schema == zippedDF1expectedSchema)
 
-      // Fields are unresolved NamedExpression
-      val zippedDF3 = df.select(
-        Column(ArraysZip(Seq(($"val1" as "val3").expr, ($"val2" as "val4").expr))) as "zipped")
-      val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
-      assert(maybeAlias3.isInstanceOf[Alias])
-      val maybeArraysZip3 = maybeAlias3.children.head
-      assert(maybeArraysZip3.isInstanceOf[ArraysZip])
-      assert(maybeArraysZip3.children.forall(e => e.isInstanceOf[Alias] && !e.resolved))
-      val file3 = new File(dir, "arrays_zip3")
-      zippedDF3.write.parquet(file3.getAbsolutePath)
-      val restoredDF3 = spark.read.parquet(file3.getAbsolutePath)
-      val fieldNames3 = restoredDF3.schema.head.dataType.asInstanceOf[ArrayType]
-        .elementType.asInstanceOf[StructType].fieldNames
-      assert(fieldNames3.toSeq === Seq("val3", "val4"))
+    // Fields are unresolved NamedExpression
+    val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
+    val zippedDF3expectedSchema = new StructType()
+      .add("zipped", ArrayType(new StructType()
+        .add("val3", IntegerType)
+        .add("val4", IntegerType)))
+    val zippedDF3Schema = zippedDF3.queryExecution.executedPlan.schema.toNullable
+    assert(zippedDF3Schema == zippedDF3expectedSchema)
 
-      // Fields are neither UnresolvedAttribute nor NamedExpression
-      val zippedDF4 = df.select(
-        Column(ArraysZip(Seq(array_sort($"val1").expr, array_sort($"val2").expr))) as "zipped")
-      val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
-      assert(maybeAlias4.isInstanceOf[Alias])
-      val maybeArraysZip4 = maybeAlias4.children.head
-      assert(maybeArraysZip4.isInstanceOf[ArraysZip])
-      assert(maybeArraysZip4.children.forall {
-        case _: UnresolvedAttribute | _: NamedExpression => false
-        case _ => true
-      })
-      val file4 = new File(dir, "arrays_zip4")
-      zippedDF4.write.parquet(file4.getAbsolutePath)
-      val restoredDF4 = spark.read.parquet(file4.getAbsolutePath)
-      val fieldNames4 = restoredDF4.schema.head.dataType.asInstanceOf[ArrayType]
-        .elementType.asInstanceOf[StructType].fieldNames
-      assert(fieldNames4.toSeq === Seq("0", "1"))
-    }
+    // Fields are neither UnresolvedAttribute nor NamedExpression
+    val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"val2")) as "zipped")
+    val zippedDF4expectedSchema = new StructType()
+      .add("zipped", ArrayType(new StructType()
+        .add("0", IntegerType)
+        .add("1", IntegerType)))
+    val zippedDF4Schema = zippedDF4.queryExecution.executedPlan.schema.toNullable
+    assert(zippedDF4Schema == zippedDF4expectedSchema)
   }
 
   test("SPARK-40292: arrays_zip should retain field names in nested structs") {
@@ -5485,7 +5570,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
       val c = if (codegenFallback) {
-        Column(CodegenFallbackExpr(v.expr))
+        column(CodegenFallbackExpr(v.expr))
       } else {
         v
       }
@@ -5811,13 +5896,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Array[Integer](null, null, null), null, null)
     ).toDF("a", "b", "c")
 
-    checkAnswer(
-      df.select(array_compact($"a"),
-        array_compact($"b"), array_compact($"c")),
+    val df2 = df.select(
+      array_compact($"a").alias("a"),
+      array_compact($"b").alias("b"),
+      array_compact($"c").alias("c"))
+
+    checkAnswer(df2,
       Seq(Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "")),
         Row(Seq.empty[Integer], Seq("1.0", "2.2", "3.0"), Seq.empty[String]),
         Row(Seq.empty[Integer], null, null))
     )
+
+    val expectedSchema = StructType(
+      StructField("a", ArrayType(IntegerType, containsNull = false), true) ::
+        StructField("b", ArrayType(StringType, containsNull = false), true) ::
+        StructField("c", ArrayType(StringType, containsNull = false), true) :: Nil)
+    assert(df2.schema === expectedSchema)
 
     checkAnswer(
       OneRowRelation().selectExpr("array_compact(array(1.0D, 2.0D, null))"),

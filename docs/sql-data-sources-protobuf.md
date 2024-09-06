@@ -402,9 +402,9 @@ Spark supports the writing of all Spark SQL types into Protobuf. For most types,
 ## Handling circular references protobuf fields
 
 One common issue that can arise when working with Protobuf data is the presence of circular references. In Protobuf, a circular reference occurs when a field refers back to itself or to another field that refers back to the original field. This can cause issues when parsing the data, as it can result in infinite loops or other unexpected behavior.
-To address this issue, the latest version of spark-protobuf introduces a new feature: the ability to check for circular references through field types. This allows users use the `recursive.fields.max.depth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, `spark-protobuf` will not permit recursive fields by setting `recursive.fields.max.depth` to -1. However, you can set this option to 0 to 10 if needed.
+To address this issue, the latest version of spark-protobuf introduces a new feature: the ability to check for circular references through field types. This allows users use the `recursive.fields.max.depth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, `spark-protobuf` will not permit recursive fields by setting `recursive.fields.max.depth` to -1. However, you can set this option to 1 to 10 if needed.
 
-Setting `recursive.fields.max.depth` to 0 drops all recursive fields, setting it to 1 allows it to be recursed once, and setting it to 2 allows it to be recursed twice. A `recursive.fields.max.depth` value greater than 10 is not allowed, as it can lead to performance issues and even stack overflows.
+Setting `recursive.fields.max.depth` to 1 drops all recursive fields, setting it to 2 allows it to be recursed once, and setting it to 3 allows it to be recursed twice. A `recursive.fields.max.depth` value greater than 10 is not allowed, as it can lead to performance issues and even stack overflows.
 
 SQL Schema for the below protobuf message will vary based on the value of `recursive.fields.max.depth`.
 
@@ -425,9 +425,10 @@ message Person {
 // The protobuf schema defined above, would be converted into a Spark SQL columns with the following
 // structure based on `recursive.fields.max.depth` value.
 
-0: struct<name: string, bff: null>
-1: struct<name string, bff: <name: string, bff: null>>
-2: struct<name string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
+1: struct<name: string>
+2: struct<name: string, bff: struct<name: string>>
+3: struct<name: string, bff: struct<name: string, bff: struct<name: string>>>
+...
 
 {% endhighlight %}
 <div class="d-none">

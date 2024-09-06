@@ -424,6 +424,19 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("substring_index(a, '.', 2)"),
       Row("www.apache")
     )
+
+    // TODO SPARK-48779 Move E2E SQL tests with column input to collations.sql golden file.
+    val testTable = "test_substring_index"
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (num int) USING parquet")
+      sql(s"INSERT INTO $testTable VALUES (1), (2), (3), (NULL)")
+      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation =>
+        withSQLConf(SQLConf.DEFAULT_COLLATION.key -> collation) {
+          val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
+          checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
+        }
+      )
+    }
   }
 
   test("string locate function") {
@@ -1046,7 +1059,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(like(col("a"), col("b"), lit(618))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"618\"")
+      parameters = Map("sqlExpr" -> "\"618\""),
+      context = ExpectedContext("like", getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -1054,7 +1068,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(ilike(col("a"), col("b"), lit(618))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"618\"")
+      parameters = Map("sqlExpr" -> "\"618\""),
+      context = ExpectedContext("ilike", getCurrentClassCallSitePattern)
     )
 
     // scalastyle:off
@@ -1064,7 +1079,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(like(col("a"), col("b"), lit("中国"))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"中国\"")
+      parameters = Map("sqlExpr" -> "\"中国\""),
+      context = ExpectedContext("like", getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -1072,7 +1088,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         df1.select(ilike(col("a"), col("b"), lit("中国"))).collect()
       },
       errorClass = "INVALID_ESCAPE_CHAR",
-      parameters = Map("sqlExpr" -> "\"中国\"")
+      parameters = Map("sqlExpr" -> "\"中国\""),
+      context = ExpectedContext("ilike", getCurrentClassCallSitePattern)
     )
     // scalastyle:on
   }
@@ -1281,5 +1298,34 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e.getCause.isInstanceOf[IllegalArgumentException] &&
       e.getCause.getMessage
         .startsWith("URLDecoder: Illegal hex characters in escape (%) pattern - "))
+  }
+
+  test("SPARK-49188: concat_ws called on array of arrays of string - invalid cast") {
+    for (enableANSI <- Seq(false, true)) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> enableANSI.toString) {
+        val testTable = "invalidCastTestTable"
+        withTable(testTable) {
+          sql(s"create table $testTable(dat array<string>) using parquet")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select concat_ws(',', collect_list(dat)) FROM $testTable")
+            },
+            errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+            parameters = Map(
+              "sqlExpr" -> """"concat_ws(,, collect_list(dat))"""",
+              "paramIndex" -> "second",
+              "inputSql" -> """"collect_list(dat)"""",
+              "inputType" -> """"ARRAY<ARRAY<STRING>>"""",
+              "requiredType" -> """("ARRAY<STRING>" or "STRING")"""
+            ),
+            context = ExpectedContext(
+              fragment = """concat_ws(',', collect_list(dat))""",
+              start = 7,
+              stop = 39
+            )
+          )
+        }
+      }
+    }
   }
 }
