@@ -24,27 +24,27 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
 
 /**
- * A handle to a query that is executing continuously in the background as new data arrives.
- * All these methods are thread-safe.
+ * A handle to a query that is executing continuously in the background as new data arrives. All
+ * these methods are thread-safe.
  * @since 2.0.0
  */
 @Evolving
 trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
 
   /**
-   * Returns the user-specified name of the query, or null if not specified.
-   * This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
-   * as `dataframe.writeStream.queryName("query").start()`.
-   * This name, if set, must be unique across all active queries.
+   * Returns the user-specified name of the query, or null if not specified. This name can be
+   * specified in the `org.apache.spark.sql.streaming.DataStreamWriter` as
+   * `dataframe.writeStream.queryName("query").start()`. This name, if set, must be unique across
+   * all active queries.
    *
    * @since 2.0.0
    */
   def name: String
 
   /**
-   * Returns the unique id of this query that persists across restarts from checkpoint data.
-   * That is, this id is generated when a query is started for the first time, and
-   * will be the same every time it is restarted from checkpoint data. Also see [[runId]].
+   * Returns the unique id of this query that persists across restarts from checkpoint data. That
+   * is, this id is generated when a query is started for the first time, and will be the same
+   * every time it is restarted from checkpoint data. Also see [[runId]].
    *
    * @since 2.1.0
    */
@@ -52,8 +52,8 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
 
   /**
    * Returns the unique id of this run of the query. That is, every start/restart of a query will
-   * generate a unique runId. Therefore, every time a query is restarted from
-   * checkpoint, it will have the same [[id]] but different [[runId]]s.
+   * generate a unique runId. Therefore, every time a query is restarted from checkpoint, it will
+   * have the same [[id]] but different [[runId]]s.
    */
   def runId: UUID
 
@@ -103,14 +103,15 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
   def lastProgress: StreamingQueryProgress
 
   /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be thrown.
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception. If
+   * the query has terminated with an exception, then the exception will be thrown.
    *
    * If the query has terminated, then all subsequent calls to this method will either return
-   * immediately (if the query was terminated by `stop()`), or throw the exception
-   * immediately (if the query has terminated with exception).
+   * immediately (if the query was terminated by `stop()`), or throw the exception immediately (if
+   * the query has terminated with exception).
    *
-   * @throws StreamingQueryException if the query has terminated with an exception.
+   * @throws StreamingQueryException
+   *   if the query has terminated with an exception.
    *
    * @since 2.0.0
    */
@@ -118,16 +119,16 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
   def awaitTermination(): Unit
 
   /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be thrown.
-   * Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
-   * milliseconds.
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception. If
+   * the query has terminated with an exception, then the exception will be thrown. Otherwise, it
+   * returns whether the query has terminated or not within the `timeoutMs` milliseconds.
    *
    * If the query has terminated, then all subsequent calls to this method will either return
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException if the query has terminated with an exception
+   * @throws StreamingQueryException
+   *   if the query has terminated with an exception
    *
    * @since 2.0.0
    */
@@ -137,9 +138,10 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
   /**
    * Blocks until all available data in the source has been processed and committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
-   * method may block forever. Additionally, this method is only guaranteed to block until data that
-   * has been synchronously appended data to a `org.apache.spark.sql.execution.streaming.Source`
-   * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
+   * method may block forever. Additionally, this method is only guaranteed to block until data
+   * that has been synchronously appended data to a
+   * `org.apache.spark.sql.execution.streaming.Source` prior to invocation. (i.e. `getOffset` must
+   * immediately reflect the addition).
    * @since 2.0.0
    */
   def processAllAvailable(): Unit
@@ -167,7 +169,8 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
   /**
    * Prints the physical plan to the console for debugging purposes.
    *
-   * @param extended whether to do extended explain or not
+   * @param extended
+   *   whether to do extended explain or not
    * @since 2.0.0
    */
   def explain(extended: Boolean): Unit

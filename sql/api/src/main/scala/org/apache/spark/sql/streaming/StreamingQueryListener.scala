@@ -31,7 +31,8 @@ import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
- * @note The methods are not thread-safe as they may be called from different threads.
+ * @note
+ *   The methods are not thread-safe as they may be called from different threads.
  *
  * @since 2.0.0
  */
@@ -42,11 +43,12 @@ abstract class StreamingQueryListener extends Serializable {
 
   /**
    * Called when a query is started.
-   * @note This is called synchronously with
-   *       [[org.apache.spark.sql.streaming.DataStreamWriter `DataStreamWriter.start()`]],
-   *       that is, `onQueryStart` will be called on all listeners before
-   *       `DataStreamWriter.start()` returns the corresponding [[StreamingQuery]]. Please
-   *       don't block this method as it will block your query.
+   * @note
+   *   This is called synchronously with
+   *   [[org.apache.spark.sql.streaming.DataStreamWriter `DataStreamWriter.start()`]], that is,
+   *   `onQueryStart` will be called on all listeners before `DataStreamWriter.start()` returns
+   *   the corresponding [[StreamingQuery]]. Please don't block this method as it will block your
+   *   query.
    * @since 2.0.0
    */
   def onQueryStarted(event: QueryStartedEvent): Unit
@@ -54,10 +56,11 @@ abstract class StreamingQueryListener extends Serializable {
   /**
    * Called when there is some status update (ingestion rate updated, etc.)
    *
-   * @note This method is asynchronous. The status in [[StreamingQuery]] will always be
-   *       latest no matter when this method is called. Therefore, the status of [[StreamingQuery]]
-   *       may be changed before/when you process the event. E.g., you may find [[StreamingQuery]]
-   *       is terminated when you are processing `QueryProgressEvent`.
+   * @note
+   *   This method is asynchronous. The status in [[StreamingQuery]] will always be latest no
+   *   matter when this method is called. Therefore, the status of [[StreamingQuery]] may be
+   *   changed before/when you process the event. E.g., you may find [[StreamingQuery]] is
+   *   terminated when you are processing `QueryProgressEvent`.
    * @since 2.0.0
    */
   def onQueryProgress(event: QueryProgressEvent): Unit
@@ -90,8 +93,8 @@ private[spark] trait PythonStreamingQueryListener {
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
 }
 
-private[spark] class PythonStreamingQueryListenerWrapper(
-    listener: PythonStreamingQueryListener) extends StreamingQueryListener {
+private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreamingQueryListener)
+    extends StreamingQueryListener {
   import StreamingQueryListener._
 
   def onQueryStarted(event: QueryStartedEvent): Unit = listener.onQueryStarted(event)
@@ -119,26 +122,32 @@ object StreamingQueryListener extends Serializable {
 
   /**
    * Event representing the start of a query
-   * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
-   * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
-   * @param name User-specified name of the query, null if not specified.
-   * @param timestamp The timestamp to start a query.
+   * @param id
+   *   A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param runId
+   *   A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param name
+   *   User-specified name of the query, null if not specified.
+   * @param timestamp
+   *   The timestamp to start a query.
    * @since 2.1.0
    */
   @Evolving
-  class QueryStartedEvent private[sql](
+  class QueryStartedEvent private[sql] (
       val id: UUID,
       val runId: UUID,
       val name: String,
-      val timestamp: String) extends Event with Serializable {
+      val timestamp: String)
+      extends Event
+      with Serializable {
 
     def json: String = compact(render(jsonValue))
 
     private def jsonValue: JValue = {
       ("id" -> JString(id.toString)) ~
-      ("runId" -> JString(runId.toString)) ~
-      ("name" -> JString(name)) ~
-      ("timestamp" -> JString(timestamp))
+        ("runId" -> JString(runId.toString)) ~
+        ("name" -> JString(name)) ~
+        ("timestamp" -> JString(timestamp))
     }
   }
 
@@ -159,12 +168,14 @@ object StreamingQueryListener extends Serializable {
 
   /**
    * Event representing any progress updates in a query.
-   * @param progress The query progress updates.
+   * @param progress
+   *   The query progress updates.
    * @since 2.1.0
    */
   @Evolving
-  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
-    with Serializable {
+  class QueryProgressEvent private[sql] (val progress: StreamingQueryProgress)
+      extends Event
+      with Serializable {
 
     def json: String = compact(render(jsonValue))
 
@@ -189,23 +200,25 @@ object StreamingQueryListener extends Serializable {
   /**
    * Event representing that query is idle and waiting for new data to process.
    *
-   * @param id    A unique query id that persists across restarts. See `StreamingQuery.id()`.
-   * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
-   * @param timestamp The timestamp when the latest no-batch trigger happened.
+   * @param id
+   *   A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param runId
+   *   A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param timestamp
+   *   The timestamp when the latest no-batch trigger happened.
    * @since 3.5.0
    */
   @Evolving
-  class QueryIdleEvent private[sql](
-      val id: UUID,
-      val runId: UUID,
-      val timestamp: String) extends Event with Serializable {
+  class QueryIdleEvent private[sql] (val id: UUID, val runId: UUID, val timestamp: String)
+      extends Event
+      with Serializable {
 
     def json: String = compact(render(jsonValue))
 
     private def jsonValue: JValue = {
       ("id" -> JString(id.toString)) ~
-      ("runId" -> JString(runId.toString)) ~
-      ("timestamp" -> JString(timestamp))
+        ("runId" -> JString(runId.toString)) ~
+        ("timestamp" -> JString(timestamp))
     }
   }
 
@@ -227,23 +240,27 @@ object StreamingQueryListener extends Serializable {
   /**
    * Event representing that termination of a query.
    *
-   * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
-   * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
-   * @param exception The exception message of the query if the query was terminated
-   *                  with an exception. Otherwise, it will be `None`.
-   * @param errorClassOnException The error class from the exception if the query was terminated
-   *                              with an exception which is a part of error class framework.
-   *                              If the query was terminated without an exception, or the
-   *                              exception is not a part of error class framework, it will be
-   *                              `None`.
+   * @param id
+   *   A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param runId
+   *   A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param exception
+   *   The exception message of the query if the query was terminated with an exception.
+   *   Otherwise, it will be `None`.
+   * @param errorClassOnException
+   *   The error class from the exception if the query was terminated with an exception which is a
+   *   part of error class framework. If the query was terminated without an exception, or the
+   *   exception is not a part of error class framework, it will be `None`.
    * @since 2.1.0
    */
   @Evolving
-  class QueryTerminatedEvent private[sql](
+  class QueryTerminatedEvent private[sql] (
       val id: UUID,
       val runId: UUID,
       val exception: Option[String],
-      val errorClassOnException: Option[String]) extends Event with Serializable {
+      val errorClassOnException: Option[String])
+      extends Event
+      with Serializable {
     // compatibility with versions in prior to 3.5.0
     def this(id: UUID, runId: UUID, exception: Option[String]) = {
       this(id, runId, exception, None)
@@ -253,9 +270,9 @@ object StreamingQueryListener extends Serializable {
 
     private def jsonValue: JValue = {
       ("id" -> JString(id.toString)) ~
-      ("runId" -> JString(runId.toString)) ~
-      ("exception" -> JString(exception.orNull)) ~
-      ("errorClassOnException" -> JString(errorClassOnException.orNull))
+        ("runId" -> JString(runId.toString)) ~
+        ("exception" -> JString(exception.orNull)) ~
+        ("errorClassOnException" -> JString(errorClassOnException.orNull))
     }
   }
 

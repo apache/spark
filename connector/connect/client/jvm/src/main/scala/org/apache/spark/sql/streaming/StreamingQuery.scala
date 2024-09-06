@@ -30,6 +30,7 @@ import org.apache.spark.sql.{api, Dataset, SparkSession}
 
 /** @inheritdoc */
 trait StreamingQuery extends api.StreamingQuery[Dataset] {
+
   /** @inheritdoc */
   override def sparkSession: SparkSession
 }

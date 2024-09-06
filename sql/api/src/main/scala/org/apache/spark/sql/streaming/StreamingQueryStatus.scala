@@ -27,20 +27,23 @@ import org.apache.spark.annotation.Evolving
 /**
  * Reports information about the instantaneous status of a streaming query.
  *
- * @param message A human readable description of what the stream is currently doing.
- * @param isDataAvailable True when there is new data to be processed. Doesn't apply
- *                        to ContinuousExecution where it is always false.
- * @param isTriggerActive True when the trigger is actively firing, false when waiting for the
- *                        next trigger time. Doesn't apply to ContinuousExecution where it is
- *                        always false.
+ * @param message
+ *   A human readable description of what the stream is currently doing.
+ * @param isDataAvailable
+ *   True when there is new data to be processed. Doesn't apply to ContinuousExecution where it is
+ *   always false.
+ * @param isTriggerActive
+ *   True when the trigger is actively firing, false when waiting for the next trigger time.
+ *   Doesn't apply to ContinuousExecution where it is always false.
  *
  * @since 2.1.0
  */
 @Evolving
-class StreamingQueryStatus protected[sql](
+class StreamingQueryStatus protected[sql] (
     val message: String,
     val isDataAvailable: Boolean,
-    val isTriggerActive: Boolean) extends Serializable {
+    val isTriggerActive: Boolean)
+    extends Serializable {
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))
@@ -62,7 +65,7 @@ class StreamingQueryStatus protected[sql](
 
   private[sql] def jsonValue: JValue = {
     ("message" -> JString(message)) ~
-    ("isDataAvailable" -> JBool(isDataAvailable)) ~
-    ("isTriggerActive" -> JBool(isTriggerActive))
+      ("isDataAvailable" -> JBool(isDataAvailable)) ~
+      ("isTriggerActive" -> JBool(isTriggerActive))
   }
 }
