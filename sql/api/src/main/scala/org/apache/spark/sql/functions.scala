@@ -4350,8 +4350,8 @@ object functions {
     Column.fn("sentences", string, language, country)
 
   /**
-   * Splits a string into arrays of sentences, where each sentence is an array of words.
-   * The default `country`('') is used.
+   * Splits a string into arrays of sentences, where each sentence is an array of words. The
+   * default `country`('') is used.
    * @group string_funcs
    * @since 4.0.0
    */

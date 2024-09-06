@@ -11242,15 +11242,15 @@ def sentences(
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
     The `language` and `country` arguments are optional,
-    - When they are omitted:
-        1. If they are both omitted, the `locale(language='', country='')` is used.
-        2. If the `country` is omitted, the `locale(language, country='')` is used.
-    - When they are null:
-        1. If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
-        2. If the `language` is null and the `country` is not null,
-            the `Locale.US - locale(language='en', country='US')` is used.
-        3. If the `language` is not null and the `country` is null, the `locale(language)` is used.
-        4. If neither is `null`, the `locale(language, country)` is used.
+    When they are omitted:
+    1.If they are both omitted, the `locale(language='', country='')` is used.
+    2.If the `country` is omitted, the `locale(language, country='')` is used.
+    When they are null:
+    1.If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+    2.If the `language` is null and the `country` is not null,
+        the `Locale.US - locale(language='en', country='US')` is used.
+    3.If the `language` is not null and the `country` is null, the `locale(language)` is used.
+    4.If neither is `null`, the `locale(language, country)` is used.
 
     .. versionadded:: 3.2.0
 
