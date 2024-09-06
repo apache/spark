@@ -480,5 +480,5 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         )
       }
     }
-  }    
+  }
 }

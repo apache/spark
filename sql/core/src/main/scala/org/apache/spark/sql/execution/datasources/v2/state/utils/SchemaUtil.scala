@@ -244,13 +244,13 @@ object SchemaUtil {
     val stateVarType = stateVarInfo.stateVariableType
 
     stateVarType match {
-      case StateVariableType.ValueState =>
+      case ValueState =>
         new StructType()
           .add("key", stateStoreColFamilySchema.keySchema)
           .add("single_value", stateStoreColFamilySchema.valueSchema)
           .add("partition_id", IntegerType)
 
-      case StateVariableType.ListState =>
+      case ListState =>
         new StructType()
           .add("key", stateStoreColFamilySchema.keySchema)
           .add("list_value", ArrayType(stateStoreColFamilySchema.valueSchema))
@@ -309,14 +309,5 @@ object SchemaUtil {
     new StructType()
       .add("key", groupingKeySchema)
       .add("userKey", userKeySchema.get)
-  }
-
-  /**
-   * Given key-value schema generated from `generateSchemaForStateVar()`,
-   * returns the value schema that it is stored in the state store
-   */
-  def getValueSchema(schema: StructType): StructType = {
-    SchemaUtil.getSchemaAsDataType(schema, "map_value").asInstanceOf[MapType]
-      .valueType.asInstanceOf[StructType]
   }
 }
