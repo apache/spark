@@ -315,15 +315,30 @@ private[scheduler] class HealthTracker (
     }
   }
 
-  def updateBlacklistForSpeculativeTasks(node: String): Unit = {
+  def updateExcludedForSpeculativeTasks(node: String): Boolean = {
     val now = clock.getTimeMillis()
     val expiryTimeForNewExcludes = now + EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS
-    if (!isNodeExcluded(node)) {
+    val nodeNotExcluded = !isNodeExcluded(node)
+    if (nodeNotExcluded) {
       nodeIdToExcludedExpiryTime.put(node, expiryTimeForNewExcludes)
       logInfo(log"Excluding node ${MDC(HOST, node)} because there are" +
         log" pending speculative tasks and just one host exists")
       listenerBus.post(SparkListenerNodeBlacklisted(now, node, 0))
       listenerBus.post(SparkListenerExecutorExcluded(now, node, 0))
+      _excludedNodeList.set(nodeIdToExcludedExpiryTime.keySet.toSet)
+      updateNextExpiryTime()
+    }
+    nodeNotExcluded
+  }
+
+  def updateRevivedForSpeculativeTasks(node: String): Unit = {
+    val now = clock.getTimeMillis()
+    if (isNodeExcluded(node)) {
+      nodeIdToExcludedExpiryTime.remove(node)
+      logInfo(log"Revive node ${MDC(HOST, node)} because" +
+        log" there are no pending speculative tasks")
+      listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
+      listenerBus.post(SparkListenerNodeUnexcluded(now, node))
       _excludedNodeList.set(nodeIdToExcludedExpiryTime.keySet.toSet)
       updateNextExpiryTime()
     }

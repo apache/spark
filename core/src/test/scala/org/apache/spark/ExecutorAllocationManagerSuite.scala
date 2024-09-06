@@ -952,8 +952,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(delta == -1)
     assert(numExecutorsTargetForDefaultProfileId(manager) == 4)
 
-    // a hardware error occur to host1 and task 18, 19 hang, speculative task submitted
-    // with index (taskId - 4)
+    // a hardware error occur to host1 and task 16-19 hang, speculative task submitted
+    // with taskId (index + 4)
     (20 to 23).foreach { taskId =>
       post(new SparkListenerSpeculativeTaskSubmitted(0, 0, taskId - 4, taskId))}
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
@@ -2001,6 +2001,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
             0, 0, (task.partitionId / 4).toString, host, null, false) :: taskAttempts(id)
         }
       }
+    }
+    override def handleExcludeNodes(node: String): Boolean = {
+      true
     }
   }
 }

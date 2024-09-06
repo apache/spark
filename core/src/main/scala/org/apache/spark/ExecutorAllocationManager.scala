@@ -192,6 +192,8 @@ private[spark] class ExecutorAllocationManager(
 
   private var adjustMaxNeed = minNumExecutors;
 
+  private val excludeSpeculativeNodes = new mutable.HashSet[String]()
+
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -299,6 +301,7 @@ private[spark] class ExecutorAllocationManager(
       numExecutorsToAddPerResourceProfileId(rpId) = 1
     }
     executorMonitor.reset()
+    excludeSpeculativeNodes.clear()
   }
 
   def setScheduler(newScheduler: TaskScheduler): Unit = {
@@ -349,15 +352,20 @@ private[spark] class ExecutorAllocationManager(
               // make sure new maxNeed exceeds numExecutorsTarget and allocate executor
               adjustMaxNeed = numExecutorsTarget + 1
               // If hasAdjustMaxNeed, use last adjust value as
-              // maxNeededWithSpeculationLocalityOffset in case of numExecutorsTarget
-              // keeps increasing during maxNumExecutorsNeeded method call
-              scheduler.asInstanceOf[TaskSchedulerImpl].handleExcludeNodes(node)
-              logDebug(log"Exclude ${MDC(HOST, node)} for speculative, " +
-                log"old maxNeeded: ${MDC(COUNT, maxNeeded)}, " +
-                log"old numExecutorsTarget: ${MDC(COUNT, numExecutorsTarget)}, " +
-                log"current executors count: ${MDC(COUNT, executorMonitor.executorCount)}")
-              executorMonitor.setAdjustMaxNeed(true)
-              adjustMaxNeed
+              // maxNeededWithSpeculationLocalityOffset in case of numExecutorsTarget keeps
+              // increasing during maxNumExecutorsNeededPerResourceProfile method called
+              if (scheduler.asInstanceOf[TaskSchedulerImpl].handleExcludeNodes(node)) {
+                logDebug(log"Exclude ${MDC(HOST, node)} for speculative, " +
+                  log"old maxNeeded: ${MDC(COUNT, maxNeeded)}, " +
+                  log"old numExecutorsTarget: ${MDC(COUNT, numExecutorsTarget)}, " +
+                  log"current executors count: ${MDC(COUNT, executorMonitor.executorCount)}")
+                excludeSpeculativeNodes.add(node)
+                executorMonitor.setAdjustMaxNeed(true)
+                adjustMaxNeed
+              } else {
+                logDebug(log"${MDC(HOST, node)} has been excluded for other reason")
+                maxNeeded
+              }
             } else {
               logDebug(log"No speculative task found on ${MDC(HOST, node)}")
               maxNeeded
@@ -443,6 +451,13 @@ private[spark] class ExecutorAllocationManager(
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       numExecutorsTargetPerResourceProfileId.foreach { case (rpId, targetExecs) =>
         val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rpId, targetExecs)
+        if (excludeSpeculativeNodes.nonEmpty &&
+          listener.pendingSpeculativeTasksPerResourceProfile(rpId) == 0) {
+          for (node <- excludeSpeculativeNodes) {
+            scheduler.asInstanceOf[TaskSchedulerImpl].handleReviveNodes(node)
+            excludeSpeculativeNodes.remove(node)
+          }
+        }
         if (maxNeeded < targetExecs) {
           // The target number exceeds the number we actually need, so stop adding new
           // executors and inform the cluster manager to cancel the extra pending requests

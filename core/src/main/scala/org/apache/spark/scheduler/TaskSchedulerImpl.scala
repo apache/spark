@@ -919,8 +919,15 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  def handleExcludeNodes(node: String): Unit = synchronized {
-    healthTrackerOpt.foreach(_.updateBlacklistForSpeculativeTasks(node))
+  def handleExcludeNodes(node: String): Boolean = synchronized {
+    if (healthTrackerOpt.nonEmpty) {
+      return healthTrackerOpt.map(_.updateExcludedForSpeculativeTasks(node)).get
+    }
+    false
+  }
+
+  def handleReviveNodes(node: String): Unit = synchronized {
+    healthTrackerOpt.foreach(_.updateRevivedForSpeculativeTasks(node))
   }
 
   def speculativeTasksHasAttemptOnHost(
