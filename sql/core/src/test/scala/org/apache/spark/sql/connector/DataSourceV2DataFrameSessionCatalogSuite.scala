@@ -55,8 +55,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
     "and a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
-        val format = spark.sessionState.conf.defaultDataSourceName
-        sql(s"CREATE TABLE same_name(id LONG) USING $format")
+        sql(s"CREATE TABLE same_name(id LONG) USING $v2Format")
         spark.range(10).createTempView("same_name")
         spark.range(20).write.format(v2Format).mode(SaveMode.Append).saveAsTable("same_name")
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
