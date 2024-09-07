@@ -315,7 +315,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
         withTempPath { dir =>
           val path = dir.getAbsolutePath
-          val input = Seq(Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")))
+          val input = Seq(
+              Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")),
+              Row(null, null, null)
+            )
           val schema = StructType.fromDDL(
             "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
           spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
