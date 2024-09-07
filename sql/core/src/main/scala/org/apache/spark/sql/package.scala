@@ -18,7 +18,9 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.SparkStrategy
+import org.apache.spark.sql.internal.ExpressionUtils
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -73,4 +75,13 @@ package object sql {
    * with rebasing.
    */
   private[sql] val SPARK_LEGACY_INT96_METADATA_KEY = "org.apache.spark.legacyINT96"
+
+  /**
+   * Implicit helper that makes it easy to construct a Column from an Expression. This allows
+   * developers to create a Column in the same way as in earlier versions of Spark (before 4.0).
+   */
+  @DeveloperApi
+  implicit class ColumnConstructorExt(val c: Column.type) extends AnyVal {
+    def apply(e: Expression): Column = ExpressionUtils.column(e)
+  }
 }

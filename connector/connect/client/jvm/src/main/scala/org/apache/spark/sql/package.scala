@@ -32,7 +32,7 @@ package object sql {
   /**
    * Create a [[Column]] from a [[proto.Expression]]
    *
-   * This method is meant to be used by Connect plugins. We do not guarantee any compatility
+   * This method is meant to be used by Connect plugins. We do not guarantee any compatibility
    * between (minor) versions.
    */
   @DeveloperApi
@@ -41,9 +41,9 @@ package object sql {
   }
 
   /**
-   * Creat a [[Column]] using a function that manipulates an [[proto.Expression.Builder]].
+   * Create a [[Column]] using a function that manipulates an [[proto.Expression.Builder]].
    *
-   * This method is meant to be used by Connect plugins. We do not guarantee any compatility
+   * This method is meant to be used by Connect plugins. We do not guarantee any compatibility
    * between (minor) versions.
    */
   @DeveloperApi
@@ -51,5 +51,16 @@ package object sql {
     val builder = proto.Expression.newBuilder()
     f(builder)
     column(builder.build())
+  }
+
+  /**
+   * Implicit helper that makes it easy to construct a Column from an Expression or an Expression
+   * builder. This allows developers to create a Column in the same way as in earlier versions of
+   * Spark (before 4.0).
+   */
+  @DeveloperApi
+  implicit class ColumnConstructorExt(val c: Column.type) extends AnyVal {
+    def apply(e: proto.Expression): Column = column(e)
+    def apply(f: proto.Expression.Builder => Unit): Column = column(f)
   }
 }

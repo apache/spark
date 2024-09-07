@@ -61,7 +61,6 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Data
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf, ToScalaUDF}
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -294,7 +293,7 @@ class Dataset[T] private[sql](
       truncate: Int): Seq[Seq[String]] = {
     val newDf = commandResultOptimized.toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
-      column(ToPrettyString(col))
+      Column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -496,7 +495,7 @@ class Dataset[T] private[sql](
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      column(oldAttribute).as(newName)
+      Column(oldAttribute).as(newName)
     }
     select(newCols : _*)
   }
@@ -751,18 +750,18 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def col(colName: String): Column = colName match {
     case "*" =>
-      column(ResolvedStar(queryExecution.analyzed.output))
+      Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
       if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        column(addDataFrameIdToCol(resolve(colName)))
+        Column(addDataFrameIdToCol(resolve(colName)))
       }
   }
 
   /** @inheritdoc */
   def metadataColumn(colName: String): Column =
-    column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
 
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
@@ -788,11 +787,11 @@ class Dataset[T] private[sql](
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     colName match {
       case ParserUtils.escapedIdentifier(columnNameRegex) =>
-        column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
+        Column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
-        column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
+        Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        column(addDataFrameIdToCol(resolve(colName)))
+        Column(addDataFrameIdToCol(resolve(colName)))
     }
   }
 
@@ -1213,7 +1212,7 @@ class Dataset[T] private[sql](
         resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => column(field)
+        case _ => Column(field)
       }
     }
 
@@ -1283,7 +1282,7 @@ class Dataset[T] private[sql](
     val allColumns = queryExecution.analyzed.output
     val remainingCols = allColumns.filter { attribute =>
       colNames.forall(n => !resolver(attribute.name, n))
-    }.map(attribute => column(attribute))
+    }.map(attribute => Column(attribute))
     if (remainingCols.size == allColumns.size) {
       toDF()
     } else {
@@ -2015,7 +2014,7 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    select(column(DistributedSequenceID()).alias(name), col("*"))
+    select(Column(DistributedSequenceID()).alias(name), col("*"))
   }
 
   /**
