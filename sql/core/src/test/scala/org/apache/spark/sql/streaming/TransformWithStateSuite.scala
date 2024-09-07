@@ -30,6 +30,7 @@ import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationExcepti
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
@@ -1522,6 +1523,109 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         // hasn't changed between batches 2, 3, we only keep the schema file for batch 2
         assert(getFiles(metadataPath).length == 2)
         assert(getFiles(stateSchemaPath).length == 1)
+      }
+    }
+  }
+
+  test("state data source integration - value state supports time travel") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "5") {
+      withTempDir { chkptDir =>
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "3", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "4", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "5", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "6", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "7", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "str2")),
+          AddData(inputData, ("a", "str4")),
+          CheckNewAnswer(("a", "str3")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Batches 0-7: countState, mostRecent
+        // Batches 8-9: countState
+
+        // By this time, offset and commit logs for batches 0-3 have been purged.
+        // However, if we want to read the data for batch 2, we need to have preserved the
+        // metadata and schema files that was written at batch 0.
+
+        val df = spark.read.format("state-metadata").load(chkptDir.toString)
+
+        // check the min and max batch ids that we have data for
+        checkAnswer(
+          df.select(
+            "operatorId", "operatorName", "stateStoreName", "numPartitions", "minBatchId",
+            "maxBatchId"),
+          Seq(Row(0, "transformWithStateExec", "default", 5, 4, 9))
+        )
+
+        val countStateDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 4)
+          .load()
+
+        val countStateAnsDf = countStateDf.selectExpr(
+          "key.value AS groupingKey",
+          "single_value.value AS valueId")
+        checkAnswer(countStateAnsDf, Seq(Row("a", 5L)))
+
+        val mostRecentDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mostRecent")
+          .option(StateSourceOptions.BATCH_ID, 4)
+          .load()
+
+        val mostRecentAnsDf = mostRecentDf.selectExpr(
+          "key.value AS groupingKey",
+          "single_value.value")
+        checkAnswer(mostRecentAnsDf, Seq(Row("a", "str1")))
       }
     }
   }
