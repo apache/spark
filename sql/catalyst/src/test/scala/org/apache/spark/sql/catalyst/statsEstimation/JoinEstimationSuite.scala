@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo, IsNotNull}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
@@ -42,7 +42,13 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     attr("key-2-4") -> ColumnStat(distinctCount = Some(3), min = Some(2), max = Some(4),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     attr("key-2-3") -> ColumnStat(distinctCount = Some(2), min = Some(2), max = Some(3),
-      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    AttributeReference("key-1980", StringType)() ->
+      ColumnStat(distinctCount = Some(1980), min = None, max = None,
+        nullCount = Some(1), avgLen = Some(9), maxLen = Some(38)),
+    AttributeReference("key-3896196", StringType)() ->
+      ColumnStat(distinctCount = Some(3896196), min = None, max = None,
+        nullCount = Some(320713790), avgLen = Some(8), maxLen = Some(69))
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
@@ -572,5 +578,36 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
 
     assert(join.stats == Statistics(sizeInBytes = 100))
+  }
+
+  test("SPARK-49537: Improve Join stats estimate") {
+    case class MyStatsTestPlan(
+        outputList: Seq[Attribute],
+        sizeInBytes: BigInt,
+        rowCount: Option[BigInt]) extends LeafNode {
+      override def output: Seq[Attribute] = outputList
+
+      override def computeStats(): Statistics = Statistics(
+        sizeInBytes = sizeInBytes,
+        rowCount = rowCount,
+        attributeStats = AttributeMap(columnInfo.filter(p => outputList.contains(p._1))))
+    }
+
+    val leftOutput = Seq("key-1980").map(nameToAttr)
+    val rightOutput = Seq("key-3896196").map(nameToAttr)
+
+    val left = Filter(
+      leftOutput.map(IsNotNull).reduceLeft(And),
+      MyStatsTestPlan(outputList = leftOutput, sizeInBytes = BigInt(36126), rowCount = Some(2150)))
+
+    val right = Filter(
+      rightOutput.map(IsNotNull).reduceLeft(And),
+      MyStatsTestPlan(outputList = rightOutput, sizeInBytes = BigInt(13250653950L),
+        rowCount = Some(1470064309)))
+
+    val join = Join(left, right, Inner,
+      Some(EqualTo(nameToAttr("key-1980"), nameToAttr("key-3896196"))), JoinHint.NONE)
+
+    assert(join.stats.rowCount === Some(1247451650))
   }
 }
