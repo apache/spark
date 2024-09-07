@@ -217,6 +217,16 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotUseKryoSerialization(): SparkRuntimeException = {
     new SparkRuntimeException(errorClass = "CANNOT_USE_KRYO", messageParameters = Map.empty)
   }
+
+  def notPublicClassError(name: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2229",
+      messageParameters = Map("name" -> name))
+  }
+
+  def primitiveTypesNotSupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2230")
+  }
 }
 
 private[sql] object ExecutionErrors extends ExecutionErrors
