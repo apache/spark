@@ -233,7 +233,16 @@ class PythonStreamingSourceRunner(
     s"stream reader for $pythonExec", 0, Long.MaxValue)
 
   def readArrowRecordBatches(): Iterator[InternalRow] = {
-    assert(dataIn.readInt() == SpecialLengths.START_ARROW_STREAM)
+    val status = dataIn.readInt() match {
+      case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "prefetchArrowBatches", msg)
+      case SpecialLengths.START_ARROW_STREAM =>
+      case _ =>
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+          action = "prefetchArrowBatches", s"unknown status code $status")
+    }
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
     // When input is empty schema can't be read.
