@@ -176,6 +176,10 @@ abstract class CompoundNestedStatementIteratorExec(
             handleLeaveStatement(leaveStatement)
             curr = None
             leaveStatement
+          case Some(iterateStatement: IterateStatementExec) =>
+            handleIterateStatement(iterateStatement)
+            curr = None
+            iterateStatement
           case Some(statement: LeafStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement
@@ -185,6 +189,9 @@ abstract class CompoundNestedStatementIteratorExec(
                 case leaveStatement: LeaveStatementExec =>
                   handleLeaveStatement(leaveStatement)
                   leaveStatement
+                case iterateStatement: IterateStatementExec =>
+                  handleIterateStatement(iterateStatement)
+                  iterateStatement
                 case other => other
               }
             } else {
@@ -206,16 +213,34 @@ abstract class CompoundNestedStatementIteratorExec(
     stopIteration = false
   }
 
-  /** Actions to do when LEAVE statement is encountered to stop the execution of this compound. */
+  /** Actions to do when LEAVE statement is encountered, to stop the execution of this compound. */
   private def handleLeaveStatement(leaveStatement: LeaveStatementExec): Unit = {
     if (!leaveStatement.hasBeenMatched) {
       // Stop the iteration.
       stopIteration = true
 
       // TODO: Variable cleanup (once we add SQL script execution logic).
+      // TODO: Add interpreter tests as well.
 
       // Check if label has been matched.
       leaveStatement.hasBeenMatched = label.isDefined && label.get.equals(leaveStatement.label)
+    }
+  }
+
+  /**
+   * Actions to do when ITERATE statement is encountered,
+   *   to stop the execution of this compound.
+   */
+  private def handleIterateStatement(iterateStatement: IterateStatementExec): Unit = {
+    if (!iterateStatement.hasBeenMatched) {
+      // Stop the iteration.
+      stopIteration = true
+
+      // TODO: Variable cleanup (once we add SQL script execution logic).
+      // TODO: Add interpreter tests as well.
+
+      // No need to check if label has been matched, since ITERATE statement is already
+      //   not allowed in CompoundBody.
     }
   }
 }
