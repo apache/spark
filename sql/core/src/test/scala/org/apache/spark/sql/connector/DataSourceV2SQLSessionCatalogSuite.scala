@@ -79,13 +79,4 @@ class DataSourceV2SQLSessionCatalogSuite
       assert(getTableMetadata("default.t").columns().map(_.name()) === Seq("c2", "c1"))
     }
   }
-
-  test("SPARK-49246: test saveAsTable") {
-    withTable("t") {
-      sql("CREATE TABLE t(id INT) USING csv")
-      val df = spark.range(10)
-      df.write.mode(SaveMode.Overwrite).format("csv").saveAsTable("t")
-      verifyTable("t", df.toDF("id"))
-    }
-  }
 }

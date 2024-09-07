@@ -88,6 +88,15 @@ class DataSourceV2DataFrameSessionCatalogSuite
       assert(tableInfo.properties().get("provider") === v2Format)
     }
   }
+
+  test("SPARK-49246: saveAsTable with v1 format") {
+    withTable("t") {
+      sql("CREATE TABLE t(c INT) USING csv")
+      val df = spark.range(10).toDF()
+      df.write.mode(SaveMode.Overwrite).format("csv").saveAsTable("t")
+      verifyTable("t", df)
+    }
+  }
 }
 
 class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable] {
