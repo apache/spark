@@ -75,6 +75,7 @@ class RocksDB(
     useColumnFamilies: Boolean = false,
     checkpointFormatVersion: Int = 1) extends Logging {
 
+  // scalastyle:off
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
@@ -281,8 +282,9 @@ class RocksDB(
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     // TODO: this might not be a zip file?
-    lazy val currMetadata = fileManager.loadCheckpointFromDfs(
-      version, workingDir, checkpointUniqueId)
+    var currLineage: Option[Array[(Long, Option[String])]] = None
+    //= fileManager.getChangelogReader(
+      //version, useColumnFamilies, checkpointUniqueId).lineage.map { x => (x._1, Option(x._2)) }
     try {
       if (loadedVersion != version ||
         (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
@@ -345,7 +347,12 @@ class RocksDB(
             metadata.numKeys
           }
         if (loadedVersion != version) {
-          replayChangelog(version, currMetadata.checkpointUniqueIdLineage)
+          val changelogReader = fileManager.getChangelogReader(
+            version, useColumnFamilies, checkpointUniqueId)
+          currLineage = Some(changelogReader.lineage.map(x => (x._1, Option(x._2))))
+          println("wei== currLineage in load(): " + currLineage.mkString(", "))
+
+          replayChangelog(version, currLineage) // TODO: this code is not backward compatible
         }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -362,8 +369,8 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      // TODO log uniqueId
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
+        log"with uniqueId ${MDC(LogKeys.UUID, checkpointUniqueId)}")
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -376,11 +383,22 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      val uniqueId = currMetadata.checkpointUniqueIdLineage.flatMap(
-        _.filter(_._1 == version + 1).head._2
-      )
+//      val uniqueId = currMetadata.checkpointUniqueIdLineage.flatMap(
+//        _.filter(_._1 == version + 1).head._2
+//      )
+      // TODO: revisit this, should it be sesionCheckpointId?
       changelogWriter = Some(fileManager.getChangeLogWriter(
-        version + 1, useColumnFamilies, uniqueId))
+        version + 1, useColumnFamilies, sessionCheckpointId))
+
+      // TODO: off by one?
+      // TODO: currLineage is only constructed when replaying changelog, it should also be constructed
+      //  when loading from snapshot
+      if (checkpointFormatVersion == 2) {
+        val lineage = (currLineage.getOrElse(Array()) ++ Array((version + 1, sessionCheckpointId)))
+          .map(x => (x._1, x._2.get))
+
+        changelogWriter.get.writeLineage(lineage)
+      }
     }
     this
   }
@@ -479,6 +497,8 @@ class RocksDB(
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies, uniqueId)
+        // TODO: verification? verify lineage is valid
+//        val lineage = changelogReader.readLineage() // TODO: ugly
         changelogReader.foreach { case (recordType, key, value) =>
           recordType match {
             case RecordType.PUT_RECORD =>
@@ -792,6 +812,7 @@ class RocksDB(
           columnFamilyMapping,
           maxColumnFamilyId)) =>
         try {
+          // TODO: load change log here and store lineage
           val uploadTime = timeTakenMs {
             fileManager.saveCheckpointToDfs(
               localDir,
@@ -1368,4 +1389,4 @@ case class AcquiredThreadInfo() {
     s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
   }
 }
-
+// scalastyle:on

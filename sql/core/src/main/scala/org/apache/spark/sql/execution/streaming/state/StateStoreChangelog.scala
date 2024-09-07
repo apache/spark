@@ -86,7 +86,8 @@ object RecordType extends Enumeration {
 abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec) extends Logging {
+    compressionCodec: CompressionCodec,
+    checkpointUniqueId: Option[String] = None) extends Logging {
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
@@ -100,6 +101,8 @@ abstract class StateStoreChangelogWriter(
   protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
+
+  def writeLineage(lineage: Array[(Long, String)]): Unit
 
   def version: Short
 
@@ -143,11 +146,19 @@ abstract class StateStoreChangelogWriter(
 class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    checkpointUniqueId: Option[String])
+    extends StateStoreChangelogWriter(fm, file, compressionCodec, checkpointUniqueId) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
+
+  override def writeLineage(lineage: Array[(Long, String)]): Unit = {
+    val lineageStr = lineage.map { case (version, uniqueId) =>
+      s"$version:$uniqueId"
+    }.mkString(" ")
+    compressedStream.writeUTF(lineageStr)
+  }
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
@@ -207,6 +218,11 @@ class StateStoreChangelogWriterV2(
 
   // append the version field to the changelog file starting from version 2
   writeVersion()
+
+  override def writeLineage(lineage: Array[(Long, String)]): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v2")
+  }
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
@@ -278,6 +294,16 @@ abstract class StateStoreChangelogReader(
       throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
+
+  def readLineage(): Array[(Long, String)] = {
+    val lineageStr = input.readUTF()
+    lineageStr.split(" ").map { lineage =>
+      val Array(version, uniqueId) = lineage.split(":")
+      (version.toLong, uniqueId)
+    }
+  }
+
+  val lineage = readLineage()
 
   def version: Short
 

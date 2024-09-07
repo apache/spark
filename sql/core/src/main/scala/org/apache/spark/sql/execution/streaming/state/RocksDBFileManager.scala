@@ -199,7 +199,7 @@ class RocksDBFileManager(
     val changelogVersion = getChangelogVersion(useColumnFamilies)
     val changelogWriter = changelogVersion match {
       case 1 =>
-        new StateStoreChangelogWriterV1(fm, changelogFile, codec)
+        new StateStoreChangelogWriterV1(fm, changelogFile, codec, checkpointUniqueId)
       case 2 =>
         new StateStoreChangelogWriterV2(fm, changelogFile, codec)
       case _ =>
@@ -256,13 +256,15 @@ class RocksDBFileManager(
       capturedFileMappings: RocksDBFileMappings,
       columnFamilyMapping: Option[Map[String, Short]] = None,
       maxColumnFamilyId: Option[Short] = None,
-      checkpointUniqueId: Option[String] = None): Unit = {
+      checkpointUniqueId: Option[String] = None,
+      checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None
+      ): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
     val rocksDBFiles = saveImmutableFilesToDfs(version, localImmutableFiles, capturedFileMappings)
-    val metadata = RocksDBCheckpointMetadata(
-      rocksDBFiles, numKeys, columnFamilyMapping, maxColumnFamilyId, checkpointUniqueId, None)
+    val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, columnFamilyMapping,
+      maxColumnFamilyId, checkpointUniqueId, checkpointUniqueIdLineage)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
     logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
@@ -431,10 +433,11 @@ class RocksDBFileManager(
     }
   }
 
-  private def deleteChangelogFiles(versionsToDelete: Array[Long]): Unit = {
-    versionsToDelete.foreach { version =>
+  private def deleteChangelogFiles(
+      versionsAndUniqueIdsToDelete: Array[(Long, Option[String])]): Unit = {
+    versionsAndUniqueIdsToDelete.foreach { case (version, uniqueId) =>
       try {
-        fm.delete(dfsChangelogFile(version))
+        fm.delete(dfsChangelogFile(version, uniqueId))
         logInfo(log"Deleted changelog file ${MDC(LogKeys.VERSION_NUM, version)}")
       } catch {
         case e: Exception =>
@@ -629,10 +632,20 @@ class RocksDBFileManager(
       log"(failed to delete" +
       log"${MDC(LogKeys.NUM_FILES_FAILED_TO_DELETE, failedToDelete)} files) " +
       log"not used in versions >= ${MDC(LogKeys.MIN_VERSION_NUM, minVersionToRetain)}")
-    val changelogVersionsToDelete = changelogFiles
-      .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
-      .filter(_ < minVersionToRetain)
-    deleteChangelogFiles(changelogVersionsToDelete)
+
+    val changelogVersionsAndUniqueIdsToDelete: Array[(Long, Option[String])] =
+      if (checkpointFormatVersion >= 2) {
+      changelogFiles
+        .map(_.getName.stripSuffix(".changelog").split("_"))
+        .map { case Array(version, uniqueId) => (version.toLong, Some(uniqueId)) }
+    } else {
+      changelogFiles
+        .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
+        .filter(_ < minVersionToRetain)
+        .map(v => (v, None))
+    }
+
+    deleteChangelogFiles(changelogVersionsAndUniqueIdsToDelete)
 
     // Always set minSeenVersion for regular deletion frequency even if deletion fails.
     // This is safe because subsequent calls retry deleting old version files
