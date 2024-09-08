@@ -904,7 +904,7 @@
       },
       "NON_STRING_TYPE" : {
         "message" : [
-          "all arguments must be strings."
+          "all arguments of the function <funcName> must be strings."
         ]
       },
       "NULL_TYPE" : {
