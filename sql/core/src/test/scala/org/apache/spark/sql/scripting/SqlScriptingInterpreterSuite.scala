@@ -703,10 +703,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 0
       Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select 1
-      Seq.empty[Row], // set x= 2
+      Seq(Row(2)), // select 2
+      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select 1
+      Seq(Row(2)), // select 2
       Seq(Row(2)), // select x
       Seq.empty[Row] // drop
     )

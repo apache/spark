@@ -228,8 +228,7 @@ abstract class CompoundNestedStatementIteratorExec(
   }
 
   /**
-   * Actions to do when ITERATE statement is encountered,
-   *   to stop the execution of this compound.
+   * Actions to do when ITERATE statement is encountered, to stop the execution of this compound.
    */
   private def handleIterateStatement(iterateStatement: IterateStatementExec): Unit = {
     if (!iterateStatement.hasBeenMatched) {
