@@ -6222,7 +6222,7 @@
       "Detected implicit cartesian product for <joinType> join between logical plans",
       "<leftPlan>",
       "and",
-      "rightPlan",
+      "<rightPlan>",
       "Join condition is missing or trivial.",
       "Either: use the CROSS JOIN syntax to allow cartesian products between these relations, or: enable implicit cartesian products by setting the configuration variable spark.sql.crossJoin.enabled=true."
     ]
