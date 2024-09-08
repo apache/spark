@@ -191,8 +191,10 @@ abstract class AbstractCommandBuilder {
           // SPARK-49534: The assumption here is that if `spark-hive_xxx.jar` is not in the classpath,
           // then the `-Phive` profile was not used during package, and therefore the Hive-related jars
           // should also not be in the classpath. To avoid failure in loading the SPI in `DataSourceRegister`
-          // under `sql/hive`, no longer prepend `sql/hive`.
-          if (!isSparkHiveJarAvailable && project.equals("sql/hive")) {
+          // under `sql/hive`, no longer prepend `sql/hive`. Meanwhile, due to the strong dependency of
+          // `sql/hive-thriftserver` on `sql/hive`, the prepend behavior for `sql/hive-thriftserver` will
+          // also be excluded at this time.
+          if (!isSparkHiveJarAvailable && (project.equals("sql/hive") || project.equals("sql/hive-thriftserver"))) {
             continue;
           }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
