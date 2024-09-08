@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.net.URL
 
-import scala.collection.immutable.Map
 import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -52,7 +51,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val sub = new StringSubstitutor(sanitizedParameters.asJava)
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
-    try {
+    val errorMessage = try {
       sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
         messageTemplate, "\\$\\{$1\\}"))
     } catch {
@@ -61,6 +60,17 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
           s"MessageTemplate: $messageTemplate, " +
           s"Parameters: $messageParameters", i)
     }
+    if (util.SparkEnvUtils.isTesting) {
+      val placeHoldersNum = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).length
+      if (placeHoldersNum < messageParameters.size) {
+        throw SparkException.internalError(
+          s"Found unused message parameters for the error class $errorClass. " +
+          s"Its error message format has $placeHoldersNum place holders, " +
+          s"but the passed message parameters map has ${messageParameters.size} items. " +
+          "Consider to add place holders to the error format or remove unused message parameters.")
+      }
+    }
+    errorMessage
   }
 
   def getMessageParameters(errorClass: String): Seq[String] = {
