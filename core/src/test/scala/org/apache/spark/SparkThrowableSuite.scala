@@ -207,13 +207,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
     assert(e.getMessageParameters().get("message").contains("Undefined error message parameter"))
-
-    // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Map("config" -> "foo", "a" -> "bar")) ==
-      "[DIVIDE_BY_ZERO] Division by zero. " +
-      "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
-        "If necessary set foo to \"false\" " +
-        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -504,7 +497,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |{
           |  "MISSING_PARAMETER" : {
           |    "message" : [
-          |      "Parameter ${param} is missing."
+          |      "Parameter <param> is missing."
           |    ]
           |  }
           |}

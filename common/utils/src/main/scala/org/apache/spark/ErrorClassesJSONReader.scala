@@ -62,11 +62,11 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
     if (util.SparkEnvUtils.isTesting) {
       val placeHoldersNum = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).length
-      if (placeHoldersNum < messageParameters.size) {
+      if (placeHoldersNum < sanitizedParameters.size) {
         throw SparkException.internalError(
           s"Found unused message parameters for the error class $errorClass. " +
           s"Its error message format has $placeHoldersNum place holders, " +
-          s"but the passed message parameters map has ${messageParameters.size} items. " +
+          s"but the passed message parameters map has ${sanitizedParameters.size} items. " +
           "Consider to add place holders to the error format or remove unused message parameters.")
       }
     }
