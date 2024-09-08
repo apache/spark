@@ -373,11 +373,11 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
     // Update column stat for other column if #outputRow / #sideRow < 1 (key-5-9), or keep it
     // unchanged (key-2-4).
-    val colStatForkey59 = nameToColInfo("key-5-9")._2.copy(distinctCount = Some(5 * 3 / 5))
+    val colStatForkey59 = nameToColInfo("key-5-9")._2.copy(distinctCount = Some(5 * 3 / 3))
 
     val expectedStats = Statistics(
-      sizeInBytes = 3 * (8 + 4 * 4),
-      rowCount = Some(3),
+      sizeInBytes = 8 * (8 + 4 * 4),
+      rowCount = Some(8),
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-5") -> joinedColStat, nameToAttr("key-1-2") -> joinedColStat,
           nameToAttr("key-5-9") -> colStatForkey59, nameToColInfo("key-2-4"))))
@@ -398,8 +398,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
     val expectedStats = Statistics(
-      sizeInBytes = 2 * (8 + 4 * 4),
-      rowCount = Some(2),
+      sizeInBytes = 3 * (8 + 4 * 4),
+      rowCount = Some(3),
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-2") -> joinedColStat1, nameToAttr("key-1-2") -> joinedColStat1,
           nameToAttr("key-2-4") -> joinedColStat2, nameToAttr("key-2-3") -> joinedColStat2)))
@@ -415,8 +415,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
     val expectedStats = Statistics(
-      sizeInBytes = 2 * (8 + 4 * 4),
-      rowCount = Some(2),
+      sizeInBytes = 3 * (8 + 4 * 4),
+      rowCount = Some(3),
       // Keep the column stat from left side unchanged.
       attributeStats = AttributeMap(
         Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-3"),
@@ -433,8 +433,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
     val expectedStats = Statistics(
-      sizeInBytes = 2 * (8 + 4 * 4),
-      rowCount = Some(2),
+      sizeInBytes = 3 * (8 + 4 * 4),
+      rowCount = Some(3),
       // Keep the column stat from right side unchanged.
       attributeStats = AttributeMap(
         Seq(nameToColInfo("key-1-2"), nameToAttr("key-2-4") -> joinedColStat,
