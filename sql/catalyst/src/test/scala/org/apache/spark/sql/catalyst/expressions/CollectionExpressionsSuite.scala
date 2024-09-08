@@ -95,7 +95,7 @@ class CollectionExpressionsSuite
     }
     checkError(
       exception = exception,
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("The size function doesn't support the operand type " +
           toSQLType(StringType))

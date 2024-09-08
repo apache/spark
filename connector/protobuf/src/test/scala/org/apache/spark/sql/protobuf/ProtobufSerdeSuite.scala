@@ -222,7 +222,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     checkError(
       exception = e1,
-      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR")
+      condition = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR")
 
     val basicMessageDescWithoutImports = descriptorSetWithoutImports(
       ProtobufUtils.readDescriptorFileContent(
@@ -240,7 +240,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     checkError(
       exception = e2,
-      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      condition = "PROTOBUF_DEPENDENCY_NOT_FOUND",
       parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
@@ -274,7 +274,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
     assert(e.getMessage === expectMsg)
     checkError(
       exception = e,
-      errorClass = errorClass,
+      condition = errorClass,
       parameters = params)
   }
 

@@ -157,7 +157,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE tempView AS SELECT 1")
       }
       checkError(e,
-        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`tempView`"))
     }
   }

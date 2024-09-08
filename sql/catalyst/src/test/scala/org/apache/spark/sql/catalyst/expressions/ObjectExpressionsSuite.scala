@@ -82,7 +82,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkException] {
         Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         ("Couldn't find method zeroArgNotExistMethod with arguments " +
           "() on class java.lang.Object.")
@@ -98,7 +98,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
           Seq(StringType)).eval(inputRow)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         ("Couldn't find method oneArgNotExistMethod with arguments " +
           "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
@@ -417,7 +417,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkRuntimeException] {
           testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
         },
-        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        condition = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> "scala.collection.Map"))
     }
   }

@@ -989,7 +989,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         exception = intercept[SparkException] {
           spark.read.option("mergeSchema", "true").parquet(path)
         },
-        errorClass = "CANNOT_MERGE_SCHEMAS",
+        condition = "CANNOT_MERGE_SCHEMAS",
         sqlState = "42KD9",
         parameters = Map(
           "left" -> toSQLType(df1.schema),
@@ -1056,7 +1056,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       if (col(0).dataType == StringType) {
         checkErrorMatchPVals(
           exception = e,
-          errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
             "path" -> s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
@@ -1067,7 +1067,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       } else {
         checkErrorMatchPVals(
           exception = e,
-          errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
             "path" -> s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
@@ -1115,7 +1115,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       exception = intercept[AnalysisException] {
         spark.read.parquet(testDataPath).collect()
       },
-      errorClass = "PARQUET_TYPE_ILLEGAL",
+      condition = "PARQUET_TYPE_ILLEGAL",
       parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
     )
   }
@@ -1126,7 +1126,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       exception = intercept[AnalysisException] {
         spark.read.parquet(testDataPath).collect()
       },
-      errorClass = "PARQUET_TYPE_NOT_SUPPORTED",
+      condition = "PARQUET_TYPE_NOT_SUPPORTED",
       parameters = Map("parquetType" -> "FIXED_LEN_BYTE_ARRAY (INTERVAL)")
     )
   }
@@ -1139,7 +1139,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       exception = intercept[AnalysisException] {
         spark.read.parquet(testDataPath).collect()
       },
-      errorClass = "PARQUET_TYPE_NOT_RECOGNIZED",
+      condition = "PARQUET_TYPE_NOT_RECOGNIZED",
       parameters = Map("field" -> expectedParameter)
     )
   }

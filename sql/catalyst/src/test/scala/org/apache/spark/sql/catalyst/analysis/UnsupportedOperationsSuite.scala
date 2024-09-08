@@ -1052,7 +1052,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[AnalysisException] {
           UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
         },
-        errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+        condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
         parameters = Map(
           "outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT),

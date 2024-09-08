@@ -145,7 +145,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException](
         sql("SELECT testcat.non_exist('abc')").collect()
       ),
-      errorClass = "UNRESOLVED_ROUTINE",
+      condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`testcat`.`non_exist`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`.`default`]"),
@@ -161,7 +161,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         exception = intercept[AnalysisException](
           sql("SELECT testcat.strlen('abc')").collect()
         ),
-        errorClass = "_LEGACY_ERROR_TEMP_1184",
+        condition = "_LEGACY_ERROR_TEMP_1184",
         parameters = Map("plugin" -> "testcat", "ability" -> "functions")
       )
     }
@@ -174,7 +174,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException] {
         sql("DESCRIBE FUNCTION testcat.abc")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1184",
+      condition = "_LEGACY_ERROR_TEMP_1184",
       parameters = Map(
         "plugin" -> "testcat",
         "ability" -> "functions"
@@ -185,7 +185,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException] {
         sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
       },
-      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
         "namespace" -> "`default`.`ns1`.`ns2`")
@@ -343,7 +343,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
 
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen(42)")),
-      errorClass = "_LEGACY_ERROR_TEMP_1198",
+      condition = "_LEGACY_ERROR_TEMP_1198",
       parameters = Map(
         "unbound" -> "strlen",
         "arguments" -> "int",
@@ -358,7 +358,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
 
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('a', 'b')")),
-      errorClass = "_LEGACY_ERROR_TEMP_1198",
+      condition = "_LEGACY_ERROR_TEMP_1198",
       parameters = Map(
         "unbound" -> "strlen",
         "arguments" -> "string, string",
@@ -414,7 +414,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       new JavaStrLen(new JavaStrLenNoImpl))
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
-      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      condition = "_LEGACY_ERROR_TEMP_3055",
       parameters = Map("scalarFunc" -> "strlen"),
       context = ExpectedContext(
         fragment = "testcat.ns.strlen('abc')",
@@ -429,7 +429,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadInputTypes))
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
-      errorClass = "_LEGACY_ERROR_TEMP_1199",
+      condition = "_LEGACY_ERROR_TEMP_1199",
       parameters = Map(
         "bound" -> "strlen_bad_input_types",
         "argsLen" -> "1",
@@ -448,7 +448,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMismatchMagic))
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect()),
-      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      condition = "_LEGACY_ERROR_TEMP_3055",
       parameters = Map("scalarFunc" -> "long_add_mismatch_magic"),
       context = ExpectedContext(
         fragment = "testcat.ns.add(1L, 2L)",
@@ -481,7 +481,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         exception = intercept[AnalysisException] {
           sql(sqlText).collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = None,
         parameters = Map(
           "sqlExpr" -> ".*",
@@ -539,7 +539,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkError(
       exception = intercept[AnalysisException](
         sql("SELECT testcat.ns.strlen('abc')")),
-      errorClass = "INVALID_UDF_IMPLEMENTATION",
+      condition = "INVALID_UDF_IMPLEMENTATION",
       parameters = Map(
         "funcName" -> "`bad_bound_func`"),
       context = ExpectedContext(
@@ -602,7 +602,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       Seq(1.toShort, 2.toShort).toDF("i").write.saveAsTable(t)
       checkError(
         exception = intercept[AnalysisException](sql(s"SELECT testcat.ns.avg(i) from $t")),
-        errorClass = "_LEGACY_ERROR_TEMP_1198",
+        condition = "_LEGACY_ERROR_TEMP_1198",
         parameters = Map(
           "unbound" -> "iavg",
           "arguments" -> "smallint",
@@ -637,7 +637,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
           sql("SELECT testcat.ns.avg(*) from values " +
             "(date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')")
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"v2aggregator(col1)\"",
           "paramIndex" -> "first",

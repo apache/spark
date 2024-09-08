@@ -2103,11 +2103,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("datetime function CurrentDate and localtimestamp are Unevaluable") {
     checkError(exception = intercept[SparkException] { CurrentDate(UTC_OPT).eval(EmptyRow) },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
 
     checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
 }

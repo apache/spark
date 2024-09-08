@@ -179,7 +179,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
             checkError(
               exception = intercept[T](eval),
-              errorClass = errorClass,
+              condition = errorClass,
               parameters = parameters
             )
           }

@@ -97,7 +97,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       exception = intercept[SparkRuntimeException] {
         df.select(variant_get(v, "$.a", "binary")).collect()
       },
-      errorClass = "INVALID_VARIANT_CAST",
+      condition = "INVALID_VARIANT_CAST",
       parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
     )
 
@@ -223,7 +223,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         exception = intercept[AnalysisException] {
           query.write.partitionBy("v").parquet(tempDir)
         },
-        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
         parameters = Map("type" -> "\"VARIANT\"")
       )
     }
@@ -239,7 +239,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         exception = intercept[AnalysisException] {
           query.write.partitionBy("v").saveAsTable("t")
         },
-        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
         parameters = Map("type" -> "\"VARIANT\"")
       )
     }
@@ -255,7 +255,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         exception = intercept[AnalysisException] {
           spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
         },
-        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
         parameters = Map("type" -> "\"VARIANT\"")
       )
     }
@@ -302,7 +302,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
             val e = intercept[org.apache.spark.SparkException](result.collect())
             checkError(
               exception = e.getCause.asInstanceOf[AnalysisException],
-              errorClass = errorClass,
+              condition = errorClass,
               parameters = parameters
             )
           }
@@ -346,7 +346,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         exception = intercept[AnalysisException] {
           spark.read.format("json").option("singleVariantColumn", "var").schema("var variant")
         },
-        errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
+        condition = "INVALID_SINGLE_VARIANT_COLUMN",
         parameters = Map.empty
       )
       checkError(
@@ -354,7 +354,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
           spark.read.format("json").option("singleVariantColumn", "another_name")
             .schema("var variant").json(file.getAbsolutePath).collect()
         },
-        errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
+        condition = "INVALID_SINGLE_VARIANT_COLUMN",
         parameters = Map.empty
       )
     }
@@ -422,7 +422,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       exception = intercept[AnalysisException] {
         spark.sql("select parse_json('') group by 1")
       },
-      errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+      condition = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
       parameters = Map("sqlExpr" -> "\"parse_json()\"", "dataType" -> "\"VARIANT\""),
       context = ExpectedContext(fragment = "parse_json('')", start = 7, stop = 20)
     )
@@ -431,7 +431,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       exception = intercept[AnalysisException] {
         spark.sql("select parse_json('') order by 1")
       },
-      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
@@ -443,7 +443,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       exception = intercept[AnalysisException] {
         spark.sql("select parse_json('') sort by 1")
       },
-      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
@@ -456,7 +456,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         spark.sql("with t as (select 1 as a, parse_json('') as v) " +
           "select rank() over (partition by a order by v) from t")
       },
-      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
@@ -469,7 +469,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         spark.sql("with t as (select parse_json('') as v) " +
           "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
       },
-      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`=`",
         "dataType" -> "\"VARIANT\"",

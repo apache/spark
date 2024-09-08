@@ -208,7 +208,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
       checkError(
         exception = e,
-        errorClass = "SPARK_JOB_CANCELLED",
+        condition = "SPARK_JOB_CANCELLED",
         sqlState = "XXKDA",
         parameters = scala.collection.immutable.Map(
           "jobId" -> "0",
@@ -222,7 +222,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         sc.setJobGroup(jobGroupName, "")
         sc.parallelize(1 to 100).count()
       },
-      errorClass = "SPARK_JOB_CANCELLED",
+      condition = "SPARK_JOB_CANCELLED",
       sqlState = "XXKDA",
       parameters = scala.collection.immutable.Map(
         "jobId" -> "1",
@@ -258,7 +258,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
       checkError(
         exception = e,
-        errorClass = "SPARK_JOB_CANCELLED",
+        condition = "SPARK_JOB_CANCELLED",
         sqlState = "XXKDA",
         parameters = scala.collection.immutable.Map(
           "jobId" -> "0",

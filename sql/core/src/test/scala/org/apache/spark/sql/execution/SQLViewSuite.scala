@@ -85,7 +85,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             exception = intercept[AnalysisException] {
               sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
             },
-            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
               "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
@@ -97,7 +97,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             exception = intercept[AnalysisException] {
               sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
             },
-            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
               "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
@@ -115,7 +115,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+        condition = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
           "operation" -> "CREATE OR REPLACE VIEW")
@@ -124,7 +124,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map(
           "relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
@@ -132,7 +132,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+        condition = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
           "operation" -> "ALTER VIEW ... AS"
@@ -161,7 +161,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
+        condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"
@@ -176,7 +176,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
+        condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"
@@ -198,7 +198,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDE 'whatever'")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
+        condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
@@ -209,7 +209,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
+        condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
@@ -220,7 +220,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
+        condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
@@ -231,7 +231,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RENAME TO PARTITION"
@@ -242,7 +242,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName RECOVER PARTITIONS")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"
@@ -253,7 +253,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
@@ -264,7 +264,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
@@ -275,7 +275,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... ADD PARTITION ..."
@@ -286,7 +286,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... DROP PARTITION ..."
@@ -297,7 +297,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
+        condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"
@@ -308,7 +308,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
+        condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"
@@ -327,7 +327,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $viewName SELECT 1")
         },
-        errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+        condition = "UNSUPPORTED_INSERT.RDD_BASED",
         parameters = Map.empty
       )
 
@@ -338,7 +338,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "LOAD DATA"
@@ -353,7 +353,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE $viewName")
         },
-        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
+        condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "SHOW CREATE TABLE"
@@ -368,7 +368,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         },
-        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
+        condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ANALYZE TABLE"
@@ -383,7 +383,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
         parameters = Map("viewName" -> s"`$viewName`")
       )
     }
@@ -394,7 +394,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       parameters: Map[String, String],
       context: ExpectedContext): Unit = {
     val e = intercept[AnalysisException](sql(query))
-    checkError(e, errorClass = errorClass, parameters = parameters, context = context)
+    checkError(e, condition = errorClass, parameters = parameters, context = context)
   }
 
   test("error handling: insert/load table commands against a view") {
@@ -405,7 +405,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $viewName SELECT 1")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "INSERT"
@@ -420,7 +420,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "LOAD DATA"),
@@ -513,7 +513,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[ParseException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        condition = "_LEGACY_ERROR_TEMP_0035",
         parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
         context = ExpectedContext(sqlText, 0, 77))
     }
@@ -867,7 +867,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
           },
-          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          condition = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testView2`",
             "viewColumns" -> "`x`, `y`, `z`",
@@ -884,7 +884,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           .write.mode(SaveMode.Overwrite).saveAsTable("tab1")
         checkError(
           exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
-          errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+          condition = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
             "actualCols" -> "[]",
@@ -914,7 +914,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
           checkError(
             exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
-            errorClass = "CANNOT_UP_CAST_DATATYPE",
+            condition = "CANNOT_UP_CAST_DATATYPE",
             parameters = Map(
               "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id",
               "sourceType" -> "\"DOUBLE\"",
@@ -930,7 +930,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
           checkError(
             exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
-            errorClass = "CANNOT_UP_CAST_DATATYPE",
+            condition = "CANNOT_UP_CAST_DATATYPE",
             parameters = Map(
               "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id1",
               "sourceType" -> "\"ARRAY<INT>\"",
@@ -956,7 +956,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW view1 AS SELECT * FROM view2")
         },
-        errorClass = "RECURSIVE_VIEW",
+        condition = "RECURSIVE_VIEW",
         parameters = Map(
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
@@ -970,7 +970,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW view1 AS SELECT * FROM view3 JOIN view2")
         },
-        errorClass = "RECURSIVE_VIEW",
+        condition = "RECURSIVE_VIEW",
         parameters = Map(
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
@@ -985,7 +985,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
         },
-        errorClass = "RECURSIVE_VIEW",
+        condition = "RECURSIVE_VIEW",
         parameters = Map(
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
@@ -999,7 +999,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
         },
-        errorClass = "RECURSIVE_VIEW",
+        condition = "RECURSIVE_VIEW",
         parameters = Map(
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
@@ -1071,7 +1071,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             exception = intercept[SparkException] {
               sql("SELECT * FROM v1").collect()
             },
-            errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+            condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
             parameters = Map("path" -> ".*")
           )
         }
@@ -1091,7 +1091,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             exception = intercept[SparkException] {
               sql("SELECT * FROM v1").collect()
             },
-            errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+            condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
             parameters = Map("path" -> ".*")
           )
         }
@@ -1157,7 +1157,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v1")
             }
             checkError(e,
-              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
@@ -1178,7 +1178,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v3")
             }
             checkError(e,
-              errorClass = "MISSING_AGGREGATION",
+              condition = "MISSING_AGGREGATION",
               parameters = Map(
                 "expression" -> "\"c1\"",
                 "expressionAnyValue" -> "\"any_value(c1)\""))
@@ -1188,7 +1188,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v4")
             }
             checkError(e,
-              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",
@@ -1206,7 +1206,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               exception = intercept[SparkArithmeticException] {
                 sql("SELECT * FROM v5").collect()
               },
-              errorClass = "DIVIDE_BY_ZERO",
+              condition = "DIVIDE_BY_ZERO",
               parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
               context = ExpectedContext(
                 objectType = "VIEW",
@@ -1225,7 +1225,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           exception = intercept[SparkArithmeticException] {
             sql("SELECT * FROM v1").collect()
           },
-          errorClass = "DIVIDE_BY_ZERO",
+          condition = "DIVIDE_BY_ZERO",
           parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
           context = ExpectedContext(
             objectType = "VIEW",

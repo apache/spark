@@ -509,7 +509,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       val analyzer = getAnalyzer
       analyzer.checkAnalysis(analyzer.execute(UnresolvedTestPlan()))
     },
-    errorClass = "INTERNAL_ERROR",
+    condition = "INTERNAL_ERROR",
     parameters = Map("message" -> "Found the unresolved operator: 'UnresolvedTestPlan"))
 
   errorTest(
@@ -949,7 +949,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       exception = intercept[SparkException] {
         SimpleAnalyzer.checkAnalysis(join)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         """
           |Failure when resolving conflicting references in Join:
@@ -966,7 +966,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       exception = intercept[SparkException] {
         SimpleAnalyzer.checkAnalysis(intersect)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         """
           |Failure when resolving conflicting references in Intersect All:
@@ -983,7 +983,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       exception = intercept[SparkException] {
         SimpleAnalyzer.checkAnalysis(except)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         """
           |Failure when resolving conflicting references in Except All:
@@ -1003,7 +1003,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       exception = intercept[SparkException] {
         SimpleAnalyzer.checkAnalysis(asOfJoin)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         """
           |Failure when resolving conflicting references in AsOfJoin:
@@ -1272,7 +1272,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       exception = intercept[SparkException] {
         SimpleAnalyzer.checkAnalysis(plan)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Hint not found: `some_random_hint_that_does_not_exist`"))
 
     // UnresolvedHint be removed by batch `Remove Unresolved Hints`

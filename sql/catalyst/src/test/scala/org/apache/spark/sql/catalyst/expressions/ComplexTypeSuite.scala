@@ -328,7 +328,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         map3.checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
@@ -483,7 +483,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         namedStruct1.checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",

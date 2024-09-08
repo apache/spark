@@ -81,7 +81,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
         sql(s"ALTER TABLE $t PARTITION (id = 3) RENAME TO PARTITION (id = 2)")
       }
       checkError(e,
-        errorClass = "PARTITIONS_NOT_FOUND",
+        condition = "PARTITIONS_NOT_FOUND",
         parameters = Map("partitionList" -> "PARTITION (`id` = 3)",
           "tableName" -> parsed))
     }
@@ -103,7 +103,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
         sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
       }
       checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
+        condition = "PARTITIONS_ALREADY_EXIST",
         parameters = Map("partitionList" -> "PARTITION (`id` = 2)", "tableName" -> parsed))
     }
   }

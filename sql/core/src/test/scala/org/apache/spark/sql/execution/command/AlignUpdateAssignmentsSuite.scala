@@ -478,7 +478,7 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
         if (policy == StoreAssignmentPolicy.ANSI) {
           checkError(
             exception = e,
-            errorClass = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
+            condition = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
             parameters = Map(
               "sqlExpr" -> "\"s.n_i = 1\", \"s.n_s = NULL\", \"s.n_i = -1\"",
               "errors" -> "\n- Multiple assignments for 's.n_i': 1, -1")
@@ -486,7 +486,7 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
         } else {
           checkError(
             exception = e,
-            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+            condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
               "tableName" -> "``",
               "colName" -> "`s`.`n_s`",
@@ -538,7 +538,7 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
       }
       checkError(
         exception = e,
-        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
       )
 
@@ -591,7 +591,7 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
       }
       checkError(
         exception = e,
-        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
       )
 

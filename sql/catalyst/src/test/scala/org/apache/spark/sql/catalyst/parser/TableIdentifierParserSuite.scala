@@ -299,7 +299,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     ).foreach { case (identifier, (errorClass, parameters)) =>
       checkError(
         exception = intercept[ParseException](parseTableIdentifier(identifier)),
-        errorClass = errorClass,
+        condition = errorClass,
         parameters = parameters)
     }
   }
@@ -318,7 +318,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
       reservedKeywordsInAnsiMode.foreach { keyword =>
         checkError(
           exception = intercept[ParseException](parseTableIdentifier(keyword)),
-          errorClass = "PARSE_SYNTAX_ERROR",
+          condition = "PARSE_SYNTAX_ERROR",
           parameters = Map("error" -> s"'$keyword'", "hint" -> ""))
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
@@ -374,7 +374,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     assert(complexName === parseTableIdentifier(complexName.quotedString))
     checkError(
       exception = intercept[ParseException](parseTableIdentifier(complexName.unquotedString)),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'b'", "hint" -> ""))
     // Table identifier contains continuous backticks should be treated correctly.
     val complexName2 = TableIdentifier("x``y", Some("d``b"))

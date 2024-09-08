@@ -191,7 +191,7 @@ trait AnalysisTest extends PlanTest {
       }
       checkError(
         exception = e,
-        errorClass = expectedErrorClass,
+        condition = expectedErrorClass,
         parameters = expectedMessageParameters,
         queryContext = queryContext
       )

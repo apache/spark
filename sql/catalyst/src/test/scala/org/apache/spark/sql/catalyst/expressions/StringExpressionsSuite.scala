@@ -155,7 +155,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Elt(Seq.empty).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -166,7 +166,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Elt(Seq(Literal(1))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -1910,7 +1910,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         ParseUrl(Seq(Literal("1"))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -1922,7 +1922,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
           Literal("4"))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -2037,7 +2037,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         expr1.checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",

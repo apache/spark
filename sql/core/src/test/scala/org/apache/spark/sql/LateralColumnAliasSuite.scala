@@ -184,7 +184,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       query: String, parameters: Map[String, String]): Unit = {
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
-      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      condition = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
       sqlState = "42702",
       parameters = parameters
     )
@@ -194,7 +194,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       query: String, lca: String, windowExprRegex: String): Unit = {
     checkErrorMatchPVals(
       exception = intercept[AnalysisException] {sql(query)},
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_WINDOW",
+      condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_WINDOW",
       parameters = Map("lca" -> lca, "windowExpr" -> windowExprRegex)
     )
   }
@@ -258,7 +258,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         exception = intercept[AnalysisException] {
           sql(s"SELECT 10000 AS lca, count(lca) FROM $testTable GROUP BY dept")
         },
-        errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+        condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
         parameters = Map(
           "lca" -> "`lca`",
@@ -269,7 +269,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         exception = intercept[AnalysisException] {
           sql(s"SELECT dept AS lca, avg(lca) FROM $testTable GROUP BY dept")
         },
-        errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+        condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
         parameters = Map(
           "lca" -> "`lca`",
@@ -281,7 +281,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         exception = intercept[AnalysisException] {
           sql(s"SELECT sum(salary) AS a, avg(a) FROM $testTable")
         },
-        errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+        condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
         parameters = Map(
           "lca" -> "`a`",
@@ -518,7 +518,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         exception = intercept[AnalysisException] {
           sql(query2)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> s"`id1`"),
         context = ExpectedContext(
@@ -796,7 +796,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"SELECT dept AS d, d AS new_dept, new_dep + 1 AS newer_dept FROM $testTable")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`new_dep`",
         "proposal" -> "`dept`, `name`, `bonus`, `salary`, `properties`"),
@@ -809,7 +809,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"SELECT count(name) AS cnt, cnt + 1, count(unresovled) FROM $testTable GROUP BY dept")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`unresovled`",
         "proposal" -> "`name`, `bonus`, `dept`, `properties`, `salary`"),
@@ -823,7 +823,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         sql(s"SELECT * FROM range(1, 7) WHERE (" +
           s"SELECT id2 FROM (SELECT 1 AS id, other_id + 1 AS id2)) > 5")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`other_id`"),
       context = ExpectedContext(
@@ -898,7 +898,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       exception = intercept[AnalysisException] { sql(
         "SELECT dept AS a, dept, " +
           s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg") },
-      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      condition = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
       parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
       context = ExpectedContext(
         fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
@@ -910,7 +910,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         "SELECT dept AS a, a, " +
           s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
       ) },
-      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      condition = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
       parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
       context = ExpectedContext(
         fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
@@ -924,7 +924,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         exception = intercept[AnalysisException] {
           sql(s"SELECT avg(salary) AS a, avg(a) $windowExpr $groupBySeg")
         },
-        errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+        condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
         parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")
       )
@@ -1009,7 +1009,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           "(partition by dept order by salary rows between n preceding and current row) as rank " +
           s"from $testTable where dept in (1, 6)")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> "Frame bound value must be a literal."),
       context = ExpectedContext(fragment = "n preceding", start = 87, stop = 97)
     )
@@ -1338,7 +1338,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
             |""".stripMargin
         )
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
       parameters = Map(
         "objectName" -> "`Freq`",

@@ -308,7 +308,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`invalid attr`", "fields" -> "`i`"))
 
     checkError(
@@ -319,7 +319,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
           filters = Seq(EqualTo("i", 1)),
           expected = Some(InternalRow.empty))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`i`", "fields" -> ""))
   }
 
@@ -374,7 +374,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
       },
-      errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+      condition = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
       parameters = Map(
         "c" -> "n",
         "pattern" -> "invalid"))

@@ -339,7 +339,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       assert(query.exception.get.cause != null)
       checkErrorMatchPVals(
         exception = query.exception.get.cause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = errorClass,
+        condition = errorClass,
         parameters = parameters
       )
     }
@@ -436,7 +436,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
             exception = intercept[SparkUnsupportedOperationException] {
               testCase(read, write, trigger)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            condition = "_LEGACY_ERROR_TEMP_2049",
             parameters = Map(
               "className" -> "fake-read-neither-mode",
               "operator" -> "reading"
@@ -449,7 +449,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
             exception = intercept[SparkUnsupportedOperationException] {
               testCase(read, write, trigger)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            condition = "_LEGACY_ERROR_TEMP_2049",
             parameters = Map(
               "className" -> "fake-write-neither-mode",
               "operator" -> "writing"
@@ -466,7 +466,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
               exception = intercept[SparkUnsupportedOperationException] {
                 testCase(read, write, trigger)
               },
-              errorClass = "_LEGACY_ERROR_TEMP_2253",
+              condition = "_LEGACY_ERROR_TEMP_2253",
               parameters = Map("sourceName" -> "fake-read-microbatch-only")
             )
           }

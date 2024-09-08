@@ -74,7 +74,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
             None,
             CaseInsensitiveStringMap.empty()).analyze
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" ->
           "Logical plan should not have output of char/varchar type.*\n"),
         matchPVals = true)

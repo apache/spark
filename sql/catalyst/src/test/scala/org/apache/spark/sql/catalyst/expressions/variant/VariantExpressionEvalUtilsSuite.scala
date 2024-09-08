@@ -124,7 +124,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
           VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
             allowDuplicateKeys = false)
         },
-        errorClass = errorClass,
+        condition = errorClass,
         parameters = parameters
       )
       assert(try_parse_json_output === null)
