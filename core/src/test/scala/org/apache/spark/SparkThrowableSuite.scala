@@ -517,4 +517,28 @@ class SparkThrowableSuite extends SparkFunSuite {
       assert(errorMessage.contains("Parameter null is missing."))
     }
   }
+
+  test("detect unused message parameters") {
+    checkError(
+      exception = intercept[SparkException] {
+        SparkThrowableHelper.getMessage(
+          errorClass = "CANNOT_UP_CAST_DATATYPE",
+          messageParameters = Map(
+            "expression" -> "CAST('aaa' AS LONG)",
+            "sourceType" -> "STRING",
+            "targetType" -> "LONG",
+            "op" -> "CAST", // unused parameter
+            "details" -> "implicit cast"
+          ))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          ("Found unused message parameters for the error class CANNOT_UP_CAST_DATATYPE. " +
+          "Its error message format has 4 place holders, but the passed message parameters map " +
+          "has 5 items. Consider to add place holders to the error format or " +
+          "remove unused message parameters.")
+      )
+    )
+  }
 }
