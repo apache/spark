@@ -19,12 +19,12 @@ TakeOrderedAndProject (30)
                :     :        +- * Project (10)
                :     :           +- * Filter (9)
                :     :              +- * ColumnarToRow (8)
-               :     :                 +- Scan parquet spark_catalog.default.promotion (7)
+               :     :                 +- Scan parquet spark_catalog.default.customer_demographics (7)
                :     +- BroadcastExchange (18)
                :        +- * Project (17)
                :           +- * Filter (16)
                :              +- * ColumnarToRow (15)
-               :                 +- Scan parquet spark_catalog.default.customer_demographics (14)
+               :                 +- Scan parquet spark_catalog.default.promotion (14)
                +- BroadcastExchange (24)
                   +- * Filter (23)
                      +- * ColumnarToRow (22)
@@ -59,69 +59,69 @@ Join condition: None
 Output [7]: [ss_item_sk#1, ss_cdemo_sk#2, ss_promo_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
 Input [9]: [ss_item_sk#1, ss_cdemo_sk#2, ss_promo_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8, d_date_sk#10]
 
-(7) Scan parquet spark_catalog.default.promotion
-Output [3]: [p_promo_sk#11, p_channel_email#12, p_channel_event#13]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/promotion]
-PushedFilters: [Or(EqualTo(p_channel_email,N),EqualTo(p_channel_event,N)), IsNotNull(p_promo_sk)]
-ReadSchema: struct<p_promo_sk:int,p_channel_email:string,p_channel_event:string>
-
-(8) ColumnarToRow [codegen id : 2]
-Input [3]: [p_promo_sk#11, p_channel_email#12, p_channel_event#13]
-
-(9) Filter [codegen id : 2]
-Input [3]: [p_promo_sk#11, p_channel_email#12, p_channel_event#13]
-Condition : (((p_channel_email#12 = N) OR (p_channel_event#13 = N)) AND isnotnull(p_promo_sk#11))
-
-(10) Project [codegen id : 2]
-Output [1]: [p_promo_sk#11]
-Input [3]: [p_promo_sk#11, p_channel_email#12, p_channel_event#13]
-
-(11) BroadcastExchange
-Input [1]: [p_promo_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
-
-(12) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [ss_promo_sk#3]
-Right keys [1]: [p_promo_sk#11]
-Join type: Inner
-Join condition: None
-
-(13) Project [codegen id : 5]
-Output [6]: [ss_item_sk#1, ss_cdemo_sk#2, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
-Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_promo_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, p_promo_sk#11]
-
-(14) Scan parquet spark_catalog.default.customer_demographics
-Output [4]: [cd_demo_sk#14, cd_gender#15, cd_marital_status#16, cd_education_status#17]
+(7) Scan parquet spark_catalog.default.customer_demographics
+Output [4]: [cd_demo_sk#11, cd_gender#12, cd_marital_status#13, cd_education_status#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_gender), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,W), EqualTo(cd_education_status,Primary             ), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string>
 
+(8) ColumnarToRow [codegen id : 2]
+Input [4]: [cd_demo_sk#11, cd_gender#12, cd_marital_status#13, cd_education_status#14]
+
+(9) Filter [codegen id : 2]
+Input [4]: [cd_demo_sk#11, cd_gender#12, cd_marital_status#13, cd_education_status#14]
+Condition : ((((((isnotnull(cd_gender#12) AND isnotnull(cd_marital_status#13)) AND isnotnull(cd_education_status#14)) AND (cd_gender#12 = F)) AND (cd_marital_status#13 = W)) AND (cd_education_status#14 = Primary             )) AND isnotnull(cd_demo_sk#11))
+
+(10) Project [codegen id : 2]
+Output [1]: [cd_demo_sk#11]
+Input [4]: [cd_demo_sk#11, cd_gender#12, cd_marital_status#13, cd_education_status#14]
+
+(11) BroadcastExchange
+Input [1]: [cd_demo_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(12) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_cdemo_sk#2]
+Right keys [1]: [cd_demo_sk#11]
+Join type: Inner
+Join condition: None
+
+(13) Project [codegen id : 5]
+Output [6]: [ss_item_sk#1, ss_promo_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
+Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_promo_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, cd_demo_sk#11]
+
+(14) Scan parquet spark_catalog.default.promotion
+Output [3]: [p_promo_sk#15, p_channel_email#16, p_channel_event#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/promotion]
+PushedFilters: [Or(EqualTo(p_channel_email,N),EqualTo(p_channel_event,N)), IsNotNull(p_promo_sk)]
+ReadSchema: struct<p_promo_sk:int,p_channel_email:string,p_channel_event:string>
+
 (15) ColumnarToRow [codegen id : 3]
-Input [4]: [cd_demo_sk#14, cd_gender#15, cd_marital_status#16, cd_education_status#17]
+Input [3]: [p_promo_sk#15, p_channel_email#16, p_channel_event#17]
 
 (16) Filter [codegen id : 3]
-Input [4]: [cd_demo_sk#14, cd_gender#15, cd_marital_status#16, cd_education_status#17]
-Condition : ((((((isnotnull(cd_gender#15) AND isnotnull(cd_marital_status#16)) AND isnotnull(cd_education_status#17)) AND (cd_gender#15 = F)) AND (cd_marital_status#16 = W)) AND (cd_education_status#17 = Primary             )) AND isnotnull(cd_demo_sk#14))
+Input [3]: [p_promo_sk#15, p_channel_email#16, p_channel_event#17]
+Condition : (((p_channel_email#16 = N) OR (p_channel_event#17 = N)) AND isnotnull(p_promo_sk#15))
 
 (17) Project [codegen id : 3]
-Output [1]: [cd_demo_sk#14]
-Input [4]: [cd_demo_sk#14, cd_gender#15, cd_marital_status#16, cd_education_status#17]
+Output [1]: [p_promo_sk#15]
+Input [3]: [p_promo_sk#15, p_channel_email#16, p_channel_event#17]
 
 (18) BroadcastExchange
-Input [1]: [cd_demo_sk#14]
+Input [1]: [p_promo_sk#15]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (19) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [ss_cdemo_sk#2]
-Right keys [1]: [cd_demo_sk#14]
+Left keys [1]: [ss_promo_sk#3]
+Right keys [1]: [p_promo_sk#15]
 Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 5]
 Output [5]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
-Input [7]: [ss_item_sk#1, ss_cdemo_sk#2, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, cd_demo_sk#14]
+Input [7]: [ss_item_sk#1, ss_promo_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, p_promo_sk#15]
 
 (21) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_sk#18, i_item_id#19]

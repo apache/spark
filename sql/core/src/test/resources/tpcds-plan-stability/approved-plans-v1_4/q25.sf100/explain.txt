@@ -8,38 +8,38 @@ TakeOrderedAndProject (49)
                :- * Sort (35)
                :  +- Exchange (34)
                :     +- * Project (33)
-               :        +- * SortMergeJoin Inner (32)
-               :           :- * Sort (23)
-               :           :  +- Exchange (22)
-               :           :     +- * Project (21)
-               :           :        +- * SortMergeJoin Inner (20)
-               :           :           :- * Sort (14)
-               :           :           :  +- Exchange (13)
-               :           :           :     +- * Project (12)
-               :           :           :        +- * BroadcastHashJoin Inner BuildRight (11)
-               :           :           :           :- * Project (6)
-               :           :           :           :  +- * BroadcastHashJoin Inner BuildRight (5)
-               :           :           :           :     :- * Filter (3)
-               :           :           :           :     :  +- * ColumnarToRow (2)
-               :           :           :           :     :     +- Scan parquet spark_catalog.default.store_sales (1)
-               :           :           :           :     +- ReusedExchange (4)
-               :           :           :           +- BroadcastExchange (10)
-               :           :           :              +- * Filter (9)
-               :           :           :                 +- * ColumnarToRow (8)
-               :           :           :                    +- Scan parquet spark_catalog.default.store (7)
-               :           :           +- * Sort (19)
-               :           :              +- Exchange (18)
-               :           :                 +- * Filter (17)
-               :           :                    +- * ColumnarToRow (16)
-               :           :                       +- Scan parquet spark_catalog.default.item (15)
-               :           +- * Sort (31)
-               :              +- Exchange (30)
-               :                 +- * Project (29)
-               :                    +- * BroadcastHashJoin Inner BuildRight (28)
-               :                       :- * Filter (26)
-               :                       :  +- * ColumnarToRow (25)
-               :                       :     +- Scan parquet spark_catalog.default.store_returns (24)
-               :                       +- ReusedExchange (27)
+               :        +- * BroadcastHashJoin Inner BuildRight (32)
+               :           :- * Project (27)
+               :           :  +- * SortMergeJoin Inner (26)
+               :           :     :- * Sort (20)
+               :           :     :  +- Exchange (19)
+               :           :     :     +- * Project (18)
+               :           :     :        +- * SortMergeJoin Inner (17)
+               :           :     :           :- * Sort (8)
+               :           :     :           :  +- Exchange (7)
+               :           :     :           :     +- * Project (6)
+               :           :     :           :        +- * BroadcastHashJoin Inner BuildRight (5)
+               :           :     :           :           :- * Filter (3)
+               :           :     :           :           :  +- * ColumnarToRow (2)
+               :           :     :           :           :     +- Scan parquet spark_catalog.default.store_sales (1)
+               :           :     :           :           +- ReusedExchange (4)
+               :           :     :           +- * Sort (16)
+               :           :     :              +- Exchange (15)
+               :           :     :                 +- * Project (14)
+               :           :     :                    +- * BroadcastHashJoin Inner BuildRight (13)
+               :           :     :                       :- * Filter (11)
+               :           :     :                       :  +- * ColumnarToRow (10)
+               :           :     :                       :     +- Scan parquet spark_catalog.default.store_returns (9)
+               :           :     :                       +- ReusedExchange (12)
+               :           :     +- * Sort (25)
+               :           :        +- Exchange (24)
+               :           :           +- * Filter (23)
+               :           :              +- * ColumnarToRow (22)
+               :           :                 +- Scan parquet spark_catalog.default.item (21)
+               :           +- BroadcastExchange (31)
+               :              +- * Filter (30)
+               :                 +- * ColumnarToRow (29)
+               :                    +- Scan parquet spark_catalog.default.store (28)
                +- * Sort (43)
                   +- Exchange (42)
                      +- * Project (41)
@@ -58,161 +58,161 @@ PartitionFilters: [isnotnull(ss_sold_date_sk#6), dynamicpruningexpression(ss_sol
 PushedFilters: [IsNotNull(ss_customer_sk), IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_profit:decimal(7,2)>
 
-(2) ColumnarToRow [codegen id : 3]
+(2) ColumnarToRow [codegen id : 2]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5, ss_sold_date_sk#6]
 
-(3) Filter [codegen id : 3]
+(3) Filter [codegen id : 2]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5, ss_sold_date_sk#6]
 Condition : (((isnotnull(ss_customer_sk#2) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_ticket_number#4)) AND isnotnull(ss_store_sk#3))
 
 (4) ReusedExchange [Reuses operator id: 54]
 Output [1]: [d_date_sk#8]
 
-(5) BroadcastHashJoin [codegen id : 3]
+(5) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_sold_date_sk#6]
 Right keys [1]: [d_date_sk#8]
 Join type: Inner
 Join condition: None
 
-(6) Project [codegen id : 3]
+(6) Project [codegen id : 2]
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5]
 Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5, ss_sold_date_sk#6, d_date_sk#8]
 
-(7) Scan parquet spark_catalog.default.store
-Output [3]: [s_store_sk#9, s_store_id#10, s_store_name#11]
+(7) Exchange
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5]
+Arguments: hashpartitioning(ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(8) Sort [codegen id : 3]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5]
+Arguments: [ss_customer_sk#2 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#4 ASC NULLS FIRST], false, 0
+
+(9) Scan parquet spark_catalog.default.store_returns
+Output [5]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12, sr_returned_date_sk#13]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string>
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(sr_returned_date_sk#13), dynamicpruningexpression(sr_returned_date_sk#13 IN dynamicpruning#14)]
+PushedFilters: [IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
+ReadSchema: struct<sr_item_sk:int,sr_customer_sk:int,sr_ticket_number:int,sr_net_loss:decimal(7,2)>
 
-(8) ColumnarToRow [codegen id : 2]
-Input [3]: [s_store_sk#9, s_store_id#10, s_store_name#11]
+(10) ColumnarToRow [codegen id : 5]
+Input [5]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12, sr_returned_date_sk#13]
 
-(9) Filter [codegen id : 2]
-Input [3]: [s_store_sk#9, s_store_id#10, s_store_name#11]
-Condition : isnotnull(s_store_sk#9)
+(11) Filter [codegen id : 5]
+Input [5]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12, sr_returned_date_sk#13]
+Condition : ((isnotnull(sr_customer_sk#10) AND isnotnull(sr_item_sk#9)) AND isnotnull(sr_ticket_number#11))
 
-(10) BroadcastExchange
-Input [3]: [s_store_sk#9, s_store_id#10, s_store_name#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=1]
+(12) ReusedExchange [Reuses operator id: 59]
+Output [1]: [d_date_sk#15]
 
-(11) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [ss_store_sk#3]
-Right keys [1]: [s_store_sk#9]
+(13) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [sr_returned_date_sk#13]
+Right keys [1]: [d_date_sk#15]
 Join type: Inner
 Join condition: None
 
-(12) Project [codegen id : 3]
-Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11]
-Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5, s_store_sk#9, s_store_id#10, s_store_name#11]
+(14) Project [codegen id : 5]
+Output [4]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12]
+Input [6]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12, sr_returned_date_sk#13, d_date_sk#15]
 
-(13) Exchange
-Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11]
-Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+(15) Exchange
+Input [4]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12]
+Arguments: hashpartitioning(sr_customer_sk#10, sr_item_sk#9, sr_ticket_number#11, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
-(14) Sort [codegen id : 4]
-Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11]
+(16) Sort [codegen id : 6]
+Input [4]: [sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12]
+Arguments: [sr_customer_sk#10 ASC NULLS FIRST, sr_item_sk#9 ASC NULLS FIRST, sr_ticket_number#11 ASC NULLS FIRST], false, 0
+
+(17) SortMergeJoin [codegen id : 7]
+Left keys [3]: [ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4]
+Right keys [3]: [sr_customer_sk#10, sr_item_sk#9, sr_ticket_number#11]
+Join type: Inner
+Join condition: None
+
+(18) Project [codegen id : 7]
+Output [6]: [ss_item_sk#1, ss_store_sk#3, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12]
+Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_ticket_number#11, sr_net_loss#12]
+
+(19) Exchange
+Input [6]: [ss_item_sk#1, ss_store_sk#3, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12]
+Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(20) Sort [codegen id : 8]
+Input [6]: [ss_item_sk#1, ss_store_sk#3, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12]
 Arguments: [ss_item_sk#1 ASC NULLS FIRST], false, 0
 
-(15) Scan parquet spark_catalog.default.item
-Output [3]: [i_item_sk#12, i_item_id#13, i_item_desc#14]
+(21) Scan parquet spark_catalog.default.item
+Output [3]: [i_item_sk#16, i_item_id#17, i_item_desc#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string>
 
-(16) ColumnarToRow [codegen id : 5]
-Input [3]: [i_item_sk#12, i_item_id#13, i_item_desc#14]
+(22) ColumnarToRow [codegen id : 9]
+Input [3]: [i_item_sk#16, i_item_id#17, i_item_desc#18]
 
-(17) Filter [codegen id : 5]
-Input [3]: [i_item_sk#12, i_item_id#13, i_item_desc#14]
-Condition : isnotnull(i_item_sk#12)
+(23) Filter [codegen id : 9]
+Input [3]: [i_item_sk#16, i_item_id#17, i_item_desc#18]
+Condition : isnotnull(i_item_sk#16)
 
-(18) Exchange
-Input [3]: [i_item_sk#12, i_item_id#13, i_item_desc#14]
-Arguments: hashpartitioning(i_item_sk#12, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+(24) Exchange
+Input [3]: [i_item_sk#16, i_item_id#17, i_item_desc#18]
+Arguments: hashpartitioning(i_item_sk#16, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
-(19) Sort [codegen id : 6]
-Input [3]: [i_item_sk#12, i_item_id#13, i_item_desc#14]
-Arguments: [i_item_sk#12 ASC NULLS FIRST], false, 0
+(25) Sort [codegen id : 10]
+Input [3]: [i_item_sk#16, i_item_id#17, i_item_desc#18]
+Arguments: [i_item_sk#16 ASC NULLS FIRST], false, 0
 
-(20) SortMergeJoin [codegen id : 7]
+(26) SortMergeJoin [codegen id : 12]
 Left keys [1]: [ss_item_sk#1]
-Right keys [1]: [i_item_sk#12]
+Right keys [1]: [i_item_sk#16]
 Join type: Inner
 Join condition: None
 
-(21) Project [codegen id : 7]
-Output [8]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
-Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_sk#12, i_item_id#13, i_item_desc#14]
+(27) Project [codegen id : 12]
+Output [7]: [ss_store_sk#3, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_id#17, i_item_desc#18]
+Input [9]: [ss_item_sk#1, ss_store_sk#3, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_sk#16, i_item_id#17, i_item_desc#18]
 
-(22) Exchange
-Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
-Arguments: hashpartitioning(ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4, 5), ENSURE_REQUIREMENTS, [plan_id=4]
-
-(23) Sort [codegen id : 8]
-Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
-Arguments: [ss_customer_sk#2 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#4 ASC NULLS FIRST], false, 0
-
-(24) Scan parquet spark_catalog.default.store_returns
-Output [5]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18, sr_returned_date_sk#19]
+(28) Scan parquet spark_catalog.default.store
+Output [3]: [s_store_sk#19, s_store_id#20, s_store_name#21]
 Batched: true
-Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(sr_returned_date_sk#19), dynamicpruningexpression(sr_returned_date_sk#19 IN dynamicpruning#20)]
-PushedFilters: [IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
-ReadSchema: struct<sr_item_sk:int,sr_customer_sk:int,sr_ticket_number:int,sr_net_loss:decimal(7,2)>
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string>
 
-(25) ColumnarToRow [codegen id : 10]
-Input [5]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18, sr_returned_date_sk#19]
+(29) ColumnarToRow [codegen id : 11]
+Input [3]: [s_store_sk#19, s_store_id#20, s_store_name#21]
 
-(26) Filter [codegen id : 10]
-Input [5]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18, sr_returned_date_sk#19]
-Condition : ((isnotnull(sr_customer_sk#16) AND isnotnull(sr_item_sk#15)) AND isnotnull(sr_ticket_number#17))
+(30) Filter [codegen id : 11]
+Input [3]: [s_store_sk#19, s_store_id#20, s_store_name#21]
+Condition : isnotnull(s_store_sk#19)
 
-(27) ReusedExchange [Reuses operator id: 59]
-Output [1]: [d_date_sk#21]
+(31) BroadcastExchange
+Input [3]: [s_store_sk#19, s_store_id#20, s_store_name#21]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=5]
 
-(28) BroadcastHashJoin [codegen id : 10]
-Left keys [1]: [sr_returned_date_sk#19]
-Right keys [1]: [d_date_sk#21]
-Join type: Inner
-Join condition: None
-
-(29) Project [codegen id : 10]
-Output [4]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18]
-Input [6]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18, sr_returned_date_sk#19, d_date_sk#21]
-
-(30) Exchange
-Input [4]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18]
-Arguments: hashpartitioning(sr_customer_sk#16, sr_item_sk#15, sr_ticket_number#17, 5), ENSURE_REQUIREMENTS, [plan_id=5]
-
-(31) Sort [codegen id : 11]
-Input [4]: [sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18]
-Arguments: [sr_customer_sk#16 ASC NULLS FIRST, sr_item_sk#15 ASC NULLS FIRST, sr_ticket_number#17 ASC NULLS FIRST], false, 0
-
-(32) SortMergeJoin [codegen id : 12]
-Left keys [3]: [ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4]
-Right keys [3]: [sr_customer_sk#16, sr_item_sk#15, sr_ticket_number#17]
+(32) BroadcastHashJoin [codegen id : 12]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#19]
 Join type: Inner
 Join condition: None
 
 (33) Project [codegen id : 12]
-Output [8]: [ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14, sr_item_sk#15, sr_customer_sk#16, sr_net_loss#18]
-Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14, sr_item_sk#15, sr_customer_sk#16, sr_ticket_number#17, sr_net_loss#18]
+Output [8]: [ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21]
+Input [10]: [ss_store_sk#3, ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_id#17, i_item_desc#18, s_store_sk#19, s_store_id#20, s_store_name#21]
 
 (34) Exchange
-Input [8]: [ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14, sr_item_sk#15, sr_customer_sk#16, sr_net_loss#18]
-Arguments: hashpartitioning(sr_customer_sk#16, sr_item_sk#15, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+Input [8]: [ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21]
+Arguments: hashpartitioning(sr_customer_sk#10, sr_item_sk#9, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (35) Sort [codegen id : 13]
-Input [8]: [ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14, sr_item_sk#15, sr_customer_sk#16, sr_net_loss#18]
-Arguments: [sr_customer_sk#16 ASC NULLS FIRST, sr_item_sk#15 ASC NULLS FIRST], false, 0
+Input [8]: [ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21]
+Arguments: [sr_customer_sk#10 ASC NULLS FIRST, sr_item_sk#9 ASC NULLS FIRST], false, 0
 
 (36) Scan parquet spark_catalog.default.catalog_sales
 Output [4]: [cs_bill_customer_sk#22, cs_item_sk#23, cs_net_profit#24, cs_sold_date_sk#25]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(cs_sold_date_sk#25), dynamicpruningexpression(cs_sold_date_sk#25 IN dynamicpruning#20)]
+PartitionFilters: [isnotnull(cs_sold_date_sk#25), dynamicpruningexpression(cs_sold_date_sk#25 IN dynamicpruning#14)]
 PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int,cs_net_profit:decimal(7,2)>
 
@@ -245,36 +245,36 @@ Input [3]: [cs_bill_customer_sk#22, cs_item_sk#23, cs_net_profit#24]
 Arguments: [cs_bill_customer_sk#22 ASC NULLS FIRST, cs_item_sk#23 ASC NULLS FIRST], false, 0
 
 (44) SortMergeJoin [codegen id : 17]
-Left keys [2]: [sr_customer_sk#16, sr_item_sk#15]
+Left keys [2]: [sr_customer_sk#10, sr_item_sk#9]
 Right keys [2]: [cs_bill_customer_sk#22, cs_item_sk#23]
 Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 17]
-Output [7]: [ss_net_profit#5, sr_net_loss#18, cs_net_profit#24, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
-Input [11]: [ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14, sr_item_sk#15, sr_customer_sk#16, sr_net_loss#18, cs_bill_customer_sk#22, cs_item_sk#23, cs_net_profit#24]
+Output [7]: [ss_net_profit#5, sr_net_loss#12, cs_net_profit#24, s_store_id#20, s_store_name#21, i_item_id#17, i_item_desc#18]
+Input [11]: [ss_net_profit#5, sr_item_sk#9, sr_customer_sk#10, sr_net_loss#12, i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, cs_bill_customer_sk#22, cs_item_sk#23, cs_net_profit#24]
 
 (46) HashAggregate [codegen id : 17]
-Input [7]: [ss_net_profit#5, sr_net_loss#18, cs_net_profit#24, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
-Keys [4]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11]
-Functions [3]: [partial_sum(UnscaledValue(ss_net_profit#5)), partial_sum(UnscaledValue(sr_net_loss#18)), partial_sum(UnscaledValue(cs_net_profit#24))]
+Input [7]: [ss_net_profit#5, sr_net_loss#12, cs_net_profit#24, s_store_id#20, s_store_name#21, i_item_id#17, i_item_desc#18]
+Keys [4]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21]
+Functions [3]: [partial_sum(UnscaledValue(ss_net_profit#5)), partial_sum(UnscaledValue(sr_net_loss#12)), partial_sum(UnscaledValue(cs_net_profit#24))]
 Aggregate Attributes [3]: [sum#27, sum#28, sum#29]
-Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#30, sum#31, sum#32]
+Results [7]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, sum#30, sum#31, sum#32]
 
 (47) Exchange
-Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#30, sum#31, sum#32]
-Arguments: hashpartitioning(i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+Input [7]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, sum#30, sum#31, sum#32]
+Arguments: hashpartitioning(i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (48) HashAggregate [codegen id : 18]
-Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#30, sum#31, sum#32]
-Keys [4]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11]
-Functions [3]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(sr_net_loss#18)), sum(UnscaledValue(cs_net_profit#24))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ss_net_profit#5))#33, sum(UnscaledValue(sr_net_loss#18))#34, sum(UnscaledValue(cs_net_profit#24))#35]
-Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#33,17,2) AS store_sales_profit#36, MakeDecimal(sum(UnscaledValue(sr_net_loss#18))#34,17,2) AS store_returns_loss#37, MakeDecimal(sum(UnscaledValue(cs_net_profit#24))#35,17,2) AS catalog_sales_profit#38]
+Input [7]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, sum#30, sum#31, sum#32]
+Keys [4]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21]
+Functions [3]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(sr_net_loss#12)), sum(UnscaledValue(cs_net_profit#24))]
+Aggregate Attributes [3]: [sum(UnscaledValue(ss_net_profit#5))#33, sum(UnscaledValue(sr_net_loss#12))#34, sum(UnscaledValue(cs_net_profit#24))#35]
+Results [7]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#33,17,2) AS store_sales_profit#36, MakeDecimal(sum(UnscaledValue(sr_net_loss#12))#34,17,2) AS store_returns_loss#37, MakeDecimal(sum(UnscaledValue(cs_net_profit#24))#35,17,2) AS catalog_sales_profit#38]
 
 (49) TakeOrderedAndProject
-Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, store_sales_profit#36, store_returns_loss#37, catalog_sales_profit#38]
-Arguments: 100, [i_item_id#13 ASC NULLS FIRST, i_item_desc#14 ASC NULLS FIRST, s_store_id#10 ASC NULLS FIRST, s_store_name#11 ASC NULLS FIRST], [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, store_sales_profit#36, store_returns_loss#37, catalog_sales_profit#38]
+Input [7]: [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, store_sales_profit#36, store_returns_loss#37, catalog_sales_profit#38]
+Arguments: 100, [i_item_id#17 ASC NULLS FIRST, i_item_desc#18 ASC NULLS FIRST, s_store_id#20 ASC NULLS FIRST, s_store_name#21 ASC NULLS FIRST], [i_item_id#17, i_item_desc#18, s_store_id#20, s_store_name#21, store_sales_profit#36, store_returns_loss#37, catalog_sales_profit#38]
 
 ===== Subqueries =====
 
@@ -308,7 +308,7 @@ Input [3]: [d_date_sk#8, d_year#39, d_moy#40]
 Input [1]: [d_date_sk#8]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
 
-Subquery:2 Hosting operator id = 24 Hosting Expression = sr_returned_date_sk#19 IN dynamicpruning#20
+Subquery:2 Hosting operator id = 9 Hosting Expression = sr_returned_date_sk#13 IN dynamicpruning#14
 BroadcastExchange (59)
 +- * Project (58)
    +- * Filter (57)
@@ -317,27 +317,27 @@ BroadcastExchange (59)
 
 
 (55) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#21, d_year#41, d_moy#42]
+Output [3]: [d_date_sk#15, d_year#41, d_moy#42]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), GreaterThanOrEqual(d_moy,4), LessThanOrEqual(d_moy,10), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (56) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#21, d_year#41, d_moy#42]
+Input [3]: [d_date_sk#15, d_year#41, d_moy#42]
 
 (57) Filter [codegen id : 1]
-Input [3]: [d_date_sk#21, d_year#41, d_moy#42]
-Condition : (((((isnotnull(d_moy#42) AND isnotnull(d_year#41)) AND (d_moy#42 >= 4)) AND (d_moy#42 <= 10)) AND (d_year#41 = 2001)) AND isnotnull(d_date_sk#21))
+Input [3]: [d_date_sk#15, d_year#41, d_moy#42]
+Condition : (((((isnotnull(d_moy#42) AND isnotnull(d_year#41)) AND (d_moy#42 >= 4)) AND (d_moy#42 <= 10)) AND (d_year#41 = 2001)) AND isnotnull(d_date_sk#15))
 
 (58) Project [codegen id : 1]
-Output [1]: [d_date_sk#21]
-Input [3]: [d_date_sk#21, d_year#41, d_moy#42]
+Output [1]: [d_date_sk#15]
+Input [3]: [d_date_sk#15, d_year#41, d_moy#42]
 
 (59) BroadcastExchange
-Input [1]: [d_date_sk#21]
+Input [1]: [d_date_sk#15]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=10]
 
-Subquery:3 Hosting operator id = 36 Hosting Expression = cs_sold_date_sk#25 IN dynamicpruning#20
+Subquery:3 Hosting operator id = 36 Hosting Expression = cs_sold_date_sk#25 IN dynamicpruning#14
 
 

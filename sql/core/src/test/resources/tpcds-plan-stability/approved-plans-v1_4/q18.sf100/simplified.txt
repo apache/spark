@@ -17,9 +17,9 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                 Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id]
                                   BroadcastHashJoin [cs_item_sk,i_item_sk]
                                     Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count]
-                                      BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                        Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk,cd_dep_count]
-                                          BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
+                                      BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
+                                        Project [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit]
+                                          BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                             Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
@@ -33,15 +33,15 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                                 InputAdapter
                                                                   Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                             InputAdapter
-                                              BroadcastExchange #4
-                                                WholeStageCodegen (1)
-                                                  Project [cd_demo_sk,cd_dep_count]
-                                                    Filter [cd_gender,cd_education_status,cd_demo_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_education_status,cd_dep_count]
+                                              ReusedExchange [d_date_sk] #3
                                         InputAdapter
-                                          ReusedExchange [d_date_sk] #3
+                                          BroadcastExchange #4
+                                            WholeStageCodegen (2)
+                                              Project [cd_demo_sk,cd_dep_count]
+                                                Filter [cd_gender,cd_education_status,cd_demo_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_education_status,cd_dep_count]
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)

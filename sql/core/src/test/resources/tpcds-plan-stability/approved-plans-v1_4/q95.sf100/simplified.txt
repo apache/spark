@@ -9,9 +9,9 @@ WholeStageCodegen (21)
                 Project [ws_order_number,ws_ext_ship_cost,ws_net_profit]
                   BroadcastHashJoin [ws_ship_date_sk,d_date_sk]
                     Project [ws_ship_date_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
-                      BroadcastHashJoin [ws_web_site_sk,web_site_sk]
-                        Project [ws_ship_date_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
-                          BroadcastHashJoin [ws_ship_addr_sk,ca_address_sk]
+                      BroadcastHashJoin [ws_ship_addr_sk,ca_address_sk]
+                        Project [ws_ship_date_sk,ws_ship_addr_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                          BroadcastHashJoin [ws_web_site_sk,web_site_sk]
                             SortMergeJoin [ws_order_number,wr_order_number]
                               InputAdapter
                                 WholeStageCodegen (8)
@@ -25,18 +25,8 @@ WholeStageCodegen (21)
                                                 Project [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
                                                   Filter [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk]
                                                     Subquery #1
-                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
-                                                        Exchange #3
-                                                          ObjectHashAggregate [ca_address_sk] [buf,buf]
-                                                            WholeStageCodegen (1)
-                                                              Project [ca_address_sk]
-                                                                Filter [ca_state,ca_address_sk]
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
-                                                    Subquery #2
                                                       ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(web_site_sk, 42), 4, 144, 0, 0),bloomFilter,buf]
-                                                        Exchange #4
+                                                        Exchange #3
                                                           ObjectHashAggregate [web_site_sk] [buf,buf]
                                                             WholeStageCodegen (1)
                                                               Project [web_site_sk]
@@ -44,6 +34,16 @@ WholeStageCodegen (21)
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
+                                                    Subquery #2
+                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
+                                                        Exchange #4
+                                                          ObjectHashAggregate [ca_address_sk] [buf,buf]
+                                                            WholeStageCodegen (1)
+                                                              Project [ca_address_sk]
+                                                                Filter [ca_state,ca_address_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                                                     Subquery #3
                                                       ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 73049, 1141755, 0, 0),bloomFilter,buf]
                                                         Exchange #5
@@ -108,19 +108,19 @@ WholeStageCodegen (21)
                             InputAdapter
                               BroadcastExchange #8
                                 WholeStageCodegen (17)
-                                  Project [ca_address_sk]
-                                    Filter [ca_state,ca_address_sk]
+                                  Project [web_site_sk]
+                                    Filter [web_company_name,web_site_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
+                                          Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
                         InputAdapter
                           BroadcastExchange #9
                             WholeStageCodegen (18)
-                              Project [web_site_sk]
-                                Filter [web_company_name,web_site_sk]
+                              Project [ca_address_sk]
+                                Filter [ca_state,ca_address_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
+                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                     InputAdapter
                       BroadcastExchange #10
                         WholeStageCodegen (19)

@@ -1,41 +1,45 @@
 == Physical Plan ==
-TakeOrderedAndProject (37)
-+- * Project (36)
-   +- * BroadcastHashJoin Inner BuildLeft (35)
-      :- BroadcastExchange (30)
-      :  +- * Project (29)
-      :     +- * BroadcastHashJoin Inner BuildLeft (28)
-      :        :- BroadcastExchange (24)
-      :        :  +- * Project (23)
-      :        :     +- * BroadcastHashJoin Inner BuildRight (22)
-      :        :        :- * Project (10)
-      :        :        :  +- * BroadcastHashJoin Inner BuildRight (9)
-      :        :        :     :- * Filter (3)
-      :        :        :     :  +- * ColumnarToRow (2)
-      :        :        :     :     +- Scan parquet spark_catalog.default.customer (1)
-      :        :        :     +- BroadcastExchange (8)
-      :        :        :        +- * Project (7)
-      :        :        :           +- * Filter (6)
-      :        :        :              +- * ColumnarToRow (5)
-      :        :        :                 +- Scan parquet spark_catalog.default.customer_address (4)
-      :        :        +- BroadcastExchange (21)
-      :        :           +- * Project (20)
-      :        :              +- * BroadcastHashJoin Inner BuildRight (19)
-      :        :                 :- * Filter (13)
-      :        :                 :  +- * ColumnarToRow (12)
-      :        :                 :     +- Scan parquet spark_catalog.default.household_demographics (11)
-      :        :                 +- BroadcastExchange (18)
-      :        :                    +- * Project (17)
-      :        :                       +- * Filter (16)
-      :        :                          +- * ColumnarToRow (15)
-      :        :                             +- Scan parquet spark_catalog.default.income_band (14)
-      :        +- * Filter (27)
-      :           +- * ColumnarToRow (26)
-      :              +- Scan parquet spark_catalog.default.customer_demographics (25)
-      +- * Project (34)
-         +- * Filter (33)
-            +- * ColumnarToRow (32)
-               +- Scan parquet spark_catalog.default.store_returns (31)
+TakeOrderedAndProject (41)
++- * Project (40)
+   +- * SortMergeJoin Inner (39)
+      :- * Project (32)
+      :  +- * SortMergeJoin Inner (31)
+      :     :- * Sort (25)
+      :     :  +- Exchange (24)
+      :     :     +- * Project (23)
+      :     :        +- * BroadcastHashJoin Inner BuildRight (22)
+      :     :           :- * Project (10)
+      :     :           :  +- * BroadcastHashJoin Inner BuildRight (9)
+      :     :           :     :- * Filter (3)
+      :     :           :     :  +- * ColumnarToRow (2)
+      :     :           :     :     +- Scan parquet spark_catalog.default.customer (1)
+      :     :           :     +- BroadcastExchange (8)
+      :     :           :        +- * Project (7)
+      :     :           :           +- * Filter (6)
+      :     :           :              +- * ColumnarToRow (5)
+      :     :           :                 +- Scan parquet spark_catalog.default.customer_address (4)
+      :     :           +- BroadcastExchange (21)
+      :     :              +- * Project (20)
+      :     :                 +- * BroadcastHashJoin Inner BuildRight (19)
+      :     :                    :- * Filter (13)
+      :     :                    :  +- * ColumnarToRow (12)
+      :     :                    :     +- Scan parquet spark_catalog.default.household_demographics (11)
+      :     :                    +- BroadcastExchange (18)
+      :     :                       +- * Project (17)
+      :     :                          +- * Filter (16)
+      :     :                             +- * ColumnarToRow (15)
+      :     :                                +- Scan parquet spark_catalog.default.income_band (14)
+      :     +- * Sort (30)
+      :        +- Exchange (29)
+      :           +- * Filter (28)
+      :              +- * ColumnarToRow (27)
+      :                 +- Scan parquet spark_catalog.default.customer_demographics (26)
+      +- * Sort (38)
+         +- Exchange (37)
+            +- * Project (36)
+               +- * Filter (35)
+                  +- * ColumnarToRow (34)
+                     +- Scan parquet spark_catalog.default.store_returns (33)
 
 
 (1) Scan parquet spark_catalog.default.customer
@@ -144,67 +148,83 @@ Join condition: None
 Output [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
 Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, hd_demo_sk#9]
 
-(24) BroadcastExchange
+(24) Exchange
 Input [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=4]
+Arguments: hashpartitioning(c_current_cdemo_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
-(25) Scan parquet spark_catalog.default.customer_demographics
+(25) Sort [codegen id : 5]
+Input [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
+Arguments: [c_current_cdemo_sk#2 ASC NULLS FIRST], false, 0
+
+(26) Scan parquet spark_catalog.default.customer_demographics
 Output [1]: [cd_demo_sk#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int>
 
-(26) ColumnarToRow
+(27) ColumnarToRow [codegen id : 6]
 Input [1]: [cd_demo_sk#14]
 
-(27) Filter
+(28) Filter [codegen id : 6]
 Input [1]: [cd_demo_sk#14]
 Condition : isnotnull(cd_demo_sk#14)
 
-(28) BroadcastHashJoin [codegen id : 5]
+(29) Exchange
+Input [1]: [cd_demo_sk#14]
+Arguments: hashpartitioning(cd_demo_sk#14, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(30) Sort [codegen id : 7]
+Input [1]: [cd_demo_sk#14]
+Arguments: [cd_demo_sk#14 ASC NULLS FIRST], false, 0
+
+(31) SortMergeJoin [codegen id : 8]
 Left keys [1]: [c_current_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#14]
 Join type: Inner
 Join condition: None
 
-(29) Project [codegen id : 5]
+(32) Project [codegen id : 8]
 Output [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#14]
 Input [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6, cd_demo_sk#14]
 
-(30) BroadcastExchange
-Input [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [plan_id=5]
-
-(31) Scan parquet spark_catalog.default.store_returns
+(33) Scan parquet spark_catalog.default.store_returns
 Output [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_cdemo_sk)]
 ReadSchema: struct<sr_cdemo_sk:int>
 
-(32) ColumnarToRow
+(34) ColumnarToRow [codegen id : 9]
 Input [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]
 
-(33) Filter
+(35) Filter [codegen id : 9]
 Input [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]
 Condition : isnotnull(sr_cdemo_sk#15)
 
-(34) Project
+(36) Project [codegen id : 9]
 Output [1]: [sr_cdemo_sk#15]
 Input [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]
 
-(35) BroadcastHashJoin [codegen id : 6]
+(37) Exchange
+Input [1]: [sr_cdemo_sk#15]
+Arguments: hashpartitioning(sr_cdemo_sk#15, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(38) Sort [codegen id : 10]
+Input [1]: [sr_cdemo_sk#15]
+Arguments: [sr_cdemo_sk#15 ASC NULLS FIRST], false, 0
+
+(39) SortMergeJoin [codegen id : 11]
 Left keys [1]: [cd_demo_sk#14]
 Right keys [1]: [sr_cdemo_sk#15]
 Join type: Inner
 Join condition: None
 
-(36) Project [codegen id : 6]
+(40) Project [codegen id : 11]
 Output [3]: [c_customer_id#1 AS customer_id#17, concat(c_last_name#6, , , c_first_name#5) AS customername#18, c_customer_id#1]
 Input [5]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#14, sr_cdemo_sk#15]
 
-(37) TakeOrderedAndProject
+(41) TakeOrderedAndProject
 Input [3]: [customer_id#17, customername#18, c_customer_id#1]
 Arguments: 100, [c_customer_id#1 ASC NULLS FIRST], [customer_id#17, customername#18]
 

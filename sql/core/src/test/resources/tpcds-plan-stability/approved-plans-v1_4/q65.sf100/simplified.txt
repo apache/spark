@@ -1,15 +1,15 @@
 TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholesale_cost,i_brand]
   WholeStageCodegen (12)
     Project [s_store_name,i_item_desc,revenue,i_current_price,i_wholesale_cost,i_brand]
-      SortMergeJoin [ss_item_sk,i_item_sk]
-        InputAdapter
-          WholeStageCodegen (9)
-            Sort [ss_item_sk]
-              InputAdapter
-                Exchange [ss_item_sk] #1
-                  WholeStageCodegen (8)
-                    Project [ss_item_sk,revenue,s_store_name]
-                      BroadcastHashJoin [ss_store_sk,s_store_sk]
+      BroadcastHashJoin [ss_store_sk,s_store_sk]
+        Project [ss_store_sk,revenue,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+          SortMergeJoin [ss_item_sk,i_item_sk]
+            InputAdapter
+              WholeStageCodegen (8)
+                Sort [ss_item_sk]
+                  InputAdapter
+                    Exchange [ss_item_sk] #1
+                      WholeStageCodegen (7)
                         Project [ss_store_sk,ss_item_sk,revenue]
                           BroadcastHashJoin [ss_store_sk,ss_store_sk,revenue,ave]
                             Filter [revenue]
@@ -57,20 +57,20 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                                                     ReusedSubquery [d_date_sk] #1
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #3
-                        InputAdapter
-                          BroadcastExchange #7
-                            WholeStageCodegen (7)
-                              Filter [s_store_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet spark_catalog.default.store [s_store_sk,s_store_name]
+            InputAdapter
+              WholeStageCodegen (10)
+                Sort [i_item_sk]
+                  InputAdapter
+                    Exchange [i_item_sk] #7
+                      WholeStageCodegen (9)
+                        Filter [i_item_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
         InputAdapter
-          WholeStageCodegen (11)
-            Sort [i_item_sk]
-              InputAdapter
-                Exchange [i_item_sk] #8
-                  WholeStageCodegen (10)
-                    Filter [i_item_sk]
-                      ColumnarToRow
-                        InputAdapter
-                          Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+          BroadcastExchange #8
+            WholeStageCodegen (11)
+              Filter [s_store_sk]
+                ColumnarToRow
+                  InputAdapter
+                    Scan parquet spark_catalog.default.store [s_store_sk,s_store_name]

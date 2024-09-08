@@ -36,20 +36,20 @@ TakeOrderedAndProject (73)
    :           +- * BroadcastHashJoin Inner BuildRight (46)
    :              :- * Project (44)
    :              :  +- * BroadcastHashJoin Inner BuildRight (43)
-   :              :     :- * Project (41)
-   :              :     :  +- * BroadcastHashJoin Inner BuildRight (40)
+   :              :     :- * Project (37)
+   :              :     :  +- * BroadcastHashJoin Inner BuildRight (36)
    :              :     :     :- * Project (34)
    :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (33)
    :              :     :     :     :- * Filter (31)
    :              :     :     :     :  +- * ColumnarToRow (30)
    :              :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (29)
    :              :     :     :     +- ReusedExchange (32)
-   :              :     :     +- BroadcastExchange (39)
-   :              :     :        +- * Project (38)
-   :              :     :           +- * Filter (37)
-   :              :     :              +- * ColumnarToRow (36)
-   :              :     :                 +- Scan parquet spark_catalog.default.store (35)
-   :              :     +- ReusedExchange (42)
+   :              :     :     +- ReusedExchange (35)
+   :              :     +- BroadcastExchange (42)
+   :              :        +- * Project (41)
+   :              :           +- * Filter (40)
+   :              :              +- * ColumnarToRow (39)
+   :              :                 +- Scan parquet spark_catalog.default.store (38)
    :              +- ReusedExchange (45)
    +- * HashAggregate (71)
       +- Exchange (70)
@@ -236,50 +236,50 @@ Join condition: None
 Output [7]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54]
 Input [9]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55, d_date_sk#56]
 
-(35) Scan parquet spark_catalog.default.store
-Output [2]: [s_store_sk#57, s_state#58]
+(35) ReusedExchange [Reuses operator id: 11]
+Output [1]: [cd_demo_sk#57]
+
+(36) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ss_cdemo_sk#49]
+Right keys [1]: [cd_demo_sk#57]
+Join type: Inner
+Join condition: None
+
+(37) Project [codegen id : 11]
+Output [6]: [ss_item_sk#48, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54]
+Input [8]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, cd_demo_sk#57]
+
+(38) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#58, s_state#59]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [In(s_state, [AL,SD,TN]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
-(36) ColumnarToRow [codegen id : 8]
-Input [2]: [s_store_sk#57, s_state#58]
+(39) ColumnarToRow [codegen id : 9]
+Input [2]: [s_store_sk#58, s_state#59]
 
-(37) Filter [codegen id : 8]
-Input [2]: [s_store_sk#57, s_state#58]
-Condition : (s_state#58 IN (TN,AL,SD) AND isnotnull(s_store_sk#57))
+(40) Filter [codegen id : 9]
+Input [2]: [s_store_sk#58, s_state#59]
+Condition : (s_state#59 IN (TN,AL,SD) AND isnotnull(s_store_sk#58))
 
-(38) Project [codegen id : 8]
-Output [1]: [s_store_sk#57]
-Input [2]: [s_store_sk#57, s_state#58]
+(41) Project [codegen id : 9]
+Output [1]: [s_store_sk#58]
+Input [2]: [s_store_sk#58, s_state#59]
 
-(39) BroadcastExchange
-Input [1]: [s_store_sk#57]
+(42) BroadcastExchange
+Input [1]: [s_store_sk#58]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
 
-(40) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ss_store_sk#50]
-Right keys [1]: [s_store_sk#57]
-Join type: Inner
-Join condition: None
-
-(41) Project [codegen id : 11]
-Output [6]: [ss_item_sk#48, ss_cdemo_sk#49, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54]
-Input [8]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, s_store_sk#57]
-
-(42) ReusedExchange [Reuses operator id: 11]
-Output [1]: [cd_demo_sk#59]
-
 (43) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ss_cdemo_sk#49]
-Right keys [1]: [cd_demo_sk#59]
+Left keys [1]: [ss_store_sk#50]
+Right keys [1]: [s_store_sk#58]
 Join type: Inner
 Join condition: None
 
 (44) Project [codegen id : 11]
 Output [5]: [ss_item_sk#48, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54]
-Input [7]: [ss_item_sk#48, ss_cdemo_sk#49, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, cd_demo_sk#59]
+Input [7]: [ss_item_sk#48, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, s_store_sk#58]
 
 (45) ReusedExchange [Reuses operator id: 23]
 Output [2]: [i_item_sk#60, i_item_id#61]
@@ -340,31 +340,31 @@ Join condition: None
 Output [7]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98]
 Input [9]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99, d_date_sk#100]
 
-(57) ReusedExchange [Reuses operator id: 39]
-Output [1]: [s_store_sk#101]
+(57) ReusedExchange [Reuses operator id: 11]
+Output [1]: [cd_demo_sk#101]
 
 (58) BroadcastHashJoin [codegen id : 17]
-Left keys [1]: [ss_store_sk#94]
-Right keys [1]: [s_store_sk#101]
+Left keys [1]: [ss_cdemo_sk#93]
+Right keys [1]: [cd_demo_sk#101]
 Join type: Inner
 Join condition: None
 
 (59) Project [codegen id : 17]
-Output [6]: [ss_item_sk#92, ss_cdemo_sk#93, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98]
-Input [8]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, s_store_sk#101]
+Output [6]: [ss_item_sk#92, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98]
+Input [8]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, cd_demo_sk#101]
 
-(60) ReusedExchange [Reuses operator id: 11]
-Output [1]: [cd_demo_sk#102]
+(60) ReusedExchange [Reuses operator id: 42]
+Output [1]: [s_store_sk#102]
 
 (61) BroadcastHashJoin [codegen id : 17]
-Left keys [1]: [ss_cdemo_sk#93]
-Right keys [1]: [cd_demo_sk#102]
+Left keys [1]: [ss_store_sk#94]
+Right keys [1]: [s_store_sk#102]
 Join type: Inner
 Join condition: None
 
 (62) Project [codegen id : 17]
 Output [5]: [ss_item_sk#92, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98]
-Input [7]: [ss_item_sk#92, ss_cdemo_sk#93, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, cd_demo_sk#102]
+Input [7]: [ss_item_sk#92, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, s_store_sk#102]
 
 (63) Scan parquet spark_catalog.default.item
 Output [1]: [i_item_sk#103]

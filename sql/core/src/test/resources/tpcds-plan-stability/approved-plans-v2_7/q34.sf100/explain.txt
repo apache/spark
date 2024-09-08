@@ -13,17 +13,17 @@
          :                    +- * BroadcastHashJoin Inner BuildRight (19)
          :                       :- * Project (13)
          :                       :  +- * BroadcastHashJoin Inner BuildRight (12)
-         :                       :     :- * Project (6)
-         :                       :     :  +- * BroadcastHashJoin Inner BuildRight (5)
+         :                       :     :- * Project (10)
+         :                       :     :  +- * BroadcastHashJoin Inner BuildRight (9)
          :                       :     :     :- * Filter (3)
          :                       :     :     :  +- * ColumnarToRow (2)
          :                       :     :     :     +- Scan parquet spark_catalog.default.store_sales (1)
-         :                       :     :     +- ReusedExchange (4)
-         :                       :     +- BroadcastExchange (11)
-         :                       :        +- * Project (10)
-         :                       :           +- * Filter (9)
-         :                       :              +- * ColumnarToRow (8)
-         :                       :                 +- Scan parquet spark_catalog.default.store (7)
+         :                       :     :     +- BroadcastExchange (8)
+         :                       :     :        +- * Project (7)
+         :                       :     :           +- * Filter (6)
+         :                       :     :              +- * ColumnarToRow (5)
+         :                       :     :                 +- Scan parquet spark_catalog.default.store (4)
+         :                       :     +- ReusedExchange (11)
          :                       +- BroadcastExchange (18)
          :                          +- * Project (17)
          :                             +- * Filter (16)
@@ -51,50 +51,50 @@ Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
 Condition : ((isnotnull(ss_store_sk#3) AND isnotnull(ss_hdemo_sk#2)) AND isnotnull(ss_customer_sk#1))
 
-(4) ReusedExchange [Reuses operator id: 40]
-Output [1]: [d_date_sk#7]
-
-(5) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_sold_date_sk#5]
-Right keys [1]: [d_date_sk#7]
-Join type: Inner
-Join condition: None
-
-(6) Project [codegen id : 4]
-Output [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4]
-Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, d_date_sk#7]
-
-(7) Scan parquet spark_catalog.default.store
-Output [2]: [s_store_sk#8, s_county#9]
+(4) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#7, s_county#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_county), EqualTo(s_county,Williamson County), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_county:string>
 
-(8) ColumnarToRow [codegen id : 2]
-Input [2]: [s_store_sk#8, s_county#9]
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [s_store_sk#7, s_county#8]
 
-(9) Filter [codegen id : 2]
-Input [2]: [s_store_sk#8, s_county#9]
-Condition : ((isnotnull(s_county#9) AND (s_county#9 = Williamson County)) AND isnotnull(s_store_sk#8))
+(6) Filter [codegen id : 1]
+Input [2]: [s_store_sk#7, s_county#8]
+Condition : ((isnotnull(s_county#8) AND (s_county#8 = Williamson County)) AND isnotnull(s_store_sk#7))
 
-(10) Project [codegen id : 2]
-Output [1]: [s_store_sk#8]
-Input [2]: [s_store_sk#8, s_county#9]
+(7) Project [codegen id : 1]
+Output [1]: [s_store_sk#7]
+Input [2]: [s_store_sk#7, s_county#8]
 
-(11) BroadcastExchange
-Input [1]: [s_store_sk#8]
+(8) BroadcastExchange
+Input [1]: [s_store_sk#7]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
-(12) BroadcastHashJoin [codegen id : 4]
+(9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
-Right keys [1]: [s_store_sk#8]
+Right keys [1]: [s_store_sk#7]
+Join type: Inner
+Join condition: None
+
+(10) Project [codegen id : 4]
+Output [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, ss_sold_date_sk#5]
+Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, s_store_sk#7]
+
+(11) ReusedExchange [Reuses operator id: 40]
+Output [1]: [d_date_sk#9]
+
+(12) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_sold_date_sk#5]
+Right keys [1]: [d_date_sk#9]
 Join type: Inner
 Join condition: None
 
 (13) Project [codegen id : 4]
 Output [3]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4]
-Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, s_store_sk#8]
+Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, ss_sold_date_sk#5, d_date_sk#9]
 
 (14) Scan parquet spark_catalog.default.household_demographics
 Output [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
@@ -209,25 +209,25 @@ BroadcastExchange (40)
 
 
 (36) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#7, d_year#23, d_dom#24]
+Output [3]: [d_date_sk#9, d_year#23, d_dom#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [Or(And(GreaterThanOrEqual(d_dom,1),LessThanOrEqual(d_dom,3)),And(GreaterThanOrEqual(d_dom,25),LessThanOrEqual(d_dom,28))), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
 (37) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
+Input [3]: [d_date_sk#9, d_year#23, d_dom#24]
 
 (38) Filter [codegen id : 1]
-Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
-Condition : (((((d_dom#24 >= 1) AND (d_dom#24 <= 3)) OR ((d_dom#24 >= 25) AND (d_dom#24 <= 28))) AND d_year#23 IN (1999,2000,2001)) AND isnotnull(d_date_sk#7))
+Input [3]: [d_date_sk#9, d_year#23, d_dom#24]
+Condition : (((((d_dom#24 >= 1) AND (d_dom#24 <= 3)) OR ((d_dom#24 >= 25) AND (d_dom#24 <= 28))) AND d_year#23 IN (1999,2000,2001)) AND isnotnull(d_date_sk#9))
 
 (39) Project [codegen id : 1]
-Output [1]: [d_date_sk#7]
-Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
+Output [1]: [d_date_sk#9]
+Input [3]: [d_date_sk#9, d_year#23, d_dom#24]
 
 (40) BroadcastExchange
-Input [1]: [d_date_sk#7]
+Input [1]: [d_date_sk#9]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
 
 

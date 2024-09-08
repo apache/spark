@@ -17,9 +17,9 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                 WholeStageCodegen (3)
                                   HashAggregate [s_store_sk,ss_ext_sales_price,ss_net_profit] [sum,sum,sum,sum]
                                     Project [ss_ext_sales_price,ss_net_profit,s_store_sk]
-                                      BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                        Project [ss_store_sk,ss_ext_sales_price,ss_net_profit]
-                                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                      BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                        Project [ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,s_store_sk]
+                                          BroadcastHashJoin [ss_store_sk,s_store_sk]
                                             Filter [ss_store_sk]
                                               ColumnarToRow
                                                 InputAdapter
@@ -33,14 +33,14 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                 InputAdapter
                                                                   Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
                                             InputAdapter
-                                              ReusedExchange [d_date_sk] #3
+                                              BroadcastExchange #4
+                                                WholeStageCodegen (1)
+                                                  Filter [s_store_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.store [s_store_sk]
                                         InputAdapter
-                                          BroadcastExchange #4
-                                            WholeStageCodegen (2)
-                                              Filter [s_store_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet spark_catalog.default.store [s_store_sk]
+                                          ReusedExchange [d_date_sk] #3
                           InputAdapter
                             BroadcastExchange #5
                               WholeStageCodegen (7)
@@ -50,18 +50,18 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                       WholeStageCodegen (6)
                                         HashAggregate [s_store_sk,sr_return_amt,sr_net_loss] [sum,sum,sum,sum]
                                           Project [sr_return_amt,sr_net_loss,s_store_sk]
-                                            BroadcastHashJoin [sr_store_sk,s_store_sk]
-                                              Project [sr_store_sk,sr_return_amt,sr_net_loss]
-                                                BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                            BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                              Project [sr_return_amt,sr_net_loss,sr_returned_date_sk,s_store_sk]
+                                                BroadcastHashJoin [sr_store_sk,s_store_sk]
                                                   Filter [sr_store_sk]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.store_returns [sr_store_sk,sr_return_amt,sr_net_loss,sr_returned_date_sk]
                                                           ReusedSubquery [d_date_sk] #1
                                                   InputAdapter
-                                                    ReusedExchange [d_date_sk] #3
+                                                    ReusedExchange [s_store_sk] #4
                                               InputAdapter
-                                                ReusedExchange [s_store_sk] #4
+                                                ReusedExchange [d_date_sk] #3
                     WholeStageCodegen (14)
                       Project [sales,returns,profit,profit_loss,cs_call_center_sk]
                         BroadcastNestedLoopJoin
@@ -103,23 +103,23 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                 WholeStageCodegen (17)
                                   HashAggregate [wp_web_page_sk,ws_ext_sales_price,ws_net_profit] [sum,sum,sum,sum]
                                     Project [ws_ext_sales_price,ws_net_profit,wp_web_page_sk]
-                                      BroadcastHashJoin [ws_web_page_sk,wp_web_page_sk]
-                                        Project [ws_web_page_sk,ws_ext_sales_price,ws_net_profit]
-                                          BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                      BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                        Project [ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,wp_web_page_sk]
+                                          BroadcastHashJoin [ws_web_page_sk,wp_web_page_sk]
                                             Filter [ws_web_page_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.web_sales [ws_web_page_sk,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk]
                                                     ReusedSubquery [d_date_sk] #1
                                             InputAdapter
-                                              ReusedExchange [d_date_sk] #3
+                                              BroadcastExchange #11
+                                                WholeStageCodegen (15)
+                                                  Filter [wp_web_page_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.web_page [wp_web_page_sk]
                                         InputAdapter
-                                          BroadcastExchange #11
-                                            WholeStageCodegen (16)
-                                              Filter [wp_web_page_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet spark_catalog.default.web_page [wp_web_page_sk]
+                                          ReusedExchange [d_date_sk] #3
                           InputAdapter
                             BroadcastExchange #12
                               WholeStageCodegen (21)
@@ -129,15 +129,15 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                       WholeStageCodegen (20)
                                         HashAggregate [wp_web_page_sk,wr_return_amt,wr_net_loss] [sum,sum,sum,sum]
                                           Project [wr_return_amt,wr_net_loss,wp_web_page_sk]
-                                            BroadcastHashJoin [wr_web_page_sk,wp_web_page_sk]
-                                              Project [wr_web_page_sk,wr_return_amt,wr_net_loss]
-                                                BroadcastHashJoin [wr_returned_date_sk,d_date_sk]
+                                            BroadcastHashJoin [wr_returned_date_sk,d_date_sk]
+                                              Project [wr_return_amt,wr_net_loss,wr_returned_date_sk,wp_web_page_sk]
+                                                BroadcastHashJoin [wr_web_page_sk,wp_web_page_sk]
                                                   Filter [wr_web_page_sk]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.web_returns [wr_web_page_sk,wr_return_amt,wr_net_loss,wr_returned_date_sk]
                                                           ReusedSubquery [d_date_sk] #1
                                                   InputAdapter
-                                                    ReusedExchange [d_date_sk] #3
+                                                    ReusedExchange [wp_web_page_sk] #11
                                               InputAdapter
-                                                ReusedExchange [wp_web_page_sk] #11
+                                                ReusedExchange [d_date_sk] #3

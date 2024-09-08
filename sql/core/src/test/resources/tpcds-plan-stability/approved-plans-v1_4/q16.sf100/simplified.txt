@@ -9,9 +9,9 @@ WholeStageCodegen (12)
                 Project [cs_order_number,cs_ext_ship_cost,cs_net_profit]
                   BroadcastHashJoin [cs_ship_date_sk,d_date_sk]
                     Project [cs_ship_date_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
-                      BroadcastHashJoin [cs_call_center_sk,cc_call_center_sk]
-                        Project [cs_ship_date_sk,cs_call_center_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
-                          BroadcastHashJoin [cs_ship_addr_sk,ca_address_sk]
+                      BroadcastHashJoin [cs_ship_addr_sk,ca_address_sk]
+                        Project [cs_ship_date_sk,cs_ship_addr_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
+                          BroadcastHashJoin [cs_call_center_sk,cc_call_center_sk]
                             SortMergeJoin [cs_order_number,cr_order_number]
                               InputAdapter
                                 WholeStageCodegen (5)
@@ -26,18 +26,8 @@ WholeStageCodegen (12)
                                                   Project [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
                                                     Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
                                                       Subquery #1
-                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
-                                                          Exchange #3
-                                                            ObjectHashAggregate [ca_address_sk] [buf,buf]
-                                                              WholeStageCodegen (1)
-                                                                Project [ca_address_sk]
-                                                                  Filter [ca_state,ca_address_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
-                                                      Subquery #2
                                                         ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cc_call_center_sk, 42), 4, 144, 0, 0),bloomFilter,buf]
-                                                          Exchange #4
+                                                          Exchange #3
                                                             ObjectHashAggregate [cc_call_center_sk] [buf,buf]
                                                               WholeStageCodegen (1)
                                                                 Project [cc_call_center_sk]
@@ -45,6 +35,16 @@ WholeStageCodegen (12)
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet spark_catalog.default.call_center [cc_call_center_sk,cc_county]
+                                                      Subquery #2
+                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
+                                                          Exchange #4
+                                                            ObjectHashAggregate [ca_address_sk] [buf,buf]
+                                                              WholeStageCodegen (1)
+                                                                Project [ca_address_sk]
+                                                                  Filter [ca_state,ca_address_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                                                       Subquery #3
                                                         ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 73049, 1141755, 0, 0),bloomFilter,buf]
                                                           Exchange #5
@@ -81,19 +81,19 @@ WholeStageCodegen (12)
                             InputAdapter
                               BroadcastExchange #8
                                 WholeStageCodegen (8)
-                                  Project [ca_address_sk]
-                                    Filter [ca_state,ca_address_sk]
+                                  Project [cc_call_center_sk]
+                                    Filter [cc_county,cc_call_center_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
+                                          Scan parquet spark_catalog.default.call_center [cc_call_center_sk,cc_county]
                         InputAdapter
                           BroadcastExchange #9
                             WholeStageCodegen (9)
-                              Project [cc_call_center_sk]
-                                Filter [cc_county,cc_call_center_sk]
+                              Project [ca_address_sk]
+                                Filter [ca_state,ca_address_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet spark_catalog.default.call_center [cc_call_center_sk,cc_county]
+                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                     InputAdapter
                       BroadcastExchange #10
                         WholeStageCodegen (10)
