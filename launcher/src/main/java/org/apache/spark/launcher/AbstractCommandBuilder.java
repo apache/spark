@@ -178,7 +178,9 @@ abstract class AbstractCommandBuilder {
             "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
             "assembly.");
         }
-        boolean isSparkHiveJarAvailable = isSparkHiveJarAvailable(jarsDir);
+        boolean shouldPrePendSparkHive = isJarAvailable(jarsDir, "spark-hive_");
+        boolean shouldPrePendSparkHiveThriftServer =
+          shouldPrePendSparkHive && isJarAvailable(jarsDir, "spark-hive-thriftserver_");
         for (String project : projects) {
           // Do not use locally compiled class files for Spark server because it should use shaded
           // dependencies.
@@ -191,10 +193,18 @@ abstract class AbstractCommandBuilder {
           // SPARK-49534: The assumption here is that if `spark-hive_xxx.jar` is not in the classpath,
           // then the `-Phive` profile was not used during package, and therefore the Hive-related jars
           // should also not be in the classpath. To avoid failure in loading the SPI in `DataSourceRegister`
-          // under `sql/hive`, no longer prepend `sql/hive`. Meanwhile, due to the strong dependency of
-          // `sql/hive-thriftserver` on `sql/hive`, the prepend behavior for `sql/hive-thriftserver` will
-          // also be excluded at this time.
-          if (!isSparkHiveJarAvailable && (project.equals("sql/hive") || project.equals("sql/hive-thriftserver"))) {
+          // under `sql/hive`, no longer prepend `sql/hive`.
+          if (!shouldPrePendSparkHive && project.equals("sql/hive")) {
+            continue;
+          }
+          // SPARK-49534: Meanwhile, due to the strong dependency of `sql/hive-thriftserver` on `sql/hive`,
+          // the prepend for `sql/hive-thriftserver` will also be excluded if `spark-hive_xxx.jar`
+          // is not in the classpath. On the other hand, if `spark-hive-thriftserver_xxx.jar` is not in
+          // the classpath, then the `-Phive-thriftserver` profile was not used during package,
+          // and therefore, jars such as hive-cli and hive-beeline should also not be included in the classpath.
+          // To avoid the inelegant startup failures of tools such as spark-sql, in this scenario,
+          // `sql/hive-thriftserver` will no longer be prepended to the classpath.
+          if (!shouldPrePendSparkHiveThriftServer && project.equals("sql/hive-thriftserver")) {
             continue;
           }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
@@ -281,10 +291,10 @@ abstract class AbstractCommandBuilder {
    * @param jarsDir the directory to search for spark-hive jar files
    * @return true if a file starting with "spark-hive_" is found, false otherwise
    */
-  private boolean isSparkHiveJarAvailable(String jarsDir) {
+  private boolean isJarAvailable(String jarsDir, String jarNamePrefix) {
     if (jarsDir != null) {
       for (File f : new File(jarsDir).listFiles()) {
-        if (f.getName().startsWith("spark-hive_")) {
+        if (f.getName().startsWith(jarNamePrefix)) {
           return true;
         }
       }
