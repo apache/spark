@@ -7828,7 +7828,7 @@
   },
   "_LEGACY_ERROR_TEMP_3055" : {
     "message" : [
-      "ScalarFunction '<scalarFunc.name>' neither implement magic method nor override 'produceResult'"
+      "ScalarFunction <scalarFunc> neither implement magic method nor override 'produceResult'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3056" : {
