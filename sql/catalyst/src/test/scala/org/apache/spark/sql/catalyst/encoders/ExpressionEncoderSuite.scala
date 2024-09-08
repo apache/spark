@@ -513,7 +513,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   }
 
   test("throw exception for tuples with more than 22 elements") {
-    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
+    val encoders = (0 to 22).map(_ => encoderFor(Encoders.scalaInt))
 
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {

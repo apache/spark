@@ -1387,7 +1387,11 @@ class Dataset[T] private[sql](
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
       schema: StructType): DataFrame = {
-    val rowEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
+    val rowEncoder: ExpressionEncoder[Row] = if (isUnTyped) {
+      exprEnc.asInstanceOf[ExpressionEncoder[Row]]
+    } else {
+      ExpressionEncoder(schema)
+    }
     Dataset.ofRows(
       sparkSession,
       MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
@@ -2245,13 +2249,15 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
   @inline private def withSetOperator[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
-    if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
+    if (isUnTyped) {
       // Set operators widen types (change the schema), so we cannot reuse the row encoder.
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
     } else {
       Dataset(sparkSession, logicalPlan)
     }
   }
+
+  private def isUnTyped: Boolean = classTag.runtimeClass.isAssignableFrom(classOf[Row])
 
   /** Returns a optimized plan for CommandResult, convert to `LocalRelation`. */
   private def commandResultOptimized: Dataset[T] = {
