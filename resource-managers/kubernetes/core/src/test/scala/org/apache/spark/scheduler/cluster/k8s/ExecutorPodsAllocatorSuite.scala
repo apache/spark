@@ -150,6 +150,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
 
+  test("SPARK-49447: Prevent small values less than 100 for batch delay") {
+    val m = intercept[IllegalArgumentException] {
+      val conf = new SparkConf().set(KUBERNETES_ALLOCATION_BATCH_DELAY.key, "1")
+      conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+    }.getMessage
+    assert(m.contains("Allocation batch delay must be greater than 0.1s."))
+  }
+
   test("SPARK-41210: Window based executor failure tracking mechanism") {
     var _exitCode = -1
     val _conf = conf.clone

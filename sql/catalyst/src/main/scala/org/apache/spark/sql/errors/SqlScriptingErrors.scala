@@ -84,4 +84,27 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
+
+  def labelDoesNotExist(
+      origin: Origin,
+      labelName: String,
+      statementType: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      cause = null,
+      messageParameters = Map(
+        "labelName" -> toSQLStmt(labelName),
+        "statementType" -> statementType))
+  }
+
+  def invalidIterateLabelUsageForCompound(
+      origin: Origin,
+      labelName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      cause = null,
+      messageParameters = Map("labelName" -> toSQLStmt(labelName)))
+  }
 }

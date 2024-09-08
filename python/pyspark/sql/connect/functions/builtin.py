@@ -3921,6 +3921,13 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 nullif.__doc__ = pysparkfuncs.nullif.__doc__
 
 
+def nullifzero(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+nullifzero.__doc__ = pysparkfuncs.nullifzero.__doc__
+
+
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("nvl", col1, col2)
 
@@ -3933,6 +3940,13 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
+
+
+def zeroifnull(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("zeroifnull", col)
+
+
+zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
 
 
 def aes_encrypt(

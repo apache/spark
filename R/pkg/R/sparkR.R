@@ -404,7 +404,7 @@ sparkR.session <- function(
   enableHiveSupport = TRUE,
   ...) {
 
-  if (Sys.getenv("SPARK_TESTING") == "") {
+  if (Sys.getenv("SPARKR_SUPPRESS_DEPRECATION_WARNING") == "") {
     warning(
       "SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version.")
   }

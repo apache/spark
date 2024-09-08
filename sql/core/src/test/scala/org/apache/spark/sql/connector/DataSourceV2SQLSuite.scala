@@ -2125,10 +2125,18 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("REPLACE TABLE: v1 table") {
-    sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
-    val v2Catalog = catalog("spark_catalog").asTableCatalog
-    val table = v2Catalog.loadTable(Identifier.of(Array("default"), "tbl"))
-    assert(table.properties().get(TableCatalog.PROP_PROVIDER) == classOf[SimpleScanSource].getName)
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    }
+    checkError(
+      exception = e,
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`tbl`",
+        "operation" -> "REPLACE TABLE"
+      )
+    )
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
@@ -2388,16 +2396,6 @@ class DataSourceV2SQLSuiteV1Filter
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")
-  }
-
-  test("SHOW COLUMNS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t IN testcat.ns1.ns2"), Seq(Row("id"), Row("data")))
-      checkAnswer(sql(s"SHOW COLUMNS in $t"), Seq(Row("id"), Row("data")))
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
-    }
   }
 
   test("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]") {
@@ -3872,27 +3870,11 @@ class ReadOnlyCatalog extends InMemoryCatalog {
 class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
   override def stageCreate(
       ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
-  }
-
-  override def stageCreate(
-      ident: Identifier,
       columns: Array[ColumnV2],
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
     super.createTable(ident, columns, partitions, properties)
     null
-  }
-
-  override def stageReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
   }
 
   override def stageReplace(
@@ -3903,14 +3885,6 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
     super.dropTable(ident)
     super.createTable(ident, columns, partitions, properties)
     null
-  }
-
-  override def stageCreateOrReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    throw new RuntimeException("shouldn't be called")
   }
 
   override def stageCreateOrReplace(

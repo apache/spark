@@ -666,7 +666,184 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
     assert(whileStmt.label.contains("lbl"))
+  }
 
+  test("leave compound block") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  LEAVE lbl;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.collection(1).isInstanceOf[LeaveStatement])
+  }
+
+  test("leave while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1 = 1 DO
+        |    SELECT 1;
+        |    LEAVE lbl;
+        |  END WHILE;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 2)
+
+    assert(whileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(whileStmt.body.collection(1).isInstanceOf[LeaveStatement])
+    assert(whileStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
+  }
+
+  test ("iterate compound block - should fail") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  ITERATE lbl;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      parameters = Map("labelName" -> "LBL"))
+  }
+
+  test("iterate while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1 = 1 DO
+        |    SELECT 1;
+        |    ITERATE lbl;
+        |  END WHILE;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 2)
+
+    assert(whileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(whileStmt.body.collection(1).isInstanceOf[IterateStatement])
+    assert(whileStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
+  }
+
+  test("leave with wrong label - should fail") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  LEAVE randomlbl;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
+  }
+
+  test("iterate with wrong label - should fail") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  ITERATE randomlbl;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
+  }
+
+  test("leave outer loop from nested while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1 = 1 DO
+        |    lbl2: WHILE 2 = 2 DO
+        |      SELECT 1;
+        |      LEAVE lbl;
+        |    END WHILE;
+        |  END WHILE;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+
+    val nestedWhileStmt = whileStmt.body.collection.head.asInstanceOf[WhileStatement]
+    assert(nestedWhileStmt.condition.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.condition.getText == "2 = 2")
+
+    assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(nestedWhileStmt.body.collection(1).isInstanceOf[LeaveStatement])
+    assert(nestedWhileStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
+  }
+
+  test("iterate outer loop from nested while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1 = 1 DO
+        |    lbl2: WHILE 2 = 2 DO
+        |      SELECT 1;
+        |      ITERATE lbl;
+        |    END WHILE;
+        |  END WHILE;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[WhileStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+
+    val nestedWhileStmt = whileStmt.body.collection.head.asInstanceOf[WhileStatement]
+    assert(nestedWhileStmt.condition.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.condition.getText == "2 = 2")
+
+    assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(nestedWhileStmt.body.collection(1).isInstanceOf[IterateStatement])
+    assert(nestedWhileStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
   }
 
   // Helper methods

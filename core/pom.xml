@@ -121,19 +121,14 @@
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-api</artifactId>
-      <version>0.12.6</version>
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-impl</artifactId>
-      <version>0.12.6</version>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-jackson</artifactId>
-      <version>0.12.6</version>
-      <scope>test</scope>
     </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
@@ -614,6 +609,12 @@
       </activation>
       <properties>
         <script.extension>.sh</script.extension>
+      </properties>
+    </profile>
+    <profile>
+      <id>jjwt</id>
+      <properties>
+        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
     <profile>
