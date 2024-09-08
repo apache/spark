@@ -527,9 +527,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       errorClass = "INTERNAL_ERROR",
       parameters = Map(
         "message" ->
-          ("Found unused message parameters for the error class CANNOT_UP_CAST_DATATYPE. " +
-          "Its error message format has 4 place holders, but the passed message parameters map " +
-          "has 5 items. Consider to add place holders to the error format or " +
+          ("Found unused message parameters of the error class 'CANNOT_UP_CAST_DATATYPE'. " +
+          "Its error message format has 4 placeholders, but the passed message parameters map " +
+          "has 5 items. Consider to add placeholders to the error format or " +
           "remove unused message parameters.")
       )
     )
