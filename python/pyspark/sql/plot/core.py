@@ -16,15 +16,17 @@
 #
 
 from typing import TYPE_CHECKING, Union
-from pyspark.sql import DataFrame, SparkSession
 
 
 if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
     from pyspark.sql._typing import ColumnOrName
 
 
 class PySparkTopNPlotBase:
-    def get_top_n(self, sdf: DataFrame):
+    def get_top_n(self, sdf: "DataFrame"):
+        from pyspark.sql import SparkSession
+
         spark = SparkSession.getActiveSession()
         max_rows = int(spark.conf.get("spark.sql.pyspark.plotting.max_rows"))
         pdf = sdf.limit(max_rows + 1).toPandas()
@@ -38,7 +40,9 @@ class PySparkTopNPlotBase:
 
 
 class PySparkSampledPlotBase:
-    def get_sampled(self, sdf: DataFrame):
+    def get_sampled(self, sdf: "DataFrame"):
+        from pyspark.sql import SparkSession
+
         spark = SparkSession.getActiveSession()
         sample_ratio = spark.conf.get("spark.sql.pyspark.plotting.sample_ratio")
         max_rows = int(spark.conf.get("spark.sql.pyspark.plotting.max_rows"))
@@ -110,11 +114,3 @@ class PySparkPlotAccessor:
         :class:`plotly.graph_objs.Figure`
         """
         return self(kind="line", x=x, y=y, **kwargs)
-
-
-def plot_accessor(df):
-    return PySparkPlotAccessor(df)
-
-
-# Need to import pyspark.sql.plot.prototype to enable plotting
-DataFrame.plot = property(plot_accessor)

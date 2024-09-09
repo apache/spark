@@ -39,6 +39,7 @@ from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
+from pyspark.sql.plot import PySparkPlotAccessor
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
@@ -6391,6 +6392,23 @@ class DataFrame:
         -----
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
+        """
+        ...
+
+    @property
+    def plot(self) -> PySparkPlotAccessor:
+        """
+        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`PySparkPlotAccessor`
+
+        Notes
+        -----
+        This API is experimental.
         """
         ...
 

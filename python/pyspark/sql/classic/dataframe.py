@@ -37,6 +37,7 @@ from typing import (
     overload,
     TYPE_CHECKING,
 )
+from xml.sax.handler import property_dom_node
 
 from pyspark import _NoValue
 from pyspark.resource import ResourceProfile
@@ -58,6 +59,7 @@ from pyspark.sql.column import Column
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
+from pyspark.sql.plot import PySparkPlotAccessor
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
     StructType,
@@ -1861,6 +1863,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
             messageParameters={"member": "queryExecution"},
         )
+
+    @property
+    def plot(self) -> PySparkPlotAccessor:
+        return PySparkPlotAccessor(self)
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):
