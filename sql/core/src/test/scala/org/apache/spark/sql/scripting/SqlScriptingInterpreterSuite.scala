@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -483,6 +483,91 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("searched case no cases matched no else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 2 THEN
+        |     SELECT 42;
+        |   WHEN 1 = 3 THEN
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq()
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case when evaluates to null") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a BOOLEAN) USING parquet;
+          |  CASE
+          |  WHEN (SELECT * FROM t) THEN
+          |   SELECT 42;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
+      )
+    }
+  }
+
+  test("searched case with non boolean condition - constant") {
+    val commands =
+      """
+        |BEGIN
+        |  CASE
+        |  WHEN 1 THEN
+        |   SELECT 42;
+        |  END CASE;
+        |END
+        |""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] (
+        runSqlScript(commands)
+      ),
+      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      parameters = Map("invalidStatement" -> "1")
+    )
+  }
+
+  test("searched case with too many rows in subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | INSERT INTO t VALUES (true);
+          | INSERT INTO t VALUES (true);
+          | CASE
+          |   WHEN (SELECT * FROM t) THEN
+          |     SELECT 1;
+          | END CASE;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SparkException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 124, stop = 140)
+      )
+    }
+  }
+
   test("simple case") {
     val commands =
       """
@@ -596,6 +681,67 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(44)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("simple case no cases matched no else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 2 THEN
+        |     SELECT 42;
+        |   WHEN 3 THEN
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq()
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case mismatched types") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN "one" THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkNumberFormatException] (
+        runSqlScript(commands)
+      ),
+      errorClass = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'one'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
+      context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27)
+    )
+  }
+
+  test("simple case compare with null") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT) USING parquet;
+          |  CASE (SELECT COUNT(*) FROM t)
+          |   WHEN 1 THEN
+          |     SELECT 42;
+          |   ELSE
+          |     SELECT 43;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
   }
