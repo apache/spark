@@ -716,20 +716,19 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     checkAnswer(df, Row(11))
   }
 
-  test("SPARK-49398: Cache Table with Parameter markers should return " +
+  test("SPARK-49398: Cache Table with Parameter markers should throw " +
     "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT") {
+    val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql("CACHE TABLE CacheTable as SELECT 1 + :param1", Map("param1" -> "1")).show()
+        spark.sql(sqlText, Map("param1" -> "1")).show()
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("name" -> "param1"),
+      parameters = Map("statement" -> "CACHE TABLE body"),
       context = ExpectedContext(
-        objectType = "VIEW",
-        objectName = "CacheTable",
-        fragment = ":param1",
-        startIndex = 11,
-        stopIndex = 17)
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
     )
   }
 }

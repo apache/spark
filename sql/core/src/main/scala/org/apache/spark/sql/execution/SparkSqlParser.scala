@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -466,22 +465,6 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
-
-  private def checkInvalidParameter(plan: LogicalPlan, statement: String):
-  Unit = {
-    plan.foreach { p =>
-      p.expressions.foreach { expr =>
-        if (expr.containsPattern(PARAMETER)) {
-          throw QueryParsingErrors.parameterMarkerNotAllowed(statement, p.origin)
-        }
-      }
-    }
-    plan.children.foreach(p => checkInvalidParameter(p, statement))
-    plan.innerChildren.collect {
-      case child: LogicalPlan => checkInvalidParameter(child, statement)
-    }
-  }
-
   /**
    * Create or replace a view. This creates a [[CreateViewCommand]].
    *
@@ -542,6 +525,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     // To lift this we would need to reconstitute the body with parameter markers replaced with the
     // values given at CREATE VIEW time, or we would need to store the parameter values alongside
     // the text.
+    // The same rule can be found in CACHE TABLE builder.
     checkInvalidParameter(qPlan, "CREATE VIEW body")
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
