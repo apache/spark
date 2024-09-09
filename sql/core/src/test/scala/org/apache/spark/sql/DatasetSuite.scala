@@ -2051,17 +2051,17 @@ class DatasetSuite extends QueryTest
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
-    val errorClass = "NOT_NULL_ASSERT_VIOLATION"
+    val condition = "NOT_NULL_ASSERT_VIOLATION"
     val sqlState = "42000"
     val parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n")
     checkError(
       exception = intercept[SparkRuntimeException](ds.collect()),
-      condition = errorClass,
+      condition = condition,
       sqlState = sqlState,
       parameters = parameters)
     checkError(
       exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
-      condition = errorClass,
+      condition = condition,
       sqlState = sqlState,
       parameters = parameters)
 
@@ -2071,12 +2071,12 @@ class DatasetSuite extends QueryTest
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       checkError(
         exception = intercept[SparkRuntimeException](ds.collect()),
-        condition = errorClass,
+        condition = condition,
         sqlState = sqlState,
         parameters = parameters)
       checkError(
         exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
-        condition = errorClass,
+        condition = condition,
         sqlState = sqlState,
         parameters = parameters)
     }
