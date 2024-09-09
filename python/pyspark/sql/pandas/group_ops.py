@@ -536,7 +536,7 @@ class PandasGroupedOpsMixin:
         the user can pass a function that takes a tuple of `pyarrow.Scalar` grouping
         key(s) and a `pyarrow.Table`. For each group, all columns are passed together
         as a`pyarrow.Table` to the user-function and the returned `pyarrow.Table` or iterator
-         of `pyarrow.RecordBatch` are combined as a :class:`DataFrame`.
+        of `pyarrow.RecordBatch` are combined as a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
         `pyarrow.Table` or `pyarrow.RecordBatch`. The column labels of the returned `pyarrow.Table`
