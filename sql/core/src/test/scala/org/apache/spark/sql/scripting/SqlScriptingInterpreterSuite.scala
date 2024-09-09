@@ -678,4 +678,38 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
+
+  test("nested compounds in loop - leave in inner compound") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: WHILE x < 2 DO
+        |    SET x = x + 1;
+        |    BEGIN
+        |      SELECT 1;
+        |      lbl2: BEGIN
+        |        SELECT 2;
+        |        LEAVE lbl2;
+        |        SELECT 3;
+        |      END;
+        |    END;
+        |  END WHILE;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select 2
+      Seq.empty[Row], // set x = 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select 2
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
 }
