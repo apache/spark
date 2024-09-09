@@ -530,7 +530,7 @@ class HiveDDLSuite
   }
 
   test("create table: partition column names exist in table definition") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
       "COLUMN_ALREADY_EXISTS",
       Map("columnName" -> "`a`"))
@@ -770,13 +770,12 @@ class HiveDDLSuite
     }
   }
 
-  private def assertAnalysisErrorClass(
+  private def assertAnalysisErrorCondition(
       sqlText: String,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String]): Unit = {
     val e = intercept[AnalysisException](sql(sqlText))
-    checkError(e,
-      condition = errorClass, parameters = parameters)
+    checkError(e, condition = condition, parameters = parameters)
   }
 
   test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
@@ -1117,9 +1116,9 @@ class HiveDDLSuite
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         sqlText = "DROP VIEW tab1",
-        errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        condition = "WRONG_COMMAND_FOR_OBJECT_TYPE",
         parameters = Map(
           "alternative" -> "DROP TABLE",
           "operation" -> "DROP VIEW",
@@ -1136,9 +1135,9 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        assertAnalysisErrorClass(
+        assertAnalysisErrorCondition(
           sqlText = "DROP TABLE view1",
-          errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+          condition = "WRONG_COMMAND_FOR_OBJECT_TYPE",
           parameters = Map(
             "alternative" -> "DROP VIEW",
             "operation" -> "DROP TABLE",
@@ -1322,7 +1321,7 @@ class HiveDDLSuite
     sql(s"USE default")
     val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
     if (tableExists && !cascade) {
-      assertAnalysisErrorClass(
+      assertAnalysisErrorCondition(
         sqlDropDatabase,
         "SCHEMA_NOT_EMPTY",
         Map("schemaName" -> s"`$dbName`"))
@@ -2526,13 +2525,13 @@ class HiveDDLSuite
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
           if (!caseSensitive) {
             // duplicating partitioning column name
-            assertAnalysisErrorClass(
+            assertAnalysisErrorCondition(
               "ALTER TABLE tab ADD COLUMNS (C2 string)",
               "COLUMN_ALREADY_EXISTS",
               Map("columnName" -> "`c2`"))
 
             // duplicating data column name
-            assertAnalysisErrorClass(
+            assertAnalysisErrorCondition(
               "ALTER TABLE tab ADD COLUMNS (C1 string)",
               "COLUMN_ALREADY_EXISTS",
               Map("columnName" -> "`c1`"))

@@ -45,12 +45,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("to_json malformed") {
-    def check(value: Array[Byte], metadata: Array[Byte],
-              errorClass: String = "MALFORMED_VARIANT"): Unit = {
+    def check(
+        value: Array[Byte],
+        metadata: Array[Byte],
+        condition: String = "MALFORMED_VARIANT"): Unit = {
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(
           StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)))),
-        errorClass
+        condition
       )
     }
 

@@ -296,10 +296,10 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
       "t:" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ": extra input ':'")),
       "${some.var.x}" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'$'", "hint" -> "")),
       "tab:1" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ""))
-    ).foreach { case (identifier, (errorClass, parameters)) =>
+    ).foreach { case (identifier, (condition, parameters)) =>
       checkError(
         exception = intercept[ParseException](parseTableIdentifier(identifier)),
-        condition = errorClass,
+        condition = condition,
         parameters = parameters)
     }
   }

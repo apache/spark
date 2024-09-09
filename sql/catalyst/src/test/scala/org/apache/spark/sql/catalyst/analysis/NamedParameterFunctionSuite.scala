@@ -98,12 +98,12 @@ class NamedParameterFunctionSuite extends AnalysisTest {
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
-    val errorClass =
+    val condition =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     checkError(
       exception = parseRearrangeException(
         signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
-      condition = errorClass,
+      condition = condition,
       parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k1"))
     )
     checkError(
