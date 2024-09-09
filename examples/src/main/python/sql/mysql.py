@@ -95,6 +95,9 @@ if __name__ == "__main__":
     print(f"Query Result: SELECT * FROM {table_name}")
     query_result.show()
 
+    # Stop SparkSession
+    spark.stop()
+
 """
     # Example 2: Filter and select specific records
     # filtered_result = spark.sql(f"SELECT * FROM {table_name} WHERE age > 30")
@@ -112,9 +115,6 @@ if __name__ == "__main__":
     # FROM {table_name} GROUP BY department")
     # grouped_result.show()
 """
-
-    # Stop SparkSession
-    spark.stop()
 
 """
 A simple example demonstrating how to create a database/table in Mysql using Python
