@@ -43,7 +43,7 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20])
 
         # multiple columns as vertical axis
-        fig = self.sdf.plot(kind="line", x="category", y=["int_val", "float_val"])
+        fig = self.sdf.plot.line(x="category", y=["int_val", "float_val"])
         self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
         self._check_fig_data(fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
 
