@@ -426,8 +426,10 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined ||
-      df.sparkSession.sessionState.conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined
+    val canUseV2 = lookupV2Provider().isDefined || (df.sparkSession.sessionState.conf.getConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined &&
+        !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
+          .isInstanceOf[DelegatingCatalogExtension])
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
