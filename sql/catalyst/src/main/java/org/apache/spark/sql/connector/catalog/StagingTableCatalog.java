@@ -102,7 +102,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * returned table's {@link StagedTable#commitStagedChanges()} is called.
    * <p>
    * This is deprecated, please override
-   * {@link #stageReplace(Identifier, StructType, Transform[], Map)} instead.
+   * {@link #stageReplace(Identifier, Column[], Transform[], Map)} instead.
    */
   @Deprecated(since = "3.4.0")
   default StagedTable stageReplace(

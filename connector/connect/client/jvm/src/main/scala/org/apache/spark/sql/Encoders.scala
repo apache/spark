@@ -20,7 +20,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, JavaSerializationCodec, RowEncoder => RowEncoderFactory}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, JavaSerializationCodec, KryoSerializationCodec, RowEncoder => RowEncoderFactory}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.StructType
 
@@ -202,6 +202,28 @@ object Encoders {
    * @since 4.0.0
    */
   def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
+
+  /**
+   * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo. This
+   * encoder maps T into a single byte array (binary) field.
+   *
+   * T must be publicly accessible.
+   *
+   * @since 4.0.0
+   */
+  def kryo[T: ClassTag]: Encoder[T] = {
+    TransformingEncoder(implicitly[ClassTag[T]], BinaryEncoder, KryoSerializationCodec)
+  }
+
+  /**
+   * Creates an encoder that serializes objects of type T using Kryo. This encoder maps T into a
+   * single byte array (binary) field.
+   *
+   * T must be publicly accessible.
+   *
+   * @since 4.0.0
+   */
+  def kryo[T](clazz: Class[T]): Encoder[T] = kryo(ClassTag[T](clazz))
 
   private def tupleEncoder[T](encoders: Encoder[_]*): Encoder[T] = {
     ProductEncoder.tuple(encoders.asInstanceOf[Seq[AgnosticEncoder[_]]]).asInstanceOf[Encoder[T]]

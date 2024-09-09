@@ -7305,36 +7305,36 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|
     +---+---+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("previos_value", lag("c2").over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|         NULL|
-    |  a|  2|            1|
-    |  a|  3|            2|
-    |  b|  2|         NULL|
-    |  b|  8|            2|
-    +---+---+-------------+
-    >>> df.withColumn("previos_value", lag("c2", 1, 0).over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|            0|
-    |  a|  2|            1|
-    |  a|  3|            2|
-    |  b|  2|            0|
-    |  b|  8|            2|
-    +---+---+-------------+
-    >>> df.withColumn("previos_value", lag("c2", 2, -1).over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|           -1|
-    |  a|  2|           -1|
-    |  a|  3|            1|
-    |  b|  2|           -1|
-    |  b|  8|           -1|
-    +---+---+-------------+
+    >>> df.withColumn("previous_value", lag("c2").over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|          NULL|
+    |  a|  2|             1|
+    |  a|  3|             2|
+    |  b|  2|          NULL|
+    |  b|  8|             2|
+    +---+---+--------------+
+    >>> df.withColumn("previous_value", lag("c2", 1, 0).over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|             0|
+    |  a|  2|             1|
+    |  a|  3|             2|
+    |  b|  2|             0|
+    |  b|  8|             2|
+    +---+---+--------------+
+    >>> df.withColumn("previous_value", lag("c2", 2, -1).over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|            -1|
+    |  a|  2|            -1|
+    |  a|  3|             1|
+    |  b|  2|            -1|
+    |  b|  8|            -1|
+    +---+---+--------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -20731,6 +20731,31 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def nullifzero(col: "ColumnOrName") -> Column:
+    """
+    Returns null if `col` is equal to zero, or `col` otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
+    >>> df.select(nullifzero(df.a).alias("result")).show()
+    +------+
+    |result|
+    +------+
+    |  NULL|
+    |     1|
+    +------+
+    """
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+@_try_remote_functions
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Returns `col2` if `col1` is null, or `col1` otherwise.
@@ -20771,6 +20796,31 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     [Row(r=6), Row(r=9)]
     """
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
+
+
+@_try_remote_functions
+def zeroifnull(col: "ColumnOrName") -> Column:
+    """
+    Returns zero if `col` is null, or `col` otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,)], ["a"])
+    >>> df.select(zeroifnull(df.a).alias("result")).show()
+    +------+
+    |result|
+    +------+
+    |     0|
+    |     1|
+    +------+
+    """
+    return _invoke_function_over_columns("zeroifnull", col)
 
 
 @_try_remote_functions

@@ -29,6 +29,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
+from pyspark.sql.functions.builtin import nullifzero, zeroifnull
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
@@ -1599,6 +1600,15 @@ class FunctionsTestsMixin:
 
         for r, c, e in zip(result, cols, expected):
             self.assertEqual(r, e, str(c))
+
+    def test_nullifzero_zeroifnull(self):
+        df = self.spark.createDataFrame([(0,), (1,)], ["a"])
+        result = df.select(nullifzero(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=None), Row(r=1)], result)
+
+        df = self.spark.createDataFrame([(None,), (1,)], ["a"])
+        result = df.select(zeroifnull(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=0), Row(r=1)], result)
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

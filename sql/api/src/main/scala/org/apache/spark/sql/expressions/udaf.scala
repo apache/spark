@@ -26,18 +26,21 @@ import org.apache.spark.sql.types._
  * The base class for implementing user-defined aggregate functions (UDAF).
  *
  * @since 1.5.0
- * @deprecated UserDefinedAggregateFunction is deprecated.
- * Aggregator[IN, BUF, OUT] should now be registered as a UDF via the functions.udaf(agg) method.
+ * @deprecated
+ *   UserDefinedAggregateFunction is deprecated. Aggregator[IN, BUF, OUT] should now be registered
+ *   as a UDF via the functions.udaf(agg) method.
  */
 @Stable
-@deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
-  " via the functions.udaf(agg) method.", "3.0.0")
+@deprecated(
+  "Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+    " via the functions.udaf(agg) method.",
+  "3.0.0")
 abstract class UserDefinedAggregateFunction extends Serializable with UserDefinedFunctionLike {
 
   /**
-   * A `StructType` represents data types of input arguments of this aggregate function.
-   * For example, if a [[UserDefinedAggregateFunction]] expects two input arguments
-   * with type of `DoubleType` and `LongType`, the returned `StructType` will look like
+   * A `StructType` represents data types of input arguments of this aggregate function. For
+   * example, if a [[UserDefinedAggregateFunction]] expects two input arguments with type of
+   * `DoubleType` and `LongType`, the returned `StructType` will look like
    *
    * ```
    *   new StructType()
@@ -45,18 +48,17 @@ abstract class UserDefinedAggregateFunction extends Serializable with UserDefine
    *    .add("longInput", LongType)
    * ```
    *
-   * The name of a field of this `StructType` is only used to identify the corresponding
-   * input argument. Users can choose names to identify the input arguments.
+   * The name of a field of this `StructType` is only used to identify the corresponding input
+   * argument. Users can choose names to identify the input arguments.
    *
    * @since 1.5.0
    */
   def inputSchema: StructType
 
   /**
-   * A `StructType` represents data types of values in the aggregation buffer.
-   * For example, if a [[UserDefinedAggregateFunction]]'s buffer has two values
-   * (i.e. two intermediate values) with type of `DoubleType` and `LongType`,
-   * the returned `StructType` will look like
+   * A `StructType` represents data types of values in the aggregation buffer. For example, if a
+   * [[UserDefinedAggregateFunction]]'s buffer has two values (i.e. two intermediate values) with
+   * type of `DoubleType` and `LongType`, the returned `StructType` will look like
    *
    * ```
    *   new StructType()
@@ -64,8 +66,8 @@ abstract class UserDefinedAggregateFunction extends Serializable with UserDefine
    *    .add("longInput", LongType)
    * ```
    *
-   * The name of a field of this `StructType` is only used to identify the corresponding
-   * buffer value. Users can choose names to identify the input arguments.
+   * The name of a field of this `StructType` is only used to identify the corresponding buffer
+   * value. Users can choose names to identify the input arguments.
    *
    * @since 1.5.0
    */
@@ -79,8 +81,8 @@ abstract class UserDefinedAggregateFunction extends Serializable with UserDefine
   def dataType: DataType
 
   /**
-   * Returns true iff this function is deterministic, i.e. given the same input,
-   * always return the same output.
+   * Returns true iff this function is deterministic, i.e. given the same input, always return the
+   * same output.
    *
    * @since 1.5.0
    */
@@ -90,8 +92,8 @@ abstract class UserDefinedAggregateFunction extends Serializable with UserDefine
    * Initializes the given aggregation buffer, i.e. the zero value of the aggregation buffer.
    *
    * The contract should be that applying the merge function on two initial buffers should just
-   * return the initial buffer itself, i.e.
-   * `merge(initialBuffer, initialBuffer)` should equal `initialBuffer`.
+   * return the initial buffer itself, i.e. `merge(initialBuffer, initialBuffer)` should equal
+   * `initialBuffer`.
    *
    * @since 1.5.0
    */
@@ -134,8 +136,8 @@ abstract class UserDefinedAggregateFunction extends Serializable with UserDefine
   }
 
   /**
-   * Creates a `Column` for this UDAF using the distinct values of the given
-   * `Column`s as input arguments.
+   * Creates a `Column` for this UDAF using the distinct values of the given `Column`s as input
+   * arguments.
    *
    * @since 1.5.0
    */

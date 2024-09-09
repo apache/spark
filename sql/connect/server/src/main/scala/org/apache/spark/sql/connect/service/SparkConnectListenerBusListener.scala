@@ -160,9 +160,11 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    logDebug(
-      s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
-        s"Sending QueryTerminatedEvent to client, id: ${event.id} runId: ${event.runId}.")
+    logInfo(
+      log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}]" +
+        log"[UserId: ${MDC(LogKeys.USER_ID, sessionHolder.userId)}] " +
+        log"Sending QueryTerminatedEvent to client, id: ${MDC(LogKeys.QUERY_ID, event.id)} " +
+        log"runId: ${MDC(LogKeys.QUERY_RUN_ID, event.runId)}.")
     send(event.json, StreamingQueryEventType.QUERY_TERMINATED_EVENT)
   }
 

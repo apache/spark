@@ -61,6 +61,12 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
+      check(
+        """{"c": [], "b": 0, "a": null, "a": {"x": 0, "x": 1}, "b": 1, "b": 2, "c": [3]}""",
+        """{"a":{"x":1},"b":2,"c":[3]}"""
+      )
+    }
   }
 
   test("from_json/to_json round-trip") {
@@ -150,7 +156,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     val variantDF = df.select(parse_json(col("v")))
     val plan = variantDF.queryExecution.executedPlan
     assert(plan.isInstanceOf[WholeStageCodegenExec])
-    val v = VariantBuilder.parseJson("""{"a":1}""")
+    val v = VariantBuilder.parseJson("""{"a":1}""", false)
     val expected = new VariantVal(v.getValue, v.getMetadata)
     checkAnswer(variantDF, Seq(Row(expected)))
   }
