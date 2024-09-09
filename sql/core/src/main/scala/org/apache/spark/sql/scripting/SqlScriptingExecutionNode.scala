@@ -407,8 +407,10 @@ class WhileStatementExec(
 
 /**
  * Executable node for RepeatStatement.
- * @param condition Executable node for the condition.
+ * @param condition Executable node for the condition - evaluates to a row with a single boolean
+ *                  expression, otherwise throws an exception
  * @param body Executable node for the body.
+ * @param label Label set to RepeatStatement by user, None if not set
  * @param session Spark session that SQL script is executed within.
  */
 class RepeatStatementExec(
