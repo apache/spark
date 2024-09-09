@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.random.XORShiftRandom
@@ -268,6 +270,9 @@ case class Uniform(min: Expression, max: Expression, seed: Expression)
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     Uniform(newFirst, newSecond, newThird)
 
+  override def toString: String = prettyName + truncatedString(
+    Seq(min, max), "(", ", ", ")", SQLConf.get.maxToStringFields)
+
   override def replacement: Expression = {
     def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
     cast(Add(
@@ -327,6 +332,9 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
   override def withNewSeed(newSeed: Long): Expression = RandStr(length, Literal(newSeed, LongType))
   override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
     RandStr(newFirst, newSecond)
+
+  override def toString: String = prettyName + truncatedString(
+    Seq(length), "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
