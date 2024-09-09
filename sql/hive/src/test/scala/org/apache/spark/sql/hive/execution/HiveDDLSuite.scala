@@ -3277,7 +3277,9 @@ class HiveDDLSuite
       }
       checkError(e,
         errorClass = "ROUTINE_ALREADY_EXISTS",
-        parameters = Map("routineName" -> "`f1`"))
+        parameters = Map("routineName" -> "`f1`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
 
       sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +

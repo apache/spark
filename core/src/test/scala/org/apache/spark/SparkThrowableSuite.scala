@@ -259,6 +259,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == null)
+        assert(!e.isInternalError)
         assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here
@@ -275,6 +276,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(!e.isInternalError)
         assert(e.getSqlState == "22018")
       case _: Throwable =>
         // Should not end up here
@@ -491,6 +493,28 @@ class SparkThrowableSuite extends SparkFunSuite {
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("BY.ZERO"))
+    }
+  }
+
+  test("handle null values in message parameters") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      FileUtils.writeStringToFile(json,
+        """
+          |{
+          |  "MISSING_PARAMETER" : {
+          |    "message" : [
+          |      "Parameter ${param} is missing."
+          |    ]
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      // Attempt to get the error message with a null parameter
+      val errorMessage = reader.getErrorMessage("MISSING_PARAMETER", Map("param" -> null))
+
+      assert(errorMessage.contains("Parameter null is missing."))
     }
   }
 }

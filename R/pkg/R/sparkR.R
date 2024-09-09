@@ -404,6 +404,11 @@ sparkR.session <- function(
   enableHiveSupport = TRUE,
   ...) {
 
+  if (Sys.getenv("SPARKR_SUPPRESS_DEPRECATION_WARNING") == "") {
+    warning(
+      "SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version.")
+  }
+
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
   namedParams <- list(...)
   if (length(namedParams) > 0) {

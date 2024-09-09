@@ -30,11 +30,11 @@ import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.{sql, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.{AnalysisException, Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.test.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
 
 /**
  * Tests for encoding external data to and from arrow.
@@ -769,6 +769,34 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("java serialization") {
+    val encoder = sql.encoderFor(Encoders.javaSerialization[(Int, String)])
+    roundTripAndCheckIdentical(encoder) { () =>
+      Iterator.tabulate(10)(i => (i, "itr_" + i))
+    }
+  }
+
+  test("kryo serialization") {
+    val e = intercept[SparkRuntimeException] {
+      val encoder = sql.encoderFor(Encoders.kryo[(Int, String)])
+      roundTripAndCheckIdentical(encoder) { () =>
+        Iterator.tabulate(10)(i => (i, "itr_" + i))
+      }
+    }
+    assert(e.getErrorClass == "CANNOT_USE_KRYO")
+  }
+
+  test("transforming encoder") {
+    val schema = new StructType()
+      .add("key", IntegerType)
+      .add("value", StringType)
+    val encoder =
+      TransformingEncoder(classTag[(Int, String)], toRowEncoder(schema), () => new TestCodec)
+    roundTripAndCheckIdentical(encoder) { () =>
+      Iterator.tabulate(10)(i => (i, "v" + i))
+    }
+  }
+
   /* ******************************************************************** *
    * Arrow deserialization upcasting
    * ******************************************************************** */
@@ -1135,4 +1163,9 @@ class UDTNotSupported extends UserDefinedType[UDTNotSupportedClass] {
   override def deserialize(datum: Any): UDTNotSupportedClass = datum match {
     case i: Int => UDTNotSupportedClass(i)
   }
+}
+
+class TestCodec extends Codec[(Int, String), Row] {
+  override def encode(in: (Int, String)): Row = Row(in._1, in._2)
+  override def decode(out: Row): (Int, String) = (out.getInt(0), out.getString(1))
 }

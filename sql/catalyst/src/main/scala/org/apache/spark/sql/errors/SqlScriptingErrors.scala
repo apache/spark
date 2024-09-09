@@ -17,26 +17,94 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
+import org.apache.spark.sql.exceptions.SqlScriptingException
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
  * of the SQL Scripting Language interpreter.
  */
-private[sql] object SqlScriptingErrors extends QueryErrorsBase {
+private[sql] object SqlScriptingErrors {
 
-  def labelsMismatch(beginLabel: String, endLabel: String): Throwable = {
-    new SparkException(
+  def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
       errorClass = "LABELS_MISMATCH",
       cause = null,
       messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
   }
 
-  def endLabelWithoutBeginLabel(endLabel: String): Throwable = {
-    new SparkException(
+  def endLabelWithoutBeginLabel(origin: Origin, endLabel: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
       messageParameters = Map("endLabel" -> endLabel))
   }
 
+  def variableDeclarationNotAllowedInScope(
+      origin: Origin,
+      varName: String,
+      lineNumber: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
+      cause = null,
+      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+  }
+
+  def variableDeclarationOnlyAtBeginning(
+      origin: Origin,
+      varName: String,
+      lineNumber: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+      cause = null,
+      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+  }
+
+  def invalidBooleanStatement(
+      origin: Origin,
+      stmt: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      cause = null,
+      messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
+  }
+
+  def booleanStatementWithEmptyRow(
+      origin: Origin,
+      stmt: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+      cause = null,
+      messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
+  }
+
+  def labelDoesNotExist(
+      origin: Origin,
+      labelName: String,
+      statementType: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      cause = null,
+      messageParameters = Map(
+        "labelName" -> toSQLStmt(labelName),
+        "statementType" -> statementType))
+  }
+
+  def invalidIterateLabelUsageForCompound(
+      origin: Origin,
+      labelName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      cause = null,
+      messageParameters = Map("labelName" -> toSQLStmt(labelName)))
+  }
 }

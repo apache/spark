@@ -30,18 +30,21 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.CloseableThreadContext
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
-import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
+import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
@@ -89,6 +92,8 @@ abstract class StreamExecution(
    */
   protected val awaitProgressLock = new ReentrantLock(true)
   protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
+
+  protected var loggingThreadContext: CloseableThreadContext.Instance = _
 
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
@@ -287,6 +292,11 @@ abstract class StreamExecution(
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
       sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
+      loggingThreadContext = CloseableThreadContext.putAll(
+        Map(
+          QUERY_ID.name -> id.toString,
+          RUN_ID.name -> runId.toString
+        ).asJava)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -338,9 +348,11 @@ abstract class StreamExecution(
         getLatestExecutionContext().updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
-        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException]) {
+        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException] ||
+          e.isInstanceOf[ForeachUserFuncException]) {
           // We want to maintain the current way users get the causing exception
-          // from the StreamingQueryException. Hence the ForeachBatch exception is unwrapped here.
+          // from the StreamingQueryException.
+          // Hence the ForeachBatch/Foreach exception is unwrapped here.
           e.getCause
         } else {
           e
@@ -404,6 +416,10 @@ abstract class StreamExecution(
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
             errorClassOpt))
+
+        if (loggingThreadContext != null) {
+          loggingThreadContext.close()
+        }
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
@@ -678,6 +694,31 @@ abstract class StreamExecution(
     offsetLog.purge(threshold)
     commitLog.purge(threshold)
   }
+
+  protected def purgeStatefulMetadata(plan: SparkPlan): Unit = {
+    plan.collect { case statefulOperator: StatefulOperator =>
+      statefulOperator match {
+        case ssw: StateStoreWriter =>
+          ssw.operatorStateMetadataVersion match {
+            case 2 =>
+              // checkpointLocation of the operator is runId/state, and commitLog path is
+              // runId/commits, so we want the parent of the checkpointLocation to get the
+              // commit log path.
+              val parentCheckpointLocation =
+                new Path(statefulOperator.getStateInfo.checkpointLocation).getParent
+
+              val fileManager = new OperatorStateMetadataV2FileManager(
+                parentCheckpointLocation,
+                sparkSession,
+                ssw
+              )
+              fileManager.purgeMetadataFiles()
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+  }
 }
 
 object StreamExecution {
@@ -716,6 +757,7 @@ object StreamExecution {
           if e2.getCause != null =>
         isInterruptionException(e2.getCause, sc)
       case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
+      case fes: ForeachUserFuncException => isInterruptionException(fes.getCause, sc)
       case se: SparkException =>
         if (se.getCause == null) {
           isCancelledJobGroup(se.getMessage)

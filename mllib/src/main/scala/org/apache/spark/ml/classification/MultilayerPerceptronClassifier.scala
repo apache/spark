@@ -365,7 +365,7 @@ object MultilayerPerceptronClassificationModel
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: weights
       val data = Data(instance.weights)
       val dataPath = new Path(path, "data").toString
@@ -380,7 +380,7 @@ object MultilayerPerceptronClassificationModel
     private val className = classOf[MultilayerPerceptronClassificationModel].getName
 
     override def load(path: String): MultilayerPerceptronClassificationModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString

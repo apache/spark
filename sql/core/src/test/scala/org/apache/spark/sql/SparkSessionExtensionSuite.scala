@@ -183,7 +183,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
       df.collect()
@@ -225,7 +225,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       // perform a join to inject a shuffle exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
@@ -283,7 +283,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       // perform a join to inject a broadcast exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
@@ -327,7 +327,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     try {
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
 
       val input = Seq((100L), (200L), (300L))
       val data = input.toDF("vals").repartition(1)
@@ -1006,7 +1006,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
     delegate.shuffleOrigin
   }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
-    delegate.submitShuffleJob
+    delegate.submitShuffleJob()
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =
     delegate.getShuffleRDD(partitionSpecs)
   override def runtimeStatistics: Statistics = {
@@ -1032,7 +1032,7 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
   override val runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
-  override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob
+  override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob()
   override def runtimeStatistics: Statistics = delegate.runtimeStatistics
   override def child: SparkPlan = delegate.child
   override protected def doPrepare(): Unit = delegate.prepare()

@@ -763,8 +763,31 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Cancel active jobs for the specified group. See
    * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobGroup(groupId: String, reason: String): Unit = sc.cancelJobGroup(groupId, reason)
+
+  /**
+   * Cancel active jobs for the specified group. See
+   * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobsWithTag(tag: String, reason: String): Unit = sc.cancelJobsWithTag(tag, reason)
 
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.

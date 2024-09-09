@@ -30,7 +30,7 @@ addSbtPlugin("com.github.sbt" % "sbt-eclipse" % "6.2.0")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.3")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.4")
 
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.5.0")
 
@@ -44,6 +44,6 @@ addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
 addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.4.0")
 
-addSbtPlugin("net.aichler" % "sbt-jupiter-interface" % "0.11.1")
+addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.13.0")
 
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")

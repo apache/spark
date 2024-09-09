@@ -24,6 +24,9 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
 import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
@@ -60,7 +63,7 @@ object SparkConnectServerUtils {
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
     val connectJar =
-      findJar("connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
+      findJar("sql/connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
 
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
@@ -184,12 +187,14 @@ object SparkConnectServerUtils {
           .port(port)
           .retryPolicy(RetryPolicy
             .defaultPolicy()
-            .copy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
+            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
           .build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.
-    assert(spark.version == SparkBuildInfo.spark_version)
+    eventually(timeout(1.minute)) {
+      assert(spark.version == SparkBuildInfo.spark_version)
+    }
 
     // Auto-sync dependencies.
     SparkConnectServerUtils.syncTestDependencies(spark)

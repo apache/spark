@@ -1160,8 +1160,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
           .buildDict($termLastMatching, $termLastReplace, $collationId);
       }
-      ${ev.value} = CollationSupport.StringTranslate.
-      exec($src, $termDict, $collationId);
+      ${ev.value} = CollationSupport.StringTranslate.exec($src, $termDict, $collationId);
       """
     })
   }
@@ -1657,7 +1656,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, delim, count) =>
-      CollationSupport.SubstringIndex.genCode(str, delim, Integer.parseInt(count, 10), collationId))
+      CollationSupport.SubstringIndex.genCode(str, delim, count, collationId))
   }
 
   override protected def withNewChildrenInternal(
@@ -2715,7 +2714,8 @@ case class Base64(child: Expression, chunkBase64: Boolean)
     dataType,
     "encode",
     Seq(child, Literal(chunkBase64, BooleanType)),
-    Seq(BinaryType, BooleanType))
+    Seq(BinaryType, BooleanType),
+    returnNullable = false)
 
   override def toString: String = s"$prettyName($child)"
 

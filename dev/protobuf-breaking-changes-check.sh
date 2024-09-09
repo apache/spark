@@ -33,7 +33,7 @@ if [[ $# -eq 1 ]]; then
   BRANCH=$1
 fi
 
-pushd connect/common/src/main &&
+pushd sql/connect/common/src/main &&
 echo "Start protobuf breaking changes checking against $BRANCH" &&
 buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=connector/connect/common/src/main" &&
 echo "Finsh protobuf breaking changes checking: SUCCESS"

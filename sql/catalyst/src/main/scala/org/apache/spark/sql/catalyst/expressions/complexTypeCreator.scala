@@ -585,17 +585,20 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
 
+  private final lazy val collationId: Int = text.dataType.asInstanceOf[StringType].collationId
+
   override def nullSafeEval(
       inputString: Any,
       stringDelimiter: Any,
       keyValueDelimiter: Any): Any = {
-    val keyValues =
-      inputString.asInstanceOf[UTF8String].split(stringDelimiter.asInstanceOf[UTF8String], -1)
+    val keyValues = CollationAwareUTF8String.splitSQL(inputString.asInstanceOf[UTF8String],
+      stringDelimiter.asInstanceOf[UTF8String], -1, collationId)
     val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
     var i = 0
     while (i < keyValues.length) {
-      val keyValueArray = keyValues(i).split(keyValueDelimiterUTF8String, 2)
+      val keyValueArray = CollationAwareUTF8String.splitSQL(
+        keyValues(i), keyValueDelimiterUTF8String, 2, collationId)
       val key = keyValueArray(0)
       val value = if (keyValueArray.length < 2) null else keyValueArray(1)
       mapBuilder.put(key, value)
@@ -610,9 +613,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
     nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
-         |UTF8String[] $keyValues = $text.split($pd, -1);
+         |UTF8String[] $keyValues = CollationAwareUTF8String.splitSQL($text, $pd, -1, $collationId);
          |for(UTF8String kvEntry: $keyValues) {
-         |  UTF8String[] kv = kvEntry.split($kvd, 2);
+         |  UTF8String[] kv = CollationAwareUTF8String.splitSQL(kvEntry, $kvd, 2, $collationId);
          |  $builderTerm.put(kv[0], kv.length == 2 ? kv[1] : null);
          |}
          |${ev.value} = $builderTerm.build();

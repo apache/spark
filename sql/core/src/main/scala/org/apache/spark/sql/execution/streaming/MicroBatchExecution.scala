@@ -280,10 +280,12 @@ class MicroBatchExecution(
     // intentionally
     state.set(TERMINATED)
     if (queryExecutionThread.isAlive) {
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      sparkSession.sparkContext.cancelJobGroup(runId.toString,
+        s"Query $prettyIdString was stopped")
       interruptAndAwaitExecutionThreadTermination()
       // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      sparkSession.sparkContext.cancelJobGroup(runId.toString,
+        s"Query $prettyIdString was stopped")
     }
     logInfo(log"Query ${MDC(LogKeys.PRETTY_ID_STRING, prettyIdString)} was stopped")
   }
@@ -820,6 +822,8 @@ class MicroBatchExecution(
     sparkSessionToRunBatch.sparkContext.setLocalProperty(
       StreamExecution.IS_CONTINUOUS_PROCESSING, false.toString)
 
+    loggingThreadContext.put(LogKeys.BATCH_ID.name, execCtx.batchId.toString)
+
     execCtx.reportTimeTaken("queryPlanning") {
       execCtx.executionPlan = new IncrementalExecution(
         sparkSessionToRunBatch,
@@ -837,6 +841,10 @@ class MicroBatchExecution(
     }
 
     markMicroBatchExecutionStart(execCtx)
+
+    if (execCtx.previousContext.isEmpty) {
+      purgeStatefulMetadataAsync(execCtx.executionPlan.executedPlan)
+    }
 
     val nextBatch =
       new Dataset(execCtx.executionPlan, ExpressionEncoder(execCtx.executionPlan.analyzed.schema))

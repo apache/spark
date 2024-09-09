@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.net.{MalformedURLException, URL}
+import java.net.{MalformedURLException, URI}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.Locale
@@ -31,7 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -1430,6 +1430,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-49200: Fix null type non-codegen ordering exception") {
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.EliminateSorts") {
+      checkAnswer(
+        sql("SELECT * FROM range(3) ORDER BY array(null)"),
+        Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
   test("SPARK-8837: use keyword in column name") {
     withTempView("t") {
       val df = Seq(1 -> "a").toDF("count", "sort")
@@ -2654,10 +2665,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val jarFromInvalidFs = "fffs://doesnotmatter/test.jar"
 
     // if 'hdfs' is not supported, MalformedURLException will be thrown
-    new URL(jarFromHdfs)
+    new URI(jarFromHdfs).toURL
 
     intercept[MalformedURLException] {
-      new URL(jarFromInvalidFs)
+      new URI(jarFromInvalidFs).toURL
     }
   }
 
@@ -4855,6 +4866,48 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |LocalTableScan [x#N, y#N]
         |"""
     )
+  }
+
+  test("SPARK-36680: Files hint options should be put into resolveDataSource function") {
+    val df1 = spark.range(100).toDF()
+    withTempPath { f =>
+      df1.write.json(f.getCanonicalPath)
+      val df2 = sql(
+        s"""
+           |SELECT id
+           |FROM json.`${f.getCanonicalPath}`
+           |WITH (`key1` = 1, `key2` = 2)
+        """.stripMargin
+      )
+      checkAnswer(df2, df1)
+      val relations = df2.queryExecution.analyzed.collect {
+        case LogicalRelation(fs: HadoopFsRelation, _, _, _) => fs
+      }
+      assert(relations.size == 1)
+      assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))
+    }
+  }
+
+  test(
+    "SPARK-49250: CheckAnalysis for UnresolvedWindowExpression must produce " +
+    "MISSING_WINDOW_SPECIFICATION error"
+  ) {
+    for (sqlText <- Seq(
+      "SELECT SUM(col1) OVER(unspecified_window) FROM VALUES (1)",
+      "SELECT SUM(col1) OVER(unspecified_window) FROM VALUES (1) GROUP BY col1",
+      "SELECT (SUM(col1) OVER(unspecified_window) / 1) FROM VALUES (1)"
+    )) {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql(sqlText)
+        ),
+        errorClass = "MISSING_WINDOW_SPECIFICATION",
+        parameters = Map(
+          "windowName" -> "unspecified_window",
+          "docroot" -> SPARK_DOC_ROOT
+        )
+      )
+    }
   }
 }
 

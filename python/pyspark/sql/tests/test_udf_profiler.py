@@ -582,8 +582,8 @@ class UDFProfiler2TestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "type",
                 "allowed_values": "['perf', 'memory']",
             },
@@ -594,8 +594,8 @@ class UDFProfiler2TestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "(type, renderer)",
                 "allowed_values": "[('perf', None), ('perf', 'flameprof')]",
             },
@@ -606,8 +606,8 @@ class UDFProfiler2TestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "(type, renderer)",
                 "allowed_values": "[('perf', None), ('perf', 'flameprof')]",
             },

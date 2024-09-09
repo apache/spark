@@ -131,6 +131,9 @@ class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BI
 private[columnar]
 class IntervalColumnBuilder extends ComplexColumnBuilder(new IntervalColumnStats, CALENDAR_INTERVAL)
 
+private[columnar]
+class VariantColumnBuilder extends ComplexColumnBuilder(new VariantColumnStats, VARIANT)
+
 private[columnar] class CompactDecimalColumnBuilder(dataType: DecimalType)
   extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
 
@@ -189,6 +192,7 @@ private[columnar] object ColumnBuilder {
       case s: StringType => new StringColumnBuilder(s)
       case BinaryType => new BinaryColumnBuilder
       case CalendarIntervalType => new IntervalColumnBuilder
+      case VariantType => new VariantColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)

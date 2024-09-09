@@ -135,6 +135,13 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
+  val LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH =
+    buildStaticConf("spark.sql.extensions.test.loadFromCp")
+      .doc("Flag that determines if we should load extensions from the classpath using the " +
+        "SparkSessionExtensionsProvider mechanism. This is a test only flag.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
     .doc("The name of a class that implements " +
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
@@ -169,6 +176,16 @@ object StaticSQLConf {
       .version("1.5.0")
       .intConf
       .createWithDefault(1000)
+
+  val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism for doing preparation of shuffle exchange, " +
+        "which includes subquery execution, file listing, etc.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
+      .createWithDefault(1024)
 
   val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")

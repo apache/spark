@@ -20,8 +20,6 @@ import com.ibm.icu.text.StringSearch;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -62,33 +60,11 @@ public final class CollationSupport {
       return string.splitSQL(delimiter, -1);
     }
     public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
-      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
-      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
-        CollationSupport.lowercaseRegexFlags);
-      String[] splits = pattern.split(string.toString(), -1);
-      UTF8String[] res = new UTF8String[splits.length];
-      for (int i = 0; i < res.length; i++) {
-        res[i] = UTF8String.fromString(splits[i]);
-      }
-      return res;
+      return CollationAwareUTF8String.lowercaseSplitSQL(string, delimiter, -1);
     }
     public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
         final int collationId) {
-      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
-      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-      List<UTF8String> strings = new ArrayList<>();
-      String target = string.toString(), pattern = delimiter.toString();
-      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-      int start = 0, end;
-      while ((end = stringSearch.next()) != StringSearch.DONE) {
-        strings.add(UTF8String.fromString(target.substring(start, end)));
-        start = end + stringSearch.getMatchLength();
-      }
-      if (start <= target.length()) {
-        strings.add(UTF8String.fromString(target.substring(start)));
-      }
-      return strings.toArray(new UTF8String[0]);
+      return CollationAwareUTF8String.icuSplitSQL(string, delimiter, -1, collationId);
     }
   }
 
@@ -118,7 +94,7 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return CollationAwareUTF8String.lowercaseIndexOf(l, r, 0) >= 0;
+      return CollationAwareUTF8String.lowercaseContains(l, r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -156,7 +132,7 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return CollationAwareUTF8String.lowercaseMatchFrom(l, r.toLowerCase(), 0);
+      return CollationAwareUTF8String.lowercaseStartsWith(l, r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -193,7 +169,7 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return CollationAwareUTF8String.lowercaseMatchUntil(l, r.toLowerCase(), l.numChars());
+      return CollationAwareUTF8String.lowercaseEndsWith(l, r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -307,7 +283,7 @@ public final class CollationSupport {
       return v.toLowerCase().toTitleCase();
     }
     public static UTF8String execBinaryICU(final UTF8String v) {
-      return CollationAwareUTF8String.toLowerCase(v).toTitleCaseICU();
+      return CollationAwareUTF8String.toTitleCaseICU(v);
     }
     public static UTF8String execLowercase(final UTF8String v) {
       return CollationAwareUTF8String.toTitleCase(v);
@@ -469,15 +445,15 @@ public final class CollationSupport {
       }
     }
     public static String genCode(final String string, final String delimiter,
-        final int count, final int collationId) {
+        final String count, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.SubstringIndex.exec";
       if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s, %d)", string, delimiter, count);
+        return String.format(expr + "Binary(%s, %s, %s)", string, delimiter, count);
       } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s, %d)", string, delimiter, count);
+        return String.format(expr + "Lowercase(%s, %s, %s)", string, delimiter, count);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d, %d)", string, delimiter, count, collationId);
+        return String.format(expr + "ICU(%s, %s, %s, %d)", string, delimiter, count, collationId);
       }
     }
     public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter,
@@ -490,8 +466,7 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
-      return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
-              collationId);
+      return CollationAwareUTF8String.subStringIndex(string, delimiter, count, collationId);
     }
   }
 
@@ -505,17 +480,6 @@ public final class CollationSupport {
         return execLowercase(source, dict);
       } else {
         return execICU(source, dict, collationId);
-      }
-    }
-    public static String genCode(final String source, final String dict, final int collationId) {
-      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      String expr = "CollationSupport.EndsWith.exec";
-      if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s)", source, dict);
-      } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s)", source, dict);
-      } else {
-        return String.format(expr + "ICU(%s, %s, %d)", source, dict, collationId);
       }
     }
     public static UTF8String execBinary(final UTF8String source, Map<String, String> dict) {
@@ -708,7 +672,7 @@ public final class CollationSupport {
     return CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
   }
 
-  private static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
+  static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
   public static int collationAwareRegexFlags(final int collationId) {
     return supportsLowercaseRegex(collationId) ? lowercaseRegexFlags : 0;
   }

@@ -654,7 +654,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
         gammaShape: Double)
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val oldModel = instance.oldLocalModel
       val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
         oldModel.topicConcentration, oldModel.gammaShape)
@@ -668,7 +668,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     private val className = classOf[LocalLDAModel].getName
 
     override def load(path: String): LocalLDAModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
@@ -809,7 +809,7 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
   class DistributedWriter(instance: DistributedLDAModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val modelPath = new Path(path, "oldModel").toString
       instance.oldDistributedModel.save(sc, modelPath)
     }
@@ -820,7 +820,7 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
     private val className = classOf[DistributedLDAModel].getName
 
     override def load(path: String): DistributedLDAModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)
       val model = new DistributedLDAModel(metadata.uid, oldModel.vocabSize,
@@ -1008,7 +1008,7 @@ object LDA extends MLReadable[LDA] {
     private val className = classOf[LDA].getName
 
     override def load(path: String): LDA = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val model = new LDA(metadata.uid)
       LDAParams.getAndSetParams(model, metadata)
       model

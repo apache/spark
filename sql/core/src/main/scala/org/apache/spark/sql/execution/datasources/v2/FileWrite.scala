@@ -44,6 +44,7 @@ trait FileWrite extends Write {
   def paths: Seq[String]
   def formatName: String
   def supportsDataType: DataType => Boolean
+  def allowDuplicatedColumnNames: Boolean = false
   def info: LogicalWriteInfo
 
   private val schema = info.schema()
@@ -91,9 +92,10 @@ trait FileWrite extends Write {
       throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
         s"got: ${paths.mkString(", ")}")
     }
-    val pathName = paths.head
-    SchemaUtils.checkColumnNameDuplication(
-      schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
+    if (!allowDuplicatedColumnNames) {
+      SchemaUtils.checkColumnNameDuplication(
+        schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
+    }
     DataSource.validateSchema(schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.

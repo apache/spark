@@ -70,6 +70,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTables" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTranspose" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnpivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUpCast" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUserSpecifiedColumns" ::
@@ -127,7 +128,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions" ::
       "org.apache.spark.sql.catalyst.optimizer.InferWindowGroupLimit" ::
-      "org.apache.spark.sql.catalyst.optimizer.InsertMapSortInGroupingExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::

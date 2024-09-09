@@ -514,8 +514,17 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
          |  FROM (SELECT 1 AS id1, id1 + 1 AS id2)) > 5
          |""".stripMargin
     withLCAOff {
-      assert(intercept[AnalysisException] { sql(query2) }
-        .getErrorClass == "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query2)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map("objectName" -> s"`id1`"),
+        context = ExpectedContext(
+          fragment = "id1",
+          start = 73,
+          stop = 75))
     }
     withLCAOn { checkAnswer(sql(query2), Seq.empty) }
 
@@ -783,18 +792,44 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   }
 
   test("Attribute cannot be resolved by LCA remain unresolved") {
-    assert(intercept[AnalysisException] {
-      sql(s"SELECT dept AS d, d AS new_dept, new_dep + 1 AS newer_dept FROM $testTable")
-    }.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT dept AS d, d AS new_dept, new_dep + 1 AS newer_dept FROM $testTable")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> s"`new_dep`",
+        "proposal" -> "`dept`, `name`, `bonus`, `salary`, `properties`"),
+      context = ExpectedContext(
+        fragment = "new_dep",
+        start = 33,
+        stop = 39))
 
-    assert(intercept[AnalysisException] {
-      sql(s"SELECT count(name) AS cnt, cnt + 1, count(unresovled) FROM $testTable GROUP BY dept")
-    }.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT count(name) AS cnt, cnt + 1, count(unresovled) FROM $testTable GROUP BY dept")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> s"`unresovled`",
+        "proposal" -> "`name`, `bonus`, `dept`, `properties`, `salary`"),
+      context = ExpectedContext(
+        fragment = "unresovled",
+        start = 42,
+        stop = 51))
 
-    assert(intercept[AnalysisException] {
-      sql(s"SELECT * FROM range(1, 7) WHERE (" +
-        s"SELECT id2 FROM (SELECT 1 AS id, other_id + 1 AS id2)) > 5")
-    }.getErrorClass == "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT * FROM range(1, 7) WHERE (" +
+          s"SELECT id2 FROM (SELECT 1 AS id, other_id + 1 AS id2)) > 5")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> s"`other_id`"),
+      context = ExpectedContext(
+        fragment = "other_id",
+        start = 66,
+        stop = 73))
   }
 
   test("Pushed-down aggregateExpressions should have no duplicates") {
@@ -1283,5 +1318,39 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |""".stripMargin),
       Row(2) :: Nil
     )
+  }
+
+  test("LCA internal error should have lower priority") {
+    // in this query, the 'order by Freq DESC' error should be the top error surfaced to users
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |WITH group_counts AS (
+            |  SELECT id, count(*) as Freq, CASE WHEN Freq <= 10 THEN "1" ELSE "2" END AS Group
+            |  FROM values (123) as data(id)
+            |  GROUP BY id
+            |)
+            |SELECT Group, count(*) * 100.0 / (select count(*) from group_counts) AS Percentage
+            |FROM group_counts
+            |Group BY Group
+            |ORDER BY Freq DESC;
+            |""".stripMargin
+        )
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map(
+        "objectName" -> "`Freq`",
+        "proposal" -> "`Percentage`, `group_counts`.`Group`"
+      ),
+      context = ExpectedContext(
+        fragment = "Freq",
+        start = 280,
+        stop = 283)
+    )
+
+    // the states are cleared - a subsequent correct query should succeed
+    sql("select 1 as a, a").queryExecution.assertAnalyzed()
   }
 }

@@ -263,13 +263,13 @@ class CollectedMetrics:
 
         except ImportError:
             raise PySparkValueError(
-                error_class="PACKAGE_NOT_INSTALLED",
-                message_parameters={"package_name": "graphviz", "minimum_version": "0.20"},
+                errorClass="PACKAGE_NOT_INSTALLED",
+                messageParameters={"package_name": "graphviz", "minimum_version": "0.20"},
             )
 
 
 class ExecutionInfo:
-    """The query execution class allows users to inspect the query execution of this particular
+    """The ExecutionInfo class allows users to inspect the query execution of this particular
     data frame. This value is only set in the data frame if it was executed."""
 
     def __init__(

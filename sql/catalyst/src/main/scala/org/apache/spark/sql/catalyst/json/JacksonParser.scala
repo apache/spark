@@ -117,6 +117,8 @@ class JacksonParser(
     }
   }
 
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   protected final def parseVariant(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
     // cannot directly use the function here because it also handles the `VALUE_NULL` token and
@@ -125,7 +127,7 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val v = VariantBuilder.parseJson(parser)
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -514,7 +516,7 @@ class JacksonParser(
       throw CannotParseJSONFieldException(parser.currentName, parser.getText, token, dataType)
   }
 
-  private val useUnsafeRow = SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW)
+  private val useUnsafeRow = options.useUnsafeRow
   private val cachedUnsafeProjection = mutable.HashMap.empty[StructType, UnsafeProjection]
 
   protected final def convertRow(row: InternalRow, schema: StructType): InternalRow = {

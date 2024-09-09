@@ -43,6 +43,7 @@ from pyspark.sql.types import (  # noqa: F401
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred, is_remote
 from pyspark import pandas as ps
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas._typing import Label
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
@@ -915,10 +916,8 @@ class InternalFrame:
         if is_remote():
             return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
         jvm = sdf.sparkSession._jvm
-        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
-        jexpr = F.monotonically_increasing_id()._jc.expr()
-        jexpr.setTagValue(tag, "distributed_index")
-        return sdf.select(PySparkColumn(jvm.Column(jexpr)).alias(column_name), *scols)
+        jcol = jvm.PythonSQLUtils.distributedIndex()
+        return sdf.select(PySparkColumn(jcol).alias(column_name), *scols)
 
     @staticmethod
     def attach_distributed_sequence_column(
@@ -940,19 +939,10 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-                from pyspark.sql.connect.expressions import DistributedSequenceID
-
-                return sdf.select(
-                    ConnectColumn(DistributedSequenceID()).alias(column_name),
-                    "*",
-                )
-            else:
-                return PySparkDataFrame(
-                    sdf._jdf.toDF().withSequenceColumn(column_name),
-                    sdf.sparkSession,
-                )
+            return sdf.select(
+                SF.distributed_sequence_id().alias(column_name),
+                "*",
+            )
         else:
             cnt = sdf.count()
             if cnt > 0:
