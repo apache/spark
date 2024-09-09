@@ -1590,7 +1590,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         // Batches 8-9: countState
 
         // By this time, offset and commit logs for batches 0-3 have been purged.
-        // However, if we want to read the data for batch 2, we need to have preserved the
+        // However, if we want to read the data for batch 4, we need to have preserved the
         // metadata and schema files that was written at batch 0.
 
         val df = spark.read.format("state-metadata").load(chkptDir.toString)
