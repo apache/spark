@@ -428,7 +428,6 @@ class CaseStatementExec(
 
   private var clauseIdx: Int = 0
   private val conditionsCount = conditions.length
-  assert(conditionsCount == conditionalBodies.length)
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {

@@ -261,30 +261,47 @@ class AstBuilder extends DataTypeAstBuilder
     WhileStatement(condition, body, Some(labelText))
   }
 
-  override def visitSearchedCaseStatement(
-    ctx: SearchedCaseStatementContext): CaseStatement = {
+  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext): CaseStatement = {
+    val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(boolExpr), "condition")()),
+          OneRowRelation()))
+    })
+    val conditionalBodies =
+      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+
+    if (conditions.length != conditionalBodies.length) {
+      throw SparkException.internalError(
+        "Mismatched number of conditions and condition bodies in case statement")
+    }
+
     CaseStatement(
-      conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
-        SingleStatement(
-          Project(
-            Seq(Alias(expression(boolExpr), "condition")()),
-            OneRowRelation()))
-      }),
-      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      conditions = conditions,
+      conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
   }
 
   override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): CaseStatement = {
     // uses EqualTo to compare the case variable(the main case expression)
     // to the WHEN clause expressions
+    val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
+          OneRowRelation()))
+    })
+    val conditionalBodies =
+      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+
+    if (conditions.length != conditionalBodies.length) {
+      throw SparkException.internalError(
+        "Mismatched number of conditions and condition bodies in case statement")
+    }
+
     CaseStatement(
-      conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
-        SingleStatement(
-          Project(
-            Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
-            OneRowRelation()))
-      }),
-      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
+      conditions = conditions,
+      conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
   }
 

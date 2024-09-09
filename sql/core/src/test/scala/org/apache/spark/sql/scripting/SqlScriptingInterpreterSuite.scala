@@ -583,7 +583,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |BEGIN
           |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
           |  INSERT INTO t VALUES (1, 'a', 1.0);
-          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (2, 'b', 2.0);
           |  CASE (SELECT COUNT(*) FROM t)
           |   WHEN 1 THEN
           |     SELECT 42;
