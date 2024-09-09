@@ -224,8 +224,6 @@ class PandasGroupedOpsMixin:
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        This API is experimental.
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -329,8 +327,6 @@ class PandasGroupedOpsMixin:
         Notes
         -----
         This function requires a full shuffle.
-
-        This API is experimental.
         """
 
         from pyspark.sql import GroupedData
@@ -484,8 +480,6 @@ class PandasGroupedOpsMixin:
         Notes
         -----
         This function requires a full shuffle.
-
-        This API is experimental.
         """
 
         from pyspark.sql import GroupedData
@@ -636,8 +630,6 @@ class PandasGroupedOpsMixin:
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        This API is unstable, and for developers.
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -683,10 +675,6 @@ class PandasCogroupedOps:
 
     .. versionchanged:: 3.4.0
         Support Spark Connect.
-
-    Notes
-    -----
-    This API is experimental.
     """
 
     def __init__(self, gd1: "GroupedData", gd2: "GroupedData"):
@@ -777,8 +765,6 @@ class PandasCogroupedOps:
         This function requires a full shuffle. All the data of a cogroup will be loaded
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
-
-        This API is experimental.
 
         See Also
         --------
@@ -875,8 +861,6 @@ class PandasCogroupedOps:
         This function requires a full shuffle. All the data of a cogroup will be loaded
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
-
-        This API is unstable, and for developers.
 
         See Also
         --------
