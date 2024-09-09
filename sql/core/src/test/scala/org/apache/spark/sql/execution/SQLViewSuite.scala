@@ -389,12 +389,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertAnalysisErrorClass(query: String,
-      errorClass: String,
+  private def assertAnalysisErrorCondition(
+      query: String,
+      condition: String,
       parameters: Map[String, String],
       context: ExpectedContext): Unit = {
     val e = intercept[AnalysisException](sql(query))
-    checkError(e, condition = errorClass, parameters = parameters, context = context)
+    checkError(e, condition = condition, parameters = parameters, context = context)
   }
 
   test("error handling: insert/load table commands against a view") {
@@ -488,7 +489,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view sql itself is invalid") {
     // A database that does not exist
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> "`db_not_exist234`.`jt`"),
