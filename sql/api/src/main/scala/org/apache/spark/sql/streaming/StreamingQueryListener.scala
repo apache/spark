@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.databind.node.TreeTraversingParser
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
@@ -30,7 +31,9 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
- * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
+ * Interface for listening to events related to
+ * [[org.apache.spark.sql.api.StreamingQuery StreamingQueries]].
+ *
  * @note
  *   The methods are not thread-safe as they may be called from different threads.
  *
@@ -44,11 +47,10 @@ abstract class StreamingQueryListener extends Serializable {
   /**
    * Called when a query is started.
    * @note
-   *   This is called synchronously with
-   *   [[org.apache.spark.sql.streaming.DataStreamWriter `DataStreamWriter.start()`]], that is,
-   *   `onQueryStart` will be called on all listeners before `DataStreamWriter.start()` returns
-   *   the corresponding [[StreamingQuery]]. Please don't block this method as it will block your
-   *   query.
+   *   This is called synchronously with `DataStreamWriter.start()`, that is, `onQueryStart` will
+   *   be called on all listeners before `DataStreamWriter.start()` returns the corresponding
+   *   [[org.apache.spark.sql.api.StreamingQuery]]. Please don't block this method as it will
+   *   block your query.
    * @since 2.0.0
    */
   def onQueryStarted(event: QueryStartedEvent): Unit
@@ -57,10 +59,11 @@ abstract class StreamingQueryListener extends Serializable {
    * Called when there is some status update (ingestion rate updated, etc.)
    *
    * @note
-   *   This method is asynchronous. The status in [[StreamingQuery]] will always be latest no
-   *   matter when this method is called. Therefore, the status of [[StreamingQuery]] may be
-   *   changed before/when you process the event. E.g., you may find [[StreamingQuery]] is
-   *   terminated when you are processing `QueryProgressEvent`.
+   *   This method is asynchronous. The status in [[org.apache.spark.sql.api.StreamingQuery]] will
+   *   always be latest no matter when this method is called. Therefore, the status of
+   *   [[org.apache.spark.sql.api.StreamingQuery]] may be changed before/when you process the
+   *   event. E.g., you may find [[org.apache.spark.sql.api.StreamingQuery]] is terminated when
+   *   you are processing `QueryProgressEvent`.
    * @since 2.0.0
    */
   def onQueryProgress(event: QueryProgressEvent): Unit
@@ -112,6 +115,22 @@ private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreami
  */
 @Evolving
 object StreamingQueryListener extends Serializable {
+  private val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.registerModule(DefaultScalaModule)
+    ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    ret
+  }
+
+  private case class EventParser(json: String) {
+    private val tree = mapper.readTree(json)
+    def getString(name: String): String = tree.get(name).asText()
+    def getUUID(name: String): UUID = UUID.fromString(getString(name))
+    def getProgress(name: String): StreamingQueryProgress = {
+      val parser = new TreeTraversingParser(tree.get(name), mapper)
+      parser.readValueAs(classOf[StreamingQueryProgress])
+    }
+  }
 
   /**
    * Base type of [[StreamingQueryListener]] events
@@ -152,18 +171,15 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryStartedEvent {
-    private val mapper = {
-      val ret = new ObjectMapper() with ClassTagExtensions
-      ret.registerModule(DefaultScalaModule)
-      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-      ret
+
+    private[spark] def fromJson(json: String): QueryStartedEvent = {
+      val parser = EventParser(json)
+      new QueryStartedEvent(
+        parser.getUUID("id"),
+        parser.getUUID("runId"),
+        parser.getString("name"),
+        parser.getString("name"))
     }
-
-    private[spark] def jsonString(event: QueryStartedEvent): String =
-      mapper.writeValueAsString(event)
-
-    private[spark] def fromJson(json: String): QueryStartedEvent =
-      mapper.readValue[QueryStartedEvent](json)
   }
 
   /**
@@ -183,18 +199,11 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryProgressEvent {
-    private val mapper = {
-      val ret = new ObjectMapper() with ClassTagExtensions
-      ret.registerModule(DefaultScalaModule)
-      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-      ret
+
+    private[spark] def fromJson(json: String): QueryProgressEvent = {
+      val parser = EventParser(json)
+      new QueryProgressEvent(parser.getProgress("progress"))
     }
-
-    private[spark] def jsonString(event: QueryProgressEvent): String =
-      mapper.writeValueAsString(event)
-
-    private[spark] def fromJson(json: String): QueryProgressEvent =
-      mapper.readValue[QueryProgressEvent](json)
   }
 
   /**
@@ -223,18 +232,14 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryIdleEvent {
-    private val mapper = {
-      val ret = new ObjectMapper() with ClassTagExtensions
-      ret.registerModule(DefaultScalaModule)
-      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-      ret
+
+    private[spark] def fromJson(json: String): QueryIdleEvent = {
+      val parser = EventParser(json)
+      new QueryIdleEvent(
+        parser.getUUID("id"),
+        parser.getUUID("runId"),
+        parser.getString("timestamp"))
     }
-
-    private[spark] def jsonString(event: QueryTerminatedEvent): String =
-      mapper.writeValueAsString(event)
-
-    private[spark] def fromJson(json: String): QueryTerminatedEvent =
-      mapper.readValue[QueryTerminatedEvent](json)
   }
 
   /**
@@ -277,17 +282,13 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryTerminatedEvent {
-    private val mapper = {
-      val ret = new ObjectMapper() with ClassTagExtensions
-      ret.registerModule(DefaultScalaModule)
-      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-      ret
+    private[spark] def fromJson(json: String): QueryTerminatedEvent = {
+      val parser = EventParser(json)
+      new QueryTerminatedEvent(
+        parser.getUUID("id"),
+        parser.getUUID("runId"),
+        Option(parser.getString("exception")),
+        Option(parser.getString("errorClassOnException")))
     }
-
-    private[spark] def jsonString(event: QueryTerminatedEvent): String =
-      mapper.writeValueAsString(event)
-
-    private[spark] def fromJson(json: String): QueryTerminatedEvent =
-      mapper.readValue[QueryTerminatedEvent](json)
   }
 }
