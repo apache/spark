@@ -102,7 +102,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, context).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
-          conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+          conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session, context)
       case WhileStatement(condition, body, _) =>
         val conditionExec =
           new SingleStatementExec(
@@ -112,7 +112,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             isInternal = false)
         val bodyExec =
           transformTreeIntoExecutable(body, context).asInstanceOf[CompoundBodyExec]
-        new WhileStatementExec(conditionExec, bodyExec, session)
+        new WhileStatementExec(conditionExec, bodyExec, session, context)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,

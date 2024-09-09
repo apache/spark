@@ -77,7 +77,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
    */
   protected def evaluateBooleanCondition(
       session: SparkSession,
-      statement: LeafStatementExec): Boolean = statement match {
+      statement: LeafStatementExec,
+      context: SqlScriptingContext): Boolean = statement match {
     case statement: SingleStatementExec =>
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
@@ -227,7 +228,8 @@ class IfElseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession,
+    context: SqlScriptingContext) extends NonLeafStatementExec {
   private object IfElseState extends Enumeration {
     val Condition, Body = Value
   }
@@ -246,7 +248,7 @@ class IfElseStatementExec(
       override def next(): CompoundStatementExec = state match {
         case IfElseState.Condition =>
           val condition = curr.get.asInstanceOf[SingleStatementExec]
-          if (evaluateBooleanCondition(session, condition)) {
+          if (evaluateBooleanCondition(session, condition, context)) {
             state = IfElseState.Body
             curr = Some(conditionalBodies(clauseIdx))
           } else {
@@ -297,7 +299,8 @@ class IfElseStatementExec(
 class WhileStatementExec(
     condition: SingleStatementExec,
     body: CompoundBodyExec,
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession,
+    context: SqlScriptingContext) extends NonLeafStatementExec {
 
   private object WhileState extends Enumeration {
     val Condition, Body = Value
