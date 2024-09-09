@@ -556,7 +556,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def identityColumnUnsupportedDataType(ctx: IdentityColumnContext, dataType: String): Throwable = {
+  def identityColumnUnsupportedDataType(
+      ctx: IdentityColumnContext,
+      dataType: String): Throwable = {
     new ParseException("IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE", Map("dataType" -> dataType), ctx)
   }
 
@@ -570,8 +572,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       "IDENTITY_COLUMNS_DUPLICATED_SEQUENCE_GENERATOR_OPTION",
       Map("sequenceGeneratorOption" -> sequenceGeneratorOption),
-      ctx
-    )
+      ctx)
   }
 
   def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {

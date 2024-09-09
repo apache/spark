@@ -3672,6 +3672,9 @@ class AstBuilder extends DataTypeAstBuilder
         if (step.get == 0L) {
           throw QueryParsingErrors.identityColumnIllegalStep(ctx)
         }
+      } else {
+        throw throw SparkException
+            .internalError(s"Invalid identity column sequence generator option: ${option.getText}")
       }
     }
     (start.getOrElse(defaultStart), step.getOrElse(defaultStep))
