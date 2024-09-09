@@ -588,7 +588,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         DoubleType,
         DoubleType),
       inputRow = InternalRow.fromSeq(Seq(Row(1))),
-      errorClass = "INVALID_EXTERNAL_TYPE",
+      condition = "INVALID_EXTERNAL_TYPE",
       parameters = Map[String, String](
         "externalType" -> "java.lang.Integer",
         "type" -> "\"DOUBLE\"",

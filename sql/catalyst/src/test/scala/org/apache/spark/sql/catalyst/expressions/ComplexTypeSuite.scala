@@ -285,7 +285,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkErrorInExpression[SparkRuntimeException](
       CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -430,7 +430,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       MapFromArrays(
         Literal.create(Seq(1, 1), ArrayType(IntegerType)),
         Literal.create(Seq(2, 3), ArrayType(IntegerType))),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -556,7 +556,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkErrorInExpression[SparkRuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")

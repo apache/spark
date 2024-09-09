@@ -1505,7 +1505,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkErrorInExpression[SparkIllegalArgumentException](
         toNumberExpr,
-        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        condition = "INVALID_FORMAT.MISMATCH_INPUT",
         parameters = Map(
           "inputType" -> "\"STRING\"",
           "input" -> str,
