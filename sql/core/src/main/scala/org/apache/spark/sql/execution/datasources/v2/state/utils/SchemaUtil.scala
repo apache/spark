@@ -123,7 +123,7 @@ object SchemaUtil {
         groupingKey: Any,
         curMap: mutable.Map[Any, Any]): GenericInternalRow = {
       val row = new GenericInternalRow(3)
-      val mapData = ArrayBasedMapData(curMap.toMap)
+      val mapData = ArrayBasedMapData(curMap)
       row.update(0, groupingKey)
       row.update(1, mapData)
       row.update(2, partitionId)
