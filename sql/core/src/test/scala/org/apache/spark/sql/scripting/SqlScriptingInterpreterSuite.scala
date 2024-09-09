@@ -652,6 +652,80 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("repeat with non boolean condition - constant") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] (
+        runSqlScript(commands)
+      ),
+      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      parameters = Map("invalidStatement" -> "1")
+    )
+  }
+
+  test("repeat with empty subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | REPEAT
+          |   SELECT 1;
+          | UNTIL
+          |   (SELECT * FROM t)
+          | END REPEAT;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
+      )
+    }
+  }
+
+  test("repeat with too many rows in subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | INSERT INTO t VALUES (true);
+          | INSERT INTO t VALUES (true);
+          | REPEAT
+          |   SELECT 1;
+          | UNTIL
+          |   (SELECT * FROM t)
+          | END REPEAT;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SparkException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 141, stop = 157)
+      )
+    }
+  }
+
   test("leave compound block") {
     val sqlScriptText =
       """
@@ -790,7 +864,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
   }
 
-  test("leave outer loop from nested while loop") {
+  test("leave outer loop from nested repeat loop") {
     val sqlScriptText =
       """
         |BEGIN
@@ -809,7 +883,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
-  test("leave outer loop from nested repeat loop") {
+  test("leave outer loop from nested while loop") {
     val sqlScriptText =
       """
         |BEGIN
