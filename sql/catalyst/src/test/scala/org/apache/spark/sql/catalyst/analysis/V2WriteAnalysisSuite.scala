@@ -155,11 +155,11 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
   }
 
   override def assertAnalysisErrorCondition(
-                                             inputPlan: LogicalPlan,
-                                             expectedErrorCondition: String,
-                                             expectedMessageParameters: Map[String, String],
-                                             queryContext: Array[ExpectedContext] = Array.empty,
-                                             caseSensitive: Boolean = true): Unit = {
+      inputPlan: LogicalPlan,
+      expectedErrorCondition: String,
+      expectedMessageParameters: Map[String, String],
+      queryContext: Array[ExpectedContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
       super.assertAnalysisErrorCondition(
         inputPlan,
@@ -192,11 +192,11 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
   }
 
   override def assertAnalysisErrorCondition(
-                                             inputPlan: LogicalPlan,
-                                             expectedErrorCondition: String,
-                                             expectedMessageParameters: Map[String, String],
-                                             queryContext: Array[ExpectedContext] = Array.empty,
-                                             caseSensitive: Boolean = true): Unit = {
+      inputPlan: LogicalPlan,
+      expectedErrorCondition: String,
+      expectedMessageParameters: Map[String, String],
+      queryContext: Array[ExpectedContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
       super.assertAnalysisErrorCondition(
         inputPlan,
