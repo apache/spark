@@ -17,11 +17,12 @@
 package org.apache.spark.sql.execution.datasources.v2.state.utils
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceErrors, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.StateVariableType._
 import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
@@ -118,14 +119,11 @@ object SchemaUtil {
         )
     }
 
-    def updateDataRow(
+    def createDataRow(
         groupingKey: Any,
         curMap: mutable.Map[Any, Any]): GenericInternalRow = {
       val row = new GenericInternalRow(3)
-      val mapData = new ArrayBasedMapData(
-        ArrayData.toArrayData(curMap.keys.toArray),
-        ArrayData.toArrayData(curMap.values.toArray)
-      )
+      val mapData = ArrayBasedMapData(curMap.toMap)
       row.update(0, groupingKey)
       row.update(1, mapData)
       row.update(2, partitionId)
@@ -143,8 +141,8 @@ object SchemaUtil {
         stateRows.hasNext || !curMap.isEmpty
 
       override def next(): InternalRow = {
-        var keepTraverse = true
-        while (stateRows.hasNext && keepTraverse) {
+        var foundNewGroupingKey = false
+        while (stateRows.hasNext && !foundNewGroupingKey) {
           curStateRowPair = stateRows.next()
           if (curGroupingKey == null) {
             // First time in the iterator
@@ -160,13 +158,13 @@ object SchemaUtil {
               appendKVPairToMap(curMap, curStateRowPair)
             } else {
               // find a different grouping key, exit loop and return a row
-              keepTraverse = false
+              foundNewGroupingKey = true
             }
           }
         }
-        if (!keepTraverse) {
+        if (foundNewGroupingKey) {
           // found a different grouping key
-          val row = updateDataRow(curGroupingKey, curMap)
+          val row = createDataRow(curGroupingKey, curMap)
           // update vars
           curGroupingKey =
             curStateRowPair.key.get(0, groupingKeySchema)
@@ -177,10 +175,13 @@ object SchemaUtil {
           // return map value of previous grouping key
           row
         } else {
-          // reach the end of the state rows
-          if (curMap.isEmpty) null.asInstanceOf[InternalRow]
+          if (curMap.isEmpty) {
+            throw new NoSuchElementException("Please check if the iterator hasNext(); Likely " +
+              "user is trying to get element from an exhausted iterator.")
+          }
           else {
-            val row = updateDataRow(curGroupingKey, curMap)
+            // reach the end of the state rows
+            val row = createDataRow(curGroupingKey, curMap)
             // clear the map to end the iterator
             curMap.clear()
             row
@@ -303,8 +304,9 @@ object SchemaUtil {
         SchemaUtil.getSchemaAsDataType(schema, "map_value").asInstanceOf[MapType]
           .keyType.asInstanceOf[StructType])
     } catch {
-      case _: Exception =>
-        None
+      case NonFatal(e) =>
+        throw StateDataSourceErrors.internalError(s"No such field named as 'map_value' " +
+          s"during state source reader schema initialization. Internal exception message: $e")
     }
     new StructType()
       .add("key", groupingKeySchema)
