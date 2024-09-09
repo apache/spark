@@ -177,9 +177,9 @@ class V2CommandsCaseSensitivitySuite
             None)))
       Seq(true, false).foreach { caseSensitive =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-          assertAnalysisErrorClass(
+          assertAnalysisErrorCondition(
             inputPlan = alter,
-            expectedErrorClass = "FIELD_NOT_FOUND",
+            expectedErrorCondition = "FIELD_NOT_FOUND",
             expectedMessageParameters = Map("fieldName" -> "`f`", "fields" -> "id, data, point")
           )
         }
@@ -208,9 +208,9 @@ class V2CommandsCaseSensitivitySuite
           None)))
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        assertAnalysisErrorClass(
+        assertAnalysisErrorCondition(
           inputPlan = alter,
-          expectedErrorClass = "FIELD_NOT_FOUND",
+          expectedErrorCondition = "FIELD_NOT_FOUND",
           expectedMessageParameters = Map("fieldName" -> "`y`", "fields" -> "id, data, point, x")
         )
       }
@@ -231,9 +231,9 @@ class V2CommandsCaseSensitivitySuite
             None)))
       Seq(true, false).foreach { caseSensitive =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-          assertAnalysisErrorClass(
+          assertAnalysisErrorCondition(
             inputPlan = alter,
-            expectedErrorClass = "FIELD_NOT_FOUND",
+            expectedErrorCondition = "FIELD_NOT_FOUND",
             expectedMessageParameters = Map("fieldName" -> "`z`", "fields" -> "x, y")
           )
         }
@@ -262,9 +262,9 @@ class V2CommandsCaseSensitivitySuite
           None)))
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        assertAnalysisErrorClass(
+        assertAnalysisErrorCondition(
           inputPlan = alter,
-          expectedErrorClass = "FIELD_NOT_FOUND",
+          expectedErrorCondition = "FIELD_NOT_FOUND",
           expectedMessageParameters = Map("fieldName" -> "`zz`", "fields" -> "x, y, z")
         )
       }
@@ -272,7 +272,7 @@ class V2CommandsCaseSensitivitySuite
   }
 
   test("SPARK-36372: Adding duplicate columns should not be allowed") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       AddColumns(
         table,
         Seq(QualifiedColType(
@@ -401,7 +401,7 @@ class V2CommandsCaseSensitivitySuite
   }
 
   test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       ReplaceColumns(
         table,
         Seq(QualifiedColType(None, "f", LongType, true, None, None, None),
@@ -420,7 +420,7 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
-          assertAnalysisErrorClass(
+          assertAnalysisErrorCondition(
             alter, expectedErrorClass, expectedMessageParameters, caseSensitive = caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)
@@ -438,7 +438,7 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
-          assertAnalysisErrorClass(
+          assertAnalysisErrorCondition(
             alter, errorClass, messageParameters, caseSensitive = caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)

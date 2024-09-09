@@ -112,7 +112,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
@@ -359,7 +359,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
       LocalRelation()
     )
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       plan,
       "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       Map(
@@ -555,7 +555,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
       "NUM_TABLE_VALUE_ALIASES_MISMATCH",
       Map("funcName" -> "`range`", "aliasesNum" -> "2", "outColsNum" -> "1"))
@@ -569,12 +569,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       tableColumnsWithAliases("col1" :: Nil),
       "ASSIGNMENT_ARITY_MISMATCH",
       Map("numExpr" -> "1", "numTarget" -> "4")
     )
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
       "ASSIGNMENT_ARITY_MISMATCH",
       Map("numExpr" -> "5", "numTarget" -> "4")
@@ -591,12 +591,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       tableColumnsWithAliases("col1" :: Nil),
       "ASSIGNMENT_ARITY_MISMATCH",
       Map("numExpr" -> "1", "numTarget" -> "4")
     )
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
       "ASSIGNMENT_ARITY_MISMATCH",
       Map("numExpr" -> "5", "numTarget" -> "4")
@@ -615,12 +615,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       joinRelationWithAliases("col1" :: Nil),
       "ASSIGNMENT_ARITY_MISMATCH",
       Map("numExpr" -> "1", "numTarget" -> "4")
     )
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
         "ASSIGNMENT_ARITY_MISMATCH",
         Map("numExpr" -> "5", "numTarget" -> "4")
@@ -755,7 +755,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
     val cond = $"a" > 1
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       MergeIntoTable(
         testRelation,
         testRelation,
@@ -794,7 +794,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-existing column alias") {
-    assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+    assertAnalysisErrorCondition(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`y`", "proposal" -> "`x`"),
       Array(ExpectedContext("y", 46, 46))
@@ -802,7 +802,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-matching column alias") {
-    assertAnalysisErrorClass(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
+    assertAnalysisErrorCondition(
+      parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
       "ASSIGNMENT_ARITY_MISMATCH",
       Map("numExpr" -> "2", "numTarget" -> "1"),
       Array(ExpectedContext("t(x, y) AS (SELECT 1)", 5, 25))
@@ -810,7 +811,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
-    assertAnalysisErrorClass(parsePlan("INSERT INTO test VALUES (1)"),
+    assertAnalysisErrorCondition(parsePlan("INSERT INTO test VALUES (1)"),
       "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"),
       Array(ExpectedContext("test", 12, 15)))
   }
@@ -826,9 +827,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Bad name
     assert(!CollectMetrics("", sum :: Nil, testRelation, 0).resolved)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics("", sum :: Nil, testRelation, 0),
-      expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
+      expectedErrorCondition = "INVALID_OBSERVED_METRICS.MISSING_NAME",
       expectedMessageParameters = Map(
         "operator" ->
           "'CollectMetrics , [sum(a#x) AS sum#xL], 0\n+- LocalRelation <empty>, [a#x]\n")
@@ -853,37 +854,38 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     // Unwrapped attribute
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics("event", a :: Nil, testRelation, 0),
-      expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      expectedErrorCondition = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
       expectedMessageParameters = Map("expr" -> "\"a\"")
     )
 
     // Unwrapped non-deterministic expression
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation, 0),
-      expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+      expectedErrorCondition =
+        "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
       expectedMessageParameters = Map("expr" -> "\"rand(10) AS rnd\"")
     )
 
     // Distinct aggregate
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics(
         "event",
         Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
         testRelation, 0),
-      expectedErrorClass =
+      expectedErrorCondition =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(DISTINCT a) AS sum\"")
     )
 
     // Nested aggregate
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics(
         "event",
         Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
         testRelation, 0),
-      expectedErrorClass = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
+      expectedErrorCondition = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(sum(a)) AS sum\"")
     )
 
@@ -892,9 +894,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       RowNumber(),
       WindowSpecDefinition(Nil, a.asc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation, 0),
-      expectedErrorClass = "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
+      expectedErrorCondition = "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
       expectedMessageParameters = Map(
         "expr" ->
           """
@@ -915,22 +917,22 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("evt1", count :: Nil, testRelation, 0) :: Nil))
 
     // Same children, structurally different metrics - fail
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Union(
         CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
           CollectMetrics("evt1", sum :: Nil, testRelation, 1) :: Nil),
-      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedErrorCondition = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
     // Different children, same metrics - fail
     val b = $"b".string
     val tblB = LocalRelation(b)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Union(
         CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
           CollectMetrics("evt1", count :: Nil, tblB, 1) :: Nil),
-      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedErrorCondition = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
@@ -939,9 +941,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val query = Project(
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
       CollectMetrics("evt1", count :: Nil, tblB, 1))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       query,
-      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedErrorCondition = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
@@ -949,9 +951,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val sumWithFilter = sum.transform {
       case a: AggregateExpression => a.copy(filter = Some(true))
     }.asInstanceOf[NamedExpression]
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       CollectMetrics("evt1", sumWithFilter :: Nil, testRelation, 0),
-      expectedErrorClass =
+      expectedErrorCondition =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(a) FILTER (WHERE true) AS sum\"")
     )
@@ -1062,9 +1064,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       AttributeReference("c", IntegerType)(),
       AttributeReference("d", TimestampType)())
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Union(firstTable, secondTable),
-      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedErrorCondition = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "second",
@@ -1074,9 +1076,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "dataType1" -> "\"TIMESTAMP\"")
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Union(firstTable, thirdTable),
-      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedErrorCondition = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "third",
@@ -1086,9 +1088,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "dataType1" -> "\"TIMESTAMP\"")
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Union(firstTable, fourthTable),
-      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedErrorCondition = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "4th",
@@ -1098,9 +1100,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "dataType1" -> "\"TIMESTAMP\"")
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Except(firstTable, secondTable, isAll = false),
-      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedErrorCondition = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "second",
@@ -1110,9 +1112,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "dataType1" -> "\"TIMESTAMP\"")
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       Intersect(firstTable, secondTable, isAll = false),
-      expectedErrorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      expectedErrorCondition = "INCOMPATIBLE_COLUMN_TYPE",
       expectedMessageParameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "second",
@@ -1124,21 +1126,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = testRelation2.select(RowNumber()),
-      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedErrorCondition = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
       expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = testRelation2.select(Sum(RowNumber())),
-      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedErrorCondition = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
       expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = testRelation2.select(RowNumber() + 1),
-      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedErrorCondition = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
       expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
     )
   }
@@ -1297,7 +1299,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |    ORDER BY grouping__id > 0
       """.stripMargin), false)
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       parsePlan(
         """
           |SELECT grouping__id FROM (
@@ -1328,7 +1330,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |ORDER BY c.x
         |""".stripMargin))
 
-    assertAnalysisErrorClass(parsePlan(
+    assertAnalysisErrorCondition(parsePlan(
      """
         |SELECT c.x
         |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
@@ -1342,7 +1344,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsePlan(
         s"""
            |WITH t as (SELECT true c)
@@ -1350,7 +1352,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |FROM t
            |GROUP BY t.c
            |HAVING mean(t.c) > 0d""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedErrorCondition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
         "paramIndex" -> "first",
@@ -1361,7 +1363,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       caseSensitive = false
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsePlan(
         s"""
            |WITH t as (SELECT true c, false d)
@@ -1369,7 +1371,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |FROM t
            |GROUP BY t.c, t.d
            |HAVING mean(c) > 0d""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedErrorCondition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
         "paramIndex" -> "first",
@@ -1379,7 +1381,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       queryContext = Array(ExpectedContext("mean(c)", 91, 97)),
       caseSensitive = false)
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsePlan(
         s"""
            |WITH t as (SELECT true c)
@@ -1387,7 +1389,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |FROM t
            |GROUP BY t.c
            |HAVING abs(t.c) > 0d""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedErrorCondition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
         "paramIndex" -> "first",
@@ -1399,7 +1401,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       caseSensitive = false
     )
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = parsePlan(
         s"""
          |WITH t as (SELECT true c, false d)
@@ -1407,7 +1409,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |FROM t
          |GROUP BY t.c, t.d
          |HAVING abs(c) > 0d""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedErrorCondition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
         "paramIndex" -> "first",
@@ -1421,7 +1423,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-39354: should be [TABLE_OR_VIEW_NOT_FOUND]") {
-    assertAnalysisErrorClass(parsePlan(
+    assertAnalysisErrorCondition(parsePlan(
       s"""
          |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
          |SELECT *
@@ -1531,13 +1533,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-41489: type of filter expression should be a bool") {
-    assertAnalysisErrorClass(parsePlan(
+    assertAnalysisErrorCondition(parsePlan(
       s"""
          |WITH t1 as (SELECT 1 user_id)
          |SELECT *
          |FROM t1
          |WHERE 'true'""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      expectedErrorCondition = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"true\"", "filter" -> "\"true\"", "type" -> "\"STRING\"")
       ,
