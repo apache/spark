@@ -231,13 +231,11 @@ case class JoinEstimation(join: Join) extends Logging {
       max: Option[Any]): (BigInt, ColumnStat) = {
     val leftKeyStat = leftStats.attributeStats(leftKey)
     val rightKeyStat = rightStats.attributeStats(rightKey)
-    val maxNdv = leftKeyStat.distinctCount.get.max(rightKeyStat.distinctCount.get)
+    val newNdv = leftKeyStat.distinctCount.get.min(rightKeyStat.distinctCount.get)
     // Compute cardinality by the basic formula.
-    val card = BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) /
-      BigDecimal(leftKeyStat.distinctCount.get.min(rightKeyStat.distinctCount.get))
+    val card = BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) / BigDecimal(newNdv)
 
     // Get the intersected column stat.
-    val newNdv = Some(leftKeyStat.distinctCount.get.min(rightKeyStat.distinctCount.get))
     val newMaxLen = if (leftKeyStat.maxLen.isDefined && rightKeyStat.maxLen.isDefined) {
       Some(math.min(leftKeyStat.maxLen.get, rightKeyStat.maxLen.get))
     } else {
@@ -248,7 +246,7 @@ case class JoinEstimation(join: Join) extends Logging {
     } else {
       None
     }
-    val newStats = ColumnStat(newNdv, min, max, Some(0), newAvgLen, newMaxLen)
+    val newStats = ColumnStat(Some(newNdv), min, max, Some(0), newAvgLen, newMaxLen)
 
     (ceil(card), newStats)
   }
