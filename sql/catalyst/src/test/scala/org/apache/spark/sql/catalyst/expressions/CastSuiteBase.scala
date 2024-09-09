@@ -1110,7 +1110,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
           Map(
             "interval" -> "year-month",
-            "msg" -> "integer overflow",
             "input" -> interval))
       }
 

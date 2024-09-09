@@ -213,7 +213,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case NonFatal(e) =>
         throw new SparkIllegalArgumentException(
           errorClass = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
-          messageParameters = Map("input" -> input, "interval" -> interval, "msg" -> e.getMessage),
+          messageParameters = Map("input" -> input, "interval" -> interval),
           cause = e)
     }
   }
@@ -516,7 +516,7 @@ object IntervalUtils extends SparkIntervalUtils {
         case DT.SECOND =>
           // No-op
         case _ => throw new SparkIllegalArgumentException(
-          errorClass = "INTERVAL_ERROR.UNSUPPORTED_FROM_TO_EXPRESSION",
+          errorClass = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
           messageParameters = Map(
             "input" -> input,
             "from" -> DT.fieldToString(from),
@@ -528,6 +528,8 @@ object IntervalUtils extends SparkIntervalUtils {
       micros = Math.addExact(micros, Math.multiplyExact(seconds, MICROS_PER_SECOND))
       new CalendarInterval(0, sign * days, sign * micros)
     } catch {
+      // Bypass SparkIllegalArgumentExceptions
+      case se: SparkIllegalArgumentException => throw se
       case e: Exception =>
         throw new SparkIllegalArgumentException(
           errorClass = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",

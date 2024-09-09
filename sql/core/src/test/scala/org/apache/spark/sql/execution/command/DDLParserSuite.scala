@@ -408,8 +408,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       condition = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
       parameters = Map(
         "input" -> "42-32",
-        "interval" -> "year-month",
-        "msg" -> "requirement failed: month 32 outside range [0, 11]"),
+        "interval" -> "year-month"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 16,

@@ -345,7 +345,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         parameters = Map(
           "msg" -> "requirement failed: hour 30 outside range [0, 23]",
           "input" -> "5 30:12:20"),
-        errorClass = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+        condition = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+        sqlState = Some("22006")
+      )
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          fromDayTimeString("5 12:40:30.999999999", 0, 0)
+        },
+        parameters = Map(
+          "from" -> "day",
+          "to" -> "day",
+          "input" -> "5 12:40:30.999999999"),
+        condition = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
         sqlState = Some("22006")
       )
 
@@ -395,7 +407,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         toDTInterval("12", "33.33.33", 1)
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
+      condition = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
       parameters = Map("input" -> "33.33.33"),
       sqlState = Some("22006")
     )

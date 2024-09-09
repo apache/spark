@@ -1488,8 +1488,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "178956970-8",
-    "interval" : "year-month",
-    "msg" : "integer overflow"
+    "interval" : "year-month"
   },
   "queryContext" : [ {
     "objectType" : "",
