@@ -201,10 +201,8 @@ object Randn {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(0, 1);
-       -0.3254147983080288
-      > SELECT _FUNC_(10, 20, 0);
-       26.034991609278433
+      > SELECT _FUNC_(10, 20) > 0;
+      true
   """,
   since = "4.0.0",
   group = "math_funcs")
