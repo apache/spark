@@ -256,15 +256,13 @@ class RocksDBFileManager(
       capturedFileMappings: RocksDBFileMappings,
       columnFamilyMapping: Option[Map[String, Short]] = None,
       maxColumnFamilyId: Option[Short] = None,
-      checkpointUniqueId: Option[String] = None,
-      checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None
-      ): Unit = {
+      checkpointUniqueId: Option[String] = None): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
     val rocksDBFiles = saveImmutableFilesToDfs(version, localImmutableFiles, capturedFileMappings)
     val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, columnFamilyMapping,
-      maxColumnFamilyId, checkpointUniqueId, checkpointUniqueIdLineage)
+      maxColumnFamilyId, checkpointUniqueId)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
     logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
@@ -327,23 +325,6 @@ class RocksDBFileManager(
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     metadata
-  }
-
-  def getLatestSnapshotVersionAndUniqueIdFromLineage(
-      version: Long,
-      localDir: File,
-      checkpointUniqueId: Option[String] = None,
-      latestSnapshotVersionsAndUniqueIds: Array[(Long, Option[String])]): (Long, Option[String]) = {
-    val metadata = loadCheckpointFromDfs(version, localDir, checkpointUniqueId)
-    val lineage = metadata.checkpointUniqueIdLineage
-    lineage.get.reverse.foreach {
-      case (version, uniqueId) =>
-        if (latestSnapshotVersionsAndUniqueIds.contains((version, uniqueId))) {
-          return (version, uniqueId)
-        }
-    }
-    // TODO: This error is not precise
-    throw QueryExecutionErrors.cannotReadCheckpoint(version.toString, s"v$version")
   }
 
   // Get latest snapshot version <= version
@@ -965,10 +946,7 @@ case class RocksDBCheckpointMetadata(
     numKeys: Long,
     columnFamilyMapping: Option[Map[String, Short]] = None,
     maxColumnFamilyId: Option[Short] = None,
-    checkpointUniqueId: Option[String] = None,
-    // Array of <version, uniqueId> pairs for lineage of the checkpoint
-    // It should be sorted by version in descending order
-    checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None) {
+    checkpointUniqueId: Option[String] = None) {
 
   require(columnFamilyMapping.isDefined == maxColumnFamilyId.isDefined,
     "columnFamilyMapping and maxColumnFamilyId must either both be defined or both be None")
@@ -1058,9 +1036,7 @@ object RocksDBCheckpointMetadata {
       numKeys: Long,
       columnFamilyMapping: Option[Map[String, Short]],
       maxColumnFamilyId: Option[Short],
-      checkpointUniqueId: Option[String],
-      checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]]):
-      RocksDBCheckpointMetadata = {
+      checkpointUniqueId: Option[String]): RocksDBCheckpointMetadata = {
     val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
     new RocksDBCheckpointMetadata(
       sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
@@ -1068,8 +1044,7 @@ object RocksDBCheckpointMetadata {
       numKeys,
       columnFamilyMapping,
       maxColumnFamilyId,
-      checkpointUniqueId,
-      checkpointUniqueIdLineage
+      checkpointUniqueId
     )
   }
 
