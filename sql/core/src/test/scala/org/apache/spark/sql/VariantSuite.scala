@@ -290,7 +290,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       (s"named_struct('value', $v, 'metadata', cast(null as binary))",
         "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "metadata"))
     )
-    cases.foreach { case (structDef, errorClass, parameters) =>
+    cases.foreach { case (structDef, condition, parameters) =>
       Seq(false, true).foreach { vectorizedReader =>
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
           withTempDir { dir =>
@@ -302,7 +302,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
             val e = intercept[org.apache.spark.SparkException](result.collect())
             checkError(
               exception = e.getCause.asInstanceOf[AnalysisException],
-              condition = errorClass,
+              condition = condition,
               parameters = parameters
             )
           }
