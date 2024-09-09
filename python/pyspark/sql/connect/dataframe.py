@@ -1783,7 +1783,7 @@ class DataFrame(ParentDataFrame):
                     )
                 )
             else:
-                # TODO: revisit vanilla Spark's Dataset.col
+                # TODO: revisit classic Spark's Dataset.col
                 # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
                 #   colRegex(colName)
                 # } else {

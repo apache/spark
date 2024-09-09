@@ -1332,7 +1332,7 @@ class DataFrame:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.5.0
-            Supports vanilla PySpark.
+            Supports classic PySpark.
 
         Parameters
         ----------
