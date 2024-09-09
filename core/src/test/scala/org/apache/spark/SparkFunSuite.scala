@@ -327,9 +327,9 @@ abstract class SparkFunSuite
   }
 
   /**
-   * Checks an exception with an error class against expected results.
+   * Checks an exception with an error condition against expected results.
    * @param exception     The exception to check
-   * @param condition     The expected error class identifying the error
+   * @param condition     The expected error condition identifying the error
    * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
    * @param parameters    A map of parameter names and values. The names are as defined
    *                      in the error-classes file.
