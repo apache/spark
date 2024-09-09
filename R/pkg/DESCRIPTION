@@ -1,6 +1,6 @@
 Package: SparkR
 Type: Package
-Version: 3.5.3
+Version: 3.5.4
 Title: R Front End for 'Apache Spark'
 Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
 Authors@R:
