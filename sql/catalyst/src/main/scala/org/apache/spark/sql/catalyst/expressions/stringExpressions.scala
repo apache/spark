@@ -3335,7 +3335,9 @@ case class FormatNumber(x: Expression, d: Expression)
  * Splits a string into arrays of sentences, where each sentence is an array of words.
  * The `lang` and `country` arguments are optional, their default values are all '',
  *  - When they are omitted:
- *    1. If they are both omitted, the `locale(language='', country='')` is used.
+ *    1. If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
+ *       the `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
+ *       language/country neutral locale for the locale sensitive operations.
  *    2. If the `country` is omitted, the `locale(language, country='')` is used.
  *  - When they are null:
  *    1. If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
