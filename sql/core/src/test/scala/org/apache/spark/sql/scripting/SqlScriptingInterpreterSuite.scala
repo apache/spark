@@ -20,7 +20,6 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parseScript
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -575,7 +574,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        runSqlScript(sqlScriptText)
       },
       errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
       parameters = Map("labelName" -> "LBL"))
@@ -614,7 +613,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        runSqlScript(sqlScriptText)
       },
       errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
@@ -629,7 +628,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
-        parseScript(sqlScriptText)
+        runSqlScript(sqlScriptText)
       },
       errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
@@ -674,6 +673,40 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select 1
       Seq.empty[Row], // set x= 2
       Seq(Row(1)), // select 1
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("nested compounds in loop - leave in inner compound") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: WHILE x < 2 DO
+        |    SET x = x + 1;
+        |    BEGIN
+        |      SELECT 1;
+        |      lbl2: BEGIN
+        |        SELECT 2;
+        |        LEAVE lbl2;
+        |        SELECT 3;
+        |      END;
+        |    END;
+        |  END WHILE;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select 2
+      Seq.empty[Row], // set x = 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select 2
       Seq(Row(2)), // select x
       Seq.empty[Row] // drop
     )
