@@ -209,11 +209,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   }
 
   private def checkSameError(
-      q1: String, q2: String, errorClass: String, errorParams: Map[String, String]): Unit = {
+      q1: String,
+      q2: String,
+      condition: String,
+      errorParams: Map[String, String]): Unit = {
     val e1 = intercept[AnalysisException] { sql(q1) }
     val e2 = intercept[AnalysisException] { sql(q2) }
-    assert(e1.getErrorClass == errorClass)
-    assert(e2.getErrorClass == errorClass)
+    assert(e1.getErrorClass == condition)
+    assert(e2.getErrorClass == condition)
     errorParams.foreach { case (k, v) =>
       assert(e1.messageParameters.get(k).exists(_ == v))
       assert(e2.messageParameters.get(k).exists(_ == v))
@@ -1188,7 +1191,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         s"from $testTable",
       s"select dept as d, d,    rank() over (partition by dept order by avg(salary)) " +
         s"from $testTable",
-      errorClass = "MISSING_GROUP_BY",
+      condition = "MISSING_GROUP_BY",
       errorParams = Map.empty
     )
     checkSameError(
@@ -1196,7 +1199,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         s"from $testTable",
       "select salary as s, s,      sum(sum(salary)) over (partition by dept order by salary) " +
         s"from $testTable",
-      errorClass = "MISSING_GROUP_BY",
+      condition = "MISSING_GROUP_BY",
       errorParams = Map.empty
     )
 
