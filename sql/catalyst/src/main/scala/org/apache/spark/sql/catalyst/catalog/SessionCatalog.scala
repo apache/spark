@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, StringUtils}
-import org.apache.spark.sql.catalyst.util.CollationFactory.Collation
+import org.apache.spark.sql.catalyst.util.CollationFactory.CollationMeta
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -1906,13 +1906,13 @@ class SessionCatalog(
   /**
    * List all built-in collations with the given pattern.
    */
-  def listCollations(pattern: Option[String]): Seq[Collation] = {
+  def listCollations(pattern: Option[String]): Seq[CollationMeta] = {
     val collationIdentifiers = CollationFactory.listCollations(
       DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA).asScala.toSeq
     val filteredCollationNames = StringUtils.filterPattern(
-      collationIdentifiers.map(_.getName), pattern.getOrElse("*"))
-    val nameToIdentifiers = collationIdentifiers.map(ident => ident.getName -> ident).toMap
-    filteredCollationNames.map(name => nameToIdentifiers(name)).map(CollationFactory.loadCollation)
+      collationIdentifiers.map(_.getName), pattern.getOrElse("*")).toSet
+    collationIdentifiers.filter(ident => filteredCollationNames.contains(ident.getName)).map(
+      CollationFactory.loadCollation(DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA, _))
   }
 
   // -----------------

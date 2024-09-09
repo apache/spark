@@ -18,10 +18,9 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CollationFactory.Collation
+import org.apache.spark.sql.catalyst.util.CollationFactory.CollationMeta
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -50,18 +49,11 @@ case class ShowCollationsCommand(
     AttributeReference("ICU_VERSION", StringType)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val ResolvedNamespace(catalog, ns, _) = child
-
-    val systemCollations: Seq[Collation] = if (systemScope) {
+    val systemCollations: Seq[CollationMeta] = if (systemScope) {
       sparkSession.sessionState.catalog.listCollations(pattern)
     } else Seq.empty
 
-    val userCollations: Seq[Collation] = if (userScope) {
-      // TODO add user scope collation
-      Seq.empty
-    } else Seq.empty
-
-    (systemCollations ++ userCollations).distinct.sortBy(_.collationName).map(m => Row(
+    systemCollations.map(m => Row(
       m.catalog,
       m.schema,
       m.collationName,

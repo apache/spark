@@ -1130,7 +1130,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       .map(_.getText.toLowerCase(Locale.ROOT)) match {
       case None | Some("all") => (true, true)
       case Some("system") => (false, true)
-      case Some("user") => (true, false)
+      case Some("user") =>
+        throw QueryParsingErrors.showCollationsUnsupportedError("user", ctx.identifier())
       case Some(x) => throw QueryParsingErrors.showCollationsUnsupportedError(x, ctx.identifier())
     }
     val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
