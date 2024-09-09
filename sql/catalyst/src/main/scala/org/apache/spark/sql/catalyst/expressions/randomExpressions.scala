@@ -287,7 +287,7 @@ object Uniform {
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(length, seed) - Returns a string of the specified length whose characters are chosen
+    _FUNC_(length[, seed]) - Returns a string of the specified length whose characters are chosen
       uniformly at random from the following pool of characters: 0-9, a-z, A-Z. The random seed is
       optional. The string length must be a constant two-byte or four-byte integer (SMALLINT or INT,
       respectively).
@@ -296,10 +296,10 @@ object Uniform {
     """
     Examples:
       > SELECT _FUNC_(3, 0);
-       abc
+       8i7
   """,
   since = "4.0.0",
-  group = "math_funcs")
+  group = "string_funcs")
 case class RandStr(length: Expression, override val seedExpression: Expression)
   extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic {
   def this(length: Expression) = this(length, Literal(Uniform.random.nextLong(), LongType))
