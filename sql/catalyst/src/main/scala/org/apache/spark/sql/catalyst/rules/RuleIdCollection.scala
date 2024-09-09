@@ -47,6 +47,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractGenerator" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractWindowExpressions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$GlobalAggregates" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$RemovePipeOperators" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggAliasInGroupBy" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggregateFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases" ::

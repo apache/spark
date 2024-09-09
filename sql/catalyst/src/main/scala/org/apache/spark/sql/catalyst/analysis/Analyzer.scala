@@ -344,7 +344,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
-      Seq(ResolveCommandsWithIfExists) ++
+      Seq(ResolveCommandsWithIfExists, RemovePipeOperators) ++
       postHocResolutionRules: _*),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
@@ -2727,6 +2727,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       t => t.containsAnyPattern(AGGREGATE_EXPRESSION, PYTHON_UDF) && t.containsPattern(PROJECT),
       ruleId) {
       case Project(projectList, child) if containsAggregates(projectList) =>
+        if (child.isInstanceOf[PipeOperatorSelect]) {
+          // If we used the pipe operator |> SELECT clause to specify an aggregate function, this is
+          // invalid; return an error message instructing the user to use the pipe operator
+          // |> AGGREGATE clause for this purpose instead.
+          throw QueryCompilationErrors.pipeOperatorSelectContainsAggregateFunction(projectList.head)
+        }
         Aggregate(Nil, projectList, child)
     }
 
@@ -2744,6 +2750,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case ae: AggregateExpression => !windowedAggExprs.contains(ae)
         case _ => false
       })
+    }
+  }
+
+  /**
+   * Removes placeholder PipeOperator* logical plan nodes and checks invariants.
+   */
+  object RemovePipeOperators extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(PIPE_OPERATOR_SELECT), ruleId) {
+      case PipeOperatorSelect(child) =>
+        child
     }
   }
 

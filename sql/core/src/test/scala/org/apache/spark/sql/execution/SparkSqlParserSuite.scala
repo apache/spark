@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.ArrayImplicits._
@@ -880,4 +880,13 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan("SELECT\u30001") // Unicode ideographic space
   }
   // scalastyle:on
+
+  test("Operator pipe SQL syntax") {
+    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
+      // Basic selection.
+      parser.parsePlan("TABLE t |> SELECT 1 AS X")
+      parser.parsePlan("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
+      parser.parsePlan("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+    }
+  }
 }
