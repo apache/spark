@@ -31,7 +31,6 @@ Run with:
 
 """
 
-
 import argparse
 from pyspark.sql import SparkSession
 
@@ -56,7 +55,7 @@ if __name__ == "__main__":
     jdbc_password = args.password
     table_name = args.table
     jdbc_driver_path = args.driver_path
-    
+
     # Initialize SparkSession with the MySQL JDBC driver
     spark = SparkSession \
         .builder \
@@ -81,7 +80,7 @@ if __name__ == "__main__":
         .option("password", jdbc_password) \
         .option("driver", "com.mysql.cj.jdbc.Driver") \
         .load()
-    
+
     # Show the DataFrame content
     df.show()
 
@@ -96,6 +95,7 @@ if __name__ == "__main__":
     print(f"Query Result: SELECT * FROM {table_name}")
     query_result.show()
 
+"""
     # Example 2: Filter and select specific records
     # filtered_result = spark.sql(f"SELECT * FROM {table_name} WHERE age > 30")
 
@@ -111,14 +111,15 @@ if __name__ == "__main__":
     # print(f"Grouped Result: SELECT department, COUNT(*) as count 
     # FROM {table_name} GROUP BY department")
     # grouped_result.show()
-    
+"""
+
     # Stop SparkSession
-    spark.stop()      
+    spark.stop()
 
 """
 A simple example demonstrating how to create a database/table in Mysql using Python
 """
-    
+
 # import mysql.connector
 # from mysql.connector import Error
 
