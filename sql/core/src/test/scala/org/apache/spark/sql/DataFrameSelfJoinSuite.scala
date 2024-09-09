@@ -18,10 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.api.python.PythonSQLUtils.distributed_sequence_id
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{count, explode, sum, year}
+import org.apache.spark.sql.functions.{col, count, explode, sum, year}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -404,7 +405,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))
 
     // Test for AttachDistributedSequence
-    val df13 = df1.withSequenceColumn("seq")
+    val df13 = df1.select(distributed_sequence_id().alias("seq"), col("*"))
     val df14 = df13.filter($"value" === "A2")
     assertAmbiguousSelfJoin(df13.join(df14, df13("key1") === df14("key2")))
     assertAmbiguousSelfJoin(df14.join(df13, df13("key1") === df14("key2")))

@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -158,7 +157,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable bucketing on collated string column") {
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(bucketColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
@@ -760,7 +758,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("disable partition on collated string column") {
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     def createTable(partitionColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
@@ -950,7 +947,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(table) {
       sql(s"create table $table (a array<string collate utf8_lcase>) using parquet")
       sql(s"insert into $table values (array('aaa')), (array('AAA'))")
-      checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("aaa"))))
+      val result = sql(s"select distinct a from $table").collect()
+      assert(result.length === 1)
+      val data = result.head.getSeq[String](0)
+      assert(data === Array("aaa") || data === Array("AAA"))
     }
     // map doesn't support aggregation
     withTable(table) {
@@ -971,7 +971,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(table) {
       sql(s"create table $table (s struct<fld:string collate utf8_lcase>) using parquet")
       sql(s"insert into $table values (named_struct('fld', 'aaa')), (named_struct('fld', 'AAA'))")
-      checkAnswer(sql(s"select s.fld from $table group by s"), Seq(Row("aaa")))
+      val result = sql(s"select s.fld from $table group by s").collect()
+      assert(result.length === 1)
+      val data = result.head.getString(0)
+      assert(data === "aaa" || data === "AAA")
     }
   }
 
