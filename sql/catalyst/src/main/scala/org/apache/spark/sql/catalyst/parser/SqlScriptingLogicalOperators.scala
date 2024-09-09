@@ -102,9 +102,9 @@ case class WhileStatement(
  *              The label can be used to LEAVE or ITERATE the loop.
  */
 case class RepeatStatement(
-  condition: SingleStatement,
-  body: CompoundBody,
-  label: Option[String]) extends CompoundPlanStatement
+    condition: SingleStatement,
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement
 
 
 /**

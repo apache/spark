@@ -412,10 +412,10 @@ class WhileStatementExec(
  * @param session Spark session that SQL script is executed within.
  */
 class RepeatStatementExec(
-  condition: SingleStatementExec,
-  body: CompoundBodyExec,
-  label: Option[String],
-  session: SparkSession) extends NonLeafStatementExec {
+    condition: SingleStatementExec,
+    body: CompoundBodyExec,
+    label: Option[String],
+    session: SparkSession) extends NonLeafStatementExec {
 
   private object RepeatState extends Enumeration {
     val Condition, Body = Value

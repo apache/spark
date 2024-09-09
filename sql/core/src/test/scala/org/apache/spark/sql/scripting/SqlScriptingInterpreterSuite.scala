@@ -804,7 +804,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  END REPEAT;
         |END""".stripMargin
     val expected = Seq(
-      Seq(Row(1)) // select
+      Seq(Row(1)) // select 1
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
