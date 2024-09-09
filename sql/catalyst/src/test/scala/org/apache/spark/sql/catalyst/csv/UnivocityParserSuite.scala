@@ -98,7 +98,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Throws exception for empty string with non null type") {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     val parser = new UnivocityParser(StructType(Seq.empty), options)
-    val exception = intercept[RuntimeException] {
+    val exception = intercept[RuntimeException]{
       parser.makeConverter("_1", IntegerType, nullable = false).apply("")
     }
     assert(exception.getMessage.contains("null value found but field _1 is not nullable."))
@@ -125,7 +125,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       timestampsOptions.locale)
     val expectedTime = format.parse(customTimestamp).getTime
     val castedTimestamp = parser.makeConverter("_1", TimestampType, nullable = true)
-      .apply(customTimestamp)
+        .apply(customTimestamp)
     assert(castedTimestamp == expectedTime * 1000L)
 
     val customDate = "31/01/2015"
@@ -137,7 +137,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       dateOptions.locale)
     val expectedDate = DateTimeUtils.millisToMicros(format.parse(customDate).getTime)
     val castedDate = parser.makeConverter("_1", DateType, nullable = true)
-      .apply(customDate)
+        .apply(customDate)
     assert(castedDate == DateTimeUtils.microsToDays(expectedDate, UTC))
 
     val timestamp = "2015-01-01 00:00:00"
@@ -354,7 +354,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkRuntimeException] {
         parser.parse(input)
       },
-      errorClass = "MALFORMED_CSV_RECORD",
+      condition = "MALFORMED_CSV_RECORD",
       parameters = Map("badRecord" -> "1,string,3.14,5,7"))
   }
 
