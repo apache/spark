@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
+    from plotly.graph_objs import Figure
 
 
 class PySparkTopNPlotBase:
@@ -95,7 +96,7 @@ class PySparkPlotAccessor:
 
         return module
 
-    def line(self, x: str, y: Union[str, list[str]], **kwargs):
+    def line(self, x: str, y: Union[str, list[str]], **kwargs) -> "Figure":
         """
         Plot DataFrame as lines.
 
