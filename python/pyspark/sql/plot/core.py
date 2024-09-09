@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
-    from pyspark.sql._typing import ColumnOrName
 
 
 class PySparkTopNPlotBase:
@@ -96,16 +95,16 @@ class PySparkPlotAccessor:
 
         return module
 
-    def line(self, x: "ColumnOrName", y: Union["ColumnOrName", list["ColumnOrName"]], **kwargs):
+    def line(self, x: str, y: Union[str, list[str]], **kwargs):
         """
         Plot DataFrame as lines.
 
         Parameters
         ----------
-        x : str or :class:`Column`
-            Columns to use for the horizontal axis.
-        y : str or :class:`Column`, or list of them
-            Column(s) to use for the vertical axis. Multiple columns can be plotted.
+        x : str
+            Name of column to use for the horizontal axis.
+        y : str or list of str
+            Name(s) of the column(s) to use for the vertical axis. Multiple columns can be plotted.
         **kwds : optional
             Additional keyword arguments.
 
