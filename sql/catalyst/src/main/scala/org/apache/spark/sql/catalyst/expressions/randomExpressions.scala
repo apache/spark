@@ -190,7 +190,7 @@ object Randn {
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(min, max, seed) - Returns a random value with independent and identically
+    _FUNC_(min, max[, seed]) - Returns a random value with independent and identically
       distributed (i.i.d.) values with the specified range of numbers. The random seed is optional.
       The provided numbers specifying the minimum and maximum values of the range must be constant.
       If both of these numbers are integers, then the result will also be an integer. Otherwise if
