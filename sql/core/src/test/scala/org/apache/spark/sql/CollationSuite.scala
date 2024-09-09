@@ -949,7 +949,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"insert into $table values (array('aaa')), (array('AAA'))")
       val result = sql(s"select distinct a from $table").collect()
       assert(result.length === 1)
-      val data = result.head.get(0).asInstanceOf[scala.collection.mutable.ArraySeq[String]]
+      val data = result.head.getSeq[String](0)
       assert(data === Array("aaa") || data === Array("AAA"))
     }
     // map doesn't support aggregation
