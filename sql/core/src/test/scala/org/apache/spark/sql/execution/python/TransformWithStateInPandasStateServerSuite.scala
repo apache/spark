@@ -56,11 +56,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var stateSerializer: ExpressionEncoder.Serializer[Row] = _
   var transformWithStateInPandasDeserializer: TransformWithStateInPandasDeserializer = _
   var arrowStreamWriter: BaseStreamingArrowWriter = _
-  var valueStateMap: mutable.HashMap[String,
-    (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])] = mutable.HashMap()
-  var listStateMap: mutable.HashMap[String,
-      (ListState[Row], StructType, ExpressionEncoder.Deserializer[Row],
-        ExpressionEncoder.Serializer[Row])] = mutable.HashMap()
+  var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
+  var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
@@ -69,13 +66,10 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     listState = mock(classOf[ListState[Row]])
     stateDeserializer = ExpressionEncoder(stateSchema).resolveAndBind().createDeserializer()
     stateSerializer = ExpressionEncoder(stateSchema).resolveAndBind().createSerializer()
-    valueStateMap = mutable.HashMap[String,
-      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])](stateName ->
-      (valueState, stateSchema, stateDeserializer))
-    listStateMap = mutable.HashMap[String,
-      (ListState[Row], StructType, ExpressionEncoder.Deserializer[Row],
-        ExpressionEncoder.Serializer[Row])](stateName ->
-      (listState, stateSchema, stateDeserializer, stateSerializer))
+    valueStateMap = mutable.HashMap[String, ValueStateInfo](stateName ->
+      ValueStateInfo(valueState, stateSchema, stateDeserializer))
+    listStateMap = mutable.HashMap[String, ListStateInfo](stateName ->
+      ListStateInfo(listState, stateSchema, stateDeserializer, stateSerializer))
     val listStateIteratorMap = mutable.HashMap[String, Iterator[Row]](stateName ->
       Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])

@@ -1190,27 +1190,3 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         """
         result = [(b, t) for x in iterator for y, t in x for b in y]
         super().dump_stream(result, stream)
-
-
-class TransformWithStateInPandasStateSerializer:
-    def load_stream(self, stream):
-        import pyarrow as pa
-
-        reader = pa.ipc.open_stream(stream)
-        for batch in reader:
-            yield batch
-
-    def dump_stream(self, state, stream, schema):
-        import pyarrow as pa
-        from pyspark.sql.pandas.types import to_arrow_schema
-
-        writer = None
-        try:
-            if writer is None:
-                arrow_schema = to_arrow_schema(schema)
-                batch = pa.RecordBatch.from_pandas(state)
-                writer = pa.RecordBatchStreamWriter(stream, arrow_schema)
-                writer.write_batch(batch)
-        finally:
-            if writer is not None:
-                writer.close()

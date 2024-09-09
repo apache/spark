@@ -186,7 +186,7 @@ class StatefulProcessorApiClient:
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)
 
-    def _send_arrow_state(self, state):
+    def _send_arrow_state(self, state) -> None:
         import pyarrow as pa
 
         batch = pa.RecordBatch.from_pandas(state)

@@ -55,12 +55,10 @@ class TransformWithStateInPandasStateServer(
     largeVarTypes: Boolean,
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
     outputStreamForTest: DataOutputStream = null,
-    valueStateMapForTest: mutable.HashMap[String,
-      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])] = null,
+    valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
-    listStatesMapForTest : mutable.HashMap[String, (ListState[Row], StructType,
-      ExpressionEncoder.Deserializer[Row], ExpressionEncoder.Serializer[Row])] = null,
+    listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
@@ -71,16 +69,14 @@ class TransformWithStateInPandasStateServer(
   private val valueStates = if (valueStateMapForTest != null) {
     valueStateMapForTest
   } else {
-    new mutable.HashMap[String, (ValueState[Row], StructType,
-      ExpressionEncoder.Deserializer[Row])]()
+    new mutable.HashMap[String, ValueStateInfo]()
   }
   // A map to store the list state name -> (list state, schema, list state row deserializer,
   // list state row serializer) mapping.
   private val listStates = if (listStatesMapForTest != null) {
     listStatesMapForTest
   } else {
-    new mutable.HashMap[String, (ListState[Row], StructType,
-      ExpressionEncoder.Deserializer[Row], ExpressionEncoder.Serializer[Row])]()
+    new mutable.HashMap[String, ListStateInfo]()
   }
   // A map to store the list state name -> iterator mapping. This is to keep track of the
   // current iterator position for each list state in a grouping key in case user tries to fetch
@@ -157,6 +153,8 @@ class TransformWithStateInPandasStateServer(
         sendResponse(0)
       case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
         ImplicitGroupingKeyTracker.removeImplicitKey()
+        // Reset the list state iterators for a new grouping key.
+        listStateIterators = new mutable.HashMap[String, Iterator[Row]]()
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -211,16 +209,17 @@ class TransformWithStateInPandasStateServer(
       sendResponse(1, s"Value state $stateName is not initialized.")
       return
     }
+    val valueStateInfo = valueStates(stateName)
     message.getMethodCase match {
       case ValueStateCall.MethodCase.EXISTS =>
-        if (valueStates(stateName)._1.exists()) {
+        if (valueStateInfo.valueState.exists()) {
           sendResponse(0)
         } else {
           // Send status code 2 to indicate that the value state doesn't have a value yet.
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case ValueStateCall.MethodCase.GET =>
-        val valueOption = valueStates(stateName)._1.getOption()
+        val valueOption = valueStateInfo.valueState.getOption()
         if (valueOption.isDefined) {
           // Serialize the value row as a byte array
           val valueBytes = PythonSQLUtils.toPyRow(valueOption.get)
@@ -233,13 +232,13 @@ class TransformWithStateInPandasStateServer(
         }
       case ValueStateCall.MethodCase.VALUESTATEUPDATE =>
         val byteArray = message.getValueStateUpdate.getValue.toByteArray
-        val valueStateTuple = valueStates(stateName)
         // The value row is serialized as a byte array, we need to convert it back to a Row
-        val valueRow = PythonSQLUtils.toJVMRow(byteArray, valueStateTuple._2, valueStateTuple._3)
-        valueStateTuple._1.update(valueRow)
+        val valueRow = PythonSQLUtils.toJVMRow(byteArray, valueStateInfo.schema,
+          valueStateInfo.deserializer)
+        valueStateInfo.valueState.update(valueRow)
         sendResponse(0)
       case ValueStateCall.MethodCase.CLEAR =>
-        valueStates(stateName)._1.clear()
+        valueStateInfo.valueState.clear()
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -253,15 +252,15 @@ class TransformWithStateInPandasStateServer(
       sendResponse(1, s"List state $stateName is not initialized.")
       return
     }
-    val listStateTuple = listStates(stateName)
+    val listStateInfo = listStates(stateName)
     val deserializer = if (deserializerForTest != null) {
       deserializerForTest
     } else {
-      new TransformWithStateInPandasDeserializer(listStateTuple._3)
+      new TransformWithStateInPandasDeserializer(listStateInfo.deserializer)
     }
     message.getMethodCase match {
       case ListStateCall.MethodCase.EXISTS =>
-        if (listStateTuple._1.exists()) {
+        if (listStateInfo.listState.exists()) {
           sendResponse(0)
         } else {
           // Send status code 2 to indicate that the list state doesn't have a value yet.
@@ -269,12 +268,12 @@ class TransformWithStateInPandasStateServer(
         }
       case ListStateCall.MethodCase.LISTSTATEPUT =>
         val rows = deserializer.readArrowBatches(inputStream)
-        listStateTuple._1.put(rows.toArray)
+        listStateInfo.listState.put(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.GET =>
         var iteratorOption = listStateIterators.get(stateName)
         if (iteratorOption.isEmpty) {
-          iteratorOption = Some(listStateTuple._1.get())
+          iteratorOption = Some(listStateInfo.listState.get())
           listStateIterators.put(stateName, iteratorOption.get)
         }
         if (!iteratorOption.get.hasNext) {
@@ -287,7 +286,7 @@ class TransformWithStateInPandasStateServer(
         val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
           arrowStreamWriterForTest
         } else {
-          val arrowSchema = ArrowUtils.toArrowSchema(listStateTuple._2, timeZoneId,
+          val arrowSchema = ArrowUtils.toArrowSchema(listStateInfo.schema, timeZoneId,
             errorOnDuplicatedFieldNames, largeVarTypes)
           val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
@@ -295,7 +294,7 @@ class TransformWithStateInPandasStateServer(
           new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
             arrowTransformWithStateInPandasMaxRecordsPerBatch)
         }
-        val listRowSerializer = listStateTuple._4
+        val listRowSerializer = listStateInfo.serializer
         // Only write a single batch in each GET request. Stops writing row if rowCount reaches
         // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit.
         var rowCount = 0
@@ -309,15 +308,16 @@ class TransformWithStateInPandasStateServer(
         arrowStreamWriter.finalizeCurrentArrowBatch()
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
-        val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateTuple._2, listStateTuple._3)
-        listStateTuple._1.appendValue(newRow)
+        val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
+          listStateInfo.deserializer)
+        listStateInfo.listState.appendValue(newRow)
         sendResponse(0)
       case ListStateCall.MethodCase.APPENDLIST =>
         val rows = deserializer.readArrowBatches(inputStream)
-        listStateTuple._1.appendList(rows.toArray)
+        listStateInfo.listState.appendList(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.CLEAR =>
-        listStates(stateName)._1.clear()
+        listStates(stateName).listState.clear()
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -351,16 +351,17 @@ class TransformWithStateInPandasStateServer(
     stateVariable match {
         case "valueState" => if (!valueStates.contains(stateName)) {
           valueStates.put(stateName,
-            (statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema)), schema,
-              expressionEncoder.createDeserializer()))
+            ValueStateInfo(statefulProcessorHandle.getValueState[Row](stateName,
+              Encoders.row(schema)), schema, expressionEncoder.createDeserializer()))
           sendResponse(0)
         } else {
           sendResponse(1, s"Value state $stateName already exists")
         }
         case "listState" => if (!listStates.contains(stateName)) {
           listStates.put(stateName,
-            (statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema)), schema,
-              expressionEncoder.createDeserializer(), expressionEncoder.createSerializer()))
+            ListStateInfo(statefulProcessorHandle.getListState[Row](stateName,
+              Encoders.row(schema)), schema, expressionEncoder.createDeserializer(),
+              expressionEncoder.createSerializer()))
           sendResponse(0)
         } else {
           sendResponse(1, s"List state $stateName already exists")
@@ -368,3 +369,20 @@ class TransformWithStateInPandasStateServer(
     }
   }
 }
+
+/**
+ * Case class to store the information of a value state.
+ */
+case class ValueStateInfo(
+    valueState: ValueState[Row],
+    schema: StructType,
+    deserializer: ExpressionEncoder.Deserializer[Row])
+
+/**
+ * Case class to store the information of a list state.
+ */
+case class ListStateInfo(
+    listState: ListState[Row],
+    schema: StructType,
+    deserializer: ExpressionEncoder.Deserializer[Row],
+    serializer: ExpressionEncoder.Serializer[Row])
