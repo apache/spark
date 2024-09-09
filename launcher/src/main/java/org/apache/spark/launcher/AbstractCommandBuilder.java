@@ -287,10 +287,11 @@ abstract class AbstractCommandBuilder {
   }
 
   /**
-   * Checks if the spark-hive jar file is available in the specified directory.
+   * Checks if a JAR file with a specific prefix is available in the given directory.
    *
-   * @param jarsDir the directory to search for spark-hive jar files
-   * @return true if a file starting with "spark-hive_" is found, false otherwise
+   * @param jarsDir       the directory to search for JAR files
+   * @param jarNamePrefix the prefix of the JAR file name to look for
+   * @return true if a JAR file with the specified prefix is found, false otherwise
    */
   private boolean isJarAvailable(String jarsDir, String jarNamePrefix) {
     if (jarsDir != null) {
