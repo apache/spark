@@ -4271,8 +4271,7 @@
   },
   "STREAM_FAILED" : {
     "message" : [
-      "Query [id = <id>, runId = <runId>, startOffset = <startOffset>, endOffset = <endOffset>] terminated with exception: <message>",
-      "<queryDebugString>"
+      "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ],
     "sqlState" : "XXKST"
   },

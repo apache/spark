@@ -369,13 +369,7 @@ abstract class StreamExecution(
           messageParameters = Map(
             "id" -> id.toString,
             "runId" -> runId.toString,
-            "message" -> message,
-            "queryDebugString" -> toDebugString(includeLogicalPlan = isInitialized),
-            "startOffset" -> getLatestExecutionContext().startOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString,
-            "endOffset" -> getLatestExecutionContext().endOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString
-          ))
+            "message" -> message))
 
         errorClassOpt = e match {
           case t: SparkThrowable => Option(t.getErrorClass)
