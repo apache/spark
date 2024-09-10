@@ -60,11 +60,11 @@ private[spark] class LazyTry[T](initialize: => T) extends Serializable {
 
 private[spark] object LazyTry {
   /**
-   * Create a new Lazy instance.
+   * Create a new LazyTry instance.
    *
    * @param initialize The block of code to initialize the lazy value.
    * @tparam T type of the lazy value.
-   * @return a new Lazy instance.
+   * @return a new LazyTry instance.
    */
   def apply[T](initialize: => T): LazyTry[T] = new LazyTry(initialize)
 }
