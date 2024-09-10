@@ -630,6 +630,8 @@ class PandasGroupedOpsMixin:
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
+        This API is unstable, and for developers.
+
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -861,6 +863,8 @@ class PandasCogroupedOps:
         This function requires a full shuffle. All the data of a cogroup will be loaded
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
+
+        This API is unstable, and for developers.
 
         See Also
         --------
