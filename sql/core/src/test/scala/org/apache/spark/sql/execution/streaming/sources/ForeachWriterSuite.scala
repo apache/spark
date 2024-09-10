@@ -310,7 +310,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
       checkError(
         exception = errorEvent.error.get.asInstanceOf[SparkException],
-        errorClass = "_LEGACY_ERROR_TEMP_2256",
+        condition = "_LEGACY_ERROR_TEMP_2256",
         parameters = Map.empty
       )
     }

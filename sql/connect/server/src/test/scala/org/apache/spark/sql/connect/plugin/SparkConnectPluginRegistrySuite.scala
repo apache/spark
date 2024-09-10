@@ -217,7 +217,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
         exception = intercept[SparkException] {
           SparkConnectPluginRegistry.loadRelationPlugins()
         },
-        errorClass = "CONNECT.PLUGIN_CTOR_MISSING",
+        condition = "CONNECT.PLUGIN_CTOR_MISSING",
         parameters = Map("cls" -> "org.apache.spark.sql.connect.plugin.DummyPluginNoTrivialCtor"))
     }
 
@@ -228,7 +228,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
         exception = intercept[SparkException] {
           SparkConnectPluginRegistry.loadRelationPlugins()
         },
-        errorClass = "CONNECT.PLUGIN_RUNTIME_ERROR",
+        condition = "CONNECT.PLUGIN_RUNTIME_ERROR",
         parameters = Map("msg" -> "Bad Plugin Error"))
     }
   }

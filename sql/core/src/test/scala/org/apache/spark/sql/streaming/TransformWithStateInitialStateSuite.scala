@@ -418,7 +418,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
           }
           checkError(
             exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
-            errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
+            condition = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
             sqlState = Some("42802"),
             parameters = Map("groupingKey" -> "init_1")
           )

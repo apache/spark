@@ -686,7 +686,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        condition = "INVALID_FORMAT.MISMATCH_INPUT",
         parameters = Map("inputType" -> "\"STRING\"", "input" -> "xx", "format" -> "999")
       )
     }
@@ -1015,7 +1015,7 @@ class CollationSQLExpressionsSuite
           exception = intercept[SparkRuntimeException] {
             sql(query).collect()
           },
-          errorClass = "USER_RAISED_EXCEPTION",
+          condition = "USER_RAISED_EXCEPTION",
           parameters = Map("errorMessage" -> t.errorMessage)
         )
       }
@@ -1193,7 +1193,7 @@ class CollationSQLExpressionsSuite
       exception = intercept[AnalysisException] {
         sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
       },
-      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      condition = "COLLATION_MISMATCH.EXPLICIT",
       parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
     )
   }
@@ -1385,7 +1385,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "{\"a\":1,", "failFastMode" -> "FAILFAST")
       )
     }
@@ -1489,7 +1489,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "INVALID_VARIANT_CAST",
+        condition = "INVALID_VARIANT_CAST",
         parameters = Map("value" -> "\"Spark\"", "dataType" -> "\"INT\"")
       )
     }
@@ -1770,7 +1770,7 @@ class CollationSQLExpressionsSuite
             exception = intercept[AnalysisException] {
               sql(query)
             },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
             parameters = params,
             queryContext = Array(
               ExpectedContext(objectType = "",
@@ -1821,7 +1821,7 @@ class CollationSQLExpressionsSuite
             exception = intercept[AnalysisException] {
               sql(query)
             },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
             parameters = params,
             queryContext = Array(
               ExpectedContext(objectType = "",
@@ -1869,7 +1869,7 @@ class CollationSQLExpressionsSuite
             exception = intercept[AnalysisException] {
               sql(query)
             },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
             parameters = params,
             queryContext = Array(
               ExpectedContext(objectType = "",
@@ -2319,7 +2319,7 @@ class CollationSQLExpressionsSuite
       exception = intercept[ExtendedAnalysisException] {
         sql(queryFail).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
       parameters = Map(
         "methodName" -> "toHexString",
         "className" -> "java.lang.Integer",
