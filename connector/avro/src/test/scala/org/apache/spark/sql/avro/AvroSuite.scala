@@ -894,7 +894,7 @@ abstract class AvroSuite
         assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[AnalysisException],
-          errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+          condition = "AVRO_INCOMPATIBLE_READ_TYPE",
           parameters = Map("avroPath" -> "field 'a'",
             "sqlPath" -> "field 'a'",
             "avroType" -> "decimal\\(12,10\\)",
@@ -972,7 +972,7 @@ abstract class AvroSuite
           assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
-            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            condition = "AVRO_INCOMPATIBLE_READ_TYPE",
             parameters = Map("avroPath" -> "field 'a'",
               "sqlPath" -> "field 'a'",
               "avroType" -> "interval day to second",
@@ -1009,7 +1009,7 @@ abstract class AvroSuite
           assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
-            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            condition = "AVRO_INCOMPATIBLE_READ_TYPE",
             parameters = Map("avroPath" -> "field 'a'",
               "sqlPath" -> "field 'a'",
               "avroType" -> "interval year to month",
@@ -1673,7 +1673,7 @@ abstract class AvroSuite
           exception = intercept[AnalysisException] {
             sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1136",
+          condition = "_LEGACY_ERROR_TEMP_1136",
           parameters = Map.empty
         )
         checkError(
@@ -1681,7 +1681,7 @@ abstract class AvroSuite
             spark.udf.register("testType", () => new IntervalData())
             sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
           },
-          errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
           parameters = Map(
             "columnName" -> "`testType()`",
             "columnType" -> "UDT(\"INTERVAL\")",
@@ -2888,7 +2888,7 @@ abstract class AvroSuite
                    |LOCATION '${dir}'
                    |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
             },
-            errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+            condition = "INVALID_COLUMN_NAME_AS_PATH",
             parameters = Map(
               "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
           )
@@ -2994,7 +2994,7 @@ class AvroV1Suite extends AvroSuite {
             sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
               .format("avro").save(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          condition = "INVALID_COLUMN_NAME_AS_PATH",
           parameters = Map(
             "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
         )
@@ -3007,7 +3007,7 @@ class AvroV1Suite extends AvroSuite {
               .write.mode(SaveMode.Overwrite)
               .format("avro").save(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          condition = "INVALID_COLUMN_NAME_AS_PATH",
           parameters = Map(
             "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
         )

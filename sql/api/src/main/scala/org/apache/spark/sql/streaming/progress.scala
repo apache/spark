@@ -139,7 +139,7 @@ class StateOperatorProgress private[spark] (
  *   Information about operators in the query that store state.
  * @param sources
  *   detailed statistics on data being read from each of the streaming sources.
- * @since 3.5.0
+ * @since 2.1.0
  */
 @Evolving
 class StreamingQueryProgress private[spark] (
@@ -195,7 +195,7 @@ class StreamingQueryProgress private[spark] (
 }
 
 private[spark] object StreamingQueryProgress {
-  private val mapper = {
+  private[this] val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
     ret.registerModule(DefaultScalaModule)
     ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -227,7 +227,7 @@ private[spark] object StreamingQueryProgress {
  *   The rate at which data is arriving from this source.
  * @param processedRowsPerSecond
  *   The rate at which data from this source is being processed by Spark.
- * @since 3.5.0
+ * @since 2.1.0
  */
 @Evolving
 class SourceProgress protected[spark] (
@@ -276,7 +276,7 @@ class SourceProgress protected[spark] (
  * @param numOutputRows
  *   Number of rows written to the sink or -1 for Continuous Mode (temporarily) or Sink V1 (until
  *   decommissioned).
- * @since 3.5.0
+ * @since 2.1.0
  */
 @Evolving
 class SinkProgress protected[spark] (
