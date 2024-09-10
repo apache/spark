@@ -170,7 +170,9 @@ class StateSchemaCompatibilityChecker(
     val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
     val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName)
 
-    if (existingStateSchemaList.isEmpty) {
+    val colFamiliesAddedOrRemoved =
+      newStateSchemaList.map(_.colFamilyName) != existingStateSchemaList.map(_.colFamilyName)
+    if (existingStateSchemaList.isEmpty || colFamiliesAddedOrRemoved) {
       // write the schema file if it doesn't exist
       createSchemaFile(newStateSchemaList, stateSchemaVersion)
       true
@@ -275,10 +277,20 @@ object StateSchemaCompatibilityChecker {
     if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
       throw result.get
     }
-    val schemaFileLocation = newSchemaFilePath match {
-      case Some(path) => path.toString
-      case None => checker.schemaFileLocation.toString
+    val schemaFileLocation = if (evolvedSchema) {
+      if (newSchemaFilePath.isDefined) {
+        newSchemaFilePath.get.toString
+      } else {
+        checker.schemaFileLocation.toString
+      }
+    } else {
+      if (oldSchemaFilePath.isDefined) {
+        oldSchemaFilePath.get.toString
+      } else {
+        checker.schemaFileLocation.toString
+      }
     }
+
     StateSchemaValidationResult(evolvedSchema, schemaFileLocation)
   }
 }
