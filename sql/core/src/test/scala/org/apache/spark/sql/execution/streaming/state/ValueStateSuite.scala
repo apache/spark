@@ -61,7 +61,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(ex.isInstanceOf[SparkException])
       checkError(
         ex.asInstanceOf[SparkException],
-        errorClass = "INTERNAL_ERROR_TWS",
+        condition = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
         ),
@@ -80,7 +80,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       }
       checkError(
         ex1.asInstanceOf[SparkException],
-        errorClass = "INTERNAL_ERROR_TWS",
+        condition = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
         ),
@@ -172,7 +172,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       }
       checkError(
         ex,
-        errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+        condition = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
         parameters = Map(
           "colFamilyName" -> cfName
         ),
@@ -192,7 +192,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
     checkError(
       ex,
-      errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+      condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
       parameters = Map(
         "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
       ),
@@ -377,7 +377,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"

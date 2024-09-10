@@ -118,7 +118,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"DECIMAL(19,0)\"",
         "newType" -> "\"INT\"",
@@ -139,7 +139,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         exception = intercept[SparkRuntimeException] {
           sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
         },
-        errorClass = "EXCEED_LIMIT_LENGTH",
+        condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "255")
       )
     }

@@ -51,7 +51,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
         exception = intercept[SparkIllegalArgumentException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_EMPTY_LOCATION",
+        condition = "INVALID_EMPTY_LOCATION",
         parameters = Map("location" -> ""))
     }
   }
@@ -66,7 +66,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
       }
       checkError(
         exception = e,
-        errorClass = "INVALID_LOCATION",
+        condition = "INVALID_LOCATION",
         parameters = Map("location" -> "file:tmp"))
     }
   }
@@ -77,7 +77,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"ALTER DATABASE $catalog.$ns SET LOCATION 'loc'")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 

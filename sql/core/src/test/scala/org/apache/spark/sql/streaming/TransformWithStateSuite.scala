@@ -712,7 +712,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
     checkError(
       ex.asInstanceOf[SparkRuntimeException],
-      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      condition = "STATE_STORE_HANDLE_NOT_INITIALIZED",
       parameters = Map.empty
     )
   }
@@ -1155,7 +1155,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "outputMode",
                 "oldConfig" -> "Update",
@@ -1197,7 +1197,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+              condition = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
               parameters = Map(
                 "stateVarName" -> "countState",
                 "newType" -> "ListState",
@@ -1244,7 +1244,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "timeMode",
                 "oldConfig" -> "NoTime",
@@ -1296,7 +1296,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+              condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
               parameters = Map(
                 "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
                 "newValueSchema" ->
