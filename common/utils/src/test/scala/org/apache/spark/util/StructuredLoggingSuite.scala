@@ -471,6 +471,10 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     org.slf4j.MDC.put(LogKeys.DATA.name, "some-data")
     val logOutputWithMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
     assert(mdcPattern.r.findFirstIn(logOutputWithMDCSet).isDefined)
+
+    org.slf4j.MDC.remove(LogKeys.DATA.name)
+    val logOutputWithoutMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
+    assert(mdcPattern.r.findFirstIn(logOutputWithoutMDCSet).isEmpty)
   }
 }
 
