@@ -22,10 +22,10 @@ import java.util.TimeZone
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range, Union}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
-import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, Decimal, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -478,5 +478,111 @@ class CanonicalizeSuite extends SparkFunSuite {
             default.toString)
         }
     }
+  }
+
+  test("SPARK-49618: union node equality when order of children is shuffled") {
+    val table1 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)()).select($"u", $"i").analyze
+
+    val table2 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)()).select($"u", $"i").analyze
+
+    val table3 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)()).select($"u", $"i").analyze
+
+    val table4 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("i", IntegerType)()).analyze
+
+    // These unions are equal because the head output attributes name are same
+    val u1 = Union(Seq(table1, table2, table3, table4))
+    val u2 = Union(Seq(table3, table2, table1, table4))
+    val u3 = Union(Seq(table4, table3, table2, table1))
+    val u4 = Union(Seq(table2, table4, table3, table1))
+    val u5 = Union(Seq(table3, table2, table4, table1))
+    val u6 = Union(Seq(table4, table1, table2, table3))
+
+    assert(u1 == u2 && u2 == u3 && u3 == u4 && u4 == u5 && u5 == u6)
+
+    // canonicalized forms of all should be same
+    assert(u1.canonicalized == u2.canonicalized && u2.canonicalized == u3.canonicalized &&
+      u3.canonicalized == u4.canonicalized && u5.canonicalized == u4.canonicalized &&
+      u6.canonicalized == u5.canonicalized)
+  }
+
+  test("SPARK-49618: union node inequality when order of children is shuffled with changed" +
+    " attribute names") {
+    val table1 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)()).select($"u", $"i").analyze
+
+    val table2 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)()).select($"u" as "a", $"i" as "b").analyze
+
+    val table3 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)()).select($"u", $"i").analyze
+
+    // These unions are not equal because the head output attributes name are differing
+    val u1 = Union(Seq(table1, table2, table3))
+    val u2 = Union(Seq(table2, table3, table1))
+    assert(u1 != u2)
+    // but canonicalized form should be same
+    assert(u1.canonicalized == u2.canonicalized)
+  }
+
+  test("SPARK-49618: union node canonicalization with similar plans") {
+    val table1 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("l", LongType)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)()).analyze
+
+    val table2 = LocalRelation(
+      AttributeReference("l", LongType)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)()).analyze
+
+    val table3 = LocalRelation(
+      AttributeReference("l", LongType)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)()).analyze
+
+    val table4 = LocalRelation(
+      AttributeReference("l", LongType)(),
+      AttributeReference("i", IntegerType)()).analyze
+
+    val u1 = Union(Seq(
+      table1.select($"l" + 3 as "l", $"i" + 5 as "i").analyze,
+      table2.select($"l" * 3 as "l", $"i" * 7 as "i").analyze,
+      table3.select($"l" - 5 as "l", $"i" - 11 as "i").analyze,
+      table4))
+
+    val u2 = Union(Seq(
+      table3.select($"l" - 5 as "l", $"i" - 11 as "i").analyze,
+      table4,
+      table2.select($"l" * 3 as "l", $"i" * 7 as "i").analyze,
+      table1.select($"l" + 3 as "l", $"i" + 5 as "i").analyze))
+
+    // The two unions will not be equal because the attribute ids differ
+    assert(u1 != u2)
+
+    // but canonicalized form should be same even though respective ordering is different
+    assert(u1.canonicalized == u2.canonicalized)
   }
 }

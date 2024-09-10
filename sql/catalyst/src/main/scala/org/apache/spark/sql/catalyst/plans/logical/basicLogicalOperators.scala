@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import com.google.common.base.Objects
+
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -436,7 +438,7 @@ object Union {
 case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
-    allowMissingCol: Boolean = false) extends LogicalPlan {
+    allowMissingCol: Boolean = false) extends LogicalPlan with UnionEquality[LogicalPlan] {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def maxRows: Option[Long] = {
@@ -455,6 +457,23 @@ case class Union(
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case that: Union if that.resolved && this.resolved => this.byName == that.byName &&
+      this.allowMissingCol == that.allowMissingCol &&
+      this.positionAgnosticEquals(that)
+
+    case that: Union => this.byName == that.byName &&
+      this.allowMissingCol == that.allowMissingCol &&
+      this.children == that.children
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = Objects.hashCode(
+    java.lang.Integer.valueOf(this.positionAgnosticHashCode),
+    java.lang.Boolean.valueOf(this.byName),
+    java.lang.Boolean.valueOf(this.allowMissingCol))
 
   /**
    * Note the definition has assumption about how union is implemented physically.
