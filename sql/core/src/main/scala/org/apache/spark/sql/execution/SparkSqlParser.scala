@@ -520,13 +520,13 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
     val qPlan: LogicalPlan = plan(ctx.query)
 
-    // Disallow parameter markers in the body of the view.
+    // Disallow parameter markers in the query of the view.
     // We need this limitation because we store the original query text, pre substitution.
-    // To lift this we would need to reconstitute the body with parameter markers replaced with the
+    // To lift this we would need to reconstitute the query with parameter markers replaced with the
     // values given at CREATE VIEW time, or we would need to store the parameter values alongside
     // the text.
     // The same rule can be found in CACHE TABLE builder.
-    checkInvalidParameter(qPlan, "CREATE VIEW body")
+    checkInvalidParameter(qPlan, "the query of CREATE VIEW")
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,
