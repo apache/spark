@@ -96,7 +96,9 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     sessionHolder.addExecuteHolder(executeHolder)
 
     executionsLock.synchronized {
-      lastExecutionTimeMs = None
+      if (!executions.isEmpty()) {
+        lastExecutionTimeMs = None
+      }
     }
     logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeHolder.key)} is created.")
 
