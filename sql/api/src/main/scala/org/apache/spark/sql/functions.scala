@@ -6853,8 +6853,8 @@ object functions {
 
   /**
    * Converts a column containing nested inputs (array/map/struct) into a variants where maps and
-   * structs are converted to variant objects which are unordered unlike SQL structs. Input maps can
-   * only have string keys.
+   * structs are converted to variant objects which are unordered unlike SQL structs. Input maps
+   * can only have string keys.
    *
    * @param col
    *   a column with a nested schema or column name.
