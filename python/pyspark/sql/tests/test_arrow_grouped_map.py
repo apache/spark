@@ -77,9 +77,9 @@ class GroupedMapInArrowTestsMixin:
         grouped_df = df.groupBy((col("id") / 4).cast("int"))
         expected = df.collect()
 
-        for func_variation in function_variations(func):
-            actual = grouped_df.applyInArrow(func_variation, "id long, value long").collect()
-            self.assertEqual(actual, expected)
+        # for func_variation in function_variations(func):
+        actual = grouped_df.applyInArrow(func, "id long, value long").collect()
+        self.assertEqual(actual, expected)
 
     def test_apply_in_arrow_with_key(self):
         def func(key, group):

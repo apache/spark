@@ -22,10 +22,12 @@ import java.io.DataOutputStream
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
+
 
 
 /**
@@ -48,6 +50,29 @@ class GroupedArrowPythonRunner(
     jobArtifactUUID, profiler
   ) {
 
+  override protected def newWriter(
+      env: SparkEnv,
+      worker: PythonWorker,
+      inputIterator: Iterator[Iterator[InternalRow]],
+      partitionIndex: Int,
+      context: TaskContext): Writer = {
+
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
+
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        handleMetadataBeforeExec(dataOut)
+        writeUDF(dataOut)
+      }
+
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        writer = new ArrowStreamWriter(root, null, dataOut)
+        writer.start()
+
+        writeNextInputToArrowStream(root, writer, dataOut, inputIterator)
+      }
+    }
+  }
+
   override protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -66,6 +91,7 @@ class GroupedArrowPythonRunner(
       batchWriter.finalizeCurrentArrowBatch()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
+      writer.end()
       true
     } else {
       close()

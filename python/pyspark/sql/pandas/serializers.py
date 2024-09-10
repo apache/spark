@@ -189,6 +189,9 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
         super(ArrowStreamGroupUDFSerializer, self).__init__()
         self._assign_cols_by_name = assign_cols_by_name
 
+    def load_stream(self, stream):
+        yield (batch for batch in ArrowStreamSerializer.load_stream(self, stream))
+
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
 
