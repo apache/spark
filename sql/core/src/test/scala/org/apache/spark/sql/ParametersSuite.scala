@@ -716,7 +716,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     checkAnswer(df, Row(11))
   }
 
-  test("SPARK-49398: Cache Table with Parameter markers should throw " +
+  test("SPARK-49398: Cache Table with parameter markers in select query should throw " +
     "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT") {
     val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
     checkError(
@@ -730,5 +730,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         start = 0,
         stop = sqlText.length - 1)
     )
+  }
+
+  test("SPARK-49398: Cache Table with parameter in identifier should work") {
+    val cacheName = "MyCacheTable"
+    withCache(cacheName) {
+      spark.sql("CACHE TABLE IDENTIFIER(:param) as SELECT 1 as c1", Map("param" -> cacheName))
+      checkAnswer(
+        spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array(cacheName)),
+        Row("c1"))
+    }
   }
 }

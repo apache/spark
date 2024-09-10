@@ -5078,16 +5078,16 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
           catalogAndNamespace.quoted, ctx)
       }
-      // Disallow parameter markers in the body of the cache.
-      // We need this limitation because we store the original query text, pre substitution.
-      // To lift this we would need to reconstitute the body with parameter markers replaced with
-      // the values given at CACHE TABLE time, or we would need to store the parameter values
-      // alongside the text.
-      // The same rule can be found in CREATE VIEW builder.
-      query.foreach(p => checkInvalidParameter(p, "CACHE TABLE body"))
       val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
       val isLazy = ctx.LAZY != null
       if (query.isDefined) {
+        // Disallow parameter markers in the body of the cache.
+        // We need this limitation because we store the original query text, pre substitution.
+        // To lift this we would need to reconstitute the body with parameter markers replaced with
+        // the values given at CACHE TABLE time, or we would need to store the parameter values
+        // alongside the text.
+        // The same rule can be found in CREATE VIEW builder.
+        checkInvalidParameter(query.get, "CACHE TABLE body")
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
         CacheTable(
