@@ -1713,6 +1713,102 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       }
     }
   }
+
+  test("transformWithState - verify that no metadata and schema logs are purged after" +
+    " removing column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "3") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "1", "")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "2", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "3", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "4", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "5", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "6", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "7", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "8", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "9", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "10", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "11", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "12", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("b", "str2")),
+          CheckNewAnswer(("b", "str1")),
+          AddData(inputData, ("b", "str3")),
+          CheckNewAnswer(("b", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // Metadata files are written for batches 0, 2, and 14.
+        // Schema files are written for 0, 14
+        // At the beginning of the last query run, the thresholdBatchId is 11.
+        // However, we would need both schema files to be preserved, if we want to
+        // be able to read from batch 11 onwards.
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
+      }
+    }
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
