@@ -109,8 +109,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "expression" -> sqlValue,
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
+        "targetType" -> toSQLType(to)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

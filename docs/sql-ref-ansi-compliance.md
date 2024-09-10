@@ -73,7 +73,7 @@ If `spark.sql.ansi.enabled` is `false`, then the decimal type will produce `null
 ```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT 2147483647 + 1
        ^^^^^^^^^^^^^^
@@ -147,7 +147,7 @@ SELECT CAST('a' AS INT)
        ^^^^^^^^^^^^^^^^
 
 SELECT CAST(2147483648L AS INT);
-org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead.
 
 SELECT CAST(DATE'2020-01-01' AS INT);
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
