@@ -1550,7 +1550,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       callGetTry(t)
     }
     // Uncomment for manual inspection
-    // e.printStackTrace()
+    // e1.printStackTrace()
     // Example:
     // java.lang.Exception: test
     //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
@@ -1606,7 +1606,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       callGetTryAgain(t)
     }
     // Uncomment for manual inspection
-    // e.printStackTrace()
+    // e2.printStackTrace()
     // Example:
     // java.lang.Exception: test
     //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
