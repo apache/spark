@@ -73,7 +73,7 @@ If `spark.sql.ansi.enabled` is `false`, then the decimal type will produce `null
 ```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 SELECT 2147483647 + 1
        ^^^^^^^^^^^^^^
@@ -141,7 +141,7 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 
 -- `spark.sql.ansi.enabled=true` (This is a default behaviour)
 SELECT CAST('a' AS INT);
-org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT CAST('a' AS INT)
        ^^^^^^^^^^^^^^^^
