@@ -170,9 +170,7 @@ class StateSchemaCompatibilityChecker(
     val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
     val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName)
 
-    val colFamiliesAddedOrRemoved =
-      newStateSchemaList.map(_.colFamilyName) != existingStateSchemaList.map(_.colFamilyName)
-    if (existingStateSchemaList.isEmpty || colFamiliesAddedOrRemoved) {
+    if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
       createSchemaFile(newStateSchemaList, stateSchemaVersion)
       true
@@ -188,8 +186,13 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
+      val colFamiliesAddedOrRemoved =
+        newStateSchemaList.map(_.colFamilyName) != existingStateSchemaList.map(_.colFamilyName)
+      if (stateSchemaVersion == 3 || colFamiliesAddedOrRemoved) {
+        createSchemaFile(newStateSchemaList, stateSchemaVersion)
+      }
       // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
-      false
+      colFamiliesAddedOrRemoved
     }
   }
 
