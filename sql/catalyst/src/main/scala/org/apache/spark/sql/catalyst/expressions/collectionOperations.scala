@@ -1519,6 +1519,63 @@ case class ArrayContains(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
+case class ToJavaArray(array: Expression)
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with QueryErrorsBase
+  with CodegenFallback {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(array.dataType)
+  override def dataType: DataType = ObjectType(classOf[Array[Long]])
+  override def child: Expression = array
+  override def prettyName: String = "to_java_array"
+
+  override def checkInputDataTypes(): TypeCheckResult = array.dataType match {
+    case ArrayType(_, _) =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(ArrayType),
+          "inputSql" -> toSQLExpr(array),
+          "inputType" -> toSQLType(array.dataType))
+      )
+  }
+
+  @transient lazy val elementType: DataType =
+    array.dataType.asInstanceOf[ArrayType].elementType
+  private def resultArrayElementNullable: Boolean =
+    array.dataType.asInstanceOf[ArrayType].containsNull
+  @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
+
+  private def toArray(array: Any): Any = {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(data, if (ascending) lt else gt)
+    }
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  override def nullSafeEval(array: Any): Any = {
+    // val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    // data.asInstanceOf[Array[Long]]
+    val data = array.asInstanceOf[ArrayData].toLongArray()
+    data
+  }
+
+  def doGenCodeX(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // nullSafeCodeGen(ctx, ev, a => nullSafeEval(ctx, ev, a))
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, array => s"$expr.nullSafeEval($array)")
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(array = newChild)
+}
+
 /**
  * Searches the specified array for the specified object using the binary search algorithm.
  *
@@ -1776,52 +1833,13 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
     }
 
   override def replacement: Expression = {
-    if (canPerformFastBinarySearch) {
-      if (arrayIsFoldable) {
-        val (arguments, inputTypes) = unboxArgumentsAndInputTypes()
-        StaticInvoke(
-          classOf[ArrayExpressionUtils],
-          IntegerType,
-          "binarySearch",
-          arguments,
-          inputTypes)
-      } else {
-        StaticInvoke(
-          classOf[ArrayExpressionUtils],
-          IntegerType,
-          "binarySearch",
-          Seq(array, value),
-          inputTypes)
-      }
-    } else if (isPrimitiveType) {
-      if (arrayIsFoldable) {
-        val (arguments, inputTypes) = boxedArgumentsAndInputTypes()
-        StaticInvoke(
-          classOf[ArrayExpressionUtils],
-          IntegerType,
-          "binarySearchNullSafe",
-          arguments,
-          inputTypes
-        )
-      } else {
-        StaticInvoke(
-          classOf[ArrayExpressionUtils],
-          IntegerType,
-          "binarySearchNullSafe",
-          Seq(array, value),
-          inputTypes)
-      }
-    } else {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(Literal(elementType, elementObjectType),
-          Literal(comp, comparatorObjectType),
-          array,
-          value),
-        elementObjectType +: comparatorObjectType +: inputTypes)
-    }
+    val toJavaArray = ToJavaArray(array)
+    StaticInvoke(
+      classOf[ArrayExpressionUtils],
+      IntegerType,
+      "binarySearch",
+      Seq(toJavaArray, value),
+      Seq(toJavaArray.dataType, value.dataType))
   }
 
   override def prettyName: String = "array_binary_search"

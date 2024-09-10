@@ -135,6 +135,11 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayContains(MapKeys(m1), Literal("a")), null)
   }
 
+  test("xxx") {
+    val a4_0 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a4_0, Literal(2L)), 1)
+  }
+
   test("ArrayBinarySearch") {
     // primitive type: boolean、byte、short、int、long、float、double
     // boolean
