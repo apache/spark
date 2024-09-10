@@ -20,11 +20,9 @@ package org.apache.spark.sql.catalyst.encoders
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
@@ -36,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -437,7 +435,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       exception = exception,
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
-        "typeName" -> "Any",
+        ExecutionErrors.TYPE_NAME -> "Any",
         "docroot" -> SPARK_DOC_ROOT)
     )
   }

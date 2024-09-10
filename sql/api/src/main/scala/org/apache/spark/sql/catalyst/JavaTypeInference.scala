@@ -22,15 +22,19 @@ import java.util.{List => JList, Map => JMap, Set => JSet}
 import javax.annotation.Nonnull
 
 import scala.jdk.CollectionConverters._
-import scala.reflect.ClassTag
+import scala.language.existentials
+import scala.reflect.{classTag, ClassTag}
+import scala.util.{Failure, Try}
 
 import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, JavaSerializationCodec}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits._
+
+
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -157,22 +161,28 @@ object JavaTypeInference {
               } catch {
                 case UseJavaSerializationEncoder() =>
                   // Is it possible to generate class tag from tv.. Looks like not..
-                  JavaSerializableEncoder(classTag[java.io.Serializable])
+                  TransformingEncoder(
+                    classTag[java.io.Serializable],
+                    BinaryEncoder,
+                    JavaSerializationCodec)
               }
               case _ => try {
                 encoderFor(methodReturnType, seenTypeSet + c, classTV)
               } catch {
                 case s: SparkUnsupportedOperationException if
-                  s.getErrorClass == QueryExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
+                  s.getErrorClass == ExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
                 try {
                   encoderFor(methodReturnType, seenTypeSet + c, classTV,
                     considerClassAsBean = false)
                 } catch {
                   case UseJavaSerializationEncoder() =>
-                    JavaSerializableEncoder(methodReturnType match {
+
+                    TransformingEncoder(methodReturnType match {
                       case c: Class[_] => ClassTag(c)
                       case _ => classTag[java.io.Serializable]
-                    })
+                    },
+                      BinaryEncoder,
+                      JavaSerializationCodec)
                 }
               }
             }
@@ -190,18 +200,21 @@ object JavaTypeInference {
           // implies it cannot be assumed a BeanClass.
           // Check if its super class or interface could be represented by an Encoder
 
-            JavaBeanEncoder(ClassTag(c), fields)
+            JavaBeanEncoder(ClassTag(c), fields.toSeq)
 
         } catch {
           case _: IllegalStateException =>
-            throw QueryExecutionErrors.cannotFindEncoderForTypeError(
-              t.getTypeName, "")
+            throw ExecutionErrors.cannotFindEncoderForTypeError(
+              t.getTypeName)
         }
       } else {
-        recursivelyGetAllInterfaces(c).map(typee => Try(encoderFor(typee))).collectFirst {
-            case Failure(UseJavaSerializationEncoder()) => JavaSerializableEncoder(ClassTag(c))
-          }.getOrElse(throw QueryExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName,
-          SPARK_DOC_ROOT))
+        val x = recursivelyGetAllInterfaces(c).map(typee => Try(encoderFor(typee)))
+
+          x.collectFirst {
+            case Failure(UseJavaSerializationEncoder()) => TransformingEncoder(ClassTag(c),
+              BinaryEncoder,
+              JavaSerializationCodec)
+          }.getOrElse(throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName))
       }
 
     case t =>
@@ -228,8 +241,8 @@ object JavaTypeInference {
   object UseJavaSerializationEncoder {
     def unapply(th: Throwable): Boolean = th match {
       case s: SparkUnsupportedOperationException =>
-        s.getErrorClass == QueryExecutionErrors.ENCODER_NOT_FOUND_ERROR &&
-          s.getMessageParameters.asScala.get(QueryExecutionErrors.TYPE_NAME).contains(
+        s.getErrorClass == ExecutionErrors.ENCODER_NOT_FOUND_ERROR &&
+          s.getMessageParameters.asScala.get(ExecutionErrors.TYPE_NAME).contains(
             classOf[java.io.Serializable].getTypeName)
 
       case _ => false

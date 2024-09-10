@@ -61,9 +61,6 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  */
 private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionErrors {
 
-  val ENCODER_NOT_FOUND_ERROR = "ENCODER_NOT_FOUND"
-  val TYPE_NAME = "typeName"
-
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
     SparkException.internalError(s"Cannot evaluate expression: $expression")
   }
@@ -962,7 +959,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unrecognizedSqlTypeError(jdbcTypeId: String, typeName: String): Throwable = {
     new SparkSQLException(
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      messageParameters = Map(TYPE_NAME -> typeName, "jdbcType" -> jdbcTypeId))
+      messageParameters = Map(ExecutionErrors.TYPE_NAME -> typeName, "jdbcType" -> jdbcTypeId))
   }
 
   def unsupportedJdbcTypeError(content: String): SparkSQLException = {
