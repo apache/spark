@@ -53,7 +53,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT")
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "DATE_TRUNC")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
