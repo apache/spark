@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.BreakIterator;
 import com.ibm.icu.text.Collator;
 import com.ibm.icu.text.RuleBasedCollator;
@@ -26,15 +27,15 @@ import com.ibm.icu.util.ULocale;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
-import static org.apache.spark.unsafe.Platform.copyMemory;
 import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,6 +48,16 @@ public class CollationAwareUTF8String {
    * string in a target string.
    */
   private static final int MATCH_NOT_FOUND = -1;
+
+  /**
+   * `COMBINED_ASCII_SMALL_I_COMBINING_DOT` is an internal representation of the combined
+   * lowercase code point for ASCII lowercase letter i with an additional combining dot character
+   * (U+0307). This integer value is not a valid code point itself, but rather an artificial code
+   * point marker used to represent the two lowercase characters that are the result of converting
+   * the uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
+   */
+  private static final int COMBINED_ASCII_SMALL_I_COMBINING_DOT =
+    SpecialCodePointConstants.ASCII_SMALL_I << 16 | SpecialCodePointConstants.COMBINING_DOT;
 
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
@@ -105,9 +116,9 @@ public class CollationAwareUTF8String {
       } else {
         // Use buffered lowercase code point iteration to handle one-to-many case mappings.
         targetCodePoint = getLowercaseCodePoint(targetIterator.next());
-        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
-          targetCodePoint = CODE_POINT_LOWERCASE_I;
-          codePointBuffer = CODE_POINT_COMBINING_DOT;
+        if (targetCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+          targetCodePoint = SpecialCodePointConstants.ASCII_SMALL_I;
+          codePointBuffer = SpecialCodePointConstants.COMBINING_DOT;
         }
         ++matchLength;
       }
@@ -207,9 +218,9 @@ public class CollationAwareUTF8String {
       } else {
         // Use buffered lowercase code point iteration to handle one-to-many case mappings.
         targetCodePoint = getLowercaseCodePoint(targetIterator.next());
-        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
-          targetCodePoint = CODE_POINT_COMBINING_DOT;
-          codePointBuffer = CODE_POINT_LOWERCASE_I;
+        if (targetCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+          targetCodePoint = SpecialCodePointConstants.COMBINING_DOT;
+          codePointBuffer = SpecialCodePointConstants.ASCII_SMALL_I;
         }
         ++matchLength;
       }
@@ -299,114 +310,82 @@ public class CollationAwareUTF8String {
     return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
-  /*
+  /**
    * Performs string replacement for ICU collations by searching for instances of the search
-   * string in the `src` string, with respect to the specified collation, and then replacing
+   * string in the `target` string, with respect to the specified collation, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
    * @param collationId the collation ID to use for string search
    * @return the position of the first occurrence of `match` in `set`
    */
-  public static UTF8String replace(final UTF8String src, final UTF8String search,
+  public static UTF8String replace(final UTF8String target, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(src, search, collationId);
+    String targetStr = target.toValidString();
+    String searchStr = search.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(targetStr, searchStr, collationId);
 
-    // Find the first occurrence of the search string.
-    int end = stringSearch.next();
-    if (end == StringSearch.DONE) {
-      // Search string was not found, so string is unchanged.
-      return src;
+    StringBuilder sb = new StringBuilder();
+    int start = 0;
+    int matchStart = stringSearch.first();
+    while (matchStart != StringSearch.DONE) {
+      sb.append(targetStr, start, matchStart);
+      sb.append(replace.toValidString());
+      start = matchStart + stringSearch.getMatchLength();
+      matchStart = stringSearch.next();
     }
-
-    // Initialize byte positions
-    int c = 0;
-    int byteStart = 0; // position in byte
-    int byteEnd = 0; // position in byte
-    while (byteEnd < src.numBytes() && c < end) {
-      byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-      c += 1;
-    }
-
-    // At least one match was found. Estimate space needed for result.
-    // The 16x multiplier here is chosen to match commons-lang3's implementation.
-    int increase = Math.max(0, Math.abs(replace.numBytes() - search.numBytes())) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
-    while (end != StringSearch.DONE) {
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
-      buf.append(replace);
-
-      // Move byteStart to the beginning of the current match
-      byteStart = byteEnd;
-      int cs = c;
-      // Move cs to the end of the current match
-      // This is necessary because the search string may contain 'multi-character' characters
-      while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
-        byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
-        cs += 1;
-      }
-      // Go to next match
-      end = stringSearch.next();
-      // Update byte positions
-      while (byteEnd < src.numBytes() && c < end) {
-        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-        c += 1;
-      }
-    }
-    buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
-      src.numBytes() - byteStart);
-    return buf.build();
+    sb.append(targetStr, start, targetStr.length());
+    return UTF8String.fromString(sb.toString());
   }
 
-  /*
+  /**
    * Performs string replacement for UTF8_LCASE collation by searching for instances of the search
-   * string in the src string, with respect to lowercased string versions, and then replacing
+   * string in the target string, with respect to lowercased string versions, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
    * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
-   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
+   * used for UTF8_BINARY, the method returns the `target` string if the `search` string is empty.
    *
-   * @param src the string to be searched in
+   * @param target the string to be searched in
    * @param search the string to be searched for
    * @param replace the string to be used as replacement
-   * @param collationId the collation ID to use for string search
    * @return the position of the first occurrence of `match` in `set`
    */
-  public static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
+  public static UTF8String lowercaseReplace(final UTF8String target, final UTF8String search,
       final UTF8String replace) {
-    if (src.numBytes() == 0 || search.numBytes() == 0) {
-      return src;
+    if (target.numBytes() == 0 || search.numBytes() == 0) {
+      return target;
     }
 
     UTF8String lowercaseSearch = lowerCaseCodePoints(search);
 
     int start = 0;
-    int end = lowercaseFind(src, lowercaseSearch, start);
+    int end = lowercaseFind(target, lowercaseSearch, start);
     if (end == -1) {
       // Search string was not found, so string is unchanged.
-      return src;
+      return target;
     }
 
     // At least one match was found. Estimate space needed for result.
     // The 16x multiplier here is chosen to match commons-lang3's implementation.
     int increase = Math.max(0, replace.numBytes() - search.numBytes()) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
+    final UTF8StringBuilder buf = new UTF8StringBuilder(target.numBytes() + increase);
     while (end != -1) {
-      buf.append(src.substring(start, end));
+      buf.append(target.substring(start, end));
       buf.append(replace);
       // Update character positions
-      start = end + lowercaseMatchLengthFrom(src, lowercaseSearch, end);
-      end = lowercaseFind(src, lowercaseSearch, start);
+      start = end + lowercaseMatchLengthFrom(target, lowercaseSearch, end);
+      end = lowercaseFind(target, lowercaseSearch, start);
     }
-    buf.append(src.substring(start, src.numChars()));
+    buf.append(target.substring(start, target.numChars()));
     return buf.build();
   }
 
@@ -493,27 +472,15 @@ public class CollationAwareUTF8String {
    */
   private static void appendLowercaseCodePoint(final int codePoint, final StringBuilder sb) {
     int lowercaseCodePoint = getLowercaseCodePoint(codePoint);
-    if (lowercaseCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
+    if (lowercaseCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      sb.appendCodePoint(0x0069);
-      sb.appendCodePoint(0x0307);
+      sb.appendCodePoint(SpecialCodePointConstants.ASCII_SMALL_I);
+      sb.appendCodePoint(SpecialCodePointConstants.COMBINING_DOT);
     } else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
       sb.appendCodePoint(lowercaseCodePoint);
     }
   }
-
-  /**
-   * `CODE_POINT_COMBINED_LOWERCASE_I_DOT` is an internal representation of the combined lowercase
-   * code point for ASCII lowercase letter i with an additional combining dot character (U+0307).
-   * This integer value is not a valid code point itself, but rather an artificial code point
-   * marker used to represent the two lowercase characters that are the result of converting the
-   * uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
-   */
-  private static final int CODE_POINT_LOWERCASE_I = 0x69;
-  private static final int CODE_POINT_COMBINING_DOT = 0x307;
-  private static final int CODE_POINT_COMBINED_LOWERCASE_I_DOT =
-    CODE_POINT_LOWERCASE_I << 16 | CODE_POINT_COMBINING_DOT;
 
   /**
    * Returns the lowercase version of the provided code point, with special handling for
@@ -522,15 +489,15 @@ public class CollationAwareUTF8String {
    * the position in the string relative to other characters in lowercase).
    */
   private static int getLowercaseCodePoint(final int codePoint) {
-    if (codePoint == 0x0130) {
+    if (codePoint == SpecialCodePointConstants.CAPITAL_I_WITH_DOT_ABOVE) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
+      return COMBINED_ASCII_SMALL_I_COMBINING_DOT;
     }
-    else if (codePoint == 0x03C2) {
+    else if (codePoint == SpecialCodePointConstants.GREEK_FINAL_SIGMA) {
       // Greek final and non-final letter sigma should be mapped the same. This is achieved by
       // mapping Greek small final sigma (U+03C2) to Greek small non-final sigma (U+03C3). Capital
       // letter sigma (U+03A3) is mapped to small non-final sigma (U+03C3) in the `else` branch.
-      return 0x03C3;
+      return SpecialCodePointConstants.GREEK_SMALL_SIGMA;
     }
     else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
@@ -580,6 +547,152 @@ public class CollationAwareUTF8String {
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UTF8String.fromString(UCharacter.toTitleCase(locale, target.toValidString(),
       BreakIterator.getWordInstance(locale)));
+  }
+
+  /**
+   * This 'HashMap' is introduced as a performance speedup. Since title-casing a codepoint can
+   * result in more than a single codepoint, for correctness, we would use
+   * 'UCharacter.toTitleCase(String)' which returns a 'String'. If we use
+   * 'UCharacter.toTitleCase(int)' (the version of the same function which converts a single
+   * codepoint to its title-case codepoint), it would be faster than the previously mentioned
+   * version, but the problem here is that we don't handle when title-casing a codepoint yields more
+   * than 1 codepoint. Since there are only 48 codepoints that are mapped to more than 1 codepoint
+   * when title-cased, they are precalculated here, so that the faster function for title-casing
+   * could be used in combination with this 'HashMap' in the method 'appendCodepointToTitleCase'.
+   */
+  private static final HashMap<Integer, String> codepointOneToManyTitleCaseLookupTable =
+    new HashMap<>(){{
+    StringBuilder sb = new StringBuilder();
+    for (int i = Character.MIN_CODE_POINT; i <= Character.MAX_CODE_POINT; ++i) {
+      sb.appendCodePoint(i);
+      String titleCase = UCharacter.toTitleCase(sb.toString(), null);
+      if (titleCase.codePointCount(0, titleCase.length()) > 1) {
+        put(i, titleCase);
+      }
+      sb.setLength(0);
+    }
+  }};
+
+  /**
+   * Title-casing a string using ICU case mappings. Iterates over the string and title-cases
+   * the first character in each word, and lowercases every other character. Handles lowercasing
+   * capital Greek letter sigma ('Σ') separately, taking into account if it should be a small final
+   * Greek sigma ('ς') or small non-final Greek sigma ('σ'). Words are separated by ASCII
+   * space(\u0020).
+   *
+   * @param source UTF8String to be title cased
+   * @return title cased source
+   */
+  public static UTF8String toTitleCaseICU(UTF8String source) {
+    // In the default UTF8String implementation, `toLowerCase` method implicitly does UTF8String
+    // validation (replacing invalid UTF-8 byte sequences with Unicode replacement character
+    // U+FFFD), but now we have to do the validation manually.
+    source = source.makeValid();
+
+    // Building the title cased source with 'sb'.
+    UTF8StringBuilder sb = new UTF8StringBuilder();
+
+    // 'isNewWord' is true if the current character is the beginning of a word, false otherwise.
+    boolean isNewWord = true;
+    // We are maintaining if the current character is preceded by a cased letter.
+    // This is used when lowercasing capital Greek letter sigma ('Σ'), to figure out if it should be
+    // lowercased into σ or ς.
+    boolean precededByCasedLetter = false;
+
+    // 'offset' is a byte offset in source's byte array pointing to the beginning of the character
+    // that we need to process next.
+    int offset = 0;
+    int len = source.numBytes();
+
+    while (offset < len) {
+      // We will actually call 'codePointFrom()' 2 times for each character in the worst case (once
+      // here, and once in 'followedByCasedLetter'). Example of a string where we call it 2 times
+      // for almost every character is 'ΣΣΣΣΣ' (a string consisting only of Greek capital sigma)
+      // and 'Σ`````' (a string consisting of a Greek capital sigma, followed by case-ignorable
+      // characters).
+      int codepoint = source.codePointFrom(offset);
+      // Appending the correctly cased character onto 'sb'.
+      appendTitleCasedCodepoint(sb, codepoint, isNewWord, precededByCasedLetter, source, offset);
+      // Updating 'isNewWord', 'precededByCasedLetter' and 'offset' to be ready for the next
+      // character that we will process.
+      isNewWord = (codepoint == SpecialCodePointConstants.ASCII_SPACE);
+      if (!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
+        precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
+      }
+      offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+    }
+    return sb.build();
+  }
+
+  private static void appendTitleCasedCodepoint(
+      UTF8StringBuilder sb,
+      int codepoint,
+      boolean isAfterAsciiSpace,
+      boolean precededByCasedLetter,
+      UTF8String source,
+      int offset) {
+    if (isAfterAsciiSpace) {
+      // Title-casing a character if it is in the beginning of a new word.
+      appendCodepointToTitleCase(sb, codepoint);
+      return;
+    }
+    if (codepoint == SpecialCodePointConstants.GREEK_CAPITAL_SIGMA) {
+      // Handling capital Greek letter sigma ('Σ').
+      appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, source, offset);
+      return;
+    }
+    // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
+    // character. We specially handle 'CAPITAL_I_WITH_DOT_ABOVE'.
+    if (codepoint == SpecialCodePointConstants.CAPITAL_I_WITH_DOT_ABOVE) {
+      sb.appendCodePoint(SpecialCodePointConstants.ASCII_SMALL_I);
+      sb.appendCodePoint(SpecialCodePointConstants.COMBINING_DOT);
+      return;
+    }
+    sb.appendCodePoint(UCharacter.toLowerCase(codepoint));
+  }
+
+  private static void appendLowerCasedGreekCapitalSigma(
+      UTF8StringBuilder sb,
+      boolean precededByCasedLetter,
+      UTF8String source,
+      int offset) {
+    int codepoint = (!followedByCasedLetter(source, offset) && precededByCasedLetter)
+      ? SpecialCodePointConstants.GREEK_FINAL_SIGMA
+      : SpecialCodePointConstants.GREEK_SMALL_SIGMA;
+    sb.appendCodePoint(codepoint);
+  }
+
+  /**
+   * Checks if the character beginning at 'offset'(in 'sources' byte array) is followed by a cased
+   * letter.
+   */
+  private static boolean followedByCasedLetter(UTF8String source, int offset) {
+    // Moving the offset one character forward, so we could start the linear search from there.
+    offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+    int len = source.numBytes();
+
+    while (offset < len) {
+      int codepoint = source.codePointFrom(offset);
+
+      if (UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
+        offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+        continue;
+      }
+      return UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
+    }
+    return false;
+  }
+
+  /**
+   * Appends title-case of a single character to a 'StringBuilder' using the ICU root locale rules.
+   */
+  private static void appendCodepointToTitleCase(UTF8StringBuilder sb, int codepoint) {
+    String toTitleCase = codepointOneToManyTitleCaseLookupTable.get(codepoint);
+    if (toTitleCase == null) {
+      sb.appendCodePoint(UCharacter.toTitleCase(codepoint));
+    } else {
+      sb.append(toTitleCase);
+    }
   }
 
   /*
@@ -700,23 +813,61 @@ public class CollationAwareUTF8String {
       final int start, final int collationId) {
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.numBytes() == 0) return MATCH_NOT_FOUND;
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-    stringSearch.setIndex(start);
-
-    return stringSearch.next();
+    // Initialize the string search with respect to the specified ICU collation.
+    String targetStr = target.toValidString();
+    String patternStr = pattern.toValidString();
+    // Check if `start` is out of bounds. The provided offset `start` is given in number of
+    // codepoints, so a simple `targetStr.length` check is not sufficient here. This check is
+    // needed because `String.offsetByCodePoints` throws an `IndexOutOfBoundsException`
+    // exception when the offset is out of bounds.
+    if (targetStr.codePointCount(0, targetStr.length()) <= start) return MATCH_NOT_FOUND;
+    StringSearch stringSearch =
+      CollationFactory.getStringSearch(targetStr, patternStr, collationId);
+    stringSearch.setOverlapping(true);
+    // Start the search from `start`-th code point (NOT necessarily from the `start`-th character).
+    int startIndex = targetStr.offsetByCodePoints(0, start);
+    stringSearch.setIndex(startIndex);
+    // Perform the search and return the next result, starting from the specified position.
+    int searchIndex = stringSearch.next();
+    if (searchIndex == StringSearch.DONE) {
+      return MATCH_NOT_FOUND;
+    }
+    // Convert the search index from character count to code point count.
+    int indexOf = targetStr.codePointCount(0, searchIndex);
+    if (indexOf < start) {
+      return MATCH_NOT_FOUND;
+    }
+    return indexOf;
   }
 
-  private static int find(UTF8String target, UTF8String pattern, int start,
-      int collationId) {
-    assert (pattern.numBytes() > 0);
+  private static int findIndex(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      int nextIndex = stringSearch.next();
+      if (nextIndex == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      } else if (nextIndex == index && index != 0) {
+        stringSearch.setIndex(stringSearch.getIndex() + stringSearch.getMatchLength());
+      } else {
+        count--;
+        index = nextIndex;
+      }
+    }
+    return index;
+  }
 
-    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-    // Set search start position (start from character at start position)
-    stringSearch.setIndex(target.bytePosToChar(start));
-
-    // Return either the byte position or -1 if not found
-    return target.charPosToByte(stringSearch.next());
+  private static int findIndexReverse(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      index = stringSearch.previous();
+      if (index == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      }
+      count--;
+    }
+    return index + stringSearch.getMatchLength();
   }
 
   public static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
@@ -724,63 +875,30 @@ public class CollationAwareUTF8String {
     if (delimiter.numBytes() == 0 || count == 0 || string.numBytes() == 0) {
       return UTF8String.EMPTY_UTF8;
     }
+    String str = string.toValidString();
+    String delim = delimiter.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(str, delim, collationId);
+    stringSearch.setOverlapping(true);
     if (count > 0) {
-      int idx = -1;
-      while (count > 0) {
-        idx = find(string, delimiter, idx + 1, collationId);
-        if (idx >= 0) {
-          count --;
-        } else {
-          // can not find enough delim
-          return string;
-        }
-      }
-      if (idx == 0) {
+      // If the count is positive, we search for the count-th delimiter from the left.
+      int searchIndex = findIndex(stringSearch, count);
+      if (searchIndex == MATCH_NOT_FOUND) {
+        return string;
+      } else if (searchIndex == 0) {
         return UTF8String.EMPTY_UTF8;
+      } else {
+        return UTF8String.fromString(str.substring(0, searchIndex));
       }
-      byte[] bytes = new byte[idx];
-      copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-      return UTF8String.fromBytes(bytes);
-
     } else {
-      count = -count;
-
-      StringSearch stringSearch = CollationFactory
-        .getStringSearch(string, delimiter, collationId);
-
-      int start = string.numChars() - 1;
-      int lastMatchLength = 0;
-      int prevStart = -1;
-      while (count > 0) {
-        stringSearch.reset();
-        prevStart = -1;
-        int matchStart = stringSearch.next();
-        lastMatchLength = stringSearch.getMatchLength();
-        while (matchStart <= start) {
-          if (matchStart != StringSearch.DONE) {
-            // Found a match, update the start position
-            prevStart = matchStart;
-            matchStart = stringSearch.next();
-          } else {
-            break;
-          }
-        }
-
-        if (prevStart == -1) {
-          // can not find enough delim
+      // If the count is negative, we search for the count-th delimiter from the right.
+      int searchIndex = findIndexReverse(stringSearch, -count);
+      if (searchIndex == MATCH_NOT_FOUND) {
           return string;
-        } else {
-          start = prevStart - 1;
-          count--;
-        }
+      } else if (searchIndex == str.length()) {
+          return UTF8String.EMPTY_UTF8;
+      } else {
+          return UTF8String.fromString(str.substring(searchIndex));
       }
-
-      int resultStart = prevStart + lastMatchLength;
-      if (resultStart == string.numChars()) {
-        return UTF8String.EMPTY_UTF8;
-      }
-
-      return string.substring(resultStart, string.numChars());
     }
   }
 
@@ -870,11 +988,11 @@ public class CollationAwareUTF8String {
       }
       // Special handling for letter i (U+0069) followed by a combining dot (U+0307). By ensuring
       // that `CODE_POINT_LOWERCASE_I` is buffered, we guarantee finding a max-length match.
-      if (lowercaseDict.containsKey(CODE_POINT_COMBINED_LOWERCASE_I_DOT) &&
-          codePoint == CODE_POINT_LOWERCASE_I && inputIter.hasNext()) {
+      if (lowercaseDict.containsKey(COMBINED_ASCII_SMALL_I_COMBINING_DOT)
+          && codePoint == SpecialCodePointConstants.ASCII_SMALL_I && inputIter.hasNext()) {
         int nextCodePoint = inputIter.next();
-        if (nextCodePoint == CODE_POINT_COMBINING_DOT) {
-          codePoint = CODE_POINT_COMBINED_LOWERCASE_I_DOT;
+        if (nextCodePoint == SpecialCodePointConstants.COMBINING_DOT) {
+          codePoint = COMBINED_ASCII_SMALL_I_COMBINING_DOT;
         } else {
           codePointBuffer = nextCodePoint;
         }
@@ -1022,20 +1140,29 @@ public class CollationAwareUTF8String {
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the left to find the first character that is not in the set.
-    int searchIndex = 0, codePoint;
+    int searchIndex = 0, codePoint, codePointBuffer = -1;
     Iterator<Integer> srcIter = srcString.codePointIterator();
     while (srcIter.hasNext()) {
-      codePoint = getLowercaseCodePoint(srcIter.next());
+      // Get the next code point from either the buffer or the iterator.
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      }
+      else {
+        codePoint = getLowercaseCodePoint(srcIter.next());
+      }
       // Special handling for Turkish dotted uppercase letter I.
-      if (codePoint == CODE_POINT_LOWERCASE_I && srcIter.hasNext() &&
-          trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
-        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
-        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == CODE_POINT_COMBINING_DOT) {
+      if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I && srcIter.hasNext() &&
+          trimChars.contains(COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
+        codePointBuffer = codePoint;
+        codePoint = getLowercaseCodePoint(srcIter.next());
+        if (codePoint == SpecialCodePointConstants.COMBINING_DOT) {
           searchIndex += 2;
-        }
-        else {
-          if (trimChars.contains(codePoint)) ++searchIndex;
+          codePointBuffer = -1;
+        } else if (trimChars.contains(codePointBuffer)) {
+          ++searchIndex;
+          codePointBuffer = codePoint;
+        } else {
           break;
         }
       } else if (trimChars.contains(codePoint)) {
@@ -1077,7 +1204,7 @@ public class CollationAwareUTF8String {
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
       int codePoint = trimIter.next();
-      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
+      trimChars.putIfAbsent(codePoint, new String(Character.toChars(codePoint)));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -1132,20 +1259,28 @@ public class CollationAwareUTF8String {
     while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
     // Iterate over `srcString` from the right to find the first character that is not in the set.
-    int searchIndex = srcString.numChars(), codePoint;
+    int searchIndex = srcString.numChars(), codePoint, codePointBuffer = -1;
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
     while (srcIter.hasNext()) {
-      codePoint = getLowercaseCodePoint(srcIter.next());
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      }
+      else {
+        codePoint = getLowercaseCodePoint(srcIter.next());
+      }
       // Special handling for Turkish dotted uppercase letter I.
-      if (codePoint == CODE_POINT_COMBINING_DOT && srcIter.hasNext() &&
-          trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
-        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
-        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == CODE_POINT_LOWERCASE_I) {
+      if (codePoint == SpecialCodePointConstants.COMBINING_DOT && srcIter.hasNext() &&
+          trimChars.contains(COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
+        codePointBuffer = codePoint;
+        codePoint = getLowercaseCodePoint(srcIter.next());
+        if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I) {
           searchIndex -= 2;
-        }
-        else {
-          if (trimChars.contains(codePoint)) --searchIndex;
+          codePointBuffer = -1;
+        } else if (trimChars.contains(codePointBuffer)) {
+          --searchIndex;
+          codePointBuffer = codePoint;
+        } else {
           break;
         }
       } else if (trimChars.contains(codePoint)) {
@@ -1187,7 +1322,7 @@ public class CollationAwareUTF8String {
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
       int codePoint = trimIter.next();
-      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
+      trimChars.putIfAbsent(codePoint, new String(Character.toChars(codePoint)));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -1224,6 +1359,79 @@ public class CollationAwareUTF8String {
 
     // Return the substring from the start of the string until that position.
     return UTF8String.fromString(src.substring(0, charIndex));
+  }
+
+  public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
+      final int limit, final int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return input.split(delim, limit);
+    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+      return lowercaseSplitSQL(input, delim, limit);
+    } else {
+      return icuSplitSQL(input, delim, limit, collationId);
+    }
+  }
+
+  public static UTF8String[] lowercaseSplitSQL(final UTF8String string, final UTF8String delimiter,
+      final int limit) {
+    if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+    if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+
+    List<UTF8String> strings = new ArrayList<>();
+    UTF8String lowercaseDelimiter = lowerCaseCodePoints(delimiter);
+    int startIndex = 0, nextMatch = 0, nextMatchLength;
+    while (nextMatch != MATCH_NOT_FOUND) {
+      if (limit > 0 && strings.size() == limit - 1) {
+        break;
+      }
+      nextMatch = lowercaseFind(string, lowercaseDelimiter, startIndex);
+      if (nextMatch != MATCH_NOT_FOUND) {
+        nextMatchLength = lowercaseMatchLengthFrom(string, lowercaseDelimiter, nextMatch);
+        strings.add(string.substring(startIndex, nextMatch));
+        startIndex = nextMatch + nextMatchLength;
+      }
+    }
+    if (startIndex <= string.numChars()) {
+      strings.add(string.substring(startIndex, string.numChars()));
+    }
+    if (limit == 0) {
+      // Remove trailing empty strings
+      int i = strings.size() - 1;
+      while (i >= 0 && strings.get(i).numBytes() == 0) {
+        strings.remove(i);
+        i--;
+      }
+    }
+    return strings.toArray(new UTF8String[0]);
+  }
+
+  public static UTF8String[] icuSplitSQL(final UTF8String string, final UTF8String delimiter,
+      final int limit, final int collationId) {
+    if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+    if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+    List<UTF8String> strings = new ArrayList<>();
+    String target = string.toValidString(), pattern = delimiter.toValidString();
+    StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+    int start = 0, end;
+    while ((end = stringSearch.next()) != StringSearch.DONE) {
+      if (limit > 0 && strings.size() == limit - 1) {
+        break;
+      }
+      strings.add(UTF8String.fromString(target.substring(start, end)));
+      start = end + stringSearch.getMatchLength();
+    }
+    if (start <= target.length()) {
+      strings.add(UTF8String.fromString(target.substring(start)));
+    }
+    if (limit == 0) {
+      // Remove trailing empty strings
+      int i = strings.size() - 1;
+      while (i >= 0 && strings.get(i).numBytes() == 0) {
+        strings.remove(i);
+        i--;
+      }
+    }
+    return strings.toArray(new UTF8String[0]);
   }
 
   // TODO: Add more collation-aware UTF8String operations here.

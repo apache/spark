@@ -103,7 +103,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException] {
           spark.read.format(dummyReadOnlyFileSourceV2).load(path).collect()
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> "Dummy file reader"))
     }
   }
@@ -131,7 +131,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
           exception = intercept[SparkException] {
             spark.read.format(dummyReadOnlyFileSourceV2).load(path).collect()
           },
-          errorClass = "INTERNAL_ERROR",
+          condition = "INTERNAL_ERROR",
           parameters = Map("message" -> "Dummy file reader"))
       }
     }

@@ -241,6 +241,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
         "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('abc')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('a a a')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "(null)").executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -390,7 +399,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[AnalysisException] {
         df.collect()
       },
-      errorClass = "NULL_DATA_SOURCE_OPTION",
+      condition = "NULL_DATA_SOURCE_OPTION",
       parameters = Map(
         "option" -> "pushDownOffset")
     )
@@ -1777,7 +1786,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary1", false),
-        Row("test", "employee_bonus", false)))
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
@@ -2941,7 +2951,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2953,7 +2963,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -3036,7 +3046,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[IndexAlreadyExistsException] {
         sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
       },
-      errorClass = "INDEX_ALREADY_EXISTS",
+      condition = "INDEX_ALREADY_EXISTS",
       parameters = Map(
         "indexName" -> "`people_index`",
         "tableName" -> "`test`.`people`"
@@ -3054,7 +3064,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[NoSuchIndexException] {
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
-      errorClass = "INDEX_NOT_FOUND",
+      condition = "INDEX_NOT_FOUND",
       parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
@@ -3071,7 +3081,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
         },
-        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
         parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
       )
@@ -3085,5 +3095,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
     val explained = getNormalizedExplain(df, FormattedMode)
     assert(explained.contains("External engine query:"))
+  }
+
+  test("Test not nullSafeEqual") {
+    val df = sql("SELECT str FROM h2.test.strings_with_nulls WHERE NOT str <=> 'abc'")
+    val rows = df.collect()
+
+    assert(rows.length == 2)
+    assert(rows.contains(Row(null)))
+    assert(rows.contains(Row("a a a")))
   }
 }

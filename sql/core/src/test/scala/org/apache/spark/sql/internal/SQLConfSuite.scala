@@ -204,7 +204,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // spark core conf w/ entry registered
     checkError(
       exception = intercept[AnalysisException](sql("RESET spark.executor.cores")),
-      errorClass = "CANNOT_MODIFY_CONFIG",
+      condition = "CANNOT_MODIFY_CONFIG",
       parameters = Map("key" -> "\"spark.executor.cores\"", "docroot" -> SPARK_DOC_ROOT)
     )
 
@@ -233,7 +233,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     checkError(
       exception = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}")),
-      errorClass = "_LEGACY_ERROR_TEMP_1325",
+      condition = "_LEGACY_ERROR_TEMP_1325",
       parameters = Map("key" -> "spark.sql.warehouse.dir"))
 
   }
@@ -450,7 +450,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, invalidTz)
       },
-      errorClass = "INVALID_CONF_VALUE.TIME_ZONE",
+      condition = "INVALID_CONF_VALUE.TIME_ZONE",
       parameters = Map(
         "confValue" -> invalidTz,
         "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
@@ -469,7 +469,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         sql(s"SET TIME ZONE '$tz'").collect()
       },
-      errorClass = "INVALID_CONF_VALUE.TIME_ZONE",
+      condition = "INVALID_CONF_VALUE.TIME_ZONE",
       parameters = Map(
         "confValue" -> tz,
         "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
@@ -486,7 +486,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val sqlText = "set time zone interval 19 hours"
     checkError(
       exception = intercept[ParseException](sql(sqlText)),
-      errorClass = "_LEGACY_ERROR_TEMP_0044",
+      condition = "_LEGACY_ERROR_TEMP_0044",
       parameters = Map.empty,
       context = ExpectedContext(sqlText, 0, 30))
   }
@@ -511,7 +511,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         sql(s"SET COLLATION unicode_c").collect()
       },
-      errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
+      condition = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
       parameters = Map(
         "confValue" -> "UNICODE_C",
         "confName" -> "spark.sql.session.collation.default",
@@ -522,7 +522,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("SPARK-43028: config not found error") {
     checkError(
       exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
-      errorClass = "SQL_CONF_NOT_FOUND",
+      condition = "SQL_CONF_NOT_FOUND",
       parameters = Map("sqlConf" -> "\"some.conf\""))
   }
 }

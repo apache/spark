@@ -61,7 +61,7 @@ class SharedStateSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         spark.sharedState.externalCatalog
       },
-      errorClass = "DEFAULT_DATABASE_NOT_EXISTS",
+      condition = "DEFAULT_DATABASE_NOT_EXISTS",
       parameters = Map("defaultDatabase" -> "default_database_not_exists")
     )
 

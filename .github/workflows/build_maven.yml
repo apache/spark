@@ -30,8 +30,3 @@ jobs:
     name: Run
     uses: ./.github/workflows/maven_test.yml
     if: github.repository == 'apache/spark'
-    with:
-      envs: >-
-        {
-          "SKIP_SPARK_RELEASE_VERSIONS": "3.4.2"
-        }

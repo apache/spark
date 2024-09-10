@@ -96,7 +96,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.agg(testUdf(df("v"))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
       parameters = Map("sqlExpr" -> "\"pandas_udf(v)\"", "dataType" -> "VARIANT"))
   }
 
@@ -110,7 +110,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.agg(testUdf(df("arr_v"))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
       parameters = Map("sqlExpr" -> "\"pandas_udf(arr_v)\"", "dataType" -> "ARRAY<VARIANT>"))
   }
 
@@ -123,7 +123,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.agg(testUdf(df("id"))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
       parameters = Map("sqlExpr" -> "\"pandas_udf(id)\"", "dataType" -> "VARIANT"))
   }
 
@@ -136,7 +136,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.agg(testUdf(df("id"))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"pandas_udf(id)\"",
         "dataType" -> "STRUCT<a: STRUCT<v: VARIANT>>"))
@@ -175,7 +175,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
       },
-      errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+      condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
       parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
       context = ExpectedContext(
         "transform", s".*${this.getClass.getSimpleName}.*"))

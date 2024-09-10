@@ -146,7 +146,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
         "`test_catalog`.`ns`.`tbl`"
       }
       checkError(e,
-        errorClass = "PARTITIONS_NOT_FOUND",
+        condition = "PARTITIONS_NOT_FOUND",
         parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
         "tableName" -> expectedTableName))
 

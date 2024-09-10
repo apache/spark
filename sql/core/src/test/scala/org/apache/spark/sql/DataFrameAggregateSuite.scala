@@ -645,7 +645,7 @@ class DataFrameAggregateSuite extends QueryTest
     }
     checkError(
       exception = error,
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`collect_set`",
         "dataType" -> "\"MAP\"",
@@ -725,7 +725,7 @@ class DataFrameAggregateSuite extends QueryTest
       exception = intercept[AnalysisException] {
         testData.groupBy(sum($"key")).count()
       },
-      errorClass = "GROUP_BY_AGGREGATE",
+      condition = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> "sum(key)"),
       context = ExpectedContext(fragment = "sum", callSitePattern = getCurrentClassCallSitePattern)
     )
@@ -985,7 +985,7 @@ class DataFrameAggregateSuite extends QueryTest
       }
       checkError(
         exception = error,
-        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
           "functionName" -> "`max_by`",
@@ -1055,7 +1055,7 @@ class DataFrameAggregateSuite extends QueryTest
       }
       checkError(
         exception = error,
-        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
           "functionName" -> "`min_by`",
@@ -1186,7 +1186,7 @@ class DataFrameAggregateSuite extends QueryTest
           exception = intercept[AnalysisException] {
             sql("SELECT COUNT_IF(x) FROM tempView")
           },
-          errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"count_if(x)\"",
@@ -1350,7 +1350,7 @@ class DataFrameAggregateSuite extends QueryTest
       exception = intercept[AnalysisException] {
         Seq(Tuple1(Seq(1))).toDF("col").groupBy(struct($"col.a")).count()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"col[a]\"",
         "paramIndex" -> "second",
@@ -1924,7 +1924,7 @@ class DataFrameAggregateSuite extends QueryTest
           )
           .collect()
       },
-      errorClass = "HLL_INVALID_LG_K",
+      condition = "HLL_INVALID_LG_K",
       parameters = Map(
         "function" -> "`hll_sketch_agg`",
         "min" -> "4",
@@ -1940,7 +1940,7 @@ class DataFrameAggregateSuite extends QueryTest
           )
           .collect()
       },
-      errorClass = "HLL_INVALID_LG_K",
+      condition = "HLL_INVALID_LG_K",
       parameters = Map(
         "function" -> "`hll_sketch_agg`",
         "min" -> "4",
@@ -1963,7 +1963,7 @@ class DataFrameAggregateSuite extends QueryTest
           .withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
           .collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -1986,7 +1986,7 @@ class DataFrameAggregateSuite extends QueryTest
           )
           .collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -2007,7 +2007,7 @@ class DataFrameAggregateSuite extends QueryTest
             |""".stripMargin)
         checkAnswer(res, Nil)
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_sketch_agg(value, text)\"",
         "paramIndex" -> "second",
@@ -2036,7 +2036,7 @@ class DataFrameAggregateSuite extends QueryTest
             |""".stripMargin)
         checkAnswer(res, Nil)
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_union_agg(sketch, Hll_4)\"",
         "paramIndex" -> "second",
@@ -2078,7 +2078,7 @@ class DataFrameAggregateSuite extends QueryTest
             | cte1 join cte2 on cte1.id = cte2.id
             |""".stripMargin).collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -2114,7 +2114,7 @@ class DataFrameAggregateSuite extends QueryTest
             |group by 1
             |""".stripMargin).collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -2162,8 +2162,9 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  private def assertAggregateOnDataframe(df: DataFrame,
-    expected: Int, aggregateColumn: String): Unit = {
+  private def assertAggregateOnDataframe(
+      df: => DataFrame,
+      expected: Int): Unit = {
     val configurations = Seq(
       Seq.empty[(String, String)], // hash aggregate is used by default
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
@@ -2175,32 +2176,64 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("spark.sql.test.forceApplySortAggregate" -> "true")
     )
 
-    for (conf <- configurations) {
-      withSQLConf(conf: _*) {
-        assert(createAggregate(df).count() == expected)
+    // Make tests faster
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+      for (conf <- configurations) {
+        withSQLConf(conf: _*) {
+          assert(df.count() == expected, df.queryExecution.simpleString)
+        }
       }
     }
-
-    def createAggregate(df: DataFrame): DataFrame = df.groupBy(aggregateColumn).agg(count("*"))
   }
 
   test("SPARK-47430 Support GROUP BY MapType") {
-    val numRows = 50
+    def genMapData(dataType: String): String = {
+      s"""
+        |case when id % 4 == 0 then map()
+        |when id % 4 == 1 then map(cast(0 as $dataType), cast(0 as $dataType))
+        |when id % 4 == 2 then map(cast(0 as $dataType), cast(0 as $dataType),
+        |  cast(1 as $dataType), cast(1 as $dataType))
+        |else map(cast(1 as $dataType), cast(1 as $dataType),
+        |  cast(0 as $dataType), cast(0 as $dataType))
+        |end
+        |""".stripMargin
+    }
+    Seq("int", "long", "float", "double", "decimal(10, 2)", "string", "varchar(6)").foreach { dt =>
+      withTempView("v") {
+        spark.range(20)
+          .selectExpr(
+            s"cast(1 as $dt) as c1",
+            s"${genMapData(dt)} as c2",
+            "map(c1, null) as c3",
+            s"cast(null as map<$dt, $dt>) as c4")
+          .createOrReplaceTempView("v")
 
-    val dfSameInt = (0 until numRows)
-      .map(_ => Tuple1(Map(1 -> 1)))
-      .toDF("m0")
-    assertAggregateOnDataframe(dfSameInt, 1, "m0")
-
-    val dfSameFloat = (0 until numRows)
-      .map(i => Tuple1(Map(if (i % 2 == 0) 1 -> 0.0 else 1 -> -0.0 )))
-      .toDF("m0")
-    assertAggregateOnDataframe(dfSameFloat, 1, "m0")
-
-    val dfDifferent = (0 until numRows)
-      .map(i => Tuple1(Map(i -> i)))
-      .toDF("m0")
-    assertAggregateOnDataframe(dfDifferent, numRows, "m0")
+        assertAggregateOnDataframe(
+          spark.sql("SELECT count(*) FROM v GROUP BY c2"),
+          3)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT c2, count(*) FROM v GROUP BY c2"),
+          3)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT c1, c2, count(*) FROM v GROUP BY c1, c2"),
+          3)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT map(c1, c1) FROM v GROUP BY map(c1, c1)"),
+          1)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT map(c1, c1), count(*) FROM v GROUP BY map(c1, c1)"),
+          1)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT c3, count(*) FROM v GROUP BY c3"),
+          1)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT c4, count(*) FROM v GROUP BY c4"),
+          1)
+        assertAggregateOnDataframe(
+          spark.sql("SELECT c1, c2, c3, c4, count(*) FROM v GROUP BY c1, c2, c3, c4"),
+          3)
+      }
+    }
   }
 
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
@@ -2209,12 +2242,16 @@ class DataFrameAggregateSuite extends QueryTest
     val dfSame = (0 until numRows)
       .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
       .toDF("c0")
-    assertAggregateOnDataframe(dfSame, 1, "c0")
+      .groupBy($"c0")
+      .count()
+    assertAggregateOnDataframe(dfSame, 1)
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(new CalendarInterval(i, i, i)))
       .toDF("c0")
-    assertAggregateOnDataframe(dfDifferent, numRows, "c0")
+      .groupBy($"c0")
+      .count()
+    assertAggregateOnDataframe(dfDifferent, numRows)
   }
 
   test("SPARK-46779: Group by subquery with a cached relation") {

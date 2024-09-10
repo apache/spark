@@ -115,16 +115,16 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.8</maven.version>
+    <maven.version>3.9.9</maven.version>
     <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7</asm.version>
-    <slf4j.version>2.0.14</slf4j.version>
+    <slf4j.version>2.0.16</slf4j.version>
     <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.25.3</protobuf.version>
+    <protobuf.version>3.25.4</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.2</zookeeper.version>
@@ -138,9 +138,9 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.1</parquet.version>
-    <orc.version>2.0.1</orc.version>
+    <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.21</jetty.version>
+    <jetty.version>11.0.23</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -151,7 +151,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.26</codahale.metrics.version>
+    <codahale.metrics.version>4.2.27</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -183,16 +183,15 @@
     <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
-    <snappy.version>1.1.10.5</snappy.version>
+    <snappy.version>1.1.10.6</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.17.1</commons-codec.version>
-    <commons-compress.version>1.26.2</commons-compress.version>
+    <commons-compress.version>1.27.1</commons-compress.version>
     <commons-io.version>2.16.1</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.16.0</commons-lang3.version>
+    <commons-lang3.version>3.17.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -211,16 +210,16 @@
     <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.8.0</commons-cli.version>
+    <commons-cli.version>1.9.0</commons-cli.version>
     <bouncycastle.version>1.78</bouncycastle.version>
-    <tink.version>1.14.1</tink.version>
+    <tink.version>1.15.0</tink.version>
     <datasketches.version>6.0.0</datasketches.version>
     <netty.version>4.1.110.Final</netty.version>
-    <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.66.Final</netty-tcnative.version>
     <icu4j.version>75.1</icu4j.version>
-    <junit-jupiter.version>5.9.3</junit-jupiter.version>
-    <junit-platform.version>1.9.3</junit-platform.version>
-    <sbt-jupiter-interface.version>0.11.1</sbt-jupiter-interface.version>
+    <junit-jupiter.version>5.11.0</junit-jupiter.version>
+    <junit-platform.version>1.11.0</junit-platform.version>
+    <sbt-jupiter-interface.version>0.13.0</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
@@ -228,10 +227,12 @@
     -->
     <arrow.version>17.0.0</arrow.version>
     <ammonite.version>3.0.0-M2</ammonite.version>
+    <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.1</kubernetes-client.version>
+    <kubernetes-client.version>6.13.3</kubernetes-client.version>
+    <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -276,6 +277,7 @@
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
+    <jjwt.deps.scope>test</jjwt.deps.scope>
 
     <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
@@ -292,7 +294,7 @@
     <connect.guava.version>33.2.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.62.2</io.grpc.version>
-    <mima.version>1.1.3</mima.version>
+    <mima.version>1.1.4</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
@@ -325,10 +327,12 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.0.0</mysql.connector.version>
-    <postgresql.version>42.7.3</postgresql.version>
+    <postgresql.version>42.7.4</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>12.8.0.jre11</mssql.jdbc.version>
+    <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
+    <!-- Used for SBT build to retrieve the Spark version -->
+    <spark.version>${project.version}</spark.version>
   </properties>
   <repositories>
     <repository>
@@ -435,7 +439,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>net.aichler</groupId>
+      <groupId>com.github.sbt.junit</groupId>
       <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
     </dependency>
@@ -676,6 +680,23 @@
         <version>${ivy.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-api</artifactId>
+        <version>${jjwt.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-impl</artifactId>
+        <version>${jjwt.version}</version>
+        <scope>${jjwt.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-jackson</artifactId>
+        <version>${jjwt.version}</version>
+        <scope>${jjwt.deps.scope}</scope>
+      </dependency>
+      <dependency>
         <groupId>com.google.code.findbugs</groupId>
         <artifactId>jsr305</artifactId>
         <version>${jsr305.version}</version>
@@ -704,7 +725,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.2.1</version>
+        <version>9.5.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -814,7 +835,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-4</version>
+        <version>1.5.6-5</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1037,11 +1058,6 @@
         <groupId>org.apache.ws.xmlschema</groupId>
         <artifactId>xmlschema-core</artifactId>
         <version>${ws.xmlschema.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.glassfish.jaxb</groupId>
-        <artifactId>txw2</artifactId>
-        <version>${org.glassfish.jaxb.txw2.version}</version>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -1269,7 +1285,7 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>net.aichler</groupId>
+        <groupId>com.github.sbt.junit</groupId>
         <artifactId>jupiter-interface</artifactId>
         <version>${sbt-jupiter-interface.version}</version>
         <scope>test</scope>
@@ -1612,7 +1628,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.9</version>
+        <version>1.10</version>
       </dependency>
       <!-- See SPARK-23654 for info on this dependency;
       It is used to keep javax.activation at v1.1.1 after dropping
@@ -2876,6 +2892,11 @@
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
       </dependency>
+      <dependency>
+        <groupId>com.squareup.okio</groupId>
+        <artifactId>okio</artifactId>
+        <version>${okio.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -3013,6 +3034,9 @@
               <goals>
                 <goal>doc-jar</goal>
               </goals>
+              <configuration>
+                <skip>${maven.scaladoc.skip}</skip>
+              </configuration>
             </execution>
           </executions>
           <configuration>
@@ -3020,7 +3044,6 @@
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
-            <skip>${maven.scaladoc.skip}</skip>
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
@@ -3804,6 +3827,9 @@
     </profile>
     <profile>
       <id>sparkr</id>
+    </profile>
+    <profile>
+      <id>jjwt</id>
     </profile>
     <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>

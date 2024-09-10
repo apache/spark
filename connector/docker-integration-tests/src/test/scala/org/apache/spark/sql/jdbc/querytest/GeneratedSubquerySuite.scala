@@ -28,9 +28,9 @@ import org.apache.spark.tags.DockerTest
 
 /**
  * This suite is used to generate subqueries, and test Spark against Postgres.
- * To run this test suite for a specific version (e.g., postgres:16.3-alpine):
+ * To run this test suite for a specific version (e.g., postgres:16.4-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.4-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.GeneratedSubquerySuite"
  * }}}
@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
 class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGeneratorHelper {
 
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.3-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.4-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -145,10 +145,6 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       None
     }
 
-    // SPARK-46446: offset operator in correlated subquery is not supported
-    // as it creates incorrect results for now.
-    val requireNoOffsetInCorrelatedSubquery = correlationConditions.nonEmpty
-
     // For the Limit clause, consider whether the subquery needs to return 1 row, or whether the
     // operator to be included is a Limit.
     val limitAndOffsetClause = if (requiresExactlyOneRowOutput) {
@@ -156,11 +152,10 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     } else {
       operatorInSubquery match {
         case lo: LimitAndOffset =>
-          val offsetValue = if (requireNoOffsetInCorrelatedSubquery) 0 else lo.offsetValue
-          if (offsetValue == 0 && lo.limitValue == 0) {
+          if (lo.offsetValue == 0 && lo.limitValue == 0) {
             None
           } else {
-            Some(LimitAndOffset(lo.limitValue, offsetValue))
+            Some(lo)
           }
         case _ => None
       }

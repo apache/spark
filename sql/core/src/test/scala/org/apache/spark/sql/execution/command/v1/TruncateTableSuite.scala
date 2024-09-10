@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FullQualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.execution.command.FakeLocalFsFileSystem
 import org.apache.spark.sql.internal.SQLConf
@@ -146,7 +147,8 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
           spark.table(t)
 
           val catalog = spark.sessionState.catalog
-          val qualifiedTableName = QualifiedTableName("ns", "tbl")
+          val qualifiedTableName =
+            FullQualifiedTableName(CatalogManager.SESSION_CATALOG_NAME, "ns", "tbl")
           val cachedPlan = catalog.getCachedTable(qualifiedTableName)
           assert(cachedPlan.stats.sizeInBytes == 0)
         }
@@ -199,7 +201,7 @@ class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
           exception = intercept[AnalysisException] {
             sql(s"TRUNCATE TABLE $t")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1266",
+          condition = "_LEGACY_ERROR_TEMP_1266",
           parameters = Map("tableIdentWithDB" -> "`spark_catalog`.`ns`.`tbl`")
         )
       }

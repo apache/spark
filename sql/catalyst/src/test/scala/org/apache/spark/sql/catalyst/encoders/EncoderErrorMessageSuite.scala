@@ -55,7 +55,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -64,7 +64,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -73,7 +73,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -82,7 +82,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -91,7 +91,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)

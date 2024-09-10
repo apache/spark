@@ -109,6 +109,16 @@
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
+    <!--
+      Included so Spark Connect client was compiled before triggering assembly.
+      See 'get-connect-client-jar' below. This will not be included in the packaging output.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
 
     <!--
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
@@ -158,6 +168,44 @@
               </zip>
             </target>
           </configuration>
+      </plugin>
+      <plugin>
+        <!--
+          Copy Spark Connect client jar and its dependencies for Spark Connect REPL.
+        -->
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-connect-client-repl-jars</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>cp</executable>
+              <arguments>
+                <argument>-r</argument>
+                <argument>${basedir}/../connector/connect/client/jvm/target/connect-repl</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/</argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-connect-client-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>cp</executable>
+              <arguments>
+                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${version}.jar</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
@@ -288,6 +336,14 @@
       <id>parquet-provided</id>
       <properties>
         <parquet.deps.scope>provided</parquet.deps.scope>
+      </properties>
+    </profile>
+
+    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
+    <profile>
+      <id>jjwt</id>
+      <properties>
+        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
 

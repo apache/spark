@@ -45,7 +45,7 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
       v2ErrorClass: String,
       v1Parameters: Map[String, String],
       v2Parameters: Map[String, String]): Unit = {
-    checkError(exception = exception, sqlState = None, errorClass = v1ErrorClass,
+    checkError(exception = exception, sqlState = None, condition = v1ErrorClass,
       parameters = v1Parameters)
   }
 }

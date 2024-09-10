@@ -179,6 +179,11 @@ class ProtoToParsedPlanTestSuite
       logError(log"Skipping ${MDC(PATH, fileName)}")
       return
     }
+    // TODO: enable below by SPARK-49487
+    if (fileName.contains("transpose")) {
+      logError(log"Skipping ${MDC(PATH, fileName)} because of SPARK-49487")
+      return
+    }
     val name = fileName.stripSuffix(".proto.bin")
     test(name) {
       val relation = readRelation(file)

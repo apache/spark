@@ -35,7 +35,7 @@ import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
 import org.apache.spark.sql.connect.client.CloseableIterator
@@ -440,6 +440,14 @@ object ArrowSerializer {
             field.readMethod.get,
             MethodType.methodType(field.enc.clsTag.runtimeClass))
           o => getter.invoke(o)
+        }
+
+      case (TransformingEncoder(_, encoder, provider), v) =>
+        new Serializer {
+          private[this] val codec = provider().asInstanceOf[Codec[Any, Any]]
+          private[this] val delegate: Serializer = serializerFor(encoder, v)
+          override def write(index: Int, value: Any): Unit =
+            delegate.write(index, codec.encode(value))
         }
 
       case (CalendarIntervalEncoder | VariantEncoder | _: UDTEncoder[_], _) =>
