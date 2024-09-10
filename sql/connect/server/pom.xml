@@ -53,6 +53,10 @@
       <version>${project.version}</version>
       <exclusions>
         <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>com.google.guava</groupId>
           <artifactId>guava</artifactId>
         </exclusion>

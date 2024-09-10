@@ -52,4 +52,7 @@ package object sql {
     f(builder)
     column(builder.build())
   }
+
+  private[sql] def throwRddNotSupportedException(): Nothing =
+    throw new UnsupportedOperationException("RDDs are not supported in Spark Connect.")
 }

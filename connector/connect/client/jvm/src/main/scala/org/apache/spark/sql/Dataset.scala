@@ -26,8 +26,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -1479,4 +1481,10 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   @scala.annotation.varargs
   override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
+
+  /** @inheritdoc */
+  override def rdd: RDD[T] = throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def toJavaRDD: JavaRDD[T] = throwRddNotSupportedException()
 }

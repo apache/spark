@@ -21,6 +21,8 @@ import scala.jdk.CollectionConverters._
 import _root_.java.util
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkCharVarcharUtils}
@@ -307,6 +309,35 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 2.2.0
    */
   def json(jsonDataset: DS[String]): DS[Row]
+
+   /**
+   * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
+   * Lines text format or newline-delimited JSON</a>) and returns the result as
+   * a `DataFrame`.
+   *
+   * Unless the schema is specified using `schema` function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @note this method is not supported in Spark Connect.
+   * @param jsonRDD input RDD with one JSON object per record
+   * @since 1.4.0
+   */
+  @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
+  def json(jsonRDD: JavaRDD[String]): DS[Row]
+
+  /**
+   * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   *
+   * Unless the schema is specified using `schema` function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @note this method is not supported in Spark Connect.
+   * @param jsonRDD input RDD with one JSON object per record
+   * @since 1.4.0
+   */
+  @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
+  def json(jsonRDD: RDD[String]): DS[Row]
 
   /**
    * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the other

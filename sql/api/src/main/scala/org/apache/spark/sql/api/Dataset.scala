@@ -22,7 +22,9 @@ import scala.reflect.runtime.universe.TypeTag
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
@@ -3055,4 +3057,31 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
    * @since 1.6.0
    */
   def write: DataFrameWriter[T]
+
+  /**
+   * Represents the content of the Dataset as an `RDD` of `T`.
+   *
+   * @note this method is not supported in Spark Connect.
+   * @group basic
+   * @since 1.6.0
+   */
+  def rdd: RDD[T]
+
+  /**
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
+   *
+   * @note this method is not supported in Spark Connect.
+   * @group basic
+   * @since 1.6.0
+   */
+  def toJavaRDD: JavaRDD[T]
+
+  /**
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
+   *
+   * @note this method is not supported in Spark Connect.
+   * @group basic
+   * @since 1.6.0
+   */
+  def javaRDD: JavaRDD[T] = toJavaRDD
 }
