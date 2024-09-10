@@ -118,11 +118,11 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         // SET spark.sql.parser.escapedStringLiterals=true
         example.split("  > ").tail.filterNot(_.trim.startsWith("SET")).take(1).foreach {
           case _ if funcName == "from_avro" || funcName == "to_avro" ||
-            funcName == "from_protobuf" || funcName == "to_protobuf" =>
+            funcName == "from_protobuf" || funcName == "to_protobuf" || funcName == "uniform" =>
               // Skip running the example queries for the from_avro, to_avro, from_protobuf and
               // to_protobuf functions because these functions dynamically load the
               // AvroDataToCatalyst or CatalystDataToAvro classes which are not available in this
-              // test.
+              // test, or use random numbers.
           case exampleRe(sql, _) =>
             val df = spark.sql(sql)
             val escapedSql = sql.replaceAll("\\|", "&#124;")
