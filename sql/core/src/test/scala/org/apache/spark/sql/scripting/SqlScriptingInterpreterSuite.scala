@@ -190,7 +190,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`$varName`"),
       context = ExpectedContext(
@@ -382,7 +382,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SqlScriptingException] (
           runSqlScript(commands)
         ),
-        errorClass = "INVALID_BOOLEAN_STATEMENT",
+        condition = "INVALID_BOOLEAN_STATEMENT",
         parameters = Map("invalidStatement" -> "1")
       )
     }
@@ -404,7 +404,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SqlScriptingException] (
           runSqlScript(commands1)
         ),
-        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
       )
 
@@ -424,7 +424,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException] (
           runSqlScript(commands2)
         ),
-        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         context = ExpectedContext(fragment = "(SELECT * FROM t2)", start = 121, stop = 138)
       )
@@ -576,7 +576,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         runSqlScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      condition = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
       parameters = Map("labelName" -> "LBL"))
   }
 
@@ -615,7 +615,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         runSqlScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
   }
 
@@ -630,7 +630,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         runSqlScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
   }
 

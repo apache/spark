@@ -76,14 +76,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           exception = intercept[AnalysisException] {
             sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
           },
-          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          condition = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
           parameters = Map.empty
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
           },
-          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          condition = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
           parameters = Map.empty
         )
       }
@@ -136,7 +136,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
         parameters = Map(
           "columnType" -> "\"ARRAY<INT>\"",
           "columnName" -> "`data`",
@@ -149,7 +149,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
         },
-        errorClass = "COLUMN_NOT_FOUND",
+        condition = "COLUMN_NOT_FOUND",
         parameters = Map(
           "colName" -> "`some_random_column`",
           "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
@@ -630,7 +630,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
         parameters = Map("viewName" -> "`tempView`")
       )
 
@@ -656,7 +656,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
         parameters = Map("viewName" -> "`global_temp`.`gTempView`")
       )
 
@@ -775,7 +775,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             exception = intercept[AnalysisException] {
               sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
             },
-            errorClass = "COLUMN_ALREADY_EXISTS",
+            condition = "COLUMN_ALREADY_EXISTS",
             parameters = Map("columnName" -> "`value`"))
         }
       }
@@ -849,7 +849,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`spark_catalog`.`db_not_exists`"))
   }
 

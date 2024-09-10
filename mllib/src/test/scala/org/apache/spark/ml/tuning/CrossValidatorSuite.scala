@@ -128,7 +128,7 @@ class CrossValidatorSuite
       exception = intercept[SparkIllegalArgumentException] {
         cv.fit(datasetWithFold)
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map(
         "fieldName" -> "`fold1`",
         "fields" -> "`label`, `features`, `fold`")

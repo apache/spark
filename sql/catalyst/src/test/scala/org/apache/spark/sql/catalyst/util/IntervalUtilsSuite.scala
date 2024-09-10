@@ -44,7 +44,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
+      condition = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
@@ -55,7 +55,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+      condition = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
@@ -66,7 +66,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "prefix" -> prefix))
@@ -78,7 +78,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
+      condition = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "number" -> number))
@@ -90,7 +90,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+      condition = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
@@ -101,7 +101,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "value" -> value))
@@ -113,7 +113,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "value" -> value))
@@ -125,7 +125,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "unit" -> unit))
@@ -137,7 +137,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "unit" -> unit))
@@ -149,7 +149,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
+      condition = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "word" -> word))
@@ -161,7 +161,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
+      condition = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "word" -> word))
@@ -173,7 +173,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
+      condition = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "word" -> word))

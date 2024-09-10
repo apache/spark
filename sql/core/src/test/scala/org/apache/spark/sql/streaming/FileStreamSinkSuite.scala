@@ -280,7 +280,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           exception = intercept[AnalysisException] {
             df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
           },
-          errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
+          condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
           sqlState = "42KDE",
           parameters = Map("className" -> "parquet", "outputMode" -> mode))
       }
@@ -378,7 +378,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           exception = intercept[AnalysisException] {
             spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }

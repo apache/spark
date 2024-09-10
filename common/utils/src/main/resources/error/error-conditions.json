@@ -2092,6 +2092,11 @@
         "message" : [
           "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
         ]
+      },
+      "SECONDS_FRACTION" : {
+        "message" : [
+          "Cannot detect a seconds fraction pattern of variable length. Please make sure the pattern contains 'S', and does not contain illegal characters."
+        ]
       }
     },
     "sqlState" : "22007"

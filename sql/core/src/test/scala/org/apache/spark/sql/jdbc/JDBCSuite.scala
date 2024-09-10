@@ -1520,7 +1520,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkSQLException] {
         spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
       },
-      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      condition = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> "INTEGER ARRAY", "jdbcType" -> "ARRAY"))
   }
 

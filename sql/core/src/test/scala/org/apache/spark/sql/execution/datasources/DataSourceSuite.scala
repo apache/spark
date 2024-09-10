@@ -128,7 +128,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
           enableGlobbing = true
         )
       ),
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> nonExistentPath.toString)
     )
   }
@@ -173,7 +173,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
           new File(uuid, "file3").getAbsolutePath,
           uuid).rdd
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:.*"),
       matchPVals = true
     )
@@ -187,7 +187,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       exception = intercept[AnalysisException] {
         spark.read.format("text").load(s"$nonExistentBasePath/*")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> s"file:$nonExistentBasePath/*")
     )
 
@@ -200,7 +200,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         exception = intercept[AnalysisException] {
           spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
         },
-        errorClass = "PATH_NOT_FOUND",
+        condition = "PATH_NOT_FOUND",
         parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json")
       )
     } finally {
