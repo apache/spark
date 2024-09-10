@@ -616,13 +616,11 @@ class LoopStatementExec(
               leaveStatementExec.hasBeenMatched = true
             }
             interrupted = true
-            return retStmt
           case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
             if (label.contains(iterStatementExec.label)) {
               iterStatementExec.hasBeenMatched = true
             }
             body.reset()
-            return retStmt
           case _ =>
         }
 
