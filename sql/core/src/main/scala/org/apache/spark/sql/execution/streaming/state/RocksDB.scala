@@ -927,10 +927,12 @@ class RocksDB(
    * @param opType - operation type releasing the lock
    */
   private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
-    logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-      log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-    acquiredThreadInfo = null
-    acquireLock.notifyAll()
+    if (acquiredThreadInfo != null) {
+      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
+        acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+      acquiredThreadInfo = null
+      acquireLock.notifyAll()
+    }
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
