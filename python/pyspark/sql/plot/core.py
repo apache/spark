@@ -15,20 +15,29 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Union
+from typing import Any, TYPE_CHECKING, Optional, Union
+from types import ModuleType
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.sql.utils import require_minimum_plotly_version
 
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
+    import pandas as pd
     from plotly.graph_objs import Figure
 
 
 class PySparkTopNPlotBase:
-    def get_top_n(self, sdf: "DataFrame"):
+    def get_top_n(self, sdf: "DataFrame") -> "pd.DataFrame":
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.getActiveSession()
-        max_rows = int(spark.conf.get("spark.sql.pyspark.plotting.max_rows"))
+        session = SparkSession.getActiveSession()
+        if session is None:
+            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
+
+        max_rows = int(
+            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+        )
         pdf = sdf.limit(max_rows + 1).toPandas()
 
         self.partial = False
@@ -40,12 +49,17 @@ class PySparkTopNPlotBase:
 
 
 class PySparkSampledPlotBase:
-    def get_sampled(self, sdf: "DataFrame"):
+    def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.getActiveSession()
-        sample_ratio = spark.conf.get("spark.sql.pyspark.plotting.sample_ratio")
-        max_rows = int(spark.conf.get("spark.sql.pyspark.plotting.max_rows"))
+        session = SparkSession.getActiveSession()
+        if session is None:
+            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
+
+        sample_ratio = session.conf.get("spark.sql.pyspark.plotting.sample_ratio")
+        max_rows = int(
+            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+        )
 
         if sample_ratio is None:
             fraction = 1 / (sdf.count() / max_rows)
@@ -65,38 +79,35 @@ class PySparkPlotAccessor:
     }
     _backends = {}  # type: ignore[var-annotated]
 
-    def __init__(self, data):
+    def __init__(self, data: "DataFrame"):
         self.data = data
 
-    def __call__(self, kind="line", backend=None, **kwargs):
+    def __call__(
+        self, kind: str = "line", backend: Optional[str] = None, **kwargs: Any
+    ) -> "Figure":
         plot_backend = PySparkPlotAccessor._get_plot_backend(backend)
 
         return plot_backend.plot_pyspark(self.data, kind=kind, **kwargs)
 
     @staticmethod
-    def _get_plot_backend(backend=None):
+    def _get_plot_backend(backend: Optional[str] = None) -> ModuleType:
         backend = backend or "plotly"
 
         if backend in PySparkPlotAccessor._backends:
             return PySparkPlotAccessor._backends[backend]
 
         if backend == "plotly":
-            try:
-                import plotly  # noqa: F401
-                from pyspark.sql.plot import plotly as module
-            except ImportError:
-                raise ImportError(
-                    "Plotly is required for plotting when the "
-                    "default backend 'plotly' is selected."
-                ) from None
-
-            PySparkPlotAccessor._backends["plotly"] = module
+            require_minimum_plotly_version()
         else:
-            raise ValueError(f"Unsupported backend '{backend}'. Only 'plotly' is supported.")
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_PLOT_BACKEND",
+                messageParameters={"backend": backend, "supported_backends": ", ".join(["plotly"])},
+            )
+        from pyspark.sql.plot import plotly as module
 
         return module
 
-    def line(self, x: str, y: Union[str, list[str]], **kwargs) -> "Figure":
+    def line(self, x: str, y: Union[str, list[str]], **kwargs: Any) -> "Figure":
         """
         Plot DataFrame as lines.
 

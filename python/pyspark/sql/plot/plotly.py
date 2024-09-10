@@ -15,15 +15,16 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pyspark.sql.plot import PySparkPlotAccessor
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
+    from plotly.graph_objs import Figure
 
 
-def plot_pyspark(data: "DataFrame", kind: str, **kwargs):
+def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
     import plotly
 
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)

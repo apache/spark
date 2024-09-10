@@ -15,14 +15,27 @@
 # limitations under the License.
 #
 
-import pyspark.sql.plot  # noqa: F401
-from pyspark.errors import PySparkNotImplementedError
-from pyspark.sql import Row, functions as F
+from pyspark.errors import PySparkValueError
+from pyspark.sql import Row
 from pyspark.sql.plot import PySparkSampledPlotBase, PySparkTopNPlotBase
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class DataFramePlotTestsMixin:
+    def test_backend(self):
+        accessor = self.spark.range(2).plot
+        backend = accessor._get_plot_backend()
+        self.assertEqual(backend.__name__, "pyspark.sql.plot.plotly")
+
+        with self.assertRaises(PySparkValueError) as pe:
+            accessor._get_plot_backend("matplotlib")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNSUPPORTED_PLOT_BACKEND",
+            messageParameters={"backend": "matplotlib", "supported_backends": "plotly"},
+        )
+
     def test_topn_max_rows(self):
         try:
             self.spark.conf.set("spark.sql.pyspark.plotting.max_rows", "1000")

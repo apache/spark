@@ -18,4 +18,4 @@
 """
 This package includes the plotting APIs for PySpark DataFrame.
 """
-from pyspark.sql.plot.core import *
+from pyspark.sql.plot.core import *  # noqa: F403, F401

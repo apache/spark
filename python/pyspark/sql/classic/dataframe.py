@@ -37,7 +37,6 @@ from typing import (
     overload,
     TYPE_CHECKING,
 )
-from xml.sax.handler import property_dom_node
 
 from pyspark import _NoValue
 from pyspark.resource import ResourceProfile
