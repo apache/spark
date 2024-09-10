@@ -5697,6 +5697,8 @@ class AstBuilder extends DataTypeAstBuilder
         havingClause = null,
         windowClause = null,
         left) match {
+        // The input should always be a projection since we only pass a context for the SELECT
+        // clause here and pass "null" for all other clauses.
         case p: Project =>
           p.copy(child = PipeOperatorSelect(p.child))
       }
