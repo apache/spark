@@ -40,13 +40,15 @@ def function_variations(func):
     if num_args == 2:
 
         def iter_func(left, right):
-            yield from func(left, right).to_batches()
+            yield from func(pa.Table.from_batches(left), pa.Table.from_batches(right)).to_batches()
 
         yield iter_func
     else:
 
         def iter_keys_func(keys, left, right):
-            yield from func(keys, left, right).to_batches()
+            yield from func(
+                keys, pa.Table.from_batches(left), pa.Table.from_batches(right)
+            ).to_batches()
 
         yield iter_keys_func
 
@@ -72,12 +74,6 @@ class CogroupedMapInArrowTestsMixin:
 
     @staticmethod
     def apply_in_arrow_func(left, right):
-        return pa.Table.from_batches(
-            CogroupedMapInArrowTests.apply_in_arrow_iterator_func(left, right)
-        )
-
-    @staticmethod
-    def apply_in_arrow_iterator_func(left, right):
         assert isinstance(left, pa.Table)
         assert isinstance(right, pa.Table)
         assert left.schema.names == ["id", "v"]
@@ -90,7 +86,13 @@ class CogroupedMapInArrowTestsMixin:
             "left": [min(left_ids), max(left_ids), len(left_ids), sum(left_ids)],
             "right": [min(right_ids), max(right_ids), len(right_ids), sum(right_ids)],
         }
-        yield pa.RecordBatch.from_pydict(result)
+        return pa.Table.from_pydict(result)
+
+    @staticmethod
+    def apply_in_arrow_iterator_func(left, right):
+        yield from CogroupedMapInArrowTestsMixin.apply_in_arrow_func(
+            pa.Table.from_batches(left), pa.Table.from_batches(right)
+        ).to_batches()
 
     @staticmethod
     def apply_in_arrow_with_key_func(key_column):

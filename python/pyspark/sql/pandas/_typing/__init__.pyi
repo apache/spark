@@ -356,9 +356,13 @@ ArrowGroupedMapFunction = Union[
 ArrowCogroupedMapFunction = Union[
     Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
     Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table, pyarrow.Table], pyarrow.Table],
-    Callable[[pyarrow.Table, pyarrow.Table], Iterator[pyarrow.RecordBatch]],
     Callable[
-        [Tuple[pyarrow.Scalar, ...], pyarrow.Table, pyarrow.Table], Iterator[pyarrow.RecordBatch]
+        [Iterator[pyarrow.RecordBatch], Iterator[pyarrow.RecordBatch]],
+        Iterator[pyarrow.RecordBatch],
+    ],
+    Callable[
+        [Tuple[pyarrow.Scalar, ...], Iterator[pyarrow.RecordBatch], Iterator[pyarrow.RecordBatch]],
+        Iterator[pyarrow.RecordBatch],
     ],
 ]
 
