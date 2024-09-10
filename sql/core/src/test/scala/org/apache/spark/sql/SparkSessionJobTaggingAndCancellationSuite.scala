@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,8 +25,8 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.tags.ExtendedSQLTest
@@ -128,9 +128,11 @@ class SparkSessionJobTaggingAndCancellationSuite
       // Add a listener to release the semaphore once jobs are launched.
       val sem = new Semaphore(0)
       val jobEnded = new AtomicInteger(0)
+      val jobProperties: ConcurrentHashMap[Int, java.util.Properties] = new ConcurrentHashMap()
 
       sc.addSparkListener(new SparkListener {
         override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobProperties.put(jobStart.jobId, jobStart.properties)
           sem.release()
         }
 
@@ -193,18 +195,17 @@ class SparkSessionJobTaggingAndCancellationSuite
       assert(sem.tryAcquire(3, 1, TimeUnit.MINUTES))
 
       // Tags are applied
-      val threeJobs = sc.dagScheduler.activeJobs
-      assert(threeJobs.size == 3)
+      assert(jobProperties.size == 3)
       for (ss <- Seq(sessionA, sessionB, sessionC)) {
-        val job = threeJobs.filter(_.properties.get(SparkContext.SPARK_JOB_TAGS)
+        val jobProperty = jobProperties.values().asScala.filter(_.get(SparkContext.SPARK_JOB_TAGS)
           .asInstanceOf[String].contains(ss.sessionUUID))
-        assert(job.size == 1)
-        val tags = job.head.properties.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
+        assert(jobProperty.size == 1)
+        val tags = jobProperty.head.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
           .split(SparkContext.SPARK_JOB_TAGS_SEP)
 
         val executionRootIdTag = SQLExecution.executionIdJobTag(
           ss,
-          job.head.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
+          jobProperty.head.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
         val userTagsPrefix = s"spark-session-${ss.sessionUUID}-"
 
         ss match {

@@ -168,7 +168,7 @@ private[spark] class DAGScheduler(
   // Stages that must be resubmitted due to fetch failures
   private[scheduler] val failedStages = new HashSet[Stage]
 
-  private[spark] val activeJobs = new HashSet[ActiveJob]
+  private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
@@ -1254,11 +1254,10 @@ private[spark] class DAGScheduler(
           .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
       }
     }
-    cancelledJobs.map(_.success(jobsToBeCancelled.toSeq))
-
     val updatedReason =
       reason.getOrElse("part of cancelled job tags %s".format(tag))
     jobsToBeCancelled.map(_.jobId).foreach(handleJobCancellation(_, Option(updatedReason)))
+    cancelledJobs.map(_.success(jobsToBeCancelled.toSeq))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
