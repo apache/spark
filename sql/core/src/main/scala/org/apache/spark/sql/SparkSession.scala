@@ -138,8 +138,9 @@ class SparkSession private(
    * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
    */
   @transient
-  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] =
-  new ConcurrentHashMap(parentManagedJobTags.asJava)
+  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] = {
+    new ConcurrentHashMap(parentManagedJobTags.asJava)
+  }
 
   /** @inheritdoc */
   def version: String = SPARK_VERSION
@@ -678,10 +679,7 @@ class SparkSession private(
   }
 
   /** @inheritdoc */
-  override def removeTag(tag: String): Unit = {
-    SparkContext.throwIfInvalidTag(tag)
-    managedJobTags.remove(tag)
-  }
+  override def removeTag(tag: String): Unit = managedJobTags.remove(tag)
 
   /** @inheritdoc */
   override def getTags(): Set[String] = managedJobTags.keys().asScala.toSet
@@ -707,6 +705,8 @@ class SparkSession private(
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
    * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
    */
   override def interruptTag(tag: String): Seq[String] = {
     val realTag = managedJobTags.get(tag)

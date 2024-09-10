@@ -910,10 +910,20 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @since 3.5.0
    */
-  def addJobTag(tag: String): Unit = {
-    SparkContext.throwIfInvalidTag(tag)
+  def addJobTag(tag: String): Unit = addJobTags(Set(tag))
+
+  /**
+   * Add multiple tags to be assigned to all the jobs started by this thread.
+   * See [[addJobTag]] for more details.
+   *
+   * @param tags The tags to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 4.0.0
+   */
+  def addJobTags(tags: Set[String]): Unit = {
+    tags.foreach(SparkContext.throwIfInvalidTag)
     val existingTags = getJobTags()
-    val newTags = (existingTags + tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    val newTags = (existingTags ++ tags).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
 
@@ -925,10 +935,20 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @since 3.5.0
    */
-  def removeJobTag(tag: String): Unit = {
-    SparkContext.throwIfInvalidTag(tag)
+  def removeJobTag(tag: String): Unit = removeJobTags(Set(tag))
+
+  /**
+   * Remove multiple tags to be assigned to all the jobs started by this thread.
+   * See [[removeJobTag]] for more details.
+   *
+   * @param tags The tags to be removed. Cannot contain ',' (comma) character.
+   *
+   * @since 4.0.0
+   */
+  def removeJobTags(tags: Set[String]): Unit = {
+    tags.foreach(SparkContext.throwIfInvalidTag)
     val existingTags = getJobTags()
-    val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    val newTags = (existingTags -- tags).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     if (newTags.isEmpty) {
       clearJobTags()
     } else {

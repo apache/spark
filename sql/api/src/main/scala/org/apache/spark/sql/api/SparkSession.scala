@@ -420,13 +420,38 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    */
   def clearTags(): Unit
 
-  // No docstring, the meaning of return value depends on the implementation.
+  /**
+   * Request to interrupt all currently running operations of this session.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+
+   * @return Sequence of operation IDs requested to be interrupted.
+
+   * @since 4.0.0
+   */
   def interruptAll(): Seq[String]
 
-  // No docstring, the meaning of return value depends on the implementation.
+  /**
+   * Request to interrupt all currently running operations of this session with the given job tag.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return Sequence of operation IDs requested to be interrupted.
+
+   * @since 4.0.0
+   */
   def interruptTag(tag: String): Seq[String]
 
-  // No docstring, the meaning of return value depends on the implementation.
+  /**
+   * Request to interrupt an operation of this session, given its operation ID.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return The operation ID requested to be interrupted, as a single-element sequence, or an empty
+   *    sequence if the operation is not started by this session.
+   *
+   * @since 4.0.0
+   */
   def interruptOperation(operationId: String): Seq[String]
 
   /**

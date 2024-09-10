@@ -257,15 +257,13 @@ object SQLExecution extends Logging {
   }
 
   private[sql] def withSessionTagsApplied[T](sparkSession: SparkSession)(block: => T): T = {
-    sparkSession.sparkContext.addJobTag(sparkSession.sessionJobTag)
-    val userTags = sparkSession.managedJobTags.values().asScala.toSeq
-    userTags.foreach(sparkSession.sparkContext.addJobTag)
+    val allTags = sparkSession.managedJobTags.values().asScala.toSet + sparkSession.sessionJobTag
+    sparkSession.sparkContext.addJobTags(allTags)
 
     try {
       block
     } finally {
-      sparkSession.sparkContext.removeJobTag(sparkSession.sessionJobTag)
-      userTags.foreach(sparkSession.sparkContext.removeJobTag)
+      sparkSession.sparkContext.removeJobTags(allTags)
     }
   }
 
