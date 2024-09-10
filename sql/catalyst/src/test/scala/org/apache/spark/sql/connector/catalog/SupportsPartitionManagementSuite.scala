@@ -93,7 +93,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         partTable.purgePartition(InternalRow.apply("3"))
       },
-      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
       parameters = Map.empty
     )
   }
@@ -217,7 +217,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         partTable.partitionExists(InternalRow(0))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3208",
+      condition = "_LEGACY_ERROR_TEMP_3208",
       parameters = Map("numFields" -> "1", "schemaLen" -> "2"))
   }
 
@@ -228,7 +228,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
     }
     checkError(e,
-      errorClass = "PARTITIONS_ALREADY_EXIST",
+      condition = "PARTITIONS_ALREADY_EXIST",
       parameters = Map("partitionList" -> "PARTITION (`part0` = 1, `part1` = abc)",
       "tableName" -> "`test`.`ns`.`test_table`"))
 
@@ -237,7 +237,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       partTable.renamePartition(newPart, InternalRow(3, "abc"))
     }
     checkError(e2,
-      errorClass = "PARTITIONS_NOT_FOUND",
+      condition = "PARTITIONS_NOT_FOUND",
       parameters = Map("partitionList" -> "PARTITION (`part0` = 2, `part1` = xyz)",
         "tableName" -> "`test`.`ns`.`test_table`"))
 

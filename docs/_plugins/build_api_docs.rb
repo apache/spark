@@ -136,11 +136,11 @@ def build_scala_and_java_docs
   # Copy over the unified ScalaDoc for all projects to api/scala.
   # This directory will be copied over to _site when `jekyll` command is run.
   copy_and_update_scala_docs("../target/scala-2.13/unidoc", "api/scala")
-  copy_and_update_scala_docs("../connector/connect/client/jvm/target/scala-2.13/unidoc", "api/connect/scala")
+  # copy_and_update_scala_docs("../connector/connect/client/jvm/target/scala-2.13/unidoc", "api/connect/scala")
 
   # Copy over the unified JavaDoc for all projects to api/java.
   copy_and_update_java_docs("../target/javaunidoc", "api/java", "api/scala")
-  copy_and_update_java_docs("../connector/connect/client/jvm/target/javaunidoc", "api/connect/java", "api/connect/scala")
+  # copy_and_update_java_docs("../connector/connect/client/jvm/target/javaunidoc", "api/connect/java", "api/connect/scala")
 end
 
 def build_python_docs
@@ -157,6 +157,7 @@ def build_python_docs
   mkdir_p "api/python"
 
   puts "cp -r ../python/docs/build/html/. api/python"
+  rm_r("../python/docs/build/html/_sources")
   cp_r("../python/docs/build/html/.", "api/python")
 end
 
@@ -199,11 +200,13 @@ def build_error_docs
     raise("Missing python3 in your path, stopping error doc generation")
   end
 
-  system("python3 '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+  system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
 
-build_error_docs
+if not (ENV['SKIP_ERRORDOC'] == '1')
+  build_error_docs
+end
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')

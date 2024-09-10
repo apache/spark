@@ -548,7 +548,7 @@ class HashedRelationSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         keyIterator.next()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2104",
+      condition = "_LEGACY_ERROR_TEMP_2104",
       parameters = Map.empty
     )
     assert(buffer.sortWith(_ < _) === randomArray)

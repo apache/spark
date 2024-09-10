@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
@@ -188,6 +189,13 @@ case class CaseWhen(
   }
 
   override def nullable: Boolean = {
+    if (branches.exists(_._1 == TrueLiteral)) {
+      // if any of the branch is always true
+      // nullability check should only be related to branches
+      // before the TrueLiteral and value of the first TrueLiteral branch
+      val (h, t) = branches.span(_._1 != TrueLiteral)
+      return h.exists(_._2.nullable) || t.head._2.nullable
+    }
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
     branches.exists(_._2.nullable) || elseValue.map(_.nullable).getOrElse(true)
   }

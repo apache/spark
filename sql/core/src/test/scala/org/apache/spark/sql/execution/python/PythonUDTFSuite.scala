@@ -133,7 +133,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select udtf.* from t, lateral variantInputUDTF(v) udtf").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
           "dataType" -> "VARIANT"),
@@ -156,7 +156,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select udtf.* from t, lateral variantInputUDTF(map_v) udtf").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
           "dataType" -> "MAP<BIGINT, VARIANT>"),
@@ -175,7 +175,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select * from variantOutUDTF()").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"SimpleOutputVariantUDTF()\"",
           "dataType" -> "VARIANT"),
@@ -192,7 +192,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select * from arrayOfVariantOutUDTF()").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"OutputArrayOfVariantUDTF()\"",
           "dataType" -> "ARRAY<VARIANT>"),
@@ -316,19 +316,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
             _, _: LocalRelation))) =>
       case other =>
         failure(other)
-    }
-    withTable("t") {
-      sql("create table t(col array<int>) using parquet")
-      val query = "select * from explode(table(t))"
-      checkErrorMatchPVals(
-        exception = intercept[AnalysisException](sql(query)),
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-        sqlState = None,
-        parameters = Map("treeNode" -> "(?s).*"),
-        context = ExpectedContext(
-          fragment = "table(t)",
-          start = 22,
-          stop = 29))
     }
 
     spark.udtf.registerPython(UDTFCountSumLast.name, pythonUDTFCountSumLast)
@@ -501,7 +488,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           |  WITH SINGLE PARTITION
           |  ORDER BY device_id, data_ds)
           |""".stripMargin)),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" ->
         ("The table function call includes a table argument with an invalid " +
           "partitioning/ordering specification: the ORDER BY clause included multiple " +

@@ -54,7 +54,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"collate(ABC, UNICODE_CI) LIKE %b%\"",
           "paramIndex" -> "first",
@@ -148,7 +148,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"ilike(collate(ABC, UNICODE_CI), %b%)\"",
           "paramIndex" -> "first",
@@ -188,7 +188,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"likeall(collate(Foo, UNICODE_CI))\"",
           "paramIndex" -> "first",
@@ -228,7 +228,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"notlikeall(collate(Foo, UNICODE_CI))\"",
           "paramIndex" -> "first",
@@ -268,7 +268,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"likeany(collate(Foo, UNICODE_CI))\"",
           "paramIndex" -> "first",
@@ -308,7 +308,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"notlikeany(collate(Foo, UNICODE_CI))\"",
           "paramIndex" -> "first",
@@ -348,7 +348,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"RLIKE(collate(ABC, UNICODE_CI), .b.)\"",
           "paramIndex" -> "first",
@@ -388,7 +388,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"split(collate(ABC, UNICODE_CI), [b], -1)\"",
           "paramIndex" -> "first",
@@ -429,7 +429,7 @@ class CollationSQLRegexpSuite
       exception = intercept[AnalysisException] {
         sql(s"SELECT regexp_replace(collate('ABCDE','$c1'), '.c.', collate('FFF','$c2'))")
       },
-      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      condition = "COLLATION_MISMATCH.EXPLICIT",
       parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
     )
     // Unsupported collations
@@ -444,7 +444,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"regexp_replace(collate(ABCDE, UNICODE_CI), .c., FFF, 1)\"",
           "paramIndex" -> "first",
@@ -486,7 +486,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"regexp_extract(collate(ABCDE, UNICODE_CI), .c., 0)\"",
           "paramIndex" -> "first",
@@ -528,7 +528,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"regexp_extract_all(collate(ABCDE, UNICODE_CI), .c., 0)\"",
           "paramIndex" -> "first",
@@ -568,7 +568,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"regexp_count(collate(ABCDE, UNICODE_CI), .c.)\"",
           "paramIndex" -> "first",
@@ -608,7 +608,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"regexp_substr(collate(ABCDE, UNICODE_CI), .c.)\"",
           "paramIndex" -> "first",
@@ -648,7 +648,7 @@ class CollationSQLRegexpSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"regexp_instr(collate(ABCDE, UNICODE_CI), .c., 0)\"",
           "paramIndex" -> "first",

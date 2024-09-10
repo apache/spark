@@ -71,35 +71,46 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   test("write") {
     val df = ss.newDataFrame(_ => ()).limit(10)
 
-    val builder = proto.WriteOperation.newBuilder()
-    builder
+    def toPlan(builder: proto.WriteOperation.Builder): proto.Plan = {
+      proto.Plan
+        .newBuilder()
+        .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
+        .build()
+    }
+
+    val builder = proto.WriteOperation
+      .newBuilder()
       .setInput(df.plan.getRoot)
       .setPath("my/test/path")
       .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS)
       .setSource("parquet")
-      .addSortColumnNames("col1")
-      .addPartitioningColumns("col99")
-      .setBucketBy(
-        proto.WriteOperation.BucketBy
-          .newBuilder()
-          .setNumBuckets(2)
-          .addBucketColumnNames("col1")
-          .addBucketColumnNames("col2"))
-      .addClusteringColumns("col3")
 
-    val expectedPlan = proto.Plan
-      .newBuilder()
-      .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
-      .build()
+    val partitionedPlan = toPlan(
+      builder
+        .clone()
+        .addSortColumnNames("col1")
+        .addPartitioningColumns("col99")
+        .setBucketBy(
+          proto.WriteOperation.BucketBy
+            .newBuilder()
+            .setNumBuckets(2)
+            .addBucketColumnNames("col1")
+            .addBucketColumnNames("col2")))
 
     df.write
       .sortBy("col1")
       .partitionBy("col99")
       .bucketBy(2, "col1", "col2")
+      .parquet("my/test/path")
+    val actualPartionedPlan = service.getAndClearLatestInputPlan()
+    assert(actualPartionedPlan.equals(partitionedPlan))
+
+    val clusteredPlan = toPlan(builder.clone().addClusteringColumns("col3"))
+    df.write
       .clusterBy("col3")
       .parquet("my/test/path")
-    val actualPlan = service.getAndClearLatestInputPlan()
-    assert(actualPlan.equals(expectedPlan))
+    val actualClusteredPlan = service.getAndClearLatestInputPlan()
+    assert(actualClusteredPlan.equals(clusteredPlan))
   }
 
   test("write jdbc") {
@@ -136,7 +147,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     builder
       .setInput(df.plan.getRoot)
       .setTableName("t1")
-      .addPartitioningColumns(col("col99").expr)
+      .addPartitioningColumns(toExpr(col("col99")))
       .setProvider("json")
       .addClusteringColumns("col3")
       .putTableProperties("key", "value")

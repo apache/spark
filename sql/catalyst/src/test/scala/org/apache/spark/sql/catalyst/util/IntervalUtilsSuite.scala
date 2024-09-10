@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DayTimeIntervalType
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -42,7 +44,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
+      condition = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
@@ -53,7 +55,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+      condition = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
@@ -64,7 +66,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "prefix" -> prefix))
@@ -76,7 +78,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
+      condition = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "number" -> number))
@@ -88,7 +90,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+      condition = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
@@ -99,7 +101,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "value" -> value))
@@ -111,7 +113,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "value" -> value))
@@ -123,7 +125,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "unit" -> unit))
@@ -135,7 +137,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+      condition = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "unit" -> unit))
@@ -147,7 +149,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
+      condition = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "word" -> word))
@@ -159,7 +161,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
+      condition = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "word" -> word))
@@ -171,7 +173,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
-      errorClass = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
+      condition = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
       parameters = Map(
         "input" -> Option(input).map(_.toString).getOrElse("null"),
         "word" -> word))
@@ -447,7 +449,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("from day-time string") {
-    import org.apache.spark.sql.types.DayTimeIntervalType._
     def check(input: String, from: Byte, to: Byte, expected: String): Unit = {
       withClue(s"from = $from, to = $to") {
         val expectedUtf8 = UTF8String.fromString(expected)
@@ -554,6 +555,15 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-34615: period to months") {
     assert(periodToMonths(Period.ZERO) === 0)
     assert(periodToMonths(Period.of(0, -1, 0)) === -1)
+    assert(periodToMonths(Period.of(0, -11, 0)) === -11)
+    assert(periodToMonths(Period.of(0, -12, 0)) === -12)
+    assert(periodToMonths(Period.of(0, -13, 0)) === -13)
+    assert(periodToMonths(Period.of(0, 11, 0), YM.YEAR) === 0)
+    assert(periodToMonths(Period.of(0, -11, 0), YM.YEAR) === 0)
+    assert(periodToMonths(Period.of(0, 12, 0), YM.YEAR) === 12)
+    assert(periodToMonths(Period.of(0, -12, 0), YM.YEAR) === -12)
+    assert(periodToMonths(Period.of(0, 13, 0), YM.YEAR) === 12)
+    assert(periodToMonths(Period.of(0, -13, 0), YM.YEAR) === -12)
     assert(periodToMonths(Period.of(-1, 0, 10)) === -12) // ignore days
     assert(periodToMonths(Period.of(178956970, 7, 0)) === Int.MaxValue)
     assert(periodToMonths(Period.of(-178956970, -8, 123)) === Int.MinValue)
@@ -637,11 +647,12 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format year-month intervals") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
       -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
       11 -> ("0-11", "INTERVAL '0-11' YEAR TO MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-1-0' YEAR TO MONTH"),
+      12 -> ("1-0", "INTERVAL '1-0' YEAR TO MONTH"),
       -13 -> ("-1-1", "INTERVAL '-1-1' YEAR TO MONTH"),
       13 -> ("1-1", "INTERVAL '1-1' YEAR TO MONTH"),
       -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
@@ -654,8 +665,22 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-49208 format year-month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0' MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
+      11 -> ("0-11", "INTERVAL '11' MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
+      12 -> ("1-0", "INTERVAL '12' MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+    }
+  }
+
   test("SPARK-35016: format day-time intervals") {
-    import DayTimeIntervalType._
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
@@ -670,8 +695,22 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-49208: format negative month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0' MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-11' MONTH"),
+      11 -> ("0-11", "INTERVAL '11' MONTH"),
+      -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
+      12 -> ("1-0", "INTERVAL '12' MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+    }
+  }
+
   test("SPARK-35734: Format day-time intervals using type fields") {
-    import DayTimeIntervalType._
     Seq(
       0L ->
         ("INTERVAL '0 00:00:00' DAY TO SECOND",
@@ -777,12 +816,13 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35771: Format year-month intervals using type fields") {
-    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 ->
         ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
       -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '-11' MONTH"),
       11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
+      -12 -> ("INTERVAL '-1-0' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-12' MONTH"),
+      12 -> ("INTERVAL '1-0' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '12' MONTH"),
       -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-13' MONTH"),
       13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '13' MONTH"),
       -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),
@@ -803,7 +843,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-38324: The second range is not [0, 59] in the day time ANSI interval") {
-    import org.apache.spark.sql.types.DayTimeIntervalType._
     Seq(
       ("10 12:40:60", 60, DAY, SECOND),
       ("10 12:40:60.999999999", 60, DAY, SECOND),

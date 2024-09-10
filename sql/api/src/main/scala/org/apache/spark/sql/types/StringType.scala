@@ -26,38 +26,43 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
- * @param collationId The id of collation for this StringType.
+ * @param collationId
+ *   The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int) extends AtomicType with Serializable {
+class StringType private (val collationId: Int) extends AtomicType with Serializable {
+
   /**
-   * Support for Binary Equality implies that strings are considered equal only if
-   * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
-   * non-binary. If this field is true, byte level operations can be used against this datatype
-   * (e.g. for equality and hashing).
+   * Support for Binary Equality implies that strings are considered equal only if they are byte
+   * for byte equal. E.g. all accent or case-insensitive collations are considered non-binary. If
+   * this field is true, byte level operations can be used against this datatype (e.g. for
+   * equality and hashing).
    */
-  def supportsBinaryEquality: Boolean =
+  private[sql] def supportsBinaryEquality: Boolean =
     CollationFactory.fetchCollation(collationId).supportsBinaryEquality
 
-  def isUTF8BinaryCollation: Boolean =
+  private[sql] def supportsLowercaseEquality: Boolean =
+    CollationFactory.fetchCollation(collationId).supportsLowercaseEquality
+
+  private[sql] def isUTF8BinaryCollation: Boolean =
     collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
 
-  def isUTF8LcaseCollation: Boolean =
+  private[sql] def isUTF8LcaseCollation: Boolean =
     collationId == CollationFactory.UTF8_LCASE_COLLATION_ID
 
   /**
-   * Support for Binary Ordering implies that strings are considered equal only
-   * if they are byte for byte equal. E.g. all accent or case-insensitive collations are
-   * considered non-binary. Also their ordering does not require calls to ICU library, as
-   * it follows spark internal implementation. If this field is true, byte level operations
-   * can be used against this datatype (e.g. for equality, hashing and ordering).
+   * Support for Binary Ordering implies that strings are considered equal only if they are byte
+   * for byte equal. E.g. all accent or case-insensitive collations are considered non-binary.
+   * Also their ordering does not require calls to ICU library, as it follows spark internal
+   * implementation. If this field is true, byte level operations can be used against this
+   * datatype (e.g. for equality, hashing and ordering).
    */
-  def supportsBinaryOrdering: Boolean =
+  private[sql] def supportsBinaryOrdering: Boolean =
     CollationFactory.fetchCollation(collationId).supportsBinaryOrdering
 
   /**
-   * Type name that is shown to the customer.
-   * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
+   * Type name that is shown to the customer. If this is an UTF8_BINARY collation output is
+   * `string` due to backwards compatibility.
    */
   override def typeName: String =
     if (isUTF8BinaryCollation) "string"

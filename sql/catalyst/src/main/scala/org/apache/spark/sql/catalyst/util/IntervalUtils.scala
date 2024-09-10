@@ -902,7 +902,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case DAY => Decimal(v / MICROS_PER_DAY)
       case HOUR => Decimal(v / MICROS_PER_HOUR)
       case MINUTE => Decimal(v / MICROS_PER_MINUTE)
-      case SECOND => Decimal(v, Decimal.MAX_LONG_DIGITS, 6)
+      case SECOND => Decimal(v, Decimal.MAX_LONG_DIGITS + 1, 6)
     }
   }
 

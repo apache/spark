@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.{col, struct}
 
 class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
 
@@ -344,6 +345,26 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     ).toDF("input1", "input2")
     intercept[IllegalArgumentException] {
       remover.transform(df).count()
+    }
+  }
+
+  test("StopWordsRemover nested input column") {
+    val remover = new StopWordsRemover()
+      .setInputCol("nest.raw")
+      .setOutputCol("filtered")
+    val dataSet = Seq(
+      (Seq("test", "test"), Seq("test", "test")),
+      (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
+      (Seq("a", "the", "an"), Seq()),
+      (Seq("A", "The", "AN"), Seq()),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+     .select(struct(col("raw")).alias("nest"), col("expected"))
+
+    remover.transform(dataSet).select("filtered", "expected").collect().foreach {
+      case Row(tokens: scala.collection.Seq[_], wantedTokens: scala.collection.Seq[_]) =>
+        assert(tokens === wantedTokens)
     }
   }
 }

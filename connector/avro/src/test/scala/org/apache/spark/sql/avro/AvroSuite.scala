@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.URL
+import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.UUID
@@ -648,7 +648,7 @@ abstract class AvroSuite
         assert(message.contains("No Avro files found."))
 
         Files.copy(
-          Paths.get(new URL(episodesAvro).toURI),
+          Paths.get(new URI(episodesAvro)),
           Paths.get(dir.getCanonicalPath, "episodes.avro"))
 
         val result = spark.read.format("avro").load(episodesAvro).collect()
@@ -760,7 +760,7 @@ abstract class AvroSuite
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
       assert(snappySize > bzip2Size)
-      assert(bzip2Size > xzSize)
+      assert(xzSize > bzip2Size)
       assert(uncompressSize > zstandardSize)
     }
   }
@@ -894,7 +894,7 @@ abstract class AvroSuite
         assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[AnalysisException],
-          errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+          condition = "AVRO_INCOMPATIBLE_READ_TYPE",
           parameters = Map("avroPath" -> "field 'a'",
             "sqlPath" -> "field 'a'",
             "avroType" -> "decimal\\(12,10\\)",
@@ -972,7 +972,7 @@ abstract class AvroSuite
           assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
-            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            condition = "AVRO_INCOMPATIBLE_READ_TYPE",
             parameters = Map("avroPath" -> "field 'a'",
               "sqlPath" -> "field 'a'",
               "avroType" -> "interval day to second",
@@ -1009,7 +1009,7 @@ abstract class AvroSuite
           assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
-            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            condition = "AVRO_INCOMPATIBLE_READ_TYPE",
             parameters = Map("avroPath" -> "field 'a'",
               "sqlPath" -> "field 'a'",
               "avroType" -> "interval year to month",
@@ -1673,7 +1673,7 @@ abstract class AvroSuite
           exception = intercept[AnalysisException] {
             sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1136",
+          condition = "_LEGACY_ERROR_TEMP_1136",
           parameters = Map.empty
         )
         checkError(
@@ -1681,7 +1681,7 @@ abstract class AvroSuite
             spark.udf.register("testType", () => new IntervalData())
             sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
           },
-          errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
           parameters = Map(
             "columnName" -> "`testType()`",
             "columnType" -> "UDT(\"INTERVAL\")",
@@ -2139,7 +2139,7 @@ abstract class AvroSuite
   test("SPARK-24805: do not ignore files without .avro extension by default") {
     withTempDir { dir =>
       Files.copy(
-        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(new URI(episodesAvro)),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
       val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
@@ -2178,7 +2178,7 @@ abstract class AvroSuite
   test("SPARK-24836: ignoreExtension must override hadoop's config") {
     withTempDir { dir =>
       Files.copy(
-        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(new URI(episodesAvro)),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
       val hadoopConf = spark.sessionState.newHadoopConf()
@@ -2726,7 +2726,7 @@ abstract class AvroSuite
                    |LOCATION '${dir}'
                    |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
             },
-            errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+            condition = "INVALID_COLUMN_NAME_AS_PATH",
             parameters = Map(
               "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
           )
@@ -2831,7 +2831,7 @@ class AvroV1Suite extends AvroSuite {
             sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
               .format("avro").save(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          condition = "INVALID_COLUMN_NAME_AS_PATH",
           parameters = Map(
             "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
         )
@@ -2844,7 +2844,7 @@ class AvroV1Suite extends AvroSuite {
               .write.mode(SaveMode.Overwrite)
               .format("avro").save(dir.getCanonicalPath)
           },
-          errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+          condition = "INVALID_COLUMN_NAME_AS_PATH",
           parameters = Map(
             "datasource" -> "AvroFileFormat", "columnName" -> "`(IF((ID = 1), 1, 0))`")
         )

@@ -17,11 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.ArrayList
-
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{Estimator, Model, Transformer}
@@ -29,13 +27,10 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{If, Literal}
-import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -124,17 +119,15 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     require(outputColNames.distinct.length == outputColNames.length,
       s"Output columns should not be duplicate.")
 
-    val sparkSession = SparkSession.getActiveSession.get
-    val transformDataset = sparkSession.createDataFrame(new ArrayList[Row](), schema = schema)
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
         try {
-          val dtype = transformDataset.col(inputColName).expr.dataType
+          val dtype = SchemaUtils.getSchemaFieldType(schema, inputColName)
           Some(
             validateAndTransformField(schema, inputColName, dtype, outputColName)
           )
         } catch {
-          case _: AnalysisException =>
+          case e: SparkIllegalArgumentException if e.getErrorClass == "FIELD_NOT_FOUND" =>
             if (skipNonExistsCol) {
               None
             } else {
@@ -194,56 +187,48 @@ class StringIndexer @Since("1.4.0") (
   private def getSelectedCols(dataset: Dataset[_], inputCols: Seq[String]): Seq[Column] = {
     inputCols.map { colName =>
       val col = dataset.col(colName)
-      if (col.expr.dataType == StringType) {
-        col
-      } else {
-        // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
-        // we replace NaNs with null in advance.
-        new Column(If(col.isNaN.expr, Literal(null), col.expr)).cast(StringType)
-      }
+      // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
+      // we replace NaNs with null in advance.
+      val fpTypes = Seq(DoubleType, FloatType).map(_.catalogString)
+      when(typeof(col).isin(fpTypes: _*) && isnan(col), lit(null))
+        .otherwise(col)
+        .cast(StringType)
     }
-  }
-
-  private def countByValue(
-      dataset: Dataset[_],
-      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
-
-    val aggregator = new StringIndexerAggregator(inputCols.length)
-    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
-
-    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq)
-    dataset.select(selectedCols: _*)
-      .toDF()
-      .agg(aggregator.toColumn)
-      .as[Array[OpenHashMap[String, Long]]]
-      .collect()(0)
   }
 
   private def sortByFreq(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
     val (inputCols, _) = getInOutCols()
+    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq)
+    val numCols = inputCols.length
 
-    val sortFunc = StringIndexer.getSortFunc(ascending = ascending)
-    val orgStrings = countByValue(dataset, inputCols).toImmutableArraySeq
-    ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
-      counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-    }.toArray
+    // In the case of equal frequency, always sorts strings by alphabet (ascending).
+    val countCol = if (ascending) count(lit(1)) else negate(count(lit(1)))
+
+    val result = Array.fill(numCols)(Array.empty[String])
+    dataset.select(posexplode(array(selectedCols: _*)).as(Seq("index", "value")))
+      .where(col("value").isNotNull)
+      .groupBy("index", "value")
+      .agg(countCol.as("count"))
+      .groupBy("index")
+      .agg(sort_array(collect_list(struct("count", "value"))).getField("value"))
+      .collect()
+      .foreach(r => result(r.getInt(0)) = r.getSeq[String](1).toArray)
+    result
   }
 
   private def sortByAlphabet(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
     val (inputCols, _) = getInOutCols()
+    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq)
+    val numCols = inputCols.length
 
-    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq).map(collect_set)
-    val allLabels = dataset.select(selectedCols: _*)
-      .collect().toImmutableArraySeq.flatMap(_.toSeq)
-      .asInstanceOf[scala.collection.Seq[scala.collection.Seq[String]]].toSeq
-    ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
-      val sorted = labels.filter(_ != null).sorted
-      if (ascending) {
-        sorted.toArray
-      } else {
-        sorted.reverse.toArray
-      }
-    }.toArray
+    val result = Array.fill(numCols)(Array.empty[String])
+    dataset.select(posexplode(array(selectedCols: _*)).as(Seq("index", "value")))
+      .where(col("value").isNotNull)
+      .groupBy("index")
+      .agg(sort_array(collect_set("value"), ascending))
+      .collect()
+      .foreach(r => result(r.getInt(0)) = r.getSeq[String](1).toArray)
+    result
   }
 
   @Since("2.0.0")
@@ -286,27 +271,6 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
-
-  // Returns a function used to sort strings by frequency (ascending or descending).
-  // In case of equal frequency, it sorts strings by alphabet (ascending).
-  private[feature] def getSortFunc(
-      ascending: Boolean): ((String, Long), (String, Long)) => Boolean = {
-    if (ascending) {
-      case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
-        if (freqA == freqB) {
-          strA < strB
-        } else {
-          freqA < freqB
-        }
-    } else {
-      case ((strA: String, freqA: Long), (strB: String, freqB: Long)) =>
-        if (freqA == freqB) {
-          strA < strB
-        } else {
-          freqA > freqB
-        }
-    }
-  }
 }
 
 /**
@@ -647,48 +611,4 @@ object IndexToString extends DefaultParamsReadable[IndexToString] {
 
   @Since("1.6.0")
   override def load(path: String): IndexToString = super.load(path)
-}
-
-/**
- * A SQL `Aggregator` used by `StringIndexer` to count labels in string columns during fitting.
- */
-private class StringIndexerAggregator(numColumns: Int)
-  extends Aggregator[Row, Array[OpenHashMap[String, Long]], Array[OpenHashMap[String, Long]]] {
-
-  override def zero: Array[OpenHashMap[String, Long]] =
-    Array.fill(numColumns)(new OpenHashMap[String, Long]())
-
-  def reduce(
-      array: Array[OpenHashMap[String, Long]],
-      row: Row): Array[OpenHashMap[String, Long]] = {
-    for (i <- 0 until numColumns) {
-      val stringValue = row.getString(i)
-      // We don't count for null values.
-      if (stringValue != null) {
-        array(i).changeValue(stringValue, 1L, _ + 1)
-      }
-    }
-    array
-  }
-
-  def merge(
-      array1: Array[OpenHashMap[String, Long]],
-      array2: Array[OpenHashMap[String, Long]]): Array[OpenHashMap[String, Long]] = {
-    for (i <- 0 until numColumns) {
-      array2(i).foreach { case (key: String, count: Long) =>
-        array1(i).changeValue(key, count, _ + count)
-      }
-    }
-    array1
-  }
-
-  def finish(array: Array[OpenHashMap[String, Long]]): Array[OpenHashMap[String, Long]] = array
-
-  override def bufferEncoder: Encoder[Array[OpenHashMap[String, Long]]] = {
-    Encoders.kryo[Array[OpenHashMap[String, Long]]]
-  }
-
-  override def outputEncoder: Encoder[Array[OpenHashMap[String, Long]]] = {
-    Encoders.kryo[Array[OpenHashMap[String, Long]]]
-  }
 }

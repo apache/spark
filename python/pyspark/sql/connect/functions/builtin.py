@@ -24,11 +24,11 @@ import warnings
 import functools
 from typing import (
     Any,
-    Dict,
+    Mapping,
     TYPE_CHECKING,
     Union,
-    List,
     Sequence,
+    List,
     overload,
     Optional,
     Tuple,
@@ -208,8 +208,8 @@ def _create_lambda(f: Callable) -> LambdaFunction:
 
 def _invoke_higher_order_function(
     name: str,
-    cols: List["ColumnOrName"],
-    funs: List[Callable],
+    cols: Sequence["ColumnOrName"],
+    funs: Sequence[Callable],
 ) -> Column:
     """
     Invokes expression identified by name,
@@ -228,7 +228,7 @@ def _invoke_higher_order_function(
     return _invoke_function(name, *_cols, *_funs)
 
 
-def _options_to_col(options: Dict[str, Any]) -> Column:
+def _options_to_col(options: Mapping[str, Any]) -> Column:
     _options: List[Column] = []
     for k, v in options.items():
         _options.append(lit(str(k)))
@@ -1201,7 +1201,7 @@ mode.__doc__ = pysparkfuncs.mode.__doc__
 
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     if not isinstance(frequency, (int, Column)):
@@ -1222,8 +1222,8 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
@@ -1234,8 +1234,8 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
@@ -1853,7 +1853,7 @@ forall.__doc__ = pysparkfuncs.forall.__doc__
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
@@ -1877,7 +1877,7 @@ from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 def from_json(
     col: "ColumnOrName",
     schema: Union[ArrayType, StructType, Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
         _schema = lit(schema)
@@ -1901,7 +1901,7 @@ from_json.__doc__ = pysparkfuncs.from_json.__doc__
 def from_xml(
     col: "ColumnOrName",
     schema: Union[StructType, Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
         _schema = lit(schema)
@@ -2071,6 +2071,13 @@ def try_parse_json(col: "ColumnOrName") -> Column:
 try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
 
 
+def to_variant_object(col: "ColumnOrName") -> Column:
+    return _invoke_function("to_variant_object", _to_col(col))
+
+
+to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
@@ -2146,7 +2153,7 @@ def sequence(
 sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
-def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_csv(csv: Union[str, Column], options: Optional[Mapping[str, str]] = None) -> Column:
     csv = _enum_to_value(csv)
     if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
@@ -2163,7 +2170,7 @@ def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = N
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
-def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_json(json: Union[str, Column], options: Optional[Mapping[str, str]] = None) -> Column:
     json = _enum_to_value(json)
     if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
@@ -2180,7 +2187,7 @@ def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] =
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
-def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_xml(xml: Union[str, Column], options: Optional[Mapping[str, str]] = None) -> Column:
     xml = _enum_to_value(xml)
     if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
@@ -2271,7 +2278,7 @@ def named_struct(*cols: "ColumnOrName") -> Column:
 named_struct.__doc__ = pysparkfuncs.named_struct.__doc__
 
 
-def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     if options is None:
         return _invoke_function("to_csv", _to_col(col))
     else:
@@ -2281,7 +2288,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
 to_csv.__doc__ = pysparkfuncs.to_csv.__doc__
 
 
-def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     if options is None:
         return _invoke_function("to_json", _to_col(col))
     else:
@@ -2291,7 +2298,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 to_json.__doc__ = pysparkfuncs.to_json.__doc__
 
 
-def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     if options is None:
         return _invoke_function("to_xml", _to_col(col))
     else:
@@ -3921,6 +3928,13 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 nullif.__doc__ = pysparkfuncs.nullif.__doc__
 
 
+def nullifzero(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+nullifzero.__doc__ = pysparkfuncs.nullifzero.__doc__
+
+
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("nvl", col1, col2)
 
@@ -3933,6 +3947,13 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
+
+
+def zeroifnull(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("zeroifnull", col)
+
+
+zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
 
 
 def aes_encrypt(

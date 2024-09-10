@@ -19,19 +19,21 @@
  import java.util.Locale
 
  import org.apache.spark.sql.errors.QueryExecutionErrors
+ import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object CharsetProvider {
 
   final lazy val VALID_CHARSETS =
-    Set("US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
+    Set("us-ascii", "iso-8859-1", "utf-8", "utf-16be", "utf-16le", "utf-16", "utf-32")
 
   def forName(
       charset: String,
-      legacyCharsets: Boolean,
+      legacyCharsets: Boolean = SQLConf.get.legacyJavaCharsets,
       caller: String = ""): Charset = {
-    if (legacyCharsets || VALID_CHARSETS.contains(charset.toUpperCase(Locale.ROOT))) {
+    val lowercasedCharset = charset.toLowerCase(Locale.ROOT)
+    if (legacyCharsets || VALID_CHARSETS.contains(lowercasedCharset)) {
       try {
-        Charset.forName(charset)
+        Charset.forName(lowercasedCharset)
       } catch {
         case _: IllegalCharsetNameException |
              _: UnsupportedCharsetException |
@@ -60,8 +62,8 @@ private[sql] object CharsetProvider {
   }
 
   def newDecoder(charset: String,
-      legacyCharsets: Boolean,
-      legacyErrorAction: Boolean,
+      legacyCharsets: Boolean = SQLConf.get.legacyJavaCharsets,
+      legacyErrorAction: Boolean = SQLConf.get.legacyCodingErrorAction,
       caller: String = "decode"): CharsetDecoder = {
     val codingErrorAction = if (legacyErrorAction) {
       CodingErrorAction.REPLACE

@@ -794,6 +794,21 @@ case class MergeIntoTable(
     copy(targetTable = newLeft, sourceTable = newRight)
 }
 
+object MergeIntoTable {
+  def getWritePrivileges(
+      matchedActions: Iterable[MergeAction],
+      notMatchedActions: Iterable[MergeAction],
+      notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
+    val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
+    (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
+      case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)
+      case _: UpdateAction | _: UpdateStarAction => privileges.add(TableWritePrivilege.UPDATE)
+      case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
+    }
+    privileges.toSeq
+  }
+}
+
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false

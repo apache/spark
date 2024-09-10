@@ -628,7 +628,9 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "shuffle",
       // other functions which are not yet supported
       "to_avro",
-      "from_avro"
+      "from_avro",
+      "to_protobuf",
+      "from_protobuf"
     )
 
     for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {

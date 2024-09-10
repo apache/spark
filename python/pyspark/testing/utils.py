@@ -53,7 +53,7 @@ except ImportError:
     pass
 
 from pyspark import SparkConf
-from pyspark.errors import PySparkAssertionError, PySparkException
+from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.captured import CapturedException
 from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.find_spark_home import _find_spark_home
@@ -185,7 +185,7 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
 
-    def test_assert_vanilla_mode(self):
+    def test_assert_classic_mode(self):
         from pyspark.sql import is_remote
 
         self.assertFalse(is_remote())
@@ -442,14 +442,14 @@ def assertSchemaEqual(
     >>> assertSchemaEqual(s1, s2, ignoreColumnName=True)
     """
     if not isinstance(actual, StructType):
-        raise PySparkAssertionError(
-            errorClass="UNSUPPORTED_DATA_TYPE",
-            messageParameters={"data_type": type(actual)},
+        raise PySparkTypeError(
+            errorClass="NOT_STRUCT",
+            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
         )
     if not isinstance(expected, StructType):
-        raise PySparkAssertionError(
-            errorClass="UNSUPPORTED_DATA_TYPE",
-            messageParameters={"data_type": type(expected)},
+        raise PySparkTypeError(
+            errorClass="NOT_STRUCT",
+            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):

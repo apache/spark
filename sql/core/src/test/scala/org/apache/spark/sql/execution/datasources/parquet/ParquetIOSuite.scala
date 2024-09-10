@@ -1068,7 +1068,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         exception = intercept[SparkException] {
           spark.read.schema(readSchema).parquet(path).collect()
         },
-        errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+        condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
         parameters = Map(
           "path" -> ".*",
           "column" -> "\\[_1\\]",

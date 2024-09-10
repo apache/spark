@@ -112,7 +112,7 @@ class FileIndexSuite extends SharedSparkSession {
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val msg = intercept[AssertionError] {
+        val msg = intercept[SparkRuntimeException] {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           fileIndex.partitionSpec()
         }.getMessage
@@ -137,7 +137,7 @@ class FileIndexSuite extends SharedSparkSession {
           exception = intercept[SparkRuntimeException] {
             fileIndex.partitionSpec()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2058",
+          condition = "_LEGACY_ERROR_TEMP_2058",
           parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
         )
       }

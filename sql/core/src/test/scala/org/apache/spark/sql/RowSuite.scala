@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -119,8 +119,21 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         rowWithoutSchema.fieldIndex("foo")
       },
-      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      condition = "UNSUPPORTED_CALL.FIELD_INDEX",
       parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`")
+    )
+  }
+
+  test("SPARK-42307: get a value from a null column should result in error") {
+    val position = 0
+    val rowWithNullValue = Row.fromSeq(Seq(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        rowWithNullValue.getLong(position)
+      },
+      condition = "ROW_VALUE_IS_NULL",
+      parameters = Map("index" -> position.toString)
     )
   }
 }

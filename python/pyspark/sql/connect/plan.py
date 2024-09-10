@@ -281,9 +281,13 @@ class DataSource(LogicalPlan):
         assert schema is None or isinstance(schema, str)
 
         if options is not None:
+            new_options = {}
             for k, v in options.items():
-                assert isinstance(k, str)
-                assert isinstance(v, str)
+                if v is not None:
+                    assert isinstance(k, str)
+                    assert isinstance(v, str)
+                    new_options[k] = v
+            options = new_options
 
         if paths is not None:
             assert isinstance(paths, list)
@@ -682,7 +686,7 @@ class Deduplicate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
-        column_names: Optional[Sequence[str]] = None,
+        column_names: Optional[List[str]] = None,
         within_watermark: bool = False,
     ) -> None:
         super().__init__(child)
@@ -1322,6 +1326,27 @@ class Unpivot(LogicalPlan):
             plan.unpivot.values.values.extend([v.to_plan(session) for v in self.values])
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
+        return plan
+
+
+class Transpose(LogicalPlan):
+    """Logical plan object for a transpose operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        index_columns: Sequence[Column],
+    ) -> None:
+        super().__init__(child)
+        self.index_columns = index_columns
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.transpose.input.CopyFrom(self._child.plan(session))
+        if self.index_columns is not None and len(self.index_columns) > 0:
+            for index_column in self.index_columns:
+                plan.transpose.index_columns.append(index_column.to_plan(session))
         return plan
 
 
