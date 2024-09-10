@@ -688,7 +688,9 @@ class SparkSession private(
   override def clearTags(): Unit = managedJobTags.clear()
 
   /**
-   * Request to interrupt all currently running operations of this session.
+   * Request to interrupt all currently running SQL operations of this session.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
 
@@ -700,7 +702,10 @@ class SparkSession private(
     doInterruptTag(sessionJobTag, "as part of cancellation of all jobs")
 
   /**
-   * Request to interrupt all currently running operations of this session with the given job tag.
+   * Request to interrupt all currently running SQL operations of this session with the given
+   * job tag.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
@@ -723,7 +728,9 @@ class SparkSession private(
   }
 
   /**
-   * Request to interrupt an operation of this session, given its SQL execution ID.
+   * Request to interrupt a SQL operation of this session, given its SQL execution ID.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
    *
    * @note This method will wait up to 60 seconds for the interruption request to be issued.
    *
