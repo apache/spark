@@ -153,9 +153,9 @@ Project [col#x.i1 AS i1#x]
 
 -- !query
 table t
-|> select (select a from other where x = a limit 1)
+|> select (select a from other where x = a limit 1) as result
 -- !query analysis
-Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
+Project [scalar-subquery#x [x#x] AS result#x]
 :  +- GlobalLimit 1
 :     +- LocalLimit 1
 :        +- Project [a#x]
@@ -168,9 +168,9 @@ Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
 
 -- !query
 table t
-|> select (select any_value(a) from other where x = a limit 1)
+|> select (select any_value(a) from other where x = a limit 1) as result
 -- !query analysis
-Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
+Project [scalar-subquery#x [x#x] AS result#x]
 :  +- GlobalLimit 1
 :     +- LocalLimit 1
 :        +- Aggregate [any_value(a#x, false) AS any_value(a)#x]
@@ -193,11 +193,11 @@ Project [z#x, (z#x + 1) AS plus_one#x]
 
 -- !query
 table t
-|> select first_value(x) over (partition by y)
+|> select first_value(x) over (partition by y) as result
 -- !query analysis
-Project [first_value(x) OVER (PARTITION BY y ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-+- Project [x#x, y#x, first_value(x) OVER (PARTITION BY y ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, first_value(x) OVER (PARTITION BY y ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Window [first_value(x#x, false) windowspecdefinition(y#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value(x) OVER (PARTITION BY y ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [y#x]
+Project [result#x]
++- Project [x#x, y#x, result#x, result#x]
+   +- Window [first_value(x#x, false) windowspecdefinition(y#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS result#x], [y#x]
       +- Project [x#x, y#x]
          +- SubqueryAlias spark_catalog.default.t
             +- Relation spark_catalog.default.t[x#x,y#x] csv

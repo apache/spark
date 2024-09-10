@@ -52,12 +52,12 @@ table st
 
 -- Expression subqueries in the pipe operator SELECT list.
 table t
-|> select (select a from other where x = a limit 1);
+|> select (select a from other where x = a limit 1) as result;
 
 -- Aggregations are allowed within expression subqueries in the pipe operator SELECT list as long as
 -- no aggregate functions exist in the top-level select list.
 table t
-|> select (select any_value(a) from other where x = a limit 1);
+|> select (select any_value(a) from other where x = a limit 1) as result;
 
 -- Lateral column aliases in the pipe operator SELECT list.
 table t
@@ -65,7 +65,7 @@ table t
 
 -- Window functions are allowed in the pipe operator SELECT list.
 table t
-|> select first_value(x) over (partition by y);
+|> select first_value(x) over (partition by y) as result;
 
 -- Selection operators: negative tests.
 ---------------------------------------

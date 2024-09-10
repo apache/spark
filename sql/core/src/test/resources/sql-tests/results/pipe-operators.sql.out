@@ -158,9 +158,9 @@ struct<i1:int>
 
 -- !query
 table t
-|> select (select a from other where x = a limit 1)
+|> select (select a from other where x = a limit 1) as result
 -- !query schema
-struct<scalarsubquery(x):int>
+struct<result:int>
 -- !query output
 1
 NULL
@@ -168,9 +168,9 @@ NULL
 
 -- !query
 table t
-|> select (select any_value(a) from other where x = a limit 1)
+|> select (select any_value(a) from other where x = a limit 1) as result
 -- !query schema
-struct<scalarsubquery(x):int>
+struct<result:int>
 -- !query output
 1
 NULL
@@ -188,9 +188,9 @@ struct<z:int,plus_one:int>
 
 -- !query
 table t
-|> select first_value(x) over (partition by y)
+|> select first_value(x) over (partition by y) as result
 -- !query schema
-struct<first_value(x) OVER (PARTITION BY y ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<result:int>
 -- !query output
 0
 1
