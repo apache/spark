@@ -390,8 +390,9 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
 def dispatch_window_method(f: FuncT) -> FuncT:
     """
-    For the use cases of direct Window.method(col, ...), it checks if self
-    is a Connect Window or Classic Window, and dispatches.
+    For use cases of direct Window.method(col, ...), this function dispatches
+    the call to either ConnectWindow or ClassicWindow based on the execution
+    environment.
     """
 
     @functools.wraps(f)
@@ -399,18 +400,11 @@ def dispatch_window_method(f: FuncT) -> FuncT:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import Window as ConnectWindow
 
-            if isinstance(args[0], ConnectWindow):
-                return getattr(ConnectWindow, f.__name__)(*args, **kwargs)
+            return getattr(ConnectWindow, f.__name__)(*args, **kwargs)
         else:
             from pyspark.sql.classic.window import Window as ClassicWindow
 
-            if isinstance(args[0], ClassicWindow):
-                return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
-
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": f"Window.{f.__name__}"},
-        )
+            return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 
