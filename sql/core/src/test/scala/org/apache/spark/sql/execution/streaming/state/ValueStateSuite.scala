@@ -166,7 +166,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
-      val cfName = "_testState"
+      val cfName = "$testState"
       val ex = intercept[SparkUnsupportedOperationException] {
         handle.getValueState[Long](cfName, Encoders.scalaLong)
       }
@@ -176,7 +176,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         parameters = Map(
           "colFamilyName" -> cfName
         ),
-        matchPVals = true
+        matchPVals = false
       )
     }
   }

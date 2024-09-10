@@ -962,7 +962,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
-      Seq("_internal", "_test", "_test123", "__12345").foreach { colFamilyName =>
+      Seq("$internal", "$test", "$test123", "$_12345", "$$$235").foreach { colFamilyName =>
         val ex = intercept[SparkUnsupportedOperationException] {
           store.createColFamilyIfAbsent(colFamilyName,
             keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
@@ -985,7 +985,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             parameters = Map(
               "colFamilyName" -> colFamilyName
             ),
-            matchPVals = true
+            matchPVals = false
           )
         }
       }
