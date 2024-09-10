@@ -415,7 +415,7 @@ abstract class SparkFunSuite
       condition: String,
       sqlState: String,
       context: ExpectedContext): Unit =
-    checkError(exception, condition, None, Map.empty, false, Array(context))
+    checkError(exception, condition, Some(sqlState), Map.empty, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
