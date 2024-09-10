@@ -20,8 +20,9 @@
 name: "Build / Python-only (master, Python 3.12)"
 
 on:
-  schedule:
-    - cron: '0 19 * * *'
+  push:
+    branches:
+    - '**'
 
 jobs:
   run-build:
@@ -29,7 +30,6 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
-    if: github.repository == 'apache/spark'
     with:
       java: 17
       branch: master

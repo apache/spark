@@ -22,7 +22,7 @@ name: "Build"
 on:
   push:
     branches:
-    - '**'
+    - 'nonexistent'
 
 jobs:
   call-build-and-test:
