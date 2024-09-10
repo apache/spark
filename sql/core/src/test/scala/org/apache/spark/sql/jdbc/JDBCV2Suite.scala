@@ -1599,6 +1599,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedTopN: ORDER BY [EXTRACT(DAY_OF_YEAR FROM DATE1) ASC NULLS FIRST] LIMIT 1,"
     checkPushedInfo(df9, expectedPlanFragment9)
     checkAnswer(df9, Seq(Row("alex")))
+
+    val df10 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('DAY', date1) = date'2022-05-19'")
+    checkFiltersRemoved(df10)
+    val expectedPlanFragment10 =
+      "PushedFilters: [(DATE_TRUNC('DAY', CAST(DATE1 AS timestamp))) = 1652943600000000]"
+    checkPushedInfo(df10, expectedPlanFragment10)
+    checkAnswer(df10, Seq(Row("amy")))
   }
 
   test("scan with filter push-down with misc functions") {

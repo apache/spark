@@ -47,10 +47,7 @@ private case class PostgresDialect()
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
     "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
-  private val supportedDatetimeFunctions = Set("DATE_TRUNC")
-  private val supportedFunctions =
-    supportedAggregateFunctions ++
-      supportedDatetimeFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_TRUNC")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
