@@ -592,3 +592,48 @@ class IterateStatementExec(val label: String) extends LeafStatementExec {
   var hasBeenMatched: Boolean = false
   override def reset(): Unit = hasBeenMatched = false
 }
+
+class LoopStatementExec(
+    body: CompoundBodyExec,
+    label: Option[String]) extends NonLeafStatementExec {
+
+  private var interrupted: Boolean = false
+
+  private lazy val treeIterator =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = !interrupted
+
+      override def next(): CompoundStatementExec = {
+        if (!body.getTreeIterator.hasNext) {
+          body.reset()
+        }
+
+        val retStmt = body.getTreeIterator.next()
+
+        retStmt match {
+          case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
+            if (label.contains(leaveStatementExec.label)) {
+              leaveStatementExec.hasBeenMatched = true
+            }
+            interrupted = true
+            return retStmt
+          case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+            if (label.contains(iterStatementExec.label)) {
+              iterStatementExec.hasBeenMatched = true
+            }
+            body.reset()
+            return retStmt
+          case _ =>
+        }
+
+        retStmt
+      }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    interrupted = false
+    body.reset()
+  }
+}

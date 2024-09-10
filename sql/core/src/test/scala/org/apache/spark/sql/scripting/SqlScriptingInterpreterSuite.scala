@@ -1383,4 +1383,110 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
+
+  test("loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: LOOP
+        |    SET x = x + 1;
+        |    SELECT x;
+        |    IF x > 3
+        |    THEN
+        |     LEAVE lbl;
+        |    END IF;
+        |  END LOOP;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select x
+      Seq.empty[Row], // set x = 2
+      Seq(Row(2)), // select x
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("loop2") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: WHILE 1=1 DO
+        |    SET x = x + 1;
+        |    SELECT x;
+        |    IF x > 3
+        |    THEN
+        |     LEAVE lbl;
+        |    END IF;
+        |  END WHILE;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x= 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("test1") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1=1 DO
+        |    IF 1 = 1
+        |    THEN
+        |     LEAVE lbl;
+        |    END IF;
+        |  END WHILE;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x= 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("test2") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: LOOP
+        |    IF 1 = 1
+        |    THEN
+        |     LEAVE lbl;
+        |    END IF;
+        |  END LOOP;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x= 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
 }

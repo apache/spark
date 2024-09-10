@@ -138,3 +138,7 @@ case class CaseStatement(
     elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
 }
+
+case class LoopStatement(
+  body: CompoundBody,
+  label: Option[String]) extends CompoundPlanStatement
