@@ -186,6 +186,7 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
+      // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
       false
     }
   }

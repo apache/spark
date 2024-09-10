@@ -145,21 +145,6 @@ object CheckConnectJvmClientCompatibility {
     checkMiMaCompatibility(clientJar, protobufJar, includedRules, excludeRules)
   }
 
-  private lazy val mergeIntoWriterExcludeRules: Seq[ProblemFilter] = {
-    // Exclude some auto-generated methods in [[MergeIntoWriter]] classes.
-    // The incompatible changes are due to the uses of [[proto.Expression]] instead
-    // of [[catalyst.Expression]] in the method signature.
-    val classNames = Seq("WhenMatched", "WhenNotMatched", "WhenNotMatchedBySource")
-    val methodNames = Seq("apply", "condition", "copy", "copy$*", "unapply")
-
-    classNames.flatMap { className =>
-      methodNames.map { methodName =>
-        ProblemFilters.exclude[IncompatibleSignatureProblem](
-          s"org.apache.spark.sql.$className.$methodName")
-      }
-    }
-  }
-
   private def checkMiMaCompatibilityWithSqlModule(
       clientJar: File,
       sqlJar: File): List[Problem] = {
@@ -269,12 +254,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.TestGroupState"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState$"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.PythonStreamingQueryListener"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.PythonStreamingQueryListenerWrapper"),
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListener$Event"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
@@ -285,10 +264,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager$"),
-
-      // UDFRegistration
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.UDFRegistration.register"),
 
       // ColumnNode conversions
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -304,6 +279,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.*"),
 
       // UDFRegistration
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.UDFRegistration.register"),
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.UDFRegistration"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.UDFRegistration.log*"),
@@ -326,14 +303,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.DataFrameReader.validateJsonSchema"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"),
-
-      // Datasource V2 partition transforms
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform$"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.PartitionTransform$ExtractTransform")) ++
-      mergeIntoWriterExcludeRules
+        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"))
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
@@ -443,8 +413,7 @@ object CheckConnectJvmClientCompatibility {
 
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$")) ++
-      mergeIntoWriterExcludeRules
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"))
 
     checkMiMaCompatibility(sqlJar, clientJar, includedRules, excludeRules)
   }
