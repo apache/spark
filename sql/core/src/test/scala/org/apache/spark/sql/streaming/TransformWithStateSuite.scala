@@ -1448,6 +1448,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
       SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
       withTempDir { chkptDir =>
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
         // in this test case, we are changing the state spec back and forth
         // to trigger the writing of the schema and metadata files
         val inputData = MemoryStream[(String, String)]
@@ -1483,6 +1487,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           },
           StopStream
         )
+        // assert that a metadata and schema file has been written for each run
+        // as state variables have been deleted
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
+
         val result3 = inputData.toDS()
           .groupByKey(x => x._1)
           .transformWithState(new RunningCountMostRecentStatefulProcessor(),
@@ -1512,10 +1521,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           },
           StopStream
         )
-        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
-        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
-
-        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
         // by the end of the test, there have been 4 batches,
         // so the metadata and schema logs, and commitLog has been purged
         // for batches 0 and 1 so metadata and schema files exist for batches 0, 1, 2, 3
