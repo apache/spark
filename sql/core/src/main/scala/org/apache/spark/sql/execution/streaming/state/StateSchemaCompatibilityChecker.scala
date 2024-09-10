@@ -188,7 +188,7 @@ class StateSchemaCompatibilityChecker(
       }
       val colFamiliesAddedOrRemoved =
         newStateSchemaList.map(_.colFamilyName) != existingStateSchemaList.map(_.colFamilyName)
-      if (stateSchemaVersion == 3 || colFamiliesAddedOrRemoved) {
+      if (stateSchemaVersion == 3 && colFamiliesAddedOrRemoved) {
         createSchemaFile(newStateSchemaList, stateSchemaVersion)
       }
       // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
