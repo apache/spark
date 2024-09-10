@@ -310,13 +310,6 @@ class OperatorStateMetadataV2Reader(
     hadoopConf: Configuration,
     batchId: Long) extends OperatorStateMetadataReader {
 
-  // Check that the requested batchId is available in the checkpoint directory
-  val baseCheckpointDir = stateCheckpointPath.getParent.getParent
-  val lastAvailOffset = listOffsets(baseCheckpointDir).lastOption.getOrElse(-1L)
-  if (batchId > lastAvailOffset) {
-    throw StateDataSourceErrors.failedToReadOperatorMetadata(baseCheckpointDir.toString, batchId)
-  }
-
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
@@ -346,7 +339,7 @@ class OperatorStateMetadataV2Reader(
 
   override def read(): Option[OperatorStateMetadata] = {
     val batches = listOperatorMetadataBatches()
-    val lastBatchId = batches.filter(_ <= batchId).lastOption
+    val lastBatchId = batches.filter(_ == batchId).lastOption
     if (lastBatchId.isEmpty) {
       throw StateDataSourceErrors.failedToReadOperatorMetadata(stateCheckpointPath.toString,
         batchId)
