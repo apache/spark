@@ -518,7 +518,7 @@ class SparkThrowableSuite extends SparkFunSuite {
             "details" -> "implicit cast"
           ))
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" ->
           ("Found unused message parameters of the error class 'CANNOT_UP_CAST_DATATYPE'. " +
