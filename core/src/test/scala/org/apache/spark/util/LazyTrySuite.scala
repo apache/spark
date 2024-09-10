@@ -18,10 +18,10 @@ package org.apache.spark.util
 
 import org.apache.spark.SparkFunSuite
 
-class LazySuite extends SparkFunSuite{
-  test("Lazy should initialize only once") {
+class LazyTrySuite extends SparkFunSuite{
+  test("LazyTry should initialize only once") {
     var count = 0
-    val lazyVal = Lazy {
+    val lazyVal = LazyTry {
       count += 1
       count
     }
@@ -32,8 +32,8 @@ class LazySuite extends SparkFunSuite{
     assert(count == 1)
   }
 
-  test("Lazy should re-throw exceptions") {
-    val lazyVal = Lazy {
+  test("LazyTry should re-throw exceptions") {
+    val lazyVal = LazyTry {
       throw new RuntimeException("test")
     }
     intercept[RuntimeException] {
@@ -44,10 +44,10 @@ class LazySuite extends SparkFunSuite{
     }
   }
 
-  test("Lazy should re-throw exceptions with current caller stack-trace") {
+  test("LazyTry should re-throw exceptions with current caller stack-trace") {
     val fileName = Thread.currentThread().getStackTrace()(1).getFileName
     val lineNo = Thread.currentThread().getStackTrace()(1).getLineNumber
-    val lazyVal = Lazy {
+    val lazyVal = LazyTry {
       throw new RuntimeException("test")
     }
 
@@ -64,16 +64,16 @@ class LazySuite extends SparkFunSuite{
       .exists(elem => elem.getFileName == fileName && elem.getLineNumber == lineNo + 12))
   }
 
-  test("Lazy does not lock containing object") {
+  test("LazyTry does not lock containing object") {
     class LazyContainer() {
       @volatile var aSet = 0
 
-      val a: Lazy[Int] = Lazy {
+      val a: LazyTry[Int] = LazyTry {
         aSet = 1
         aSet
       }
 
-      val b: Lazy[Int] = Lazy {
+      val b: LazyTry[Int] = LazyTry {
         val t = new Thread(new Runnable {
           override def run(): Unit = {
             assert(a.get == 1)
@@ -143,7 +143,7 @@ class LazySuite extends SparkFunSuite{
     // will wait on that monitor, not able to initialize a.
     // b will therefore see aSet == 0.
     assert(container.b == 0)
-    // However, after b finishes initializing, the monitor will be relased, and then thread t
+    // However, after b finishes initializing, the monitor will be released, and then thread t
     // will finish initializing a, and set aSet to 1.
     container.t.join()
     assert(container.aSet == 1)

@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.WriteFilesSpec
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.{Lazy, NextIterator}
+import org.apache.spark.util.{LazyTry, NextIterator}
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 object SparkPlan {
@@ -182,7 +182,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
-  private val executeRDD = Lazy {
+  private val executeRDD = LazyTry {
     doExecute()
   }
 
@@ -199,7 +199,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     executeRDD.get
   }
 
-  private val executeBroadcastBcast = Lazy {
+  private val executeBroadcastBcast = LazyTry {
     doExecuteBroadcast()
   }
 
@@ -216,7 +216,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     executeBroadcastBcast.get.asInstanceOf[broadcast.Broadcast[T]]
   }
 
-  private val executeColumnarRDD = Lazy {
+  private val executeColumnarRDD = LazyTry {
     doExecuteColumnar()
   }
 
