@@ -60,7 +60,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{DataFrameWriterImpl, SQLConf, ToScalaUDF}
+import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf, ToScalaUDF}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -982,6 +982,22 @@ class Dataset[T] private[sql](
     unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /** @inheritdoc */
+  def transpose(indexColumn: Column): DataFrame = withPlan {
+    UnresolvedTranspose(
+      Seq(indexColumn.named),
+      logicalPlan
+    )
+  }
+
+  /** @inheritdoc */
+  def transpose(): DataFrame = withPlan {
+    UnresolvedTranspose(
+      Seq.empty,
+      logicalPlan
+    )
+  }
+
+  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
@@ -1595,25 +1611,7 @@ class Dataset[T] private[sql](
     new DataFrameWriterImpl[T](this)
   }
 
-  /**
-   * Create a write configuration builder for v2 sources.
-   *
-   * This builder is used to configure and execute write operations. For example, to append to an
-   * existing table, run:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").append()
-   * }}}
-   *
-   * This can also be used to create or replace existing tables:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
-   * }}}
-   *
-   * @group basic
-   * @since 3.0.0
-   */
+  /** @inheritdoc */
   def writeTo(table: String): DataFrameWriterV2[T] = {
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
@@ -1621,7 +1619,7 @@ class Dataset[T] private[sql](
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("writeTo")))
     }
-    new DataFrameWriterV2[T](table, this)
+    new DataFrameWriterV2Impl[T](table, this)
   }
 
   /**
@@ -1653,7 +1651,7 @@ class Dataset[T] private[sql](
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    new MergeIntoWriter[T](table, this, condition)
+    new MergeIntoWriterImpl[T](table, this, condition)
   }
 
   /**
@@ -1673,7 +1671,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   override def toJSON: Dataset[String] = {
-    val rowSchema = this.schema
+    val rowSchema = exprEnc.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     mapPartitions { iter =>
       val writer = new CharArrayWriter()
@@ -2011,14 +2009,6 @@ class Dataset[T] private[sql](
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * It adds a new long column with the name `name` that increases one by one.
-   * This is for 'distributed-sequence' default index in pandas API on Spark.
-   */
-  private[sql] def withSequenceColumn(name: String) = {
-    select(column(DistributedSequenceID()).alias(name), col("*"))
-  }
 
   /**
    * Converts a JavaRDD to a PythonRDD.

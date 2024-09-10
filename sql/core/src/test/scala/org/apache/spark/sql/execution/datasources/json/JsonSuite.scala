@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, Da
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.{DecimalData, TestData}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
@@ -3967,6 +3968,34 @@ abstract class JsonSuite
         multiLine = true
       )
     }
+  }
+
+  test("SPARK-48965: Dataset#toJSON should use correct schema #1: decimals") {
+    val numString = "123.456"
+    val bd = BigDecimal(numString)
+    val ds1 = sql(s"select ${numString}bd as a, ${numString}bd as b").as[DecimalData]
+    checkDataset(
+      ds1,
+      DecimalData(bd, bd)
+    )
+    val ds2 = ds1.toJSON
+    checkDataset(
+      ds2,
+      "{\"a\":123.456000000000000000,\"b\":123.456000000000000000}"
+    )
+  }
+
+  test("SPARK-48965: Dataset#toJSON should use correct schema #2: misaligned columns") {
+    val ds1 = sql("select 'Hey there' as value, 90000001 as key").as[TestData]
+    checkDataset(
+      ds1,
+      TestData(90000001, "Hey there")
+    )
+    val ds2 = ds1.toJSON
+    checkDataset(
+      ds2,
+      "{\"key\":90000001,\"value\":\"Hey there\"}"
+    )
   }
 }
 

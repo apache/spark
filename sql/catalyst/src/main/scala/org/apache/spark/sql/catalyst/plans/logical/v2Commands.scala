@@ -796,9 +796,9 @@ case class MergeIntoTable(
 
 object MergeIntoTable {
   def getWritePrivileges(
-      matchedActions: Seq[MergeAction],
-      notMatchedActions: Seq[MergeAction],
-      notMatchedBySourceActions: Seq[MergeAction]): Seq[TableWritePrivilege] = {
+      matchedActions: Iterable[MergeAction],
+      notMatchedActions: Iterable[MergeAction],
+      notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
     val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
     (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
       case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)

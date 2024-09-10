@@ -29,12 +29,14 @@ import org.apache.spark.sql.catalyst.util.StringConcat
  */
 @Stable
 object ArrayType extends AbstractDataType {
+
   /**
    * Construct a [[ArrayType]] object with the given element type. The `containsNull` is true.
    */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, containsNull = true)
 
-  override private[sql] def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)
+  override private[sql] def defaultConcreteType: DataType =
+    ArrayType(NullType, containsNull = true)
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[ArrayType]
@@ -44,18 +46,19 @@ object ArrayType extends AbstractDataType {
 }
 
 /**
- * The data type for collections of multiple values.
- * Internally these are represented as columns that contain a ``scala.collection.Seq``.
+ * The data type for collections of multiple values. Internally these are represented as columns
+ * that contain a ``scala.collection.Seq``.
  *
  * Please use `DataTypes.createArrayType()` to create a specific instance.
  *
- * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
- * `containsNull: Boolean`.
- * The field of `elementType` is used to specify the type of array elements.
- * The field of `containsNull` is used to specify if the array can have `null` values.
+ * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and `containsNull:
+ * Boolean`. The field of `elementType` is used to specify the type of array elements. The field
+ * of `containsNull` is used to specify if the array can have `null` values.
  *
- * @param elementType The data type of values.
- * @param containsNull Indicates if the array can have `null` values
+ * @param elementType
+ *   The data type of values.
+ * @param containsNull
+ *   Indicates if the array can have `null` values
  *
  * @since 1.3.0
  */
@@ -82,8 +85,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       ("containsNull" -> containsNull)
 
   /**
-   * The default size of a value of the ArrayType is the default size of the element type.
-   * We assume that there is only 1 element on average in an array. See SPARK-18853.
+   * The default size of a value of the ArrayType is the default size of the element type. We
+   * assume that there is only 1 element on average in an array. See SPARK-18853.
    */
   override def defaultSize: Int = 1 * elementType.defaultSize
 
@@ -97,8 +100,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ArrayType(elementType.asNullable, containsNull = true)
 
   /**
-   * Returns the same data type but set all nullability fields are true
-   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   * Returns the same data type but set all nullability fields are true (`StructField.nullable`,
+   * `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    *
    * @since 4.0.0
    */
