@@ -35,19 +35,18 @@ if have_pyarrow:
 
 
 def function_variations(func):
-    """Wraps a applyInArrow function returning a Table to return an iter of batches"""
     yield func
     num_args = len(inspect.getfullargspec(func).args)
     if num_args == 1:
 
-        def iter_func(table):
-            yield from func(table).to_batches()
+        def iter_func(batches):
+            yield from func(pa.Table.from_batches(batches)).to_batches()
 
         yield iter_func
     else:
 
-        def iter_keys_func(keys, table):
-            yield from func(keys, table).to_batches()
+        def iter_keys_func(keys, batches):
+            yield from func(keys, pa.Table.from_batches(batches)).to_batches()
 
         yield iter_keys_func
 

@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import itertools
 import os
 import sys
 import dataclasses
@@ -470,7 +471,9 @@ def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
     verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
-def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
+def wrap_grouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_conf):
+    import pyarrow as pa
+
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
     if _assign_cols_by_name:
@@ -482,23 +485,36 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
         ]
 
-    def wrapped(key_table, value_table):
-        if len(argspec.args) == 1:
-            result = f(value_table)
-        elif len(argspec.args) == 2:
-            key = tuple(c[0] for c in key_table.columns)
-            result = f(key, value_table)
-
-        if isinstance(result, Iterator):
+    def wrapped(key_batch, value_batches):
+        if is_generator:
+            # Iterator[RecordBatch] -> Iterator[RecordBatch]
+            if len(argspec.args) == 1:
+                result = f(value_batches)
+            elif len(argspec.args) == 2:
+                key = tuple(c[0] for c in key_batch.columns)
+                result = f(key, value_batches)
 
             def verify_element(batch):
                 verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
                 return batch
 
-            return map(verify_element, result)
+            yield from map(verify_element, result)
+            # Make sure value_batches was fully iterated
+            for _ in value_batches:
+                pass
+
         else:
+            # Table -> Table
+            value_table = pa.Table.from_batches(value_batches)
+            if len(argspec.args) == 1:
+                result = f(value_table)
+            elif len(argspec.args) == 2:
+                key = tuple(c[0] for c in key_batch.columns)
+                result = f(key, value_table)
+
             verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
-            return result.to_batches()
+
+            yield from result.to_batches()
 
     return lambda k, v: (wrapped(k, v), to_arrow_type(return_type))
 
@@ -879,7 +895,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return args_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, runner_conf)
+        is_generator = inspect.isgeneratorfunction(chained_func)
+        return args_offsets, wrap_grouped_map_arrow_udf(
+            func, return_type, argspec, is_generator, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
@@ -1727,13 +1746,18 @@ def read_udfs(pickleSer, infile, eval_type):
                 names=[batch.schema.names[o] for o in offsets],
             )
 
-        def table_from_batches(batches, offsets):
-            return pa.Table.from_batches([batch_from_offset(batch, offsets) for batch in batches])
-
         def mapper(a):
-            keys = table_from_batches(a, parsed_offsets[0][0])
-            vals = table_from_batches(a, parsed_offsets[0][1])
-            return f(keys, vals)
+            batch_iter = iter(a)
+            # Need to materialize the first batch to get the keys
+            first_batch = next(batch_iter)
+
+            keys = batch_from_offset(first_batch, parsed_offsets[0][0])
+            value_batches = (
+                batch_from_offset(b, parsed_offsets[0][1])
+                for b in itertools.chain((first_batch,), batch_iter)
+            )
+
+            return f(keys, value_batches)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         # We assume there is only one UDF here because grouped map doesn't
