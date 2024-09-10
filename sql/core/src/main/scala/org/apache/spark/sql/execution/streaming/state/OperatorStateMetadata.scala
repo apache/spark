@@ -317,35 +317,24 @@ class OperatorStateMetadataV2Reader(
 
   override def version: Int = 2
 
-  // List the available offsets in the offset directory
-  private def listOffsets(baseCheckpointDir: Path): Array[Long] = {
-    val offsetLog = new Path(baseCheckpointDir, DIR_NAME_OFFSETS)
-    val fm = CheckpointFileManager.create(offsetLog, hadoopConf)
-    if (!fm.exists(offsetLog)) {
-      return Array.empty
-    }
-    fm.list(offsetLog)
-      .filter(f => !f.getPath.getName.startsWith(".")) // ignore hidden files
-      .map(_.getPath.getName.toLong).sorted
-  }
-
-  // List the available batches in the operator metadata directory
+  // List the available batches in the operator metadata directory in no particular order.
   private def listOperatorMetadataBatches(): Array[Long] = {
     if (!fm.exists(metadataDirPath)) {
       return Array.empty
     }
-    fm.list(metadataDirPath).map(_.getPath.getName.toLong).sorted
+    fm.list(metadataDirPath).map(_.getPath.getName.toLong)
   }
 
   override def read(): Option[OperatorStateMetadata] = {
     val batches = listOperatorMetadataBatches()
-    val lastBatchId = batches.filter(_ == batchId).lastOption
-    if (lastBatchId.isEmpty) {
+    val targetBatchId = batches.filter(_ == batchId).lastOption
+
+    if (targetBatchId.isEmpty) {
       throw StateDataSourceErrors.failedToReadOperatorMetadata(stateCheckpointPath.toString,
         batchId)
     } else {
       val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
-        stateCheckpointPath, lastBatchId.get)
+        stateCheckpointPath, targetBatchId.get)
       val inputStream = fm.open(metadataFilePath)
       OperatorStateMetadataUtils.readMetadata(inputStream, version)
     }
