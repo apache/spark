@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1117,24 +1117,11 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[ShowCollationsCommand]] command.
    * Expected format:
    * {{{
-   *   SHOW identifier? COLLATIONS ((FROM | IN) ns=identifierReference)? (LIKE? pattern=stringLit);
+   *   SHOW COLLATIONS (LIKE? pattern=stringLit)?;
    * }}}
    */
   override def visitShowCollations(ctx: ShowCollationsContext): LogicalPlan = withOrigin(ctx) {
-    val ns = if (ctx.ns != null) {
-      withIdentClause(ctx.ns, UnresolvedNamespace(_))
-    } else {
-      CurrentNamespace
-    }
-    val (userScope, systemScope) = Option(ctx.identifier)
-      .map(_.getText.toLowerCase(Locale.ROOT)) match {
-      case None | Some("all") => (true, true)
-      case Some("system") => (false, true)
-      case Some("user") =>
-        throw QueryParsingErrors.showCollationsUnsupportedError("user", ctx.identifier())
-      case Some(x) => throw QueryParsingErrors.showCollationsUnsupportedError(x, ctx.identifier())
-    }
     val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
-    ShowCollationsCommand(ns, userScope, systemScope, pattern)
+    ShowCollationsCommand(pattern)
   }
 }

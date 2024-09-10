@@ -1627,38 +1627,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("show collations") {
     assert(sql("SHOW COLLATIONS").collect().length >= 562)
-    assert(sql("SHOW ALL COLLATIONS").collect().length >= 562)
-    assert(sql("SHOW SYSTEM COLLATIONS").collect().length >= 562)
-
-    val sqlText1 = "SHOW USER COLLATIONS"
-    checkError(
-      exception = intercept[ParseException] {
-        sql(sqlText1)
-      },
-      errorClass = "INVALID_SQL_SYNTAX.SHOW_COLLATIONS_INVALID_SCOPE",
-      sqlState = "42000",
-      parameters = Map("scope" -> "`user`"),
-      context = ExpectedContext(
-        fragment = sqlText1,
-        start = 0,
-        stop = 19
-      )
-    )
-
-    val sqlText2 = "SHOW XXX COLLATIONS"
-    checkError(
-      exception = intercept[ParseException] {
-        sql(sqlText2)
-      },
-      errorClass = "INVALID_SQL_SYNTAX.SHOW_COLLATIONS_INVALID_SCOPE",
-      sqlState = "42000",
-      parameters = Map("scope" -> "`xxx`"),
-      context = ExpectedContext(
-        fragment = sqlText2,
-        start = 0,
-        stop = 18
-      )
-    )
 
     checkAnswer(sql("SHOW COLLATIONS LIKE '*UTF8_BINARY*'"),
       Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,

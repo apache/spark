@@ -99,22 +99,7 @@ public final class CollationFactory {
     String icuVersion,
     String padAttribute,
     boolean accentSensitivity,
-    boolean caseSensitivity) {
-
-    public static CollationMeta fromCollation(
-        String catalog, String schema, Collation collation) {
-      return new CollationMeta(
-        catalog,
-        schema,
-        collation.collationName,
-        collation.language,
-        collation.country,
-        collation.icuVersion,
-        collation.padAttribute,
-        collation.accentSensitivity,
-        collation.caseSensitivity);
-    }
-  }
+    boolean caseSensitivity) { }
 
   /**
    * Entry encapsulating all information about a collation.
@@ -123,12 +108,6 @@ public final class CollationFactory {
 
     public final String collationName;
     public final String provider;
-    public final String language;
-    public final String country;
-    public final String icuVersion;
-    public final String padAttribute;
-    public final boolean accentSensitivity;
-    public final boolean caseSensitivity;
     public final Collator collator;
     public final Comparator<UTF8String> comparator;
 
@@ -177,12 +156,6 @@ public final class CollationFactory {
 
     public Collation(
         String collationName,
-        String language,
-        String country,
-        String icuVersion,
-        String padAttribute,
-        boolean accentSensitivity,
-        boolean caseSensitivity,
         String provider,
         Collator collator,
         Comparator<UTF8String> comparator,
@@ -192,12 +165,6 @@ public final class CollationFactory {
         boolean supportsBinaryOrdering,
         boolean supportsLowercaseEquality) {
       this.collationName = collationName;
-      this.language = language;
-      this.country = country;
-      this.icuVersion = icuVersion;
-      this.padAttribute = padAttribute;
-      this.accentSensitivity = accentSensitivity;
-      this.caseSensitivity = caseSensitivity;
       this.provider = provider;
       this.collator = collator;
       this.comparator = comparator;
@@ -390,18 +357,19 @@ public final class CollationFactory {
 
       protected abstract Collation buildCollation();
 
-      static List<CollationIdentifier> listCollations(String catalog, String schema) {
+      protected abstract CollationMeta buildCollationMeta();
+
+      static List<CollationIdentifier> listCollations() {
         return Stream.concat(
-          CollationSpecUTF8.listCollations(catalog, schema).stream(),
-          CollationSpecICU.listCollations(catalog, schema).stream()).toList();
+          CollationSpecUTF8.listCollations().stream(),
+          CollationSpecICU.listCollations().stream()).toList();
       }
 
-      static CollationMeta loadCollation(
-          String catalog, String schema, CollationIdentifier collationIdentifier) {
+      static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
         CollationMeta collationSpecUTF8 =
-          CollationSpecUTF8.loadCollation(catalog, schema, collationIdentifier);
+          CollationSpecUTF8.loadCollationMeta(collationIdentifier);
         if (collationSpecUTF8 == null) {
-          return CollationSpecICU.loadCollation(catalog, schema, collationIdentifier);
+          return CollationSpecICU.loadCollationMeta(collationIdentifier);
         }
         return collationSpecUTF8;
       }
@@ -473,12 +441,6 @@ public final class CollationFactory {
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           return new Collation(
             UTF8_BINARY_COLLATION_NAME,
-            /* language = */ null,
-            /* country = */ null,
-            /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
-            /* accentSensitivity = */ true,
-            /* caseSensitivity = */ true,
             PROVIDER_SPARK,
             null,
             UTF8String::binaryCompare,
@@ -490,12 +452,6 @@ public final class CollationFactory {
         } else {
           return new Collation(
             UTF8_LCASE_COLLATION_NAME,
-            /* language = */ null,
-            /* country = */ null,
-            /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
-            /* accentSensitivity = */ true,
-            /* caseSensitivity = */ false,
             PROVIDER_SPARK,
             null,
             CollationAwareUTF8String::compareLowerCase,
@@ -507,7 +463,34 @@ public final class CollationFactory {
         }
       }
 
-      static List<CollationIdentifier> listCollations(String catalog, String schema) {
+      @Override
+      protected CollationMeta buildCollationMeta() {
+        if (collationId == UTF8_BINARY_COLLATION_ID) {
+          return new CollationMeta(
+            CATALOG,
+            SCHEMA,
+            UTF8_BINARY_COLLATION_NAME,
+            /* language = */ null,
+            /* country = */ null,
+            /* icuVersion = */ null,
+            COLLATION_PAD_ATTRIBUTE,
+            /* accentSensitivity = */ true,
+            /* caseSensitivity = */ true);
+        } else {
+          return new CollationMeta(
+            CATALOG,
+            SCHEMA,
+            UTF8_LCASE_COLLATION_NAME,
+            /* language = */ null,
+            /* country = */ null,
+            /* icuVersion = */ null,
+            COLLATION_PAD_ATTRIBUTE,
+            /* accentSensitivity = */ true,
+            /* caseSensitivity = */ false);
+        }
+      }
+
+      static List<CollationIdentifier> listCollations() {
         CollationIdentifier UTF8_BINARY_COLLATION_IDENT =
           new CollationIdentifier(PROVIDER_SPARK, UTF8_BINARY_COLLATION_NAME, null);
         CollationIdentifier UTF8_LCASE_COLLATION_IDENT =
@@ -515,13 +498,11 @@ public final class CollationFactory {
         return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
       }
 
-      static CollationMeta loadCollation(
-          String catalog, String schema, CollationIdentifier collationIdentifier) {
+      static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
         try {
           int collationId = CollationSpecUTF8.collationNameToId(
             collationIdentifier.name, collationIdentifier.name.toUpperCase());
-          return CollationMeta.fromCollation(catalog, schema,
-            CollationSpecUTF8.fromCollationId(collationId).buildCollation());
+          return CollationSpecUTF8.fromCollationId(collationId).buildCollationMeta();
         } catch (SparkException ignored) {
           // ignore
           return null;
@@ -773,12 +754,6 @@ public final class CollationFactory {
         collator.freeze();
         return new Collation(
           collationName(),
-          ICULocaleMap.get(locale).getDisplayLanguage(),
-          ICULocaleMap.get(locale).getDisplayCountry(),
-          VersionInfo.ICU_VERSION.toString(),
-          COLLATION_PAD_ATTRIBUTE,
-          caseSensitivity == CaseSensitivity.CS,
-          accentSensitivity == AccentSensitivity.AS,
           PROVIDER_ICU,
           collator,
           (s1, s2) -> collator.compare(s1.toValidString(), s2.toValidString()),
@@ -787,6 +762,20 @@ public final class CollationFactory {
           /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
           /* supportsLowercaseEquality = */ false);
+      }
+
+      @Override
+      protected CollationMeta buildCollationMeta() {
+        return new CollationMeta(
+          CATALOG,
+          SCHEMA,
+          collationName(),
+          ICULocaleMap.get(locale).getDisplayLanguage(),
+          ICULocaleMap.get(locale).getDisplayCountry(),
+          VersionInfo.ICU_VERSION.toString(),
+          COLLATION_PAD_ATTRIBUTE,
+          caseSensitivity == CaseSensitivity.CS,
+          accentSensitivity == AccentSensitivity.AS);
       }
 
       /**
@@ -815,28 +804,26 @@ public final class CollationFactory {
         for (String locale: ICULocaleToId.keySet()) {
           // CaseSensitivity.CS + AccentSensitivity.AS
           collationNames.add(locale);
-          // CaseSensitivity.CI + AccentSensitivity.AS
-          collationNames.add(locale + "_CI");
           // CaseSensitivity.CS + AccentSensitivity.AI
           collationNames.add(locale + "_AI");
+          // CaseSensitivity.CI + AccentSensitivity.AS
+          collationNames.add(locale + "_CI");
           // CaseSensitivity.CI + AccentSensitivity.AI
           collationNames.add(locale + "_CI_AI");
         }
         return collationNames.stream().sorted().toList();
       }
 
-      static List<CollationIdentifier> listCollations(String catalog, String schema) {
+      static List<CollationIdentifier> listCollations() {
         return allCollationNames().stream().map(name ->
           new CollationIdentifier(PROVIDER_ICU, name, VersionInfo.ICU_VERSION.toString())).toList();
       }
 
-      static CollationMeta loadCollation(
-          String catalog, String schema, CollationIdentifier collationIdentifier) {
+      static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
         try {
           int collationId = CollationSpecICU.collationNameToId(
             collationIdentifier.name, collationIdentifier.name.toUpperCase());
-          return CollationMeta.fromCollation(catalog, schema,
-            CollationSpecICU.fromCollationId(collationId).buildCollation());
+          return CollationSpecICU.fromCollationId(collationId).buildCollationMeta();
         } catch (SparkException ignored) {
           // ignore
           return null;
@@ -868,6 +855,8 @@ public final class CollationFactory {
     }
   }
 
+  public static final String CATALOG = "SYSTEM";
+  public static final String SCHEMA = "BUILTIN";
   public static final String PROVIDER_SPARK = "spark";
   public static final String PROVIDER_ICU = "icu";
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
@@ -1064,12 +1053,11 @@ public final class CollationFactory {
     return String.join(", ", suggestions);
   }
 
-  public static List<CollationIdentifier> listCollations(String catalog, String schema) {
-    return Collation.CollationSpec.listCollations(catalog, schema);
+  public static List<CollationIdentifier> listCollations() {
+    return Collation.CollationSpec.listCollations();
   }
 
-  public static CollationMeta loadCollation(
-      String catalog, String schema, CollationIdentifier collationIdentifier) {
-    return Collation.CollationSpec.loadCollation(catalog, schema, collationIdentifier);
+  public static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
+    return Collation.CollationSpec.loadCollationMeta(collationIdentifier);
   }
 }

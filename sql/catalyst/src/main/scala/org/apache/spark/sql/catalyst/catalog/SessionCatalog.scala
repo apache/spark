@@ -54,8 +54,6 @@ import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
-  val DEFAULT_COLLATION_CATALOG = "SYSTEM"
-  val DEFAULT_COLLATION_SCHEMA = "BUILTIN"
 }
 
 /**
@@ -1907,12 +1905,11 @@ class SessionCatalog(
    * List all built-in collations with the given pattern.
    */
   def listCollations(pattern: Option[String]): Seq[CollationMeta] = {
-    val collationIdentifiers = CollationFactory.listCollations(
-      DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA).asScala.toSeq
+    val collationIdentifiers = CollationFactory.listCollations().asScala.toSeq
     val filteredCollationNames = StringUtils.filterPattern(
       collationIdentifiers.map(_.getName), pattern.getOrElse("*")).toSet
     collationIdentifiers.filter(ident => filteredCollationNames.contains(ident.getName)).map(
-      CollationFactory.loadCollation(DEFAULT_COLLATION_CATALOG, DEFAULT_COLLATION_SCHEMA, _))
+      CollationFactory.loadCollationMeta)
   }
 
   // -----------------

@@ -2941,11 +2941,6 @@
           "The definition of window <windowName> is repetitive."
         ]
       },
-      "SHOW_COLLATIONS_INVALID_SCOPE" : {
-        "message" : [
-          "SHOW <scope> COLLATIONS not supported."
-        ]
-      },
       "SHOW_FUNCTIONS_INVALID_PATTERN" : {
         "message" : [
           "Invalid pattern in SHOW FUNCTIONS: <pattern>. It must be a \"STRING\" literal."

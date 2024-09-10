@@ -255,8 +255,7 @@ statement
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
-    | SHOW identifier? COLLATIONS ((FROM | IN) ns=identifierReference)?
-        (LIKE? pattern=stringLit)?                                     #showCollations
+    | SHOW COLLATIONS (LIKE? pattern=stringLit)?                       #showCollations
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs

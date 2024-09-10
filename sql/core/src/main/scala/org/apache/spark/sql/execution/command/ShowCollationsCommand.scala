@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CollationFactory.CollationMeta
 import org.apache.spark.sql.types.StringType
 
@@ -28,14 +27,10 @@ import org.apache.spark.sql.types.StringType
  *
  * The syntax of this command is:
  * {{{
- *    SHOW identifier? COLLATIONS ((FROM | IN) ns=identifierReference)? (LIKE? pattern=stringLit);
+ *    SHOW COLLATIONS (LIKE? pattern=stringLit)?;
  * }}}
  */
-case class ShowCollationsCommand(
-    ns: LogicalPlan,
-    userScope: Boolean,
-    systemScope: Boolean,
-    pattern: Option[String]) extends UnaryRunnableCommand {
+case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
     AttributeReference("COLLATION_CATALOG", StringType, nullable = false)(),
@@ -49,9 +44,8 @@ case class ShowCollationsCommand(
     AttributeReference("ICU_VERSION", StringType)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val systemCollations: Seq[CollationMeta] = if (systemScope) {
+    val systemCollations: Seq[CollationMeta] =
       sparkSession.sessionState.catalog.listCollations(pattern)
-    } else Seq.empty
 
     systemCollations.map(m => Row(
       m.catalog,
@@ -65,10 +59,4 @@ case class ShowCollationsCommand(
       m.icuVersion
     ))
   }
-
-  override def child: LogicalPlan = ns
-
-  override protected def withNewChildInternal(
-      newChild: LogicalPlan): ShowCollationsCommand =
-    copy(ns = newChild)
 }
