@@ -35,17 +35,16 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  * @since 2.0.0
  */
 class KeyValueGroupedDataset[K, V] private[sql](
-    kEncoder: Encoder[K],
-    vEncoder: Encoder[V],
+    val kEncoder: Encoder[K],
+    val vEncoder: Encoder[V],
     @transient val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute])
   extends api.KeyValueGroupedDataset[K, V, Dataset] {
   type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
-  // Similar to [[Dataset]], we turn the passed in encoder to `ExpressionEncoder` explicitly.
-  private implicit val kExprEnc: ExpressionEncoder[K] = encoderFor(kEncoder)
-  private implicit val vExprEnc: ExpressionEncoder[V] = encoderFor(vEncoder)
+  private implicit def kEncoderImpl: Encoder[K] = kEncoder
+  private implicit def vEncoderImpl: Encoder[V] = vEncoder
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
@@ -54,8 +53,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /** @inheritdoc */
   def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
     new KeyValueGroupedDataset(
-      encoderFor[L],
-      vExprEnc,
+      implicitly[Encoder[L]],
+      vEncoder,
       queryExecution,
       dataAttributes,
       groupingAttributes)
@@ -67,8 +66,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val executed = sparkSession.sessionState.executePlan(projected)
 
     new KeyValueGroupedDataset(
-      encoderFor[K],
-      encoderFor[W],
+      kEncoder,
+      implicitly[Encoder[W]],
       executed,
       withNewData.newColumns,
       groupingAttributes)
@@ -297,20 +296,21 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   /** @inheritdoc */
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
-    val vEncoder = encoderFor[V]
     val aggregator: TypedColumn[V, V] = new ReduceAggregator[V](f)(vEncoder).toColumn
     agg(aggregator)
   }
 
   /** @inheritdoc */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    val keyExprEncoder = encoderFor(kEncoder)
+    val valueExprEncoder = encoderFor(vEncoder)
     val encoders = columns.map(c => encoderFor(c.encoder))
-    val namedColumns = columns.map(c => withInputType(c.named, vExprEnc, dataAttributes))
-    val keyColumn = aggKeyColumn(kExprEnc, groupingAttributes)
+    val namedColumns = columns.map(c => withInputType(c.named, valueExprEncoder,
+      dataAttributes))
+    val keyColumn = aggKeyColumn(keyExprEncoder, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)
-
-    new Dataset(execution, ExpressionEncoder.tuple(kExprEnc +: encoders))
+    new Dataset(execution, ExpressionEncoder.tuple(keyExprEncoder +: encoders))
   }
 
   /** @inheritdoc */
@@ -319,7 +319,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       thisSortExprs: Column*)(
       otherSortExprs: Column*)(
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
-    implicit val uEncoder = other.vExprEnc
+    implicit val uEncoder = other.vEncoder
     Dataset[R](
       sparkSession,
       CoGroup(
@@ -336,10 +336,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   override def toString: String = {
     val builder = new StringBuilder
-    val kFields = kExprEnc.schema.map { f =>
+    val kFields = kEncoder.schema.map { f =>
       s"${f.name}: ${f.dataType.simpleString(2)}"
     }
-    val vFields = vExprEnc.schema.map { f =>
+    val vFields = vEncoder.schema.map { f =>
       s"${f.name}: ${f.dataType.simpleString(2)}"
     }
     builder.append("KeyValueGroupedDataset: [key: [")

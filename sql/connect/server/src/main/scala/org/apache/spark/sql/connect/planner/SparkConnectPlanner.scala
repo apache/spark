@@ -47,7 +47,7 @@ import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, Rela
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTranspose}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -2318,16 +2318,16 @@ class SparkConnectPlanner(
     if (fun.getArgumentsCount != 1) {
       throw InvalidPlanInput("reduce requires single child expression")
     }
-    val udf = fun.getArgumentsList.asScala.map(transformExpression) match {
-      case collection.Seq(f: ScalaUDF) =>
-        f
+    val udf = fun.getArgumentsList.asScala match {
+      case collection.Seq(e) if e.hasCommonInlineUserDefinedFunction &&
+           e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
+        unpackUdf(e.getCommonInlineUserDefinedFunction)
       case other =>
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
     }
-    assert(udf.outputEncoder.isDefined)
-    val tEncoder = udf.outputEncoder.get // (T, T) => T
-    val reduce = ReduceAggregator(udf.function)(tEncoder).toColumn.expr
-    TypedAggUtils.withInputType(reduce, tEncoder, dataAttributes)
+    val encoder = udf.outputEncoder
+    val reduce = ReduceAggregator(udf.function)(encoder).toColumn.expr
+    TypedAggUtils.withInputType(reduce, encoderFor(encoder), dataAttributes)
   }
 
   private def transformExpressionWithTypedReduceExpression(

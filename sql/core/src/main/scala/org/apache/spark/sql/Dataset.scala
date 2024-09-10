@@ -78,13 +78,14 @@ private[sql] object Dataset {
   val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
-    val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+    val encoder = implicitly[Encoder[T]]
+    val dataset = new Dataset(sparkSession, logicalPlan, encoder)
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
     // schema. The user will get an error if this is not the case.
     // optimization: it is guaranteed that [[InternalRow]] can be converted to [[Row]] so
     // do not do this check in that case. this check can be expensive since it requires running
     // the whole [[Analyzer]] to resolve the deserializer
-    if (dataset.exprEnc.clsTag.runtimeClass != classOf[Row]) {
+    if (dataset.encoder.clsTag.runtimeClass != classOf[Row]) {
       dataset.resolvedEnc
     }
     dataset
@@ -251,13 +252,15 @@ class Dataset[T] private[sql](
     plan
   }
 
+  private implicit def encoderImpl: Encoder[T] = encoder
+
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
    * passed in encoder to [[ExpressionEncoder]] explicitly, and mark it implicit so that we can use
    * it when constructing new Dataset objects that have the same object type (that will be
    * possibly resolved to a different schema).
    */
-  private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
+  private[sql] val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
   // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
   // collecting rows to the driver side.
@@ -265,7 +268,7 @@ class Dataset[T] private[sql](
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
   }
 
-  private implicit def classTag: ClassTag[T] = exprEnc.clsTag
+  private implicit def classTag: ClassTag[T] = encoder.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
@@ -912,8 +915,8 @@ class Dataset[T] private[sql](
     val executed = sparkSession.sessionState.executePlan(withGroupingKey)
 
     new KeyValueGroupedDataset(
-      encoderFor[K],
-      encoderFor[T],
+      implicitly[Encoder[K]],
+      encoder,
       executed,
       logicalPlan.output,
       withGroupingKey.newColumns)
