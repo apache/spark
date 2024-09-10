@@ -105,7 +105,6 @@ public final class CollationFactory {
    * Entry encapsulating all information about a collation.
    */
   public static class Collation {
-
     public final String collationName;
     public final String provider;
     public final Collator collator;
@@ -860,8 +859,7 @@ public final class CollationFactory {
   public static final String PROVIDER_SPARK = "spark";
   public static final String PROVIDER_ICU = "icu";
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
-
-  private static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
+  public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
 
   public static final int UTF8_BINARY_COLLATION_ID =
     Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION_ID;
