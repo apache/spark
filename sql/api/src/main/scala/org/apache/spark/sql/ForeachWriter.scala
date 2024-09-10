@@ -89,7 +89,7 @@ package org.apache.spark.sql
  *  });
  * }}}
  *
- * @since 3.5.0
+ * @since 2.0.0
  */
 abstract class ForeachWriter[T] extends Serializable {
 
