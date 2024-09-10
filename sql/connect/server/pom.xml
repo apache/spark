@@ -111,7 +111,8 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-protobuf_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-      <scope>provided</scope>
+      <type>test-jar</type>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
