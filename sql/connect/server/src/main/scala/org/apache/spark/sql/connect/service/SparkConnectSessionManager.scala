@@ -141,11 +141,20 @@ class SparkConnectSessionManager extends Logging {
   // Removes session from sessionStore and returns it.
   private def removeSessionHolder(key: SessionKey): Option[SessionHolder] = {
     var sessionHolder: Option[SessionHolder] = None
-    sessionHolder = Option(sessionStore.remove(key))
+
+    // The session holder should remain in the session store until it is added to the closed session
+    // cache, because of a subtle data race: a new session with the same key can be created if the
+    // closed session cache does not contain the key right after the key has been removed from the
+    // session store.
+    sessionHolder = Option(sessionStore.get(key))
+
     sessionHolder.foreach { s =>
       // Put into closedSessionsCache to prevent the same session from being recreated by
       // getOrCreateIsolatedSession.
       closedSessionsCache.put(s.key, s.getSessionHolderInfo)
+
+      // Then, remove the session holder from the session store.
+      sessionStore.remove(key)
     }
     sessionHolder
   }
