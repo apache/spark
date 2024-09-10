@@ -1628,6 +1628,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("show collations") {
     assert(sql("SHOW COLLATIONS").collect().length >= 562)
 
+    // verify that the output ordering is as expected (UTF8_BINARY, UTF8_LCASE, etc.)
     val df = sql("SHOW COLLATIONS").limit(10)
     checkAnswer(df,
       Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
