@@ -348,8 +348,10 @@ PandasCogroupedMapFunction = Union[
 ArrowGroupedMapFunction = Union[
     Callable[[pyarrow.Table], pyarrow.Table],
     Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table], pyarrow.Table],
-    Callable[[pyarrow.Table], Iterator[pyarrow.RecordBatch]],
-    Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table], Iterator[pyarrow.RecordBatch]],
+    Callable[[Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]],
+    Callable[
+        [Tuple[pyarrow.Scalar, ...], Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]
+    ],
 ]
 ArrowCogroupedMapFunction = Union[
     Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
