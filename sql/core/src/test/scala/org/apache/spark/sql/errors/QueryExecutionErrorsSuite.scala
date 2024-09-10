@@ -1177,7 +1177,7 @@ class QueryExecutionErrorsSuite
     val enc: ExpressionEncoder[Row] = ExpressionEncoder(rowEnc)
     val deserializer = AttributeReference.apply("v", IntegerType)()
     implicit val im: ExpressionEncoder[Row] = new ExpressionEncoder[Row](
-      enc.objSerializer, deserializer, enc.clsTag)
+      rowEnc, enc.objSerializer, deserializer)
 
     checkError(
       exception = intercept[SparkRuntimeException] {

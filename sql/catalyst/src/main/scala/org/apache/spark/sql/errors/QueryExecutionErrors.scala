@@ -1310,10 +1310,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("badRecord" -> badRecord))
   }
 
-  def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
-  }
-
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "EXPRESSION_DECODING_FAILED",
