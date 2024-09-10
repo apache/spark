@@ -90,7 +90,7 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         createBuilderWithVarLengthSecondFraction(pattern)
       },
-      errorClass = "INVALID_DATETIME_PATTERN.SECONDS_FRACTION",
+      condition = "INVALID_DATETIME_PATTERN.SECONDS_FRACTION",
       parameters = Map("pattern" -> pattern))
   }
 }
