@@ -1783,7 +1783,7 @@ class DataFrame(ParentDataFrame):
                     )
                 )
             else:
-                # TODO: revisit vanilla Spark's Dataset.col
+                # TODO: revisit classic Spark's Dataset.col
                 # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
                 #   colRegex(colName)
                 # } else {
@@ -1857,6 +1857,12 @@ class DataFrame(ParentDataFrame):
         pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
         self._execution_info = ei
         return pdf
+
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
+        return DataFrame(
+            plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
+            self._session,
+        )
 
     @property
     def schema(self) -> StructType:

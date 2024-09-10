@@ -552,17 +552,23 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
   encodeDecodeTest(FooEnum.E1, "scala Enum")
 
-  test("transforming encoder") {
+
+  private def testTransformingEncoder(
+      name: String,
+      provider: () => Codec[Any, Array[Byte]]): Unit = test(name) {
     val encoder = ExpressionEncoder(TransformingEncoder(
       classTag[(Long, Long)],
       BinaryEncoder,
-      JavaSerializationCodec))
+      provider))
       .resolveAndBind()
     assert(encoder.schema == new StructType().add("value", BinaryType))
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
     assert(fromRow(toRow((11, 14))) == (11, 14))
   }
+
+  testTransformingEncoder("transforming java serialization encoder", JavaSerializationCodec)
+  testTransformingEncoder("transforming kryo encoder", KryoSerializationCodec)
 
   // Scala / Java big decimals ----------------------------------------------------------
 

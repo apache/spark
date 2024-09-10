@@ -87,8 +87,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     def rows(results: Any*): Seq[Row] = results.map(Row(_))
 
     checkAnswer(df.select(is_variant_null(v)), rows(false, false))
-    checkAnswer(df.select(schema_of_variant(v)), rows("STRUCT<a: BIGINT>", "STRUCT<b: BIGINT>"))
-    checkAnswer(df.select(schema_of_variant_agg(v)), rows("STRUCT<a: BIGINT, b: BIGINT>"))
+    checkAnswer(df.select(schema_of_variant(v)), rows("OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"))
+    checkAnswer(df.select(schema_of_variant_agg(v)), rows("OBJECT<a: BIGINT, b: BIGINT>"))
 
     checkAnswer(df.select(variant_get(v, "$.a", "int")), rows(1, null))
     checkAnswer(df.select(variant_get(v, "$.b", "int")), rows(null, 2))
@@ -805,5 +805,12 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         .getStruct(0)
     checkSize(structResult.getAs[VariantVal](0), 5, 10, 5, 10)
     checkSize(structResult.getAs[VariantVal](1), 2, 4, 2, 4)
+  }
+
+  test("schema_of_variant(object)") {
+    for (expr <- Seq("schema_of_variant", "schema_of_variant_agg")) {
+      val q = s"""select $expr(parse_json('{"STRUCT": {"!special!": true}}'))"""
+      checkAnswer(sql(q), Row("""OBJECT<STRUCT: OBJECT<`!special!`: BOOLEAN>>"""))
+    }
   }
 }

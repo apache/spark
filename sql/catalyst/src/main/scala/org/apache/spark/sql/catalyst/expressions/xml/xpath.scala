@@ -242,13 +242,15 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
        ["b1","b2","b3"]
+      > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b');
+       [null,null,null]
   """,
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"
-  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType, containsNull = false)
+  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val nodeList = xpathUtil.evalNodeList(xml.asInstanceOf[UTF8String].toString, pathString)

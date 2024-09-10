@@ -503,12 +503,7 @@ class SparkSession private(
    |  Catalog-related methods  |
    * ------------------------- */
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying
-   * databases, tables, functions etc.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /** @inheritdoc */
@@ -749,16 +744,7 @@ class SparkSession private(
     }
   }
 
-  /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
   /**

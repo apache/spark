@@ -83,4 +83,14 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
     assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'") === "uuuu-MM-dd'T'")
   }
+
+  test("SPARK-49583: invalid var length second fraction") {
+    val pattern = "\nSSSS\r"
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        createBuilderWithVarLengthSecondFraction(pattern)
+      },
+      errorClass = "INVALID_DATETIME_PATTERN.SECONDS_FRACTION",
+      parameters = Map("pattern" -> pattern))
+  }
 }

@@ -1332,7 +1332,7 @@ class DataFrame:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.5.0
-            Supports vanilla PySpark.
+            Supports classic PySpark.
 
         Parameters
         ----------
@@ -6308,6 +6308,72 @@ class DataFrame:
            age   name
         0    2  Alice
         1    5    Bob
+        """
+        ...
+
+    @dispatch_df_method
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> "DataFrame":
+        """
+        Transposes a DataFrame such that the values in the specified index column become the new
+        columns of the DataFrame. If no index column is provided, the first column is used as
+        the default.
+
+        Please note:
+        - All columns except the index column must share a least common data type. Unless they
+        are the same data type, all columns are cast to the nearest common data type.
+        - The name of the column into which the original column names are transposed defaults
+        to "key".
+        - null values in the index column are excluded from the column names for the
+        transposed table, which are ordered in ascending order.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        indexColumn : str or :class:`Column`, optional
+            The single column that will be treated as the index for the transpose operation. This
+            column will be used to transform the DataFrame such that the values of the indexColumn
+            become the new columns in the transposed DataFrame. If not provided, the first column of
+            the DataFrame will be used as the default.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transposed DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [("A", 1, 2), ("B", 3, 4)],
+        ...     ["id", "val1", "val2"],
+        ... )
+        >>> df.show()
+        +---+----+----+
+        | id|val1|val2|
+        +---+----+----+
+        |  A|   1|   2|
+        |  B|   3|   4|
+        +---+----+----+
+
+        >>> df.transpose().show()
+        +----+---+---+
+        | key|  A|  B|
+        +----+---+---+
+        |val1|  1|  3|
+        |val2|  2|  4|
+        +----+---+---+
+
+        >>> df.transpose(df.id).show()
+        +----+---+---+
+        | key|  A|  B|
+        +----+---+---+
+        |val1|  1|  3|
+        |val2|  2|  4|
+        +----+---+---+
         """
         ...
 

@@ -536,4 +536,180 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(commands, expected)
     }
   }
+
+  test("leave compound block") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  LEAVE lbl;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("leave while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1 = 1 DO
+        |    SELECT 1;
+        |    LEAVE lbl;
+        |  END WHILE;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("iterate compound block - should fail") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  ITERATE lbl;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScriptText)
+      },
+      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      parameters = Map("labelName" -> "LBL"))
+  }
+
+  test("iterate while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: WHILE x < 2 DO
+        |    SET x = x + 1;
+        |    ITERATE lbl;
+        |    SET x = x + 2;
+        |  END WHILE;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq.empty[Row], // set x = 2
+      Seq(Row(2)), // select
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("leave with wrong label - should fail") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  LEAVE randomlbl;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScriptText)
+      },
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
+  }
+
+  test("iterate with wrong label - should fail") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  ITERATE randomlbl;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScriptText)
+      },
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
+  }
+
+  test("leave outer loop from nested while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: WHILE 1 = 1 DO
+        |    lbl2: WHILE 2 = 2 DO
+        |      SELECT 1;
+        |      LEAVE lbl;
+        |    END WHILE;
+        |  END WHILE;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("iterate outer loop from nested while loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: WHILE x < 2 DO
+        |    SET x = x + 1;
+        |    lbl2: WHILE 2 = 2 DO
+        |      SELECT 1;
+        |      ITERATE lbl;
+        |    END WHILE;
+        |  END WHILE;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x= 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("nested compounds in loop - leave in inner compound") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: WHILE x < 2 DO
+        |    SET x = x + 1;
+        |    BEGIN
+        |      SELECT 1;
+        |      lbl2: BEGIN
+        |        SELECT 2;
+        |        LEAVE lbl2;
+        |        SELECT 3;
+        |      END;
+        |    END;
+        |  END WHILE;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select 2
+      Seq.empty[Row], // set x = 2
+      Seq(Row(1)), // select 1
+      Seq(Row(2)), // select 2
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
 }

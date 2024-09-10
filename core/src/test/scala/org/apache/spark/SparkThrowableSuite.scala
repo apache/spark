@@ -207,13 +207,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
     assert(e.getMessageParameters().get("message").contains("Undefined error message parameter"))
-
-    // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Map("config" -> "foo", "a" -> "bar")) ==
-      "[DIVIDE_BY_ZERO] Division by zero. " +
-      "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
-        "If necessary set foo to \"false\" " +
-        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -259,6 +252,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == null)
+        assert(!e.isInternalError)
         assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here
@@ -275,6 +269,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(!e.isInternalError)
         assert(e.getSqlState == "22018")
       case _: Throwable =>
         // Should not end up here
@@ -502,7 +497,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |{
           |  "MISSING_PARAMETER" : {
           |    "message" : [
-          |      "Parameter ${param} is missing."
+          |      "Parameter <param> is missing."
           |    ]
           |  }
           |}
@@ -514,5 +509,29 @@ class SparkThrowableSuite extends SparkFunSuite {
 
       assert(errorMessage.contains("Parameter null is missing."))
     }
+  }
+
+  test("detect unused message parameters") {
+    checkError(
+      exception = intercept[SparkException] {
+        SparkThrowableHelper.getMessage(
+          errorClass = "CANNOT_UP_CAST_DATATYPE",
+          messageParameters = Map(
+            "expression" -> "CAST('aaa' AS LONG)",
+            "sourceType" -> "STRING",
+            "targetType" -> "LONG",
+            "op" -> "CAST", // unused parameter
+            "details" -> "implicit cast"
+          ))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          ("Found unused message parameters of the error class 'CANNOT_UP_CAST_DATATYPE'. " +
+          "Its error message format has 4 placeholders, but the passed message parameters map " +
+          "has 5 items. Consider to add placeholders to the error format or " +
+          "remove unused message parameters.")
+      )
+    )
   }
 }
