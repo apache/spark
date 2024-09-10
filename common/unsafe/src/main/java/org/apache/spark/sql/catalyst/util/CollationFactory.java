@@ -822,7 +822,7 @@ public final class CollationFactory {
           // CaseSensitivity.CI + AccentSensitivity.AI
           collationNames.add(locale + "_CI_AI");
         }
-        return collationNames;
+        return collationNames.stream().sorted().toList();
       }
 
       static List<CollationIdentifier> listCollations(String catalog, String schema) {
