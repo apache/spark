@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 
 class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._

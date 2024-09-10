@@ -2420,7 +2420,7 @@ abstract class AvroSuite
     withTempPath { tempDir =>
       df.write.format("avro").save(tempDir.getPath)
 
-      val exc = intercept[AvroInvalidOptionValue] {
+      val exc = intercept[AnalysisException] {
         spark.read
           .format("avro")
           .option("avroSchema", avroSchema)
