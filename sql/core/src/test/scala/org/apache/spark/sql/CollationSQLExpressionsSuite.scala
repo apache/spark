@@ -1791,33 +1791,7 @@ class CollationSQLExpressionsSuite
           t.collationId + ", f2: INT>) USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
-        if(t.collationId == "UTF8_LCASE" ||
-          t.collationId == "unicode_ci" ||
-          t.collationId == "unicode") {
-          // Cannot resolve "mode(i)" due to data type mismatch:
-          // Input to function mode was a complex type with strings collated on non-binary
-          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
-          val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode'" +
-              " was a type of binary-unstable type that is not currently supported by mode."),
-            ("hint", "")).toMap
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(query)
-            },
-            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = params,
-            queryContext = Array(
-              ExpectedContext(objectType = "",
-                objectName = "",
-                startIndex = 13,
-                stopIndex = 19,
-                fragment = "mode(i)")
-            )
-          )
-        } else {
-          checkAnswer(sql(query), Row(t.result))
-        }
+        checkAnswer(sql(query), Row(t.result))
       }
     })
   }
@@ -1842,33 +1816,7 @@ class CollationSQLExpressionsSuite
           t.collationId + ">, f3: INT>) USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(mode(i).f1.f2) FROM ${tableName}"
-        if(t.collationId == "UTF8_LCASE" ||
-          t.collationId == "unicode_ci" ||
-          t.collationId == "unicode") {
-          // Cannot resolve "mode(i)" due to data type mismatch:
-          // Input to function mode was a complex type with strings collated on non-binary
-          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
-          val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' " +
-              "was a type of binary-unstable type that is not currently supported by mode."),
-            ("hint", "")).toMap
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(query)
-            },
-            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = params,
-            queryContext = Array(
-              ExpectedContext(objectType = "",
-                objectName = "",
-                startIndex = 13,
-                stopIndex = 19,
-                fragment = "mode(i)")
-            )
-          )
-        } else {
-          checkAnswer(sql(query), Row(t.result))
-        }
+        checkAnswer(sql(query), Row(t.result))
       }
     })
   }
@@ -1946,29 +1894,8 @@ class CollationSQLExpressionsSuite
           s" USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(element_at(element_at(mode(i), 1).s1.a2, 1)) FROM ${tableName}"
-        if(t.collationId == "UTF8_LCASE" ||
-          t.collationId == "unicode_ci" || t.collationId == "unicode") {
-          val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' was a type" +
-              " of binary-unstable type that is not currently supported by mode."),
-            ("hint", "")).toMap
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(query)
-            },
-            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = params,
-            queryContext = Array(
-              ExpectedContext(objectType = "",
-                objectName = "",
-                startIndex = 35,
-                stopIndex = 41,
-                fragment = "mode(i)")
-            )
-          )
-        } else {
+
           checkAnswer(sql(query), Row(t.result))
-        }
       }
     })
   }
