@@ -1485,4 +1485,54 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
+
+  test("leave outer loop from nested loop statement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: LOOP
+        |    lbl2: LOOP
+        |      SELECT 1;
+        |      LEAVE lbl;
+        |    END LOOP;
+        |  END LOOP;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select 1
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("iterate outer loop from nested loop statement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: LOOP
+        |    SET x = x + 1;
+        |    IF x > 2 THEN
+        |     LEAVE lbl;
+        |    END IF;
+        |    lbl2: LOOP
+        |      SELECT 1;
+        |      ITERATE lbl;
+        |      SET x = 10;
+        |    END LOOP;
+        |  END LOOP;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x = 2
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x = 3
+      Seq(Row(3)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
 }
