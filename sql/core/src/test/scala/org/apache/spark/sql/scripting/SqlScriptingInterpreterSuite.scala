@@ -516,7 +516,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SqlScriptingException] (
           runSqlScript(commands)
         ),
-        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
       )
     }
@@ -537,7 +537,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] (
         runSqlScript(commands)
       ),
-      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      condition = "INVALID_BOOLEAN_STATEMENT",
       parameters = Map("invalidStatement" -> "1")
     )
   }
@@ -561,7 +561,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException] (
           runSqlScript(commands)
         ),
-        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 124, stop = 140)
       )
@@ -716,7 +716,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkNumberFormatException] (
         runSqlScript(commands)
       ),
-      errorClass = "CAST_INVALID_INPUT",
+      condition = "CAST_INVALID_INPUT",
       parameters = Map(
         "expression" -> "'one'",
         "sourceType" -> "\"STRING\"",

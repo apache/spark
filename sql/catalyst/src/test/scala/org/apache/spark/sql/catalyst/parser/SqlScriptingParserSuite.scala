@@ -1408,9 +1408,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       predicateRight: Expression => Boolean): Unit = {
     assert(conditionStatement.parsedPlan.isInstanceOf[Project])
     val project = conditionStatement.parsedPlan.asInstanceOf[Project]
+
     assert(project.projectList.head.isInstanceOf[Alias])
     assert(project.projectList.head.asInstanceOf[Alias].child.isInstanceOf[EqualTo])
     val equalTo = project.projectList.head.asInstanceOf[Alias].child.asInstanceOf[EqualTo]
+    
     assert(predicateLeft(equalTo.left))
     assert(predicateRight(equalTo.right))
   }
