@@ -169,11 +169,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
+    "functionName" : "uniform",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "first",
-    "requiredType" : "constant value of integer or floating-point",
-    "sqlExpr" : "\"uniform(NULL, 1, 0)\""
+    "requiredType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(NULL, 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -193,11 +194,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
+    "functionName" : "uniform",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "second",
-    "requiredType" : "constant value of integer or floating-point",
-    "sqlExpr" : "\"uniform(0, NULL, 0)\""
+    "requiredType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(0, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -217,11 +219,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
+    "functionName" : "uniform",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "third",
-    "requiredType" : "constant value of integer or floating-point",
-    "sqlExpr" : "\"uniform(0, 1, NULL)\""
+    "requiredType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(0, 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -238,14 +241,13 @@ SELECT uniform(10, 20, col) AS result FROM VALUES (0), (1), (2) tab(col)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"col\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "third",
-    "requiredType" : "constant value of integer or floating-point",
-    "sqlExpr" : "\"uniform(10, 20, col)\""
+    "inputExpr" : "\"col\"",
+    "inputName" : "seed",
+    "inputType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(10, 20)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -262,14 +264,13 @@ SELECT uniform(col, 10, 0) AS result FROM VALUES (0), (1), (2) tab(col)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"col\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "constant value of integer or floating-point",
-    "sqlExpr" : "\"uniform(col, 10, 0)\""
+    "inputExpr" : "\"col\"",
+    "inputName" : "min",
+    "inputType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(col, 10)\""
   },
   "queryContext" : [ {
     "objectType" : "",

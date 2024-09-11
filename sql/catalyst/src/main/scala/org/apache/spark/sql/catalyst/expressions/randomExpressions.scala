@@ -20,16 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.random.XORShiftRandom
@@ -201,16 +199,15 @@ object Randn {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(10, 20) > 0;
+      > SELECT _FUNC_(10, 20) > 0 AS result;
       true
   """,
   since = "4.0.0",
   group = "math_funcs")
-case class Uniform(min: Expression, max: Expression, seed: Expression)
-  extends RuntimeReplaceable with TernaryLike[Expression] with ExpressionWithRandomSeed {
-  def this(min: Expression, max: Expression) =
-    this(min, max, Literal(Uniform.random.nextLong(), LongType))
+case class Uniform(min: Expression, max: Expression)
+  extends RuntimeReplaceable with BinaryLike[Expression] with ExpressionWithRandomSeed {
 
+  private var seed: Expression = Literal(Uniform.random.nextLong(), LongType)
   final override lazy val deterministic: Boolean = false
   override val nodePatterns: Seq[TreePattern] =
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
@@ -230,7 +227,6 @@ case class Uniform(min: Expression, max: Expression, seed: Expression)
   }
 
   private def valid(e: Expression): Boolean = e.dataType match {
-    case _ if !e.foldable => false
     case _: ShortType | _: IntegerType | _: LongType | _: FloatType | _: DoubleType => true
     case _ => false
   }
@@ -242,34 +238,44 @@ case class Uniform(min: Expression, max: Expression, seed: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
-    Seq(min, max, seed).zipWithIndex.foreach { case (expr: Expression, index: Int) =>
-      if (!valid(expr)) {
-        result = DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(index),
-            "requiredType" -> "constant value of integer or floating-point",
-            "inputSql" -> toSQLExpr(expr),
-            "inputType" -> toSQLType(expr.dataType)))
-      }
+    def requiredType = "integer or floating-point"
+    Seq((min, "min", 0),
+      (max, "max", 1),
+      (seed, "seed", 2)).foreach {
+      case (expr: Expression, name: String, index: Int) =>
+        if (!expr.foldable && result == TypeCheckResult.TypeCheckSuccess) {
+          result = DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> name,
+              "inputType" -> requiredType,
+              "inputExpr" -> toSQLExpr(expr)))
+        } else if (!valid(expr) && result == TypeCheckResult.TypeCheckSuccess) {
+          result = DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(index),
+              "functionName" -> prettyName,
+              "requiredType" -> requiredType,
+              "inputSql" -> toSQLExpr(expr),
+              "inputType" -> toSQLType(expr.dataType)))
+        }
     }
     result
   }
 
-  override def first: Expression = min
-  override def second: Expression = max
-  override def third: Expression = seed
+  override def left: Expression = min
+  override def right: Expression = max
 
   override def seedExpression: Expression = seed
-  override def withNewSeed(newSeed: Long): Expression =
-    Uniform(min, max, Literal(newSeed, LongType))
+  override def withNewSeed(newSeed: Long): Expression = {
+    val result = Uniform(min, max)
+    result.seed = Literal(newSeed, LongType)
+    result
+  }
 
-  override def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
-    Uniform(newFirst, newSecond, newThird)
-
-  override def toString: String = prettyName + truncatedString(
-    Seq(min, max), "(", ", ", ")", SQLConf.get.maxToStringFields)
+  override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
+    Uniform(newFirst, newSecond)
 
   override def replacement: Expression = {
     def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
@@ -286,6 +292,26 @@ case class Uniform(min: Expression, max: Expression, seed: Expression)
 
 object Uniform {
   lazy val random = new Random()
+
+  def apply(min: Expression, max: Expression, seedExpression: Expression): Uniform = {
+    val result = Uniform(min, max)
+    result.seed = seedExpression
+    result
+  }
+}
+
+object UniformExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    expressions match {
+      case Seq(min, max) =>
+        Uniform(min, max)
+      case Seq(min, max, seed) =>
+        Uniform(min, max, seed)
+      case _ =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -298,7 +324,7 @@ object Uniform {
   examples =
     """
     Examples:
-      > SELECT _FUNC_(3, 0);
+      > SELECT _FUNC_(3, 0) AS result;
        8i7
   """,
   since = "4.0.0",
@@ -330,9 +356,6 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
   override def withNewSeed(newSeed: Long): Expression = RandStr(length, Literal(newSeed, LongType))
   override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
     RandStr(newFirst, newSecond)
-
-  override def toString: String = prettyName + truncatedString(
-    Seq(length), "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
