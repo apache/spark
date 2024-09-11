@@ -27,6 +27,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
+import org.apache.spark.sql.execution.streaming.state.StateSchemaCompatibilityChecker.SCHEMA_FORMAT_V3
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -95,7 +96,7 @@ class StateSchemaCompatibilityChecker(
       stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       stateSchemaVersion: Int): Unit = {
     // Ensure that schema file path is passed explicitly for schema version 3
-    if (stateSchemaVersion == 3 && newSchemaFilePath.isEmpty) {
+    if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFilePath.isEmpty) {
       throw new IllegalStateException("Schema file path is required for schema version 3")
     }
 
@@ -188,7 +189,7 @@ class StateSchemaCompatibilityChecker(
       }
       val colFamiliesAddedOrRemoved =
         newStateSchemaList.map(_.colFamilyName) != existingStateSchemaList.map(_.colFamilyName)
-      if (stateSchemaVersion == 3 && colFamiliesAddedOrRemoved) {
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && colFamiliesAddedOrRemoved) {
         createSchemaFile(newStateSchemaList, stateSchemaVersion)
       }
       // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
@@ -201,6 +202,9 @@ class StateSchemaCompatibilityChecker(
 }
 
 object StateSchemaCompatibilityChecker {
+
+  val SCHEMA_FORMAT_V3: Int = 3
+
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
       throw new SparkUnsupportedOperationException(
@@ -284,7 +288,7 @@ object StateSchemaCompatibilityChecker {
       // if we are using the state schema v3, and we have
       // evolved schema, this newSchemaFilePath should be defined
       // and we want to populate the metadata with this file
-      if (newSchemaFilePath.isDefined) {
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
         newSchemaFilePath.get.toString
       } else {
         // if we are using any version less than v3, we have written
@@ -296,7 +300,7 @@ object StateSchemaCompatibilityChecker {
       // and we are using state schema v3, this file path would be defined
       // so we would just populate the next run's metadata file with this
       // file path
-      if (oldSchemaFilePath.isDefined) {
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
         oldSchemaFilePath.get.toString
       } else {
         // if we are using any version less than v3, we have written
