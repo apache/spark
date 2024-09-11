@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
@@ -35,6 +36,24 @@ import org.apache.spark.util.ThreadUtils
 
 // Unique key identifying execution by combination of user, session and operation id
 case class ExecuteKey(userId: String, sessionId: String, operationId: String)
+
+object ExecuteKey {
+  def apply(request: proto.ExecutePlanRequest, sessionHolder: SessionHolder): ExecuteKey = {
+    val operationId = if (request.hasOperationId) {
+      try {
+        UUID.fromString(request.getOperationId).toString
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.FORMAT",
+            messageParameters = Map("handle" -> request.getOperationId))
+      }
+    } else {
+      UUID.randomUUID().toString
+    }
+    ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, operationId)
+  }
+}
 
 /**
  * Global tracker of all ExecuteHolder executions.
@@ -76,22 +95,26 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         request.getUserContext.getUserId,
         request.getSessionId,
         previousSessionId)
-    val executeHolder = new ExecuteHolder(request, sessionHolder)
-
-    // Check if the operation already exists, either in the active execution map, or in the
-    // graveyard of tombstones of executions that have been abandoned. The latter is to prevent
-    // double executions when the client retries, thinking it never reached the server, but in
-    // fact it did, and already got removed as abandoned.
-    if (executions.putIfAbsent(executeHolder.key, executeHolder) != null) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-        messageParameters = Map("handle" -> executeHolder.operationId))
-    } else if (getAbandonedTombstone(executeHolder.key).isDefined) {
-      executions.remove(executeHolder.key)
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
-        messageParameters = Map("handle" -> executeHolder.operationId))
-    }
+    val executeKey = ExecuteKey(request, sessionHolder)
+    val executeHolder = executions.compute(
+      executeKey,
+      (executeKey, oldExecuteHolder) => {
+        // Check if the operation already exists, either in the active execution map, or in the
+        // graveyard of tombstones of executions that have been abandoned. The latter is to prevent
+        // double executions when the client retries, thinking it never reached the server, but in
+        // fact it did, and already got removed as abandoned.
+        if (oldExecuteHolder != null) {
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+            messageParameters = Map("handle" -> executeKey.operationId))
+        }
+        if (getAbandonedTombstone(executeKey).isDefined) {
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
+            messageParameters = Map("handle" -> executeKey.operationId))
+        }
+        new ExecuteHolder(executeKey, request, sessionHolder)
+      })
 
     sessionHolder.addExecuteHolder(executeHolder)
 
