@@ -1969,13 +1969,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     if (pattern == null) {
       null
     } else {
-      val sb = new StringBuffer()
-      val formatter = new java.util.Formatter(sb, Locale.US)
-
+      val formatter = new java.util.Formatter(Locale.US)
       val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
-      formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
-
-      UTF8String.fromString(sb.toString)
+      UTF8String.fromString(
+        formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*).toString)
     }
   }
 
@@ -2006,19 +2003,16 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
     val form = ctx.freshName("formatter")
     val formatter = classOf[java.util.Formatter].getName
-    val sb = ctx.freshName("sb")
-    val stringBuffer = classOf[StringBuffer].getName
     ev.copy(code = code"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        $stringBuffer $sb = new $stringBuffer();
-        $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
+        $formatter $form = new $formatter(${classOf[Locale].getName}.US);
         Object[] $argList = new Object[$numArgLists];
         $argListCodes
-        $form.format(${pattern.value}.toString(), $argList);
-        ${ev.value} = UTF8String.fromString($sb.toString());
+        ${ev.value} = UTF8String.fromString(
+          $form.format(${pattern.value}.toString(), $argList).toString());
       }""")
   }
 
