@@ -5099,6 +5099,13 @@ class AstBuilder extends DataTypeAstBuilder
       val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
       val isLazy = ctx.LAZY != null
       if (query.isDefined) {
+        // Disallow parameter markers in the query of the cache.
+        // We need this limitation because we store the original query text, pre substitution.
+        // To lift this we would need to reconstitute the query with parameter markers replaced with
+        // the values given at CACHE TABLE time, or we would need to store the parameter values
+        // alongside the text.
+        // The same rule can be found in CREATE VIEW builder.
+        checkInvalidParameter(query.get, "the query of CACHE TABLE")
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
         CacheTable(
@@ -5695,4 +5702,23 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
     }
+
+  /**
+   * Check plan for any parameters.
+   * If it finds any throws UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT.
+   * This method is used to ban parameters in some contexts.
+   */
+  protected def checkInvalidParameter(plan: LogicalPlan, statement: String): Unit = {
+    plan.foreach { p =>
+      p.expressions.foreach { expr =>
+        if (expr.containsPattern(PARAMETER)) {
+          throw QueryParsingErrors.parameterMarkerNotAllowed(statement, p.origin)
+        }
+      }
+    }
+    plan.children.foreach(p => checkInvalidParameter(p, statement))
+    plan.innerChildren.collect {
+      case child: LogicalPlan => checkInvalidParameter(child, statement)
+    }
+  }
 }
