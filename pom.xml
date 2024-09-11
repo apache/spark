@@ -183,7 +183,7 @@
     <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <snappy.version>1.1.10.6</snappy.version>
+    <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.17.1</commons-codec.version>
     <commons-compress.version>1.27.1</commons-compress.version>
