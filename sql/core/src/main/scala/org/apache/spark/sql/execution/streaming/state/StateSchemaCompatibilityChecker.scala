@@ -281,15 +281,26 @@ object StateSchemaCompatibilityChecker {
       throw result.get
     }
     val schemaFileLocation = if (evolvedSchema) {
+      // if we are using the state schema v3, and we have
+      // evolved schema, this newSchemaFilePath should be defined
+      // and we want to populate the metadata with this file
       if (newSchemaFilePath.isDefined) {
         newSchemaFilePath.get.toString
       } else {
+        // if we are using any version less than v3, we have written
+        // the schema to this static location, which we will return
         checker.schemaFileLocation.toString
       }
     } else {
+      // if we have not evolved schema (there has been a previous schema)
+      // and we are using state schema v3, this file path would be defined
+      // so we would just populate the next run's metadata file with this
+      // file path
       if (oldSchemaFilePath.isDefined) {
         oldSchemaFilePath.get.toString
       } else {
+        // if we are using any version less than v3, we have written
+        // the schema to this static location, which we will return
         checker.schemaFileLocation.toString
       }
     }
