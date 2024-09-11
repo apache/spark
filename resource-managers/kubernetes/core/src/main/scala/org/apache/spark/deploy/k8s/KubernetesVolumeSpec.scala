@@ -24,7 +24,8 @@ private[spark] case class KubernetesHostPathVolumeConf(hostPath: String)
 private[spark] case class KubernetesPVCVolumeConf(
     claimName: String,
     storageClass: Option[String] = None,
-    size: Option[String] = None)
+    size: Option[String] = None,
+    labels: Map[String, String] = Map())
   extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesEmptyDirVolumeConf(

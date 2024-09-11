@@ -776,6 +776,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
+  val KUBERNETES_VOLUMES_OPTIONS_LABELS_KEY = "options.labels"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 

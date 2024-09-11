@@ -17,7 +17,6 @@
 package org.apache.spark.deploy.k8s
 
 import java.lang.Long.parseLong
-
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
@@ -86,12 +85,14 @@ object KubernetesVolumeUtils {
         val storageClassKey =
           s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
+        val labelsKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_LABELS_KEY"
         verifyOptionKey(options, claimNameKey, KUBERNETES_VOLUMES_PVC_TYPE)
         verifySize(options.get(sizeLimitKey))
         KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
-          options.get(sizeLimitKey))
+          options.get(sizeLimitKey),
+          convertStringLabelsToMap(options.get(labelsKey)))
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
@@ -125,6 +126,23 @@ object KubernetesVolumeUtils {
         throw new IllegalArgumentException(
           s"Volume size `$v` is smaller than 1KiB. Missing units?")
       }
+    }
+  }
+
+  /**
+   * Converts string of labels to consumable java Map
+   *
+   * @param labels labels in format : k1=v1,k2=v2
+   * @return Map[k1->v1, k2->v2]
+   */
+  private def convertStringLabelsToMap(labels: Option[String]): Map[String, String] = {
+    labels match {
+      case Some(value) => {
+        value.split(",").map(_.split("=")).collect {
+          case Array(k, v) => k -> v
+        }.toMap
+      }
+      case None => Map()
     }
   }
 }

@@ -117,7 +117,7 @@ object KubernetesTestConf {
           (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
             Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
 
-        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit) =>
+        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit, labels) =>
           val sconf = storageClass
             .map { s => (KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY, s) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
