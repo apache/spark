@@ -29,7 +29,7 @@ import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
  * @tparam O
  *   output type (typically the internal representation of the data.
  */
-trait Codec[I, O] {
+trait Codec[I, O] extends Serializable {
   def encode(in: I): O
   def decode(out: O): I
 }

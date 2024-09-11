@@ -531,7 +531,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder(schema, lenient = true)
     val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
     val exception = intercept[org.apache.spark.SparkRuntimeException] {
-      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+      new ExpressionEncoder[Row](encoder.encoder, unexpectedSerializer, encoder.objDeserializer)
     }
     checkError(
       exception = exception,
