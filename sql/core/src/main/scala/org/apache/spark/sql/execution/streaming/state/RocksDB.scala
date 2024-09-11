@@ -322,13 +322,13 @@ class RocksDB(
           fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
         }
 
-        if (enableChangelogCheckpointing && version != 0) {
+        if (checkpointFormatVersion >= 2 && enableChangelogCheckpointing && version != 0) {
           // TODO: changelog not always enabled?
           val changelogReader = fileManager.getChangelogReader(
             version, useColumnFamilies, checkpointUniqueId)
           // currLineage contains the version -> uniqueId mapping from the previous snapshot file
           // to current version's changelog file
-          currLineage = Some(changelogReader.lineage.map(x => (x._1, Option(x._2))))
+          currLineage = Some(changelogReader.lineage.get.map(x => (x._1, Option(x._2))))
           println("wei== currLineage in load(): ")
           currLineage.foreach(x => println("wei== " + x.mkString(", ")))
         }

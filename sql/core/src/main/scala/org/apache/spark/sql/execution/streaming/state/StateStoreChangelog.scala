@@ -87,7 +87,7 @@ abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec,
-    checkpointUniqueId: Option[String] = None) extends Logging {
+    checkpointFormatVersion: Int = 1) extends Logging {
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
@@ -102,7 +102,14 @@ abstract class StateStoreChangelogWriter(
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
-  def writeLineage(lineage: Array[(Long, String)]): Unit
+  def writeLineage(lineage: Array[(Long, String)]): Unit = {
+    assert(checkpointFormatVersion >= 2, "writeLineage should not be called upon " +
+      "StateStoreChangelogWriter with version < 2")
+    val lineageStr = lineage.map { case (version, uniqueId) =>
+      s"$version:$uniqueId"
+    }.mkString(" ")
+    compressedStream.writeUTF(lineageStr)
+  }
 
   def version: Short
 
@@ -147,18 +154,11 @@ class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec,
-    checkpointUniqueId: Option[String])
-    extends StateStoreChangelogWriter(fm, file, compressionCodec, checkpointUniqueId) {
+    checkpointFormatVersion: Int = 1)
+  extends StateStoreChangelogWriter(fm, file, compressionCodec, checkpointFormatVersion) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
-
-  override def writeLineage(lineage: Array[(Long, String)]): Unit = {
-    val lineageStr = lineage.map { case (version, uniqueId) =>
-      s"$version:$uniqueId"
-    }.mkString(" ")
-    compressedStream.writeUTF(lineageStr)
-  }
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
@@ -211,8 +211,9 @@ class StateStoreChangelogWriterV1(
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    checkpointFormatVersion: Int = 1)
+  extends StateStoreChangelogWriter(fm, file, compressionCodec, checkpointFormatVersion) {
 
   override def version: Short = 2
 
@@ -279,7 +280,8 @@ class StateStoreChangelogWriterV2(
 abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
+    compressionCodec: CompressionCodec,
+    checkpointFormatVersion: Int = 1)
   extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
@@ -303,7 +305,11 @@ abstract class StateStoreChangelogReader(
     }
   }
 
-  val lineage = readLineage()
+  val lineage = if (checkpointFormatVersion == 2) {
+    Some(readLineage())
+  } else {
+    None
+  }
 
   def version: Short
 
@@ -322,8 +328,9 @@ abstract class StateStoreChangelogReader(
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    checkpointFormatVersion: Int = 1)
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec, checkpointFormatVersion) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -365,8 +372,9 @@ class StateStoreChangelogReaderV1(
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    checkpointFormatVersion: Int = 1)
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec, checkpointFormatVersion) {
 
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
