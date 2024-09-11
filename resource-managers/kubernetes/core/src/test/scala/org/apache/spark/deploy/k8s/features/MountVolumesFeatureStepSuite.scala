@@ -48,7 +48,8 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf("pvcClaim")
+      KubernetesPVCVolumeConf(claimName = "pvcClaim",
+        labels = Map("env" -> "test", "name" -> "pvc-name"))
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -120,7 +121,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf("OnDemand")
+      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND)
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
