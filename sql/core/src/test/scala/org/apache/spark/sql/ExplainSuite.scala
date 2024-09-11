@@ -396,12 +396,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val cmd = SaveIntoDataSourceCommand(query, null, options, SaveMode.Overwrite)
 
     checkError(
-      exception = intercept[SparkThrowable] {
+      exception = intercept[AnalysisException] {
         cmd.run(spark)
       },
-      errorClass = "DATA_SOURCE_EXTERNAL_ERROR",
-      sqlState = "KD00F",
-      parameters = Map()
+      condition = "KD00F",
+      parameters = Map.empty
     )
   }
 
