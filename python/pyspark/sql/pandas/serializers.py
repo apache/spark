@@ -172,7 +172,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         return super(ArrowStreamUDFSerializer, self).dump_stream(wrap_and_init_stream(), stream)
 
 
-class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
+class ArrowStreamGroupUDFSerializer(ArrowStreamSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.
 
@@ -189,8 +189,28 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
         super(ArrowStreamGroupUDFSerializer, self).__init__()
         self._assign_cols_by_name = assign_cols_by_name
 
+    def _load_group(self, stream):
+        import pyarrow as pa
+
+        batches = ArrowStreamSerializer.load_stream(self, stream)
+        for batch in batches:
+            struct = batch.column(0)
+            yield pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+
     def load_stream(self, stream):
-        yield (batch for batch in ArrowStreamSerializer.load_stream(self, stream))
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 1:
+                yield self._load_group(stream)
+
+            elif dataframes_in_group != 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa

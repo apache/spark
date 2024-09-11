@@ -65,6 +65,11 @@ class GroupedArrowPythonRunner(
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        if (inputIterator.hasNext) {
+          dataOut.writeInt(1)
+        } else {
+          dataOut.writeInt(0)
+        }
         writer = new ArrowStreamWriter(root, null, dataOut)
         writer.start()
 
