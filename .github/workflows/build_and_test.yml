@@ -304,7 +304,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
-        path: "**/target/unit-tests.log"
+        path: "**/target/*.log"
 
   infra-image:
     name: "Base image build"

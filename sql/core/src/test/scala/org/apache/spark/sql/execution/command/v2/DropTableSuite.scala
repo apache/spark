@@ -35,7 +35,7 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"DROP TABLE $catalog.ns.tbl PURGE")
         },
-        errorClass = "UNSUPPORTED_FEATURE.PURGE_TABLE",
+        condition = "UNSUPPORTED_FEATURE.PURGE_TABLE",
         parameters = Map.empty
       )
     }

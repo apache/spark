@@ -329,7 +329,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           s"""
              |select to_avro(s, 42) as result from t
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map("sqlExpr" -> "\"to_avro(s, 42)\"",
           "msg" -> ("The second argument of the TO_AVRO SQL function must be a constant string " +
             "containing the JSON representation of the schema to use for converting the value to " +
@@ -344,7 +344,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           s"""
              |select from_avro(s, 42, '') as result from t
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map("sqlExpr" -> "\"from_avro(s, 42, )\"",
           "msg" -> ("The second argument of the FROM_AVRO SQL function must be a constant string " +
             "containing the JSON representation of the schema to use for converting the value " +
@@ -359,7 +359,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           s"""
              |select from_avro(s, '$jsonFormatSchema', 42) as result from t
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" ->
             s"\"from_avro(s, $jsonFormatSchema, 42)\"".stripMargin,
