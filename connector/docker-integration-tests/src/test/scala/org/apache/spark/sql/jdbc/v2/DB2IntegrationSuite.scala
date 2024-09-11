@@ -87,7 +87,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"DOUBLE\"",
         "newType" -> "\"VARCHAR(10)\"",

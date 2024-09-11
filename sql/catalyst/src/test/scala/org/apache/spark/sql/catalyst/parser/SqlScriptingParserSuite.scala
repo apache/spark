@@ -210,7 +210,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "LABELS_MISMATCH",
+      condition = "LABELS_MISMATCH",
       parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
   }
 
@@ -229,7 +229,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
+      condition = "END_LABEL_WITHOUT_BEGIN_LABEL",
       parameters = Map("endLabel" -> "lbl"))
   }
 
@@ -290,7 +290,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SqlScriptingException] {
           parseScript(sqlScriptText)
         },
-        errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+        condition = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
         parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
   }
 
@@ -306,7 +306,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
+      condition = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       parameters = Map("varName" -> "`testVariable`", "lineNumber" -> "4"))
   }
 
@@ -708,6 +708,34 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(whileStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
   }
 
+  test("leave repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    SELECT 1;
+        |    LEAVE lbl;
+        |  UNTIL 1 = 2
+        |  END REPEAT;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val repeatStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(repeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(repeatStmt.condition.getText == "1 = 2")
+
+    assert(repeatStmt.body.isInstanceOf[CompoundBody])
+    assert(repeatStmt.body.collection.length == 2)
+
+    assert(repeatStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(repeatStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(repeatStmt.body.collection(1).isInstanceOf[LeaveStatement])
+    assert(repeatStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
+  }
+
   test ("iterate compound block - should fail") {
     val sqlScriptText =
       """
@@ -719,7 +747,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      condition = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
       parameters = Map("labelName" -> "LBL"))
   }
 
@@ -750,6 +778,34 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(whileStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
   }
 
+  test("iterate repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    SELECT 1;
+        |    ITERATE lbl;
+        |  UNTIL 1 = 2
+        |  END REPEAT;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val repeatStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(repeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(repeatStmt.condition.getText == "1 = 2")
+
+    assert(repeatStmt.body.isInstanceOf[CompoundBody])
+    assert(repeatStmt.body.collection.length == 2)
+
+    assert(repeatStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(repeatStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(repeatStmt.body.collection(1).isInstanceOf[IterateStatement])
+    assert(repeatStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
+  }
+
   test("leave with wrong label - should fail") {
     val sqlScriptText =
       """
@@ -761,7 +817,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
   }
 
@@ -776,7 +832,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parseScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
   }
 
@@ -813,6 +869,42 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedWhileStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
   }
 
+  test("leave outer loop from nested repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    lbl2: REPEAT
+        |      SELECT 1;
+        |      LEAVE lbl;
+        |    UNTIL 2 = 2
+        |    END REPEAT;
+        |  UNTIL 1 = 1
+        |  END REPEAT;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val repeatStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(repeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(repeatStmt.condition.getText == "1 = 1")
+
+    assert(repeatStmt.body.isInstanceOf[CompoundBody])
+    assert(repeatStmt.body.collection.length == 1)
+
+    val nestedRepeatStmt = repeatStmt.body.collection.head.asInstanceOf[RepeatStatement]
+    assert(nestedRepeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(nestedRepeatStmt.condition.getText == "2 = 2")
+
+    assert(nestedRepeatStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(
+      nestedRepeatStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(nestedRepeatStmt.body.collection(1).isInstanceOf[LeaveStatement])
+    assert(nestedRepeatStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
+  }
+
   test("iterate outer loop from nested while loop") {
     val sqlScriptText =
       """
@@ -844,6 +936,179 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
     assert(nestedWhileStmt.body.collection(1).isInstanceOf[IterateStatement])
     assert(nestedWhileStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
+  }
+
+  test("iterate outer loop from nested repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    lbl2: REPEAT
+        |      SELECT 1;
+        |      ITERATE lbl;
+        |    UNTIL 2 = 2
+        |    END REPEAT;
+        |  UNTIL 1 = 1
+        |  END REPEAT;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val repeatStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(repeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(repeatStmt.condition.getText == "1 = 1")
+
+    assert(repeatStmt.body.isInstanceOf[CompoundBody])
+    assert(repeatStmt.body.collection.length == 1)
+
+    val nestedRepeatStmt = repeatStmt.body.collection.head.asInstanceOf[RepeatStatement]
+    assert(nestedRepeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(nestedRepeatStmt.condition.getText == "2 = 2")
+
+    assert(nestedRepeatStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(
+      nestedRepeatStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(nestedRepeatStmt.body.collection(1).isInstanceOf[IterateStatement])
+    assert(nestedRepeatStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
+  }
+
+  test("repeat") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: REPEAT
+        |  SELECT 1;
+        | UNTIL 1 = 1
+        |END REPEAT lbl;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val repeatStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(repeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(repeatStmt.condition.getText == "1 = 1")
+
+    assert(repeatStmt.body.isInstanceOf[CompoundBody])
+    assert(repeatStmt.body.collection.length == 1)
+    assert(repeatStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(repeatStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+
+    assert(repeatStmt.label.contains("lbl"))
+  }
+
+  test("repeat with complex condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+        |REPEAT
+        | SELECT 42;
+        |UNTIL
+        | (SELECT COUNT(*) < 2 FROM t)
+        |END REPEAT;
+        |END
+        |""".stripMargin
+
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection(1).isInstanceOf[RepeatStatement])
+
+    val repeatStmt = tree.collection(1).asInstanceOf[RepeatStatement]
+    assert(repeatStmt.condition.isInstanceOf[SingleStatement])
+    assert(repeatStmt.condition.getText == "(SELECT COUNT(*) < 2 FROM t)")
+
+    assert(repeatStmt.body.isInstanceOf[CompoundBody])
+    assert(repeatStmt.body.collection.length == 1)
+    assert(repeatStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(repeatStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+  }
+
+  test("repeat with if else block") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: REPEAT
+        |  IF 1 = 1 THEN
+        |    SELECT 1;
+        |  ELSE
+        |    SELECT 2;
+        |  END IF;
+        |UNTIL
+        |  1 = 1
+        |END REPEAT lbl;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+    assert(whileStmt.body.collection.head.isInstanceOf[IfElseStatement])
+    val ifStmt = whileStmt.body.collection.head.asInstanceOf[IfElseStatement]
+
+    assert(ifStmt.conditions.length == 1)
+    assert(ifStmt.conditionalBodies.length == 1)
+    assert(ifStmt.elseBody.isDefined)
+
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1 = 1")
+
+    assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 1")
+
+    assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 2")
+
+    assert(whileStmt.label.contains("lbl"))
+  }
+
+  test("nested repeat") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: REPEAT
+        |  REPEAT
+        |    SELECT 42;
+        |  UNTIL
+        |    2 = 2
+        |  END REPEAT;
+        |UNTIL
+        |   1 = 1
+        |END REPEAT lbl;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[RepeatStatement])
+
+    val whileStmt = tree.collection.head.asInstanceOf[RepeatStatement]
+    assert(whileStmt.condition.isInstanceOf[SingleStatement])
+    assert(whileStmt.condition.getText == "1 = 1")
+
+    assert(whileStmt.body.isInstanceOf[CompoundBody])
+    assert(whileStmt.body.collection.length == 1)
+    assert(whileStmt.body.collection.head.isInstanceOf[RepeatStatement])
+    val nestedWhileStmt = whileStmt.body.collection.head.asInstanceOf[RepeatStatement]
+
+    assert(nestedWhileStmt.condition.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.condition.getText == "2 = 2")
+
+    assert(nestedWhileStmt.body.isInstanceOf[CompoundBody])
+    assert(nestedWhileStmt.body.collection.length == 1)
+    assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
+    assert(nestedWhileStmt.body.collection.
+      head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+
+    assert(whileStmt.label.contains("lbl"))
+
   }
 
   // Helper methods

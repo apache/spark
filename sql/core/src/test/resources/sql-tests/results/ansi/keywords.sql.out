@@ -251,6 +251,7 @@ REFERENCES	true
 REFRESH	false
 RENAME	false
 REPAIR	false
+REPEAT	false
 REPEATABLE	false
 REPLACE	false
 RESET	false
@@ -336,6 +337,7 @@ UNKNOWN	true
 UNLOCK	false
 UNPIVOT	false
 UNSET	false
+UNTIL	false
 UPDATE	false
 USE	false
 USER	true

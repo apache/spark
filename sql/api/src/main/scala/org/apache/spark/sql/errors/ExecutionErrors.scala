@@ -109,8 +109,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "expression" -> sqlValue,
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
+        "targetType" -> toSQLType(to)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -226,6 +225,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def primitiveTypesNotSupportedError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2230")
+  }
+
+  def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
   }
 }
 

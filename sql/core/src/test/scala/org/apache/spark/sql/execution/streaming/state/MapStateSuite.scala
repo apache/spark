@@ -244,7 +244,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"

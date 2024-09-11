@@ -419,7 +419,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             createFileStreamSourceAndGetSchema(
               format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
           },
-          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          condition = "UNABLE_TO_INFER_SCHEMA",
           parameters = Map("format" -> "JSON")
         )
       }

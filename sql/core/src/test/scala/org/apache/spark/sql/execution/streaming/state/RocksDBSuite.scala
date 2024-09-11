@@ -202,7 +202,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       parameters = Map("version" -> "-1")
     )
     ex = intercept[SparkException] {
@@ -210,7 +210,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       parameters = Map("version" -> "-1")
     )
 
@@ -222,7 +222,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       checkError(
         ex,
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
         parameters = Map(
           "fileToRead" -> s"$remoteDir/1.changelog"
         )
@@ -1107,7 +1107,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
         checkError(
           ex,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          condition = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
             "operationType" -> "load_store",
@@ -1135,7 +1135,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
         checkError(
           ex,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          condition = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
             "operationType" -> "load_store",
@@ -1187,7 +1187,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
         parameters = Map(
           "expectedVersion" -> "v2",
           "actualVersion" -> "v1"

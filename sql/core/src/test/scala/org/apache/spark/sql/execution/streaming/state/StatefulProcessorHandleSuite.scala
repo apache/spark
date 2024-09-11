@@ -64,7 +64,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
     checkError(
       ex,
-      errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+      condition = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
       parameters = Map(
         "operationType" -> operationType,
         "handleState" -> handleState.toString
@@ -112,7 +112,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
       checkError(
         ex,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
+        condition = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
         parameters = Map(
           "operationType" -> "register_timer",
           "timeMode" -> TimeMode.None().toString
@@ -126,7 +126,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
       checkError(
         ex2,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
+        condition = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
         parameters = Map(
           "operationType" -> "delete_timer",
           "timeMode" -> TimeMode.None().toString

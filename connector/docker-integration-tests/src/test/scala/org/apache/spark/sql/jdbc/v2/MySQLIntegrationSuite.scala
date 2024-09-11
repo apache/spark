@@ -98,7 +98,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"STRING\"",
         "newType" -> "\"INT\"",
@@ -131,7 +131,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2271")
+      condition = "_LEGACY_ERROR_TEMP_2271")
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {

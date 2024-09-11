@@ -112,7 +112,7 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkException] {
         planner.plan(deduplicate)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Deduplicate operator for non streaming data source should have been " +
           "replaced by aggregate in the optimizer")))

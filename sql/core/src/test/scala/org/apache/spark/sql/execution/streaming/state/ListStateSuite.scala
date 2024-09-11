@@ -49,7 +49,7 @@ class ListStateSuite extends StateVariableSuiteBase {
 
       checkError(
         exception = e,
-        errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+        condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
         sqlState = Some("42601"),
         parameters = Map("stateName" -> "listState")
       )
@@ -234,7 +234,7 @@ class ListStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"

@@ -108,7 +108,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = df1.col("b"), allowExactMatches = true,
           direction = "backward")
       },
-      errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
+      condition = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
       parameters = Map.empty)
   }
 
@@ -120,7 +120,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = lit(-1), allowExactMatches = true,
           direction = "backward")
       },
-      errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
+      condition = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
       parameters = Map.empty)
   }
 
@@ -133,7 +133,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = lit(-1), allowExactMatches = true,
           direction = direction)
       },
-      errorClass = "AS_OF_JOIN.UNSUPPORTED_DIRECTION",
+      condition = "AS_OF_JOIN.UNSUPPORTED_DIRECTION",
       sqlState = "42604",
       parameters = Map(
         "direction" -> direction,

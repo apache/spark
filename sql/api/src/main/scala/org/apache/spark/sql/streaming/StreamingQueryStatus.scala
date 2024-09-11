@@ -36,7 +36,7 @@ import org.apache.spark.annotation.Evolving
  *   True when the trigger is actively firing, false when waiting for the next trigger time.
  *   Doesn't apply to ContinuousExecution where it is always false.
  *
- * @since 3.5.0
+ * @since 2.1.0
  */
 @Evolving
 class StreamingQueryStatus protected[sql] (
@@ -44,7 +44,6 @@ class StreamingQueryStatus protected[sql] (
     val isDataAvailable: Boolean,
     val isTriggerActive: Boolean)
     extends Serializable {
-  // This is a copy of the same class in sql/core/.../streaming/StreamingQueryStatus.scala
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))
