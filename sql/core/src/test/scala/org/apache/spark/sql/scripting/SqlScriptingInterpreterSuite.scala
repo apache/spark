@@ -537,6 +537,195 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("repeat") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   i = 3
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq(Row(0)), // select i
+      Seq.empty[Row], // set i
+      Seq(Row(1)), // select i
+      Seq.empty[Row], // set i
+      Seq(Row(2)), // select i
+      Seq.empty[Row], // set i
+      Seq.empty[Row] // drop var
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat: enters body only once") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 3;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   1 = 1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq(Row(3)), // select i
+      Seq.empty[Row], // set i
+      Seq.empty[Row] // drop i
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("nested repeat") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | DECLARE j = 0;
+        | REPEAT
+        |   SET VAR j = 0;
+        |   REPEAT
+        |     SELECT i, j;
+        |     SET VAR j = j + 1;
+        |   UNTIL j >= 2
+        |   END REPEAT;
+        |   SET VAR i = i + 1;
+        | UNTIL i >= 2
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq.empty[Row], // declare j
+      Seq.empty[Row], // set j to 0
+      Seq(Row(0, 0)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq(Row(0, 1)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq.empty[Row], // increase i
+      Seq.empty[Row], // set j to 0
+      Seq(Row(1, 0)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq(Row(1, 1)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq.empty[Row], // increase i
+      Seq.empty[Row], // drop j
+      Seq.empty[Row] // drop i
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |REPEAT
+          |  SELECT 42;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |UNTIL (SELECT COUNT(*) >= 2 FROM t)
+          |END REPEAT;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq(Row(42)), // select
+        Seq.empty[Row], // insert
+        Seq(Row(42)), // select
+        Seq.empty[Row] // insert
+      )
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("repeat with non boolean condition - constant") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] (
+        runSqlScript(commands)
+      ),
+      errorClass = "INVALID_BOOLEAN_STATEMENT",
+      parameters = Map("invalidStatement" -> "1")
+    )
+  }
+
+  test("repeat with empty subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | REPEAT
+          |   SELECT 1;
+          | UNTIL
+          |   (SELECT * FROM t)
+          | END REPEAT;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
+      )
+    }
+  }
+
+  test("repeat with too many rows in subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | INSERT INTO t VALUES (true);
+          | INSERT INTO t VALUES (true);
+          | REPEAT
+          |   SELECT 1;
+          | UNTIL
+          |   (SELECT * FROM t)
+          | END REPEAT;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SparkException] (
+          runSqlScript(commands)
+        ),
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 141, stop = 157)
+      )
+    }
+  }
+
   test("leave compound block") {
     val sqlScriptText =
       """
@@ -561,6 +750,22 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END""".stripMargin
     val expected = Seq(
       Seq(Row(1)) // select
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("leave repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    SELECT 1;
+        |    LEAVE lbl;
+        |  UNTIL 1 = 2
+        |  END REPEAT;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select 1
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -604,6 +809,31 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
+  test("iterate repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: REPEAT
+        |    SET x = x + 1;
+        |    ITERATE lbl;
+        |    SET x = x + 2;
+        |  UNTIL x > 1
+        |  END REPEAT;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq.empty[Row], // set x = 2
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
   test("leave with wrong label - should fail") {
     val sqlScriptText =
       """
@@ -632,6 +862,25 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
+  }
+
+  test("leave outer loop from nested repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    lbl2: REPEAT
+        |      SELECT 1;
+        |      LEAVE lbl;
+        |    UNTIL 1 = 2
+        |    END REPEAT;
+        |  UNTIL 1 = 2
+        |  END REPEAT;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select 1
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
   }
 
   test("leave outer loop from nested while loop") {
@@ -671,7 +920,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 0
       Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
-      Seq.empty[Row], // set x= 2
+      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select x
       Seq.empty[Row] // drop
@@ -707,6 +956,36 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select 2
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("iterate outer loop from nested repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: REPEAT
+        |    SET x = x + 1;
+        |    lbl2: REPEAT
+        |      SELECT 1;
+        |      ITERATE lbl;
+        |    UNTIL 1 = 2
+        |    END REPEAT;
+        |  UNTIL x > 1
+        |  END REPEAT;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x = 2
+      Seq(Row(1)), // select 1
       Seq(Row(2)), // select x
       Seq.empty[Row] // drop
     )
