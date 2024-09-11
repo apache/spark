@@ -204,6 +204,20 @@ object Randn {
   """,
   since = "4.0.0",
   group = "math_funcs")
+object UniformExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    expressions match {
+      case Seq(min, max) =>
+        Uniform(min, max)
+      case Seq(min, max, seed) =>
+        Uniform(min, max, seed)
+      case _ =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
+    }
+  }
+}
+
 case class Uniform(min: Expression, max: Expression)
   extends RuntimeReplaceable with BinaryLike[Expression] with ExpressionWithRandomSeed {
 
@@ -297,20 +311,6 @@ object Uniform {
     val result = Uniform(min, max)
     result.seed = seedExpression
     result
-  }
-}
-
-object UniformExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val numArgs = expressions.length
-    expressions match {
-      case Seq(min, max) =>
-        Uniform(min, max)
-      case Seq(min, max, seed) =>
-        Uniform(min, max, seed)
-      case _ =>
-        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
-    }
   }
 }
 
