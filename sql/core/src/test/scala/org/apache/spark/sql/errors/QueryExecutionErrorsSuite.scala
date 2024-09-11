@@ -734,8 +734,7 @@ class QueryExecutionErrorsSuite
           parameters = Map(
             "value" -> sourceValue,
             "sourceType" -> s""""${sourceType.sql}"""",
-            "targetType" -> s""""$it"""",
-            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+            "targetType" -> s""""$it""""),
           sqlState = "22003")
       }
     }

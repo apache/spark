@@ -336,7 +336,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
 
 def dispatch_df_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct DataFrame.union(df, ...), it checks if self
+    For the use cases of direct DataFrame.method(df, ...), it checks if self
     is a Connect DataFrame or Classic DataFrame, and dispatches.
     """
 
@@ -363,8 +363,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
 
 def dispatch_col_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Column.method(col, ...), it checks if self
-    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    For the use cases of direct Column.method(col, ...), it checks if self
+    is a Connect Column or Classic Column, and dispatches.
     """
 
     @functools.wraps(f)
@@ -390,8 +390,9 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
 def dispatch_window_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Window.method(col, ...), it checks if self
-    is a Connect Window or Classic Window, and dispatches.
+    For use cases of direct Window.method(col, ...), this function dispatches
+    the call to either ConnectWindow or ClassicWindow based on the execution
+    environment.
     """
 
     @functools.wraps(f)
@@ -404,11 +405,6 @@ def dispatch_window_method(f: FuncT) -> FuncT:
             from pyspark.sql.classic.window import Window as ClassicWindow
 
             return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
-
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": f"Window.{f.__name__}"},
-        )
 
     return cast(FuncT, wrapped)
 
