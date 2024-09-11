@@ -1142,7 +1142,7 @@ class Dataset[T] private[sql] (
     val unpivot = builder.getUnpivotBuilder
       .setInput(plan.getRoot)
       .addAllIds(ids.toSeq.map(_.expr).asJava)
-      .setValueColumnName(variableColumnName)
+      .setVariableColumnName(variableColumnName)
       .setValueColumnName(valueColumnName)
     valuesOption.foreach { values =>
       unpivot.getValuesBuilder
