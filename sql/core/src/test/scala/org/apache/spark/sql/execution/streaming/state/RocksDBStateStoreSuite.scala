@@ -174,7 +174,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
     checkError(
       ex1,
-      errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
+      condition = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
       parameters = Map(
         "numOrderingCols" -> "0"
       ),
@@ -193,7 +193,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
     checkError(
       ex2,
-      errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
+      condition = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
       parameters = Map(
         "numOrderingCols" -> (keySchemaWithRangeScan.length + 1).toString
       ),
@@ -215,7 +215,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
     checkError(
       ex,
-      errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+      condition = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
       parameters = Map(
         "fieldName" -> keySchemaWithVariableSizeCols.fields(0).name,
         "index" -> "0"
@@ -253,7 +253,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
         checkError(
           ex,
-          errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+          condition = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
           parameters = Map(
             "fieldName" -> field.name,
             "index" -> index.toString
@@ -278,7 +278,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
     checkError(
       ex,
-      errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
+      condition = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
       parameters = Map(
         "fieldName" -> keySchemaWithNullTypeCols.fields(0).name,
         "index" -> "0"
@@ -934,7 +934,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         if (!colFamiliesEnabled) {
           checkError(
             ex,
-            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            condition = "STATE_STORE_UNSUPPORTED_OPERATION",
             parameters = Map(
               "operationType" -> "create_col_family",
               "entity" -> "multiple column families is disabled in RocksDBStateStoreProvider"
@@ -944,7 +944,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         } else {
           checkError(
             ex,
-            errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
+            condition = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
             parameters = Map(
               "operationName" -> "create_col_family",
               "colFamilyName" -> colFamilyName
@@ -962,7 +962,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
-      Seq("_internal", "_test", "_test123", "__12345").foreach { colFamilyName =>
+      Seq("$internal", "$test", "$test123", "$_12345", "$$$235").foreach { colFamilyName =>
         val ex = intercept[SparkUnsupportedOperationException] {
           store.createColFamilyIfAbsent(colFamilyName,
             keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
@@ -971,7 +971,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         if (!colFamiliesEnabled) {
           checkError(
             ex,
-            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            condition = "STATE_STORE_UNSUPPORTED_OPERATION",
             parameters = Map(
               "operationType" -> "create_col_family",
               "entity" -> "multiple column families is disabled in RocksDBStateStoreProvider"
@@ -981,11 +981,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         } else {
           checkError(
             ex,
-            errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+            condition = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
             parameters = Map(
               "colFamilyName" -> colFamilyName
             ),
-            matchPVals = true
+            matchPVals = false
           )
         }
       }
@@ -1073,7 +1073,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
       checkError(
         exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
         sqlState = Some("42802"),
         parameters = Map("operationType" -> "get", "colFamilyName" -> colFamily1)
       )
@@ -1221,7 +1221,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
         checkError(
           exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
-          errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+          condition = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
           sqlState = Some("42802"),
           parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
         )
@@ -1241,7 +1241,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     if (!colFamiliesEnabled) {
       checkError(
         ex,
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION",
         parameters = Map(
           "operationType" -> operationName,
           "entity" -> "multiple column families is disabled in RocksDBStateStoreProvider"
@@ -1251,7 +1251,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     } else {
       checkError(
         ex,
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
         parameters = Map(
           "operationType" -> operationName,
           "colFamilyName" -> colFamilyName

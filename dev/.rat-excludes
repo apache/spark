@@ -31,12 +31,13 @@ graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.css
-dataTables.bootstrap4.*.min.css
-dataTables.bootstrap4.*.min.js
+dataTables.bootstrap4.min.css
+dataTables.bootstrap4.min.js
 dataTables.rowsGroup.js
 jquery.blockUI.min.js
 jquery.cookies.2.2.0.min.js
-jquery.dataTables.*.min.js
+jquery.dataTables.min.css
+jquery.dataTables.min.js
 jquery.mustache.js
 .*\.avsc
 .*\.txt

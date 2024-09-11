@@ -1223,7 +1223,7 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
@@ -1235,7 +1235,7 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 def approx_percentile(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
@@ -2069,6 +2069,13 @@ def try_parse_json(col: "ColumnOrName") -> Column:
 
 
 try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
+
+
+def to_variant_object(col: "ColumnOrName") -> Column:
+    return _invoke_function("to_variant_object", _to_col(col))
+
+
+to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
 
 
 def parse_json(col: "ColumnOrName") -> Column:
@@ -3921,6 +3928,13 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 nullif.__doc__ = pysparkfuncs.nullif.__doc__
 
 
+def nullifzero(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+nullifzero.__doc__ = pysparkfuncs.nullifzero.__doc__
+
+
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("nvl", col1, col2)
 
@@ -3933,6 +3947,13 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
+
+
+def zeroifnull(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("zeroifnull", col)
+
+
+zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
 
 
 def aes_encrypt(

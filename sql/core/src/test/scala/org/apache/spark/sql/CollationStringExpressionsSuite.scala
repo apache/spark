@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -110,6 +111,51 @@ class CollationStringExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collation)))
       }
     })
+  }
+
+  test("Support `StringSplitSQL` string expression with collation") {
+    case class StringSplitSQLTestCase[R](
+        str: String,
+        delimiter: String,
+        collation: String,
+        result: R)
+    val testCases = Seq(
+      StringSplitSQLTestCase("1a2", "a", "UTF8_BINARY", Array("1", "2")),
+      StringSplitSQLTestCase("1a2", "a", "UNICODE", Array("1", "2")),
+      StringSplitSQLTestCase("1a2", "A", "UTF8_LCASE", Array("1", "2")),
+      StringSplitSQLTestCase("1a2", "A", "UNICODE_CI", Array("1", "2"))
+    )
+    testCases.foreach(t => {
+      // Unit test.
+      val str = Literal.create(t.str, StringType(t.collation))
+      val delimiter = Literal.create(t.delimiter, StringType(t.collation))
+      checkEvaluation(StringSplitSQL(str, delimiter), t.result)
+    })
+
+    // Because `StringSplitSQL` is an internal expression,
+    // E2E SQL test cannot be performed in `collations.sql`.
+    checkError(
+      exception = intercept[AnalysisException] {
+        val expr = StringSplitSQL(
+          Cast(Literal.create("1a2"), StringType("UTF8_BINARY")),
+          Cast(Literal.create("a"), StringType("UTF8_LCASE")))
+        CollationTypeCasts.transform(expr)
+      },
+      condition = "COLLATION_MISMATCH.IMPLICIT",
+      sqlState = "42P21",
+      parameters = Map.empty
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        val expr = StringSplitSQL(
+          Collate(Literal.create("1a2"), "UTF8_BINARY"),
+          Collate(Literal.create("a"), "UTF8_LCASE"))
+        CollationTypeCasts.transform(expr)
+      },
+      condition = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
+      parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+    )
   }
 
   test("Support `Contains` string expression with collation") {

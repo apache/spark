@@ -435,7 +435,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       implicitly[ExpressionEncoder[Foo]])
     checkError(
       exception = exception,
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "Any",
         "docroot" -> SPARK_DOC_ROOT)
@@ -496,7 +496,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -507,7 +507,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -519,7 +519,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       exception = intercept[SparkUnsupportedOperationException] {
         ExpressionEncoder.tuple(encoders)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2150",
+      condition = "_LEGACY_ERROR_TEMP_2150",
       parameters = Map.empty)
   }
 
@@ -531,11 +531,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder(schema, lenient = true)
     val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
     val exception = intercept[org.apache.spark.SparkRuntimeException] {
-      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+      new ExpressionEncoder[Row](encoder.encoder, unexpectedSerializer, encoder.objDeserializer)
     }
     checkError(
       exception = exception,
-      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      condition = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       parameters = Map(
         "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
         "expr" -> toSQLExpr(unexpectedSerializer))
@@ -552,17 +552,23 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
   encodeDecodeTest(FooEnum.E1, "scala Enum")
 
-  test("transforming encoder") {
+
+  private def testTransformingEncoder(
+      name: String,
+      provider: () => Codec[Any, Array[Byte]]): Unit = test(name) {
     val encoder = ExpressionEncoder(TransformingEncoder(
       classTag[(Long, Long)],
       BinaryEncoder,
-      JavaSerializationCodec))
+      provider))
       .resolveAndBind()
     assert(encoder.schema == new StructType().add("value", BinaryType))
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
     assert(fromRow(toRow((11, 14))) == (11, 14))
   }
+
+  testTransformingEncoder("transforming java serialization encoder", JavaSerializationCodec)
+  testTransformingEncoder("transforming kryo encoder", KryoSerializationCodec)
 
   // Scala / Java big decimals ----------------------------------------------------------
 

@@ -19,6 +19,7 @@
  import java.util.Locale
 
  import org.apache.spark.sql.errors.QueryExecutionErrors
+ import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object CharsetProvider {
 
@@ -27,7 +28,7 @@ private[sql] object CharsetProvider {
 
   def forName(
       charset: String,
-      legacyCharsets: Boolean,
+      legacyCharsets: Boolean = SQLConf.get.legacyJavaCharsets,
       caller: String = ""): Charset = {
     val lowercasedCharset = charset.toLowerCase(Locale.ROOT)
     if (legacyCharsets || VALID_CHARSETS.contains(lowercasedCharset)) {
@@ -61,8 +62,8 @@ private[sql] object CharsetProvider {
   }
 
   def newDecoder(charset: String,
-      legacyCharsets: Boolean,
-      legacyErrorAction: Boolean,
+      legacyCharsets: Boolean = SQLConf.get.legacyJavaCharsets,
+      legacyErrorAction: Boolean = SQLConf.get.legacyCodingErrorAction,
       caller: String = "decode"): CharsetDecoder = {
     val codingErrorAction = if (legacyErrorAction) {
       CodingErrorAction.REPLACE

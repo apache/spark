@@ -752,7 +752,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
     checkError(
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-      errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+      condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
       parameters = Map("storedKeySchema" -> ".*",
         "newKeySchema" -> ".*"),
       matchPVals = true
@@ -822,7 +822,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
     checkError(
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-      errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+      condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
       parameters = Map("storedValueSchema" -> ".*",
         "newValueSchema" -> ".*"),
       matchPVals = true

@@ -58,7 +58,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "j").to(schema))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`non_exist`",
         "proposal" -> "`i`, `j`"))
@@ -69,7 +69,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "I").to(schema))
     checkError(
       exception = e,
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map(
         "name" -> "`i`",
         "n" -> "2"))
@@ -92,7 +92,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
-      errorClass = "NULLABLE_COLUMN_OR_FIELD",
+      condition = "NULLABLE_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`i`"))
   }
 
@@ -108,7 +108,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](Seq("a" -> 1).toDF("i", "j").to(schema))
     checkError(
       exception = e,
-      errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+      condition = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       parameters = Map(
         "name" -> "`i`",
         "type" -> "\"STRING\"",
@@ -160,7 +160,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_FIELD.WITH_SUGGESTION",
+      condition = "UNRESOLVED_FIELD.WITH_SUGGESTION",
       parameters = Map(
         "fieldName" -> "`non_exist`",
         "columnPath" -> "`struct`",
@@ -200,7 +200,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
-      errorClass = "NULLABLE_COLUMN_OR_FIELD",
+      condition = "NULLABLE_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`struct`.`i`"))
   }
 
@@ -220,7 +220,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+      condition = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       parameters = Map(
         "name" -> "`struct`.`i`",
         "type" -> "\"STRING\"",
@@ -284,7 +284,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
-      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.ARRAY_ELEMENT",
+      condition = "NOT_NULL_CONSTRAINT_VIOLATION.ARRAY_ELEMENT",
       parameters = Map("columnPath" -> "`arr`"))
   }
 
@@ -362,7 +362,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
-      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.MAP_VALUE",
+      condition = "NOT_NULL_CONSTRAINT_VIOLATION.MAP_VALUE",
       parameters = Map("columnPath" -> "`map`"))
   }
 }

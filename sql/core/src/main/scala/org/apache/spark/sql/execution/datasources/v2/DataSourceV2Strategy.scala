@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode,
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
@@ -477,7 +478,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Seq(part).asResolvedPartitionSpecs.head,
         recacheTable(r)) :: Nil
 
-    case ShowColumns(resolvedTable: ResolvedTable, _, output) =>
+    case ShowColumns(resolvedTable: ResolvedTable, ns, output) =>
+      ns match {
+        case Some(namespace) =>
+          val tableNamespace = resolvedTable.identifier.namespace()
+          if (namespace.length != tableNamespace.length ||
+            !namespace.zip(tableNamespace).forall(SQLConf.get.resolver.tupled)) {
+            throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+              namespace, tableNamespace.toSeq)
+          }
+        case _ =>
+      }
       ShowColumnsExec(output, resolvedTable) :: Nil
 
     case r @ ShowPartitions(

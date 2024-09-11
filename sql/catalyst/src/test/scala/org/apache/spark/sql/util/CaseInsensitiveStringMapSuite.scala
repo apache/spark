@@ -67,7 +67,7 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         options.getBoolean("FOO", true)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3206",
+      condition = "_LEGACY_ERROR_TEMP_3206",
       parameters = Map("value" -> "bar"))
   }
 

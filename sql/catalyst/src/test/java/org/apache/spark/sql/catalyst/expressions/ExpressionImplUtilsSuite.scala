@@ -349,7 +349,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkRuntimeException] {
         f(t)
       },
-      errorClass = t.expectedErrorClassOpt.get,
+      condition = t.expectedErrorClassOpt.get,
       parameters = t.errorParamsMap
     )
   }
@@ -361,7 +361,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
           exception = intercept[SparkIllegalArgumentException] {
             ExpressionImplUtils.validateUTF8String(str)
           },
-          errorClass = "INVALID_UTF8_STRING",
+          condition = "INVALID_UTF8_STRING",
           parameters = Map(
             "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
           )

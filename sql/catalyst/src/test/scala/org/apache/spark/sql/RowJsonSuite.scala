@@ -136,7 +136,7 @@ class RowJsonSuite extends SparkFunSuite {
           new StructType().add("a", ObjectType(classOf[(Int, Int)])))
         row.jsonValue
       },
-      errorClass = "FAILED_ROW_TO_JSON",
+      condition = "FAILED_ROW_TO_JSON",
       parameters = Map(
         "value" -> toSQLValue("(1,2)"),
         "class" -> "class scala.Tuple2$mcII$sp",

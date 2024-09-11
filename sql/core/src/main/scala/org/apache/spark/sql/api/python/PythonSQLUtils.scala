@@ -149,6 +149,12 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def nullIndex(e: Column): Column = Column.internalFn("null_index", e)
 
+  def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
+
+  def binary_search(e: Column, value: Column): Column =
+    Column.internalFn("array_binary_search", e, value)
+
   def pandasProduct(e: Column, ignoreNA: Boolean): Column =
     Column.internalFn("pandas_product", e, lit(ignoreNA))
 
@@ -169,6 +175,13 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
     Column.internalFn("pandas_covar", col1, col2, lit(ddof))
+
+  /**
+   * A long column that increases one by one.
+   * This is for 'distributed-sequence' default index in pandas API on Spark.
+   */
+  def distributed_sequence_id(): Column =
+    Column.internalFn("distributed_sequence_id")
 
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))

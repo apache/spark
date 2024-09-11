@@ -103,7 +103,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       exception = intercept[AnalysisException] {
         CallMethodViaReflection(Seq.empty).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
@@ -114,7 +114,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       exception = intercept[AnalysisException] {
         CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",

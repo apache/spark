@@ -24,12 +24,14 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
 
   test("parseJson type coercion") {
-    def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte]): Unit = {
+    def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte],
+              allowDuplicateKeys: Boolean = false): Unit = {
       // parse_json
-      val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+      val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        allowDuplicateKeys)
       // try_parse_json
       val tryActual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
-        failOnError = false)
+        allowDuplicateKeys, failOnError = false)
       val expected = new VariantVal(expectedValue, expectedMetadata)
       assert(actual === expected && tryActual === expected)
     }
@@ -89,6 +91,13 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
       /* offset list */ 0, 2, 4, 6,
       /* field data */ primitiveHeader(INT1), 1, primitiveHeader(INT1), 2, shortStrHeader(1), '3'),
       Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c'))
+    check("""{"a": 1, "b": 2, "c": "3", "a": 4}""", Array(objectHeader(false, 1, 1),
+      /* size */ 3,
+      /* id list */ 0, 1, 2,
+      /* offset list */ 4, 0, 2, 6,
+      /* field data */ primitiveHeader(INT1), 2, shortStrHeader(1), '3', primitiveHeader(INT1), 4),
+      Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c'),
+      allowDuplicateKeys = true)
     check("""{"z": 1, "y": 2, "x": "3"}""", Array(objectHeader(false, 1, 1),
       /* size */ 3,
       /* id list */ 2, 1, 0,
@@ -107,14 +116,15 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
   }
 
   test("parseJson negative") {
-    def checkException(json: String, errorClass: String, parameters: Map[String, String]): Unit = {
+    def checkException(json: String, condition: String, parameters: Map[String, String]): Unit = {
       val try_parse_json_output = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
-        failOnError = false)
+        allowDuplicateKeys = false, failOnError = false)
       checkError(
         exception = intercept[SparkThrowable] {
-          VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+          VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+            allowDuplicateKeys = false)
         },
-        errorClass = errorClass,
+        condition = condition,
         parameters = parameters
       )
       assert(try_parse_json_output === null)

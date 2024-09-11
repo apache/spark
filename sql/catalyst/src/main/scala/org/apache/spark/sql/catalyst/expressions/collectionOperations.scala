@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
@@ -432,7 +433,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         inputArrays.map(_.numElements()).max
       }
 
-      val result = new Array[InternalRow](biggestCardinality)
+      val result = new Array[AnyRef](biggestCardinality)
       val zippedArrs: Seq[(ArrayData, Int)] = inputArrays.zipWithIndex
 
       for (i <- 0 until biggestCardinality) {
@@ -1516,6 +1517,141 @@ case class ArrayContains(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayContains =
     copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Searches the specified array for the specified object using the binary search algorithm.
+ *
+ * NOTE: The input array must be in ascending order before calling this method; if the array is
+ * not sorted, the results are undefined.
+ *
+ * This expression is dedicated only for PySpark and Spark-ML.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array, value) - Return index (0-based) of the search value, " +
+    "if it is contained in the array; otherwise, (-<insertion point> - 1).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       1
+      > SELECT _FUNC_(array(null, 1, 2, 3), 2);
+       2
+      > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), 1.1F);
+       -2
+  """,
+  group = "array_funcs",
+  since = "4.0.0")
+case class ArrayBinarySearch(array: Expression, value: Expression)
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with RuntimeReplaceable
+  with QueryErrorsBase {
+
+  override def left: Expression = array
+  override def right: Expression = value
+  override def dataType: DataType = IntegerType
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) =>
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          Map("functionName" -> toSQLId(prettyName)))
+      case (t, _) if !ArrayType.acceptsType(t) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
+    }
+  }
+
+  @transient private lazy val elementType: DataType =
+    array.dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val resultArrayElementNullable: Boolean =
+    array.dataType.asInstanceOf[ArrayType].containsNull
+
+  @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
+  @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
+    elementType != BooleanType && !resultArrayElementNullable
+
+  @transient private lazy val comp: Comparator[Any] = new Comparator[Any] with Serializable {
+    private val ordering = array.dataType match {
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType.ordering(n)
+    }
+
+    override def compare(o1: Any, o2: Any): Int =
+      (o1, o2) match {
+        case (null, null) => 0
+        case (null, _) => 1
+        case (_, null) => -1
+        case _ => ordering.compare(o1, o2)
+      }
+  }
+
+  @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
+  @transient private lazy val  comparatorObjectType = ObjectType(classOf[Comparator[Object]])
+  override def replacement: Expression =
+    if (canPerformFastBinarySearch) {
+      StaticInvoke(
+        classOf[ArrayExpressionUtils],
+        IntegerType,
+        "binarySearch",
+        Seq(array, value),
+        inputTypes)
+    } else if (isPrimitiveType) {
+      StaticInvoke(
+        classOf[ArrayExpressionUtils],
+        IntegerType,
+        "binarySearchNullSafe",
+        Seq(array, value),
+        inputTypes)
+    } else {
+      StaticInvoke(
+        classOf[ArrayExpressionUtils],
+        IntegerType,
+        "binarySearch",
+        Seq(Literal(elementType, elementObjectType),
+          Literal(comp, comparatorObjectType),
+          array,
+          value),
+        elementObjectType +: comparatorObjectType +: inputTypes)
+  }
+
+  override def prettyName: String = "array_binary_search"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayBinarySearch =
+    copy(array = newLeft, value = newRight)
 }
 
 trait ArrayPendBase extends RuntimeReplaceable

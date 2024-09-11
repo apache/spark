@@ -200,7 +200,7 @@
             <configuration>
               <executable>cp</executable>
               <arguments>
-                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${version}.jar</argument>
+                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>
@@ -336,6 +336,14 @@
       <id>parquet-provided</id>
       <properties>
         <parquet.deps.scope>provided</parquet.deps.scope>
+      </properties>
+    </profile>
+
+    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
+    <profile>
+      <id>jjwt</id>
+      <properties>
+        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
 

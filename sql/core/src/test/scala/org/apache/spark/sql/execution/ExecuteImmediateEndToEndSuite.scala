@@ -51,7 +51,7 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
 
         checkError(
           exception = e,
-          errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
+          condition = "FAILED_TO_PARSE_TOO_COMPLEX",
           parameters = Map(),
           context = ExpectedContext(
             query,

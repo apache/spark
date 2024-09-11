@@ -3674,7 +3674,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
@@ -3685,7 +3685,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           2.75|  2.75|
     +---------------+------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -3696,7 +3696,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           NULL|  NULL|
     +---------------+------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -3707,7 +3707,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           NULL|   1.0|
     +---------------+------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
@@ -3718,7 +3718,7 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |            3.0|   3.0|
     +---------------+------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
@@ -3754,7 +3754,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
@@ -3765,7 +3765,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           1.75|  1.75|
     +---------------+------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -3776,7 +3776,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           NULL|   1.0|
     +---------------+------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -3787,7 +3787,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           NULL|  NULL|
     +---------------+------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
@@ -3798,7 +3798,7 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |1.6666666666666...|  1.75|
     +------------------+------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
@@ -3834,7 +3834,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x)")
@@ -3845,7 +3845,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |               4|       4|
     +----------------+--------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -3856,7 +3856,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |               0|       1|
     +----------------+--------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -3867,7 +3867,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |               0|       1|
     +----------------+--------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x)")
@@ -3878,7 +3878,7 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |               3|       4|
     +----------------+--------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x)")
@@ -3915,7 +3915,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
@@ -3926,7 +3926,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |                 0.0|
     +--------------------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -3937,7 +3937,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |                NULL|
     +--------------------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -3948,7 +3948,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |                NULL|
     +--------------------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
@@ -3959,7 +3959,7 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |                 0.0|
     +--------------------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
@@ -3995,7 +3995,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
@@ -4006,7 +4006,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          1.0|
     +-------------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -4017,7 +4017,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |         NULL|
     +-------------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -4028,7 +4028,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |         NULL|
     +-------------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
@@ -4039,7 +4039,7 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          1.0|
     +-------------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
@@ -4075,7 +4075,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
@@ -4086,7 +4086,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |             1.0|
     +----------------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -4097,7 +4097,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |            NULL|
     +----------------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -4108,7 +4108,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |            NULL|
     +----------------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
@@ -4119,7 +4119,7 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |             1.0|
     +----------------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
@@ -4155,7 +4155,7 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
@@ -4166,7 +4166,7 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           5.0|
     +--------------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -4177,7 +4177,7 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          NULL|
     +--------------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -4188,7 +4188,7 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          NULL|
     +--------------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
@@ -4199,7 +4199,7 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |4.666666666666...|
     +-----------------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
@@ -4235,7 +4235,7 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
@@ -4246,7 +4246,7 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           5.0|
     +--------------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -4257,7 +4257,7 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          NULL|
     +--------------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -4268,7 +4268,7 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          NULL|
     +--------------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
@@ -4279,7 +4279,7 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |4.666666666666...|
     +-----------------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
@@ -4315,7 +4315,7 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: All paris are non-null
+    Example 1: All pairs are non-null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x)")
@@ -4326,7 +4326,7 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |           5.0|
     +--------------+
 
-    Example 2: All paris's x values are null
+    Example 2: All pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, null) AS tab(y, x)")
@@ -4337,7 +4337,7 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          NULL|
     +--------------+
 
-    Example 3: All paris's y values are null
+    Example 3: All pairs' y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (null, 1) AS tab(y, x)")
@@ -4348,7 +4348,7 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |          NULL|
     +--------------+
 
-    Example 4: Some paris's x values are null
+    Example 4: Some pairs' x values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x)")
@@ -4359,7 +4359,7 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     |4.666666666666...|
     +-----------------+
 
-    Example 5: Some paris's x or y values are null
+    Example 5: Some pairs' x or y values are null
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x)")
@@ -6339,7 +6339,7 @@ def percentile(
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
@@ -6360,7 +6360,7 @@ def percentile_approx(
         When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
         In this case, returns the approximate percentile array of column col
         at the given percentage array.
-    accuracy : :class:`~pyspark.sql.Column` or float
+    accuracy : :class:`~pyspark.sql.Column` or int
         is a positive numeric literal which controls approximation accuracy
         at the cost of memory. Higher value of accuracy yields better accuracy,
         1.0/accuracy is the relative error of the approximation. (default: 10000).
@@ -6397,7 +6397,7 @@ def percentile_approx(
 def approx_percentile(
     col: "ColumnOrName",
     percentage: Union[Column, float, Sequence[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
@@ -6414,7 +6414,7 @@ def approx_percentile(
         When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
         In this case, returns the approximate percentile array of column col
         at the given percentage array.
-    accuracy : :class:`~pyspark.sql.Column` or float
+    accuracy : :class:`~pyspark.sql.Column` or int
         is a positive numeric literal which controls approximation accuracy
         at the cost of memory. Higher value of accuracy yields better accuracy,
         1.0/accuracy is the relative error of the approximation. (default: 10000).
@@ -7305,36 +7305,36 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|
     +---+---+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("previos_value", lag("c2").over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|         NULL|
-    |  a|  2|            1|
-    |  a|  3|            2|
-    |  b|  2|         NULL|
-    |  b|  8|            2|
-    +---+---+-------------+
-    >>> df.withColumn("previos_value", lag("c2", 1, 0).over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|            0|
-    |  a|  2|            1|
-    |  a|  3|            2|
-    |  b|  2|            0|
-    |  b|  8|            2|
-    +---+---+-------------+
-    >>> df.withColumn("previos_value", lag("c2", 2, -1).over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|           -1|
-    |  a|  2|           -1|
-    |  a|  3|            1|
-    |  b|  2|           -1|
-    |  b|  8|           -1|
-    +---+---+-------------+
+    >>> df.withColumn("previous_value", lag("c2").over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|          NULL|
+    |  a|  2|             1|
+    |  a|  3|             2|
+    |  b|  2|          NULL|
+    |  b|  8|             2|
+    +---+---+--------------+
+    >>> df.withColumn("previous_value", lag("c2", 1, 0).over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|             0|
+    |  a|  2|             1|
+    |  a|  3|             2|
+    |  b|  2|             0|
+    |  b|  8|             2|
+    +---+---+--------------+
+    >>> df.withColumn("previous_value", lag("c2", 2, -1).over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|            -1|
+    |  a|  2|            -1|
+    |  a|  3|             1|
+    |  b|  2|            -1|
+    |  b|  8|            -1|
+    +---+---+--------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -11241,12 +11241,26 @@ def sentences(
 ) -> Column:
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
-    The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
+    The `language` and `country` arguments are optional,
+    When they are omitted:
+    1.If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
+    The `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
+    language/country neutral locale for the locale sensitive operations.
+    2.If the `country` is omitted, the `locale(language, country='')` is used.
+    When they are null:
+    1.If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+    2.If the `language` is null and the `country` is not null,
+    the `Locale.US - locale(language='en', country='US')` is used.
+    3.If the `language` is not null and the `country` is null, the `locale(language)` is used.
+    4.If neither is `null`, the `locale(language, country)` is used.
 
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.0.0
+        Supports `sentences(string, language)`.
 
     Parameters
     ----------
@@ -11268,6 +11282,12 @@ def sentences(
     >>> df.select(sentences(df.string, lit("en"), lit("US"))).show(truncate=False)
     +-----------------------------------+
     |sentences(string, en, US)          |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
+    >>> df.select(sentences(df.string, lit("en"))).show(truncate=False)
+    +-----------------------------------+
+    |sentences(string, en, )            |
     +-----------------------------------+
     |[[This, is, an, example, sentence]]|
     +-----------------------------------+
@@ -16309,6 +16329,55 @@ def try_parse_json(
 
 
 @_try_remote_functions
+def to_variant_object(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Converts a column containing nested inputs (array/map/struct) into a variants where maps and
+    structs are converted to variant objects which are unordered unlike SQL structs. Input maps can
+    only have string keys.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column with a nested schema or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    Example 1: Converting an array containing a nested struct into a variant
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StructType, StructField, StringType, MapType
+    >>> schema = StructType([
+    ...     StructField("i", StringType(), True),
+    ...     StructField("v", ArrayType(StructType([
+    ...         StructField("a", MapType(StringType(), StringType()), True)
+    ...     ]), True))
+    ... ])
+    >>> data = [("1", [{"a": {"b": 2}}])]
+    >>> df = spark.createDataFrame(data, schema)
+    >>> df.select(sf.to_variant_object(df.v))
+    DataFrame[to_variant_object(v): variant]
+    >>> df.select(sf.to_variant_object(df.v)).show(truncate=False)
+    +--------------------+
+    |to_variant_object(v)|
+    +--------------------+
+    |[{"a":{"b":"2"}}]   |
+    +--------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("to_variant_object", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
@@ -16467,7 +16536,7 @@ def schema_of_variant(v: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
     >>> df.select(schema_of_variant(parse_json(df.json)).alias("r")).collect()
-    [Row(r='STRUCT<a: BIGINT>')]
+    [Row(r='OBJECT<a: BIGINT>')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16495,7 +16564,7 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
     >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
-    [Row(r='STRUCT<a: BIGINT>')]
+    [Row(r='OBJECT<a: BIGINT>')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -20682,6 +20751,31 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def nullifzero(col: "ColumnOrName") -> Column:
+    """
+    Returns null if `col` is equal to zero, or `col` otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0,), (1,)], ["a"])
+    >>> df.select(nullifzero(df.a).alias("result")).show()
+    +------+
+    |result|
+    +------+
+    |  NULL|
+    |     1|
+    +------+
+    """
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+@_try_remote_functions
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Returns `col2` if `col1` is null, or `col1` otherwise.
@@ -20722,6 +20816,31 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     [Row(r=6), Row(r=9)]
     """
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
+
+
+@_try_remote_functions
+def zeroifnull(col: "ColumnOrName") -> Column:
+    """
+    Returns zero if `col` is null, or `col` otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,)], ["a"])
+    >>> df.select(zeroifnull(df.a).alias("result")).show()
+    +------+
+    |result|
+    +------+
+    |     0|
+    |     1|
+    +------+
+    """
+    return _invoke_function_over_columns("zeroifnull", col)
 
 
 @_try_remote_functions
