@@ -950,11 +950,11 @@ class RocksDB(
       // Cancel and wait until all background work finishes
       db.cancelAllBackgroundWork(true)
       if (ignoreException) {
-        // Close the DB instance and throw the exception if any
-        db.closeE()
-      } else {
         // Close the DB instance
         db.close()
+      } else {
+        // Close the DB instance and throw the exception if any
+        db.closeE()
       }
       db = null
     }
