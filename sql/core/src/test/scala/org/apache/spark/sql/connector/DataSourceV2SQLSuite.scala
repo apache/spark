@@ -1775,7 +1775,7 @@ class DataSourceV2SQLSuiteV1Filter
             sql("USE dummy")
             sql(s"$statement dummy.$tableDefinition USING foo")
           },
-          errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
           parameters = Map(
             "tableName" -> "`dummy`.`my_tab`",
             "operation" -> "identity column"

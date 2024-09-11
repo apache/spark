@@ -2293,7 +2293,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"create table t(a int, b bigint generated always as identity()) using parquet")
       },
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
         "operation" -> "identity columns")
     )
