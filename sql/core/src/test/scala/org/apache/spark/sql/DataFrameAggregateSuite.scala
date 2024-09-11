@@ -2496,17 +2496,17 @@ class DataFrameAggregateSuite extends QueryTest
     withTempView("v1") {
       data.createOrReplaceTempView("v1")
       val df =
-        sql("""select
-              |  round(sum(b), 6) as sum1,
-              |  count(distinct a) as count1,
-              |  count(distinct c) as count2
-              |from (
-              |  select
-              |    6 as gb,
+        sql("""SELECT
+              |  ROUND(SUM(b), 6) AS sum1,
+              |  COUNT(DISTINCT a) AS count1,
+              |  COUNT(DISTINCT c) AS count2
+              |FROM (
+              |  SELECT
+              |    6 AS gb,
               |    *
-              |  from v1
+              |  FROM v1
               |)
-              |group by a, gb
+              |GROUP BY a, gb
               |""".stripMargin)
       checkAnswer(df, Row(1.001d, 1, 1) :: Row(6.002d, 1, 1) :: Nil)
     }
