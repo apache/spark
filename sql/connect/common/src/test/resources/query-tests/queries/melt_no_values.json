@@ -20,6 +20,7 @@
         "unparsedIdentifier": "a"
       }
     }],
+    "variableColumnName": "name",
     "valueColumnName": "value"
   }
 }
