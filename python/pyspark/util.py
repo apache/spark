@@ -262,10 +262,6 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     if "pypy" in platform.python_implementation().lower():
         # Traceback modification is not supported with PyPy in PySpark.
         return None
-    if sys.version_info[:2] < (3, 7):
-        # Traceback creation is not supported Python < 3.7.
-        # See https://bugs.python.org/issue30579.
-        return None
 
     import pyspark
 
@@ -791,7 +787,7 @@ def is_remote_only() -> bool:
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
+    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 9):
         import doctest
         import pyspark.util
         from pyspark.core.context import SparkContext

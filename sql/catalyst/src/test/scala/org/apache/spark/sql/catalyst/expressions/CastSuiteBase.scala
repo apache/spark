@@ -1107,8 +1107,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { interval =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), YearMonthIntervalType()),
-          "_LEGACY_ERROR_TEMP_3213",
-          Map("interval" -> "year-month", "msg" -> "integer overflow"))
+          "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          Map(
+            "interval" -> "year-month",
+            "input" -> interval))
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
@@ -1176,9 +1178,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val dataType = YearMonthIntervalType()
       checkErrorInExpression[SparkIllegalArgumentException](
         cast(Literal.create(interval), dataType),
-        "_LEGACY_ERROR_TEMP_3214",
+        "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
         Map(
-          "fallBackNotice" -> "",
           "typeName" -> "interval year to month",
           "intervalStr" -> "year-month",
           "supportedFormat" -> "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
@@ -1198,9 +1199,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
           Map(
-            "fallBackNotice" -> "",
             "typeName" -> dataType.typeName,
             "intervalStr" -> "year-month",
             "supportedFormat" ->
@@ -1322,10 +1322,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
-          Map("fallBackNotice" -> (", set spark.sql.legacy.fromDayTimeString.enabled" +
-            " to true to restore the behavior before Spark 3.0."),
-            "intervalStr" -> "day-time",
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
             "typeName" -> dataType.typeName,
             "input" -> interval,
             "supportedFormat" ->
@@ -1348,10 +1346,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
-          Map("fallBackNotice" -> (", set spark.sql.legacy.fromDayTimeString.enabled" +
-            " to true to restore the behavior before Spark 3.0."),
-            "intervalStr" -> "day-time",
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
             "typeName" -> dataType.typeName,
             "input" -> interval,
             "supportedFormat" ->

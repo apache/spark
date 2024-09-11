@@ -216,6 +216,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotUseKryoSerialization(): SparkRuntimeException = {
     new SparkRuntimeException(errorClass = "CANNOT_USE_KRYO", messageParameters = Map.empty)
   }
+
+  def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
+  }
 }
 
 private[sql] object ExecutionErrors extends ExecutionErrors
