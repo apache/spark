@@ -349,17 +349,6 @@
       </snapshots>
     </repository>
     <repository>
-      <id>parquet-release-candidate</id>
-      <name>Parquet Release Candidate</name>
-      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1059</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
       <!--
         This is used as a fallback when the first try fails.
       -->
