@@ -434,6 +434,12 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_USE_KRYO" : {
+    "message" : [
+      "Cannot load Kryo serialization codec. Kryo serialization cannot be used in the Spark Connect client. Use Java serialization, provide a custom Codec, or use Spark Classic instead."
+    ],
+    "sqlState" : "22KD3"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -449,13 +455,13 @@
   },
   "CAST_INVALID_INPUT" : {
     "message" : [
-      "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead."
     ],
     "sqlState" : "22018"
   },
   "CAST_OVERFLOW" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
   },
@@ -898,7 +904,7 @@
       },
       "NON_STRING_TYPE" : {
         "message" : [
-          "all arguments must be strings."
+          "all arguments of the function <funcName> must be strings."
         ]
       },
       "NULL_TYPE" : {
@@ -1463,6 +1469,12 @@
     ],
     "sqlState" : "42704"
   },
+  "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in flatMapGroupsWithState. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
@@ -1472,6 +1484,12 @@
   "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
     "message" : [
       "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
+  "FOREACH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
   },
@@ -2080,6 +2098,11 @@
         "message" : [
           "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
         ]
+      },
+      "SECONDS_FRACTION" : {
+        "message" : [
+          "Cannot detect a seconds fraction pattern of variable length. Please make sure the pattern contains 'S', and does not contain illegal characters."
+        ]
       }
     },
     "sqlState" : "22007"
@@ -2182,6 +2205,12 @@
       "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
     ],
     "sqlState" : "42001"
+  },
+  "INVALID_EXTERNAL_TYPE" : {
+    "message" : [
+      "The external type <externalType> is not valid for the type <type> at the expression <expr>."
+    ],
+    "sqlState" : "42K0N"
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
@@ -2489,6 +2518,24 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_LABEL_USAGE" : {
+    "message" : [
+      "The usage of the label <labelName> is invalid."
+    ],
+    "subClass" : {
+      "DOES_NOT_EXIST" : {
+        "message" : [
+          "Label was used in the <statementType> statement, but the label does not belong to any surrounding block."
+        ]
+      },
+      "ITERATE_IN_COMPOUND" : {
+        "message" : [
+          "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
+        ]
+      }
+    },
+    "sqlState" : "42K0L"
+  },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
       "Invalid lambda function call."
@@ -2679,6 +2726,11 @@
       "DOUBLE" : {
         "message" : [
           "expects an double literal, but got <invalidValue>."
+        ]
+      },
+      "DTYPE" : {
+        "message" : [
+          "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
       "INTEGER" : {
@@ -3867,6 +3919,12 @@
     ],
     "sqlState" : "42K08"
   },
+  "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
+    "message" : [
+      "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
+    ],
+    "sqlState" : "42K05"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -4314,6 +4372,24 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TRANSPOSE_EXCEED_ROW_LIMIT" : {
+    "message" : [
+      "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
+    ],
+    "sqlState" : "54006"
+  },
+  "TRANSPOSE_INVALID_INDEX_COLUMN" : {
+    "message" : [
+      "Invalid index column for TRANSPOSE because: <reason>"
+    ],
+    "sqlState" : "42804"
+  },
+  "TRANSPOSE_NO_LEAST_COMMON_TYPE" : {
+    "message" : [
+      "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
+    ],
+    "sqlState" : "42K09"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -5686,11 +5762,6 @@
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1057" : {
-    "message" : [
-      "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1058" : {
     "message" : [
       "Cannot create table with both USING <provider> and <serDeInfo>."
@@ -6162,7 +6233,7 @@
       "Detected implicit cartesian product for <joinType> join between logical plans",
       "<leftPlan>",
       "and",
-      "rightPlan",
+      "<rightPlan>",
       "Join condition is missing or trivial.",
       "Either: use the CROSS JOIN syntax to allow cartesian products between these relations, or: enable implicit cartesian products by setting the configuration variable spark.sql.crossJoin.enabled=true."
     ]
@@ -7767,7 +7838,7 @@
   },
   "_LEGACY_ERROR_TEMP_3055" : {
     "message" : [
-      "ScalarFunction '<scalarFunc.name>' neither implement magic method nor override 'produceResult'"
+      "ScalarFunction <scalarFunc> neither implement magic method nor override 'produceResult'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3056" : {

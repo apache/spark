@@ -4625,6 +4625,12 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0N": {
+        "description": "Invalid external type.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",

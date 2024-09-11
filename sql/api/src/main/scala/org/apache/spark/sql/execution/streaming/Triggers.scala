@@ -88,8 +88,8 @@ object ProcessingTimeTrigger {
 }
 
 /**
- * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
- * the specified interval.
+ * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at the
+ * specified interval.
  */
 case class ContinuousTrigger(intervalMs: Long) extends Trigger {
   Triggers.validate(intervalMs)

@@ -16,6 +16,7 @@
         "unparsedIdentifier": "id"
       }
     }],
+    "variableColumnName": "name",
     "valueColumnName": "value"
   }
 }

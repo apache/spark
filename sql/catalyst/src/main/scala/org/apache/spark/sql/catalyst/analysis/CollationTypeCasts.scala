@@ -100,6 +100,11 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
       stringSplitSQL.withNewChildren(Seq(newStr, newDelimiter))
 
+    case levenshtein: Levenshtein =>
+      val Seq(left, right, threshold @ _*) = levenshtein.children
+      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
+      levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |

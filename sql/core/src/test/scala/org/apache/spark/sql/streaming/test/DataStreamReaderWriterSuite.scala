@@ -133,7 +133,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
           .write
           .save()
       },
-      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`write`"))
   }
 

@@ -86,14 +86,14 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t SET SERDE 'whatever'")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1248",
+        condition = "_LEGACY_ERROR_TEMP_1248",
         parameters = Map.empty)
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
             "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1248",
+        condition = "_LEGACY_ERROR_TEMP_1248",
         parameters = Map.empty)
 
       // set serde properties only
@@ -133,14 +133,14 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'whatever'")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        condition = "_LEGACY_ERROR_TEMP_1247",
         parameters = Map.empty)
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
             "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        condition = "_LEGACY_ERROR_TEMP_1247",
         parameters = Map.empty)
 
       // set serde properties only
@@ -149,7 +149,7 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
           sql(s"ALTER TABLE $t PARTITION (a=1, b=2) " +
             "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        condition = "_LEGACY_ERROR_TEMP_1247",
         parameters = Map.empty)
 
       // set things without explicitly specifying database
@@ -158,7 +158,7 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE tbl PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        condition = "_LEGACY_ERROR_TEMP_1247",
         parameters = Map.empty)
 
       // table to alter does not exist

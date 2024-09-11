@@ -1332,7 +1332,7 @@ class DataFrame:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.5.0
-            Supports vanilla PySpark.
+            Supports classic PySpark.
 
         Parameters
         ----------
@@ -4570,7 +4570,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -4586,9 +4586,6 @@ class DataFrame:
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
-
-        .. versionchanged:: 4.0.0
-            Supports variable-length argument
 
         Parameters
         ----------
@@ -4621,7 +4618,7 @@ class DataFrame:
 
         Deduplicate values on 'name' and 'height' columns.
 
-        >>> df.dropDuplicates('name', 'height').show()
+        >>> df.dropDuplicates(['name', 'height']).show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4631,7 +4628,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> "DataFrame":
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
@@ -4647,9 +4644,6 @@ class DataFrame:
         Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
-
-         .. versionchanged:: 4.0.0
-            Supports variable-length argument
 
          Parameters
          ----------
@@ -4680,7 +4674,7 @@ class DataFrame:
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
         """
         ...
 
@@ -5937,17 +5931,11 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def drop_duplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
+    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect
-
-        .. versionchanged:: 4.0.0
-            Supports variable-length argument
         """
         ...
 
@@ -6180,10 +6168,6 @@ class DataFrame:
         |  1| 21|
         +---+---+
 
-        Notes
-        -----
-        This API is experimental
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -6257,10 +6241,6 @@ class DataFrame:
         |  1| 21|
         +---+---+
 
-        Notes
-        -----
-        This API is unstable, and for developers.
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -6320,6 +6300,72 @@ class DataFrame:
            age   name
         0    2  Alice
         1    5    Bob
+        """
+        ...
+
+    @dispatch_df_method
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> "DataFrame":
+        """
+        Transposes a DataFrame such that the values in the specified index column become the new
+        columns of the DataFrame. If no index column is provided, the first column is used as
+        the default.
+
+        Please note:
+        - All columns except the index column must share a least common data type. Unless they
+        are the same data type, all columns are cast to the nearest common data type.
+        - The name of the column into which the original column names are transposed defaults
+        to "key".
+        - null values in the index column are excluded from the column names for the
+        transposed table, which are ordered in ascending order.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        indexColumn : str or :class:`Column`, optional
+            The single column that will be treated as the index for the transpose operation. This
+            column will be used to transform the DataFrame such that the values of the indexColumn
+            become the new columns in the transposed DataFrame. If not provided, the first column of
+            the DataFrame will be used as the default.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transposed DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [("A", 1, 2), ("B", 3, 4)],
+        ...     ["id", "val1", "val2"],
+        ... )
+        >>> df.show()
+        +---+----+----+
+        | id|val1|val2|
+        +---+----+----+
+        |  A|   1|   2|
+        |  B|   3|   4|
+        +---+----+----+
+
+        >>> df.transpose().show()
+        +----+---+---+
+        | key|  A|  B|
+        +----+---+---+
+        |val1|  1|  3|
+        |val2|  2|  4|
+        +----+---+---+
+
+        >>> df.transpose(df.id).show()
+        +----+---+---+
+        | key|  A|  B|
+        +----+---+---+
+        |val1|  1|  3|
+        |val2|  2|  4|
+        +----+---+---+
         """
         ...
 

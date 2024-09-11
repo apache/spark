@@ -117,6 +117,8 @@ class JacksonParser(
     }
   }
 
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   protected final def parseVariant(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
     // cannot directly use the function here because it also handles the `VALUE_NULL` token and
@@ -125,7 +127,7 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val v = VariantBuilder.parseJson(parser)
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>

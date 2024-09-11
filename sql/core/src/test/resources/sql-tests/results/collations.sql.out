@@ -545,3 +545,97 @@ drop table t5
 struct<>
 -- !query output
 
+
+
+-- !query
+create table t6 (utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase, threshold int) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t6 values('kitten', 'sitting', 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase) from t6
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) from t6
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t6
+-- !query schema
+struct<levenshtein(collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary)):int>
+-- !query output
+3
+
+
+-- !query
+select levenshtein(utf8_binary, utf8_lcase, threshold) from t6
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21"
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase, threshold) from t6
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_LCASE`"
+  }
+}
+
+
+-- !query
+select levenshtein(utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary, threshold) from t6
+-- !query schema
+struct<levenshtein(collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary), threshold):int>
+-- !query output
+-1
+
+
+-- !query
+drop table t6
+-- !query schema
+struct<>
+-- !query output
+

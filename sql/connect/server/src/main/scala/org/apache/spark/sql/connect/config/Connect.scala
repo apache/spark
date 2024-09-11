@@ -289,7 +289,7 @@ object Connect {
       .version("4.0.0")
       .internal()
       .intConf
-      .createWithDefault(5)
+      .createWithDefault(16)
 
   val CONNECT_SESSION_PLAN_CACHE_ENABLED =
     buildConf("spark.connect.session.planCache.enabled")

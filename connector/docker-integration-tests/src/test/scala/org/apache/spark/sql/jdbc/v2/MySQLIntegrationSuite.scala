@@ -27,9 +27,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.0.0):
+ * To run this test suite for a specific version (e.g., mysql:9.0.1):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.1
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  * }}}
  */
@@ -98,7 +98,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"STRING\"",
         "newType" -> "\"INT\"",
@@ -131,7 +131,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2271")
+      condition = "_LEGACY_ERROR_TEMP_2271")
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
@@ -160,9 +160,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 }
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.0.0):
+ * To run this test suite for a specific version (e.g., mysql:9.0.1):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.1
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
  * }}}
