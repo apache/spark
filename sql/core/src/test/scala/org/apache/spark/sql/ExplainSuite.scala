@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
@@ -395,12 +396,12 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val cmd = SaveIntoDataSourceCommand(query, null, options, SaveMode.Overwrite)
 
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkThrowable] {
         cmd.run(spark)
       },
       errorClass = "DATA_SOURCE_EXTERNAL_ERROR",
-      parameters = Map(),
-      sqlState = "KD00F"
+      sqlState = "KD00F",
+      parameters = Map()
     )
   }
 
