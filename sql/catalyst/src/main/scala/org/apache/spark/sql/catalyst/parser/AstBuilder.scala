@@ -5734,10 +5734,25 @@ class AstBuilder extends DataTypeAstBuilder
         // clause here and pass "null" for all other clauses.
         case p: Project =>
           p.copy(child = PipeOperatorSelect(p.child))
+        case d @ Distinct(p: Project) =>
+          d.copy(child = p.copy(child = PipeOperatorSelect(p.child)))
         case other =>
           throw SparkException.internalError(s"Unrecognized matched logical plan: $other")
       }
-    }.get
+    }.getOrElse(Option(ctx.whereClause).map { c =>
+      // Add a table subquery boundary between the new filter and the input plan if one does not
+      // already exist. This helps the analyzer behave as if we had added the WHERE clause after a
+      // table subquery containing the input plan.
+      val withSubqueryAlias = left match {
+        case s: SubqueryAlias =>
+          s
+        case u: UnresolvedRelation =>
+          SubqueryAlias(u.name, left)
+        case _ =>
+          SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
+      }
+      withWhereClause(c, withSubqueryAlias)
+    }.get)
   }
 
   /**

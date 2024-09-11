@@ -883,10 +883,15 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Operator pipe SQL syntax") {
     withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
-      // Basic selection.
+      // Basic SELECT operators.
       parser.parsePlan("TABLE t |> SELECT 1 AS X")
       parser.parsePlan("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       parser.parsePlan("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      // Basic WHERE operators.
+      parser.parsePlan("TABLE t |> WHERE X = 1")
+      parser.parsePlan("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
+      parser.parsePlan("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
+      parser.parsePlan("VALUES (0), (1) tab(col) |> WHERE col < 1")
     }
   }
 }

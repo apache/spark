@@ -204,6 +204,48 @@ Project [result#x]
 
 
 -- !query
+select 1 x, 2 y, 3 z
+|> select 1 + sum(x) over (),
+     avg(y) over (),
+     x,
+     avg(x+1) over (partition by y order by z) AS a2
+|> select a2
+-- !query analysis
+Project [a2#x]
++- Project [(1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, x#x, a2#x]
+   +- Project [x#x, y#x, _w1#x, z#x, _we0#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, a2#x, (cast(1 as bigint) + _we0#xL) AS (1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, a2#x]
+      +- Window [avg(_w1#x) windowspecdefinition(y#x, z#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS a2#x], [y#x], [z#x ASC NULLS FIRST]
+         +- Window [sum(x#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL, avg(y#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+            +- Project [x#x, y#x, (x#x + 1) AS _w1#x, z#x]
+               +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+                  +- OneRowRelation
+
+
+-- !query
+table t
+|> select x, count(*) over ()
+|> select x
+-- !query analysis
+Project [x#x]
++- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+   +- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+         +- Project [x#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select distinct x, y
+-- !query analysis
+Distinct
++- Project [x#x, y#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 table t
 |> select sum(x) as result
 -- !query analysis
@@ -240,6 +282,205 @@ org.apache.spark.sql.AnalysisException
     "objectName" : "",
     "startIndex" : 19,
     "stopIndex" : 19,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> where true
+-- !query analysis
+Filter true
++- SubqueryAlias t
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+-- !query analysis
+Filter ((x#x + length(y#x)) < 4)
++- SubqueryAlias t
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+|> where x + length(y) < 3
+-- !query analysis
+Filter ((x#x + length(y#x)) < 3)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Filter ((x#x + length(y#x)) < 4)
+      +- SubqueryAlias t
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [x#x], [x#x, sum(length(y#x)) AS sum_len#xL]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select col from st)
+|> where col.i1 = 1
+-- !query analysis
+Filter (col#x.i1 = 1)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [col#x]
+      +- SubqueryAlias spark_catalog.default.st
+         +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table st
+|> where st.col.i1 = 2
+-- !query analysis
+Filter (col#x.i1 = 2)
++- SubqueryAlias st
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> where exists (select a from other where x = a limit 1)
+-- !query analysis
+Filter exists#x [x#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [a#x]
+:           +- Filter (outer(x#x) = a#x)
+:              +- SubqueryAlias spark_catalog.default.other
+:                 +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias t
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where (select any_value(a) from other where x = a limit 1) = 1
+-- !query analysis
+Filter (scalar-subquery#x [x#x] = 1)
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Aggregate [any_value(a#x, false) AS any_value(a)#x]
+:           +- Filter (outer(x#x) = a#x)
+:              +- SubqueryAlias spark_catalog.default.other
+:                 +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias t
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where sum(x) = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"(sum(x) = 1)\"",
+    "expressionList" : "sum(t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 27,
+    "fragment" : "table t\n|> where sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where y = 'abc' or length(y) + sum(x) = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
+    "expressionList" : "sum(t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 52,
+    "fragment" : "table t\n|> where y = 'abc' or length(y) + sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where first_value(x) over (partition by y) = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 57,
+    "stopIndex" : 57,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where sum(length(y)) = 3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `sum_len`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 77,
     "fragment" : "y"
   } ]
 }

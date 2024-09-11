@@ -197,6 +197,40 @@ struct<result:int>
 
 
 -- !query
+select 1 x, 2 y, 3 z
+|> select 1 + sum(x) over (),
+     avg(y) over (),
+     x,
+     avg(x+1) over (partition by y order by z) AS a2
+|> select a2
+-- !query schema
+struct<a2:double>
+-- !query output
+2.0
+
+
+-- !query
+table t
+|> select x, count(*) over ()
+|> select x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+|> select distinct x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
 table t
 |> select sum(x) as result
 -- !query schema
@@ -237,6 +271,192 @@ org.apache.spark.sql.AnalysisException
     "objectName" : "",
     "startIndex" : 19,
     "stopIndex" : 19,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> where true
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+|> where x + length(y) < 3
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where x = 1
+-- !query schema
+struct<x:int,sum_len:bigint>
+-- !query output
+1	3
+
+
+-- !query
+(select col from st)
+|> where col.i1 = 1
+-- !query schema
+struct<col:struct<i1:int,i2:int>>
+-- !query output
+
+
+
+-- !query
+table st
+|> where st.col.i1 = 2
+-- !query schema
+struct<x:int,col:struct<i1:int,i2:int>>
+-- !query output
+1	{"i1":2,"i2":3}
+
+
+-- !query
+table t
+|> where exists (select a from other where x = a limit 1)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> where (select any_value(a) from other where x = a limit 1) = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> where sum(x) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"(sum(x) = 1)\"",
+    "expressionList" : "sum(t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 27,
+    "fragment" : "table t\n|> where sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where y = 'abc' or length(y) + sum(x) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
+    "expressionList" : "sum(t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 52,
+    "fragment" : "table t\n|> where y = 'abc' or length(y) + sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where first_value(x) over (partition by y) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 57,
+    "stopIndex" : 57,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where sum(length(y)) = 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `sum_len`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 77,
     "fragment" : "y"
   } ]
 }
