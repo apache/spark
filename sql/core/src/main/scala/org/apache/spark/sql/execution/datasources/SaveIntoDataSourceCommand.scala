@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
@@ -51,11 +52,14 @@ case class SaveIntoDataSourceCommand(
       relation = dataSource.createRelation(
         sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
     } catch {
+      case e: SparkThrowable =>
+        // We should avoid wrapping `SparkThrowable` exceptions into another `AnalysisException`.
+        throw e
       case e @ (_: NullPointerException | _: MatchError | _: ArrayIndexOutOfBoundsException) =>
         // These are some of the exceptions thrown by the data source API. We catch these
         // exceptions here and rethrow QueryCompilationErrors.externalDataSourceException to
         // provide a more friendly error message for the user. This list is not exhaustive.
-        throw QueryCompilationErrors.externalDataSourceException(Some(e))
+        throw QueryCompilationErrors.externalDataSourceException(e)
       case e: Throwable =>
         // For other exceptions, just rethrow it, since we don't have enough information to
         // provide a better error message for the user at the moment. We may want to further
