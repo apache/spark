@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
@@ -399,7 +398,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       exception = intercept[AnalysisException] {
         cmd.run(spark)
       },
-      condition = "KD00F",
+      condition = "DATA_SOURCE_EXTERNAL_ERROR",
+      sqlState = "KD00F",
       parameters = Map.empty
     )
   }
