@@ -175,7 +175,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         ex,
-        errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+        condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
         parameters = Map(
           "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
         ),
@@ -187,7 +187,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         ex,
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION",
         parameters = Map(
           "operationType" -> operationName,
           "entity" -> "HDFSBackedStateStoreProvider"
@@ -241,7 +241,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
     checkError(
       ex,
-      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      condition = "STATE_STORE_UNSUPPORTED_OPERATION",
       parameters = Map(
         "operationType" -> "Range scan",
         "entity" -> "HDFSBackedStateStoreProvider"
@@ -373,7 +373,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -385,7 +385,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -396,7 +396,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
         parameters = Map(
           "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
           "clazz" -> s"${provider.toString()}"
@@ -1273,21 +1273,21 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         if (version < 0) {
           checkError(
             e,
-            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
             parameters = Map("version" -> version.toString)
           )
         } else {
           if (isHDFSBackedStoreProvider) {
             checkError(
               e,
-              errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+              condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
               parameters = Map("fileToRead" -> ".*", "clazz" -> ".*"),
               matchPVals = true
             )
           } else {
             checkError(
               e,
-              errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+              condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
               parameters = Map("fileToRead" -> ".*"),
               matchPVals = true
             )
@@ -1478,7 +1478,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           }
           checkError(
             e,
-            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
             parameters = Map(
               "version" -> "-1"
             )
@@ -1493,7 +1493,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           }
           checkError(
             e,
-            errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+            condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
             parameters = Map(
               "fileToRead" -> s"$dir/0/0/1.delta",
               "clazz" -> "HDFSStateStoreProvider\\[.+\\]"

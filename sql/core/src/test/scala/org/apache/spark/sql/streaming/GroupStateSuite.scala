@@ -302,13 +302,13 @@ class GroupStateSuite extends SparkFunSuite {
         TestGroupState.create[Int](
           Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3168",
+      condition = "_LEGACY_ERROR_TEMP_3168",
       parameters = Map.empty)
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         GroupStateImpl.createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3168",
+      condition = "_LEGACY_ERROR_TEMP_3168",
       parameters = Map.empty)
   }
 
@@ -349,7 +349,7 @@ class GroupStateSuite extends SparkFunSuite {
     def assertWrongTimeoutError(test: => Unit): Unit = {
       checkError(
         exception = intercept[SparkUnsupportedOperationException] { test },
-        errorClass = "_LEGACY_ERROR_TEMP_2204",
+        condition = "_LEGACY_ERROR_TEMP_2204",
         parameters = Map.empty)
     }
 
