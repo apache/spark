@@ -125,7 +125,6 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
           case _ =>
             throw new IllegalArgumentException(s"Failed to get table provider for $format")
         }
-
       }
     }
   }
