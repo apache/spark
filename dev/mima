@@ -24,9 +24,9 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-SPARK_PROFILES=${1:-"-Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
-TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
-OLD_DEPS_CLASSPATH="$(build/sbt -DcopyDependencies=false $SPARK_PROFILES "export oldDeps/fullClasspath" | grep jar | tail -n1)"
+SPARK_PROFILES=${1:-"-Pscala-2.13 -Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
+TOOLS_CLASSPATH="$(build/sbt -Pscala-2.13 -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
+OLD_DEPS_CLASSPATH="$(build/sbt -Pscala-2.13 -DcopyDependencies=false $SPARK_PROFILES "export oldDeps/fullClasspath" | grep jar | tail -n1)"
 
 rm -f .generated-mima*
 
@@ -42,7 +42,7 @@ $JAVA_CMD \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
 
-echo -e "q\n" | build/sbt -mem 5632 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
+echo -e "q\n" | build/sbt -Pscala-2.13 -mem 5632 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
 
 if [ $ret_val != 0 ]; then
