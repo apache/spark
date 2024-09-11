@@ -56,7 +56,7 @@ trait AlterNamespaceUnsetPropertiesSuiteBase extends QueryTest with DDLCommandTe
       sql(s"ALTER NAMESPACE $catalog.$ns UNSET PROPERTIES ('d')")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
@@ -90,7 +90,7 @@ trait AlterNamespaceUnsetPropertiesSuiteBase extends QueryTest with DDLCommandTe
             exception = intercept[ParseException] {
               sql(sqlText)
             },
-            errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
+            condition = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
             parameters = Map("property" -> key, "msg" -> ".*"),
             sqlState = None,
             context = ExpectedContext(

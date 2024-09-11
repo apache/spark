@@ -490,7 +490,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
           .option("query", "SELECT @myvariant1 as variant1, @myvariant2 as variant2")
           .load()
       },
-      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      condition = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> "sql_variant", "jdbcType" -> "-156"))
   }
 }

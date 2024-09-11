@@ -839,6 +839,7 @@ object FunctionRegistry {
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
+    expression[ToVariantObject]("to_variant_object"),
 
     // cast
     expression[Cast]("cast"),

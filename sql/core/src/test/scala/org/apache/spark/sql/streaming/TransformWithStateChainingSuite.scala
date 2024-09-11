@@ -191,7 +191,7 @@ class TransformWithStateChainingSuite extends StreamTest {
             StartStream()
           )
         },
-        errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+        condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
         parameters = Map(
           "outputMode" -> "append",

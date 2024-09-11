@@ -65,7 +65,7 @@ abstract class ParquetFileFormatSuite
       exception = intercept[SparkException] {
         testReadFooters(false)
       }.getCause.asInstanceOf[SparkException],
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
     )
   }

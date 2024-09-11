@@ -58,7 +58,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             exception = intercept[AnalysisException] {
               spark.read.orc(path)
             },
-            errorClass = "UNABLE_TO_INFER_SCHEMA",
+            condition = "UNABLE_TO_INFER_SCHEMA",
             parameters = Map("format" -> "ORC")
           )
 

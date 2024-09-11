@@ -74,8 +74,11 @@ abstract class StatePartitionReaderBase(
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
-  protected val keySchema = SchemaUtil.getSchemaAsDataType(
-    schema, "key").asInstanceOf[StructType]
+  protected val keySchema = {
+    if (!SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
+      SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
+    } else SchemaUtil.getCompositeKeySchema(schema)
+  }
 
   protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
     schemaForValueRow
@@ -178,38 +181,43 @@ class StatePartitionReader(
   override lazy val iter: Iterator[InternalRow] = {
     val stateVarName = stateVariableInfoOpt
       .map(_.stateName).getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
-    store
-      .iterator(stateVarName)
-      .map { pair =>
-        stateVariableInfoOpt match {
-          case Some(stateVarInfo) =>
-            val stateVarType = stateVarInfo.stateVariableType
+    if (SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
+      SchemaUtil.unifyMapStateRowPair(
+        store.iterator(stateVarName), keySchema, partition.partition)
+    } else {
+      store
+        .iterator(stateVarName)
+        .map { pair =>
+          stateVariableInfoOpt match {
+            case Some(stateVarInfo) =>
+              val stateVarType = stateVarInfo.stateVariableType
 
-            stateVarType match {
-              case StateVariableType.ValueState =>
-                SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+              stateVarType match {
+                case StateVariableType.ValueState =>
+                  SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
 
-              case StateVariableType.ListState =>
-                val key = pair.key
-                val result = store.valuesIterator(key, stateVarName)
-                var unsafeRowArr: Seq[UnsafeRow] = Seq.empty
-                result.foreach { entry =>
-                  unsafeRowArr = unsafeRowArr :+ entry.copy()
-                }
-                // convert the list of values to array type
-                val arrData = new GenericArrayData(unsafeRowArr.toArray)
-                SchemaUtil.unifyStateRowPairWithMultipleValues((pair.key, arrData),
-                  partition.partition)
+                case StateVariableType.ListState =>
+                  val key = pair.key
+                  val result = store.valuesIterator(key, stateVarName)
+                  var unsafeRowArr: Seq[UnsafeRow] = Seq.empty
+                  result.foreach { entry =>
+                    unsafeRowArr = unsafeRowArr :+ entry.copy()
+                  }
+                  // convert the list of values to array type
+                  val arrData = new GenericArrayData(unsafeRowArr.toArray)
+                  SchemaUtil.unifyStateRowPairWithMultipleValues((pair.key, arrData),
+                    partition.partition)
 
-              case _ =>
-                throw new IllegalStateException(
-                  s"Unsupported state variable type: $stateVarType")
-            }
+                case _ =>
+                  throw new IllegalStateException(
+                    s"Unsupported state variable type: $stateVarType")
+              }
 
-          case None =>
-            SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+            case None =>
+              SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+          }
         }
-      }
+    }
   }
 
   override def close(): Unit = {

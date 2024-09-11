@@ -95,7 +95,7 @@ class CollectionExpressionsSuite
     }
     checkError(
       exception = exception,
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("The size function doesn't support the operand type " +
           toSQLType(StringType))
@@ -446,7 +446,7 @@ class CollectionExpressionsSuite
 
     checkErrorInExpression[SparkRuntimeException](
       MapConcat(Seq(m0, m1)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -606,7 +606,7 @@ class CollectionExpressionsSuite
 
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(ai4),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -638,7 +638,7 @@ class CollectionExpressionsSuite
 
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(as4),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -900,7 +900,7 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a0, Literal(-1), Literal(2)), Seq(6))
     checkErrorInExpression[SparkRuntimeException](
       expression = Slice(a0, Literal(1), Literal(-1)),
-      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      condition = "INVALID_PARAMETER_VALUE.LENGTH",
       parameters = Map(
         "parameter" -> toSQLId("length"),
         "length" -> (-1).toString,
@@ -908,7 +908,7 @@ class CollectionExpressionsSuite
       ))
     checkErrorInExpression[SparkRuntimeException](
       expression = Slice(a0, Literal(0), Literal(1)),
-      errorClass = "INVALID_PARAMETER_VALUE.START",
+      condition = "INVALID_PARAMETER_VALUE.START",
       parameters = Map(
         "parameter" -> toSQLId("start"),
         "functionName" -> toSQLId("slice")
@@ -1090,7 +1090,7 @@ class CollectionExpressionsSuite
     // SPARK-43393: test Sequence overflow checking
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -1098,7 +1098,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -1106,7 +1106,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
         "functionName" -> toSQLId("sequence"),
@@ -1114,7 +1114,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -1122,7 +1122,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -1130,7 +1130,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
         "functionName" -> toSQLId("sequence"),

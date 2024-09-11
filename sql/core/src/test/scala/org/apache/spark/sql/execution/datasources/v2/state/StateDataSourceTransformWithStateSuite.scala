@@ -23,7 +23,8 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.explode
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, ListState, OutputMode, RunningCountStatefulProcessor, StatefulProcessor, StateStoreMetricsTest, TimeMode, TimerValues, TransformWithStateSuiteUtils, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessor, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /** Stateful processor of single value state var with non-primitive type */
 class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor {
@@ -367,6 +368,116 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(valuesDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
           Row("session2", "group1"), Row("session3", "group7")))
+      }
+    }
+  }
+
+  test("state data source integration - map state with single variable") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[InputMapRow]
+        val result = inputData.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(new TestMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
+        testStream(result, OutputMode.Append())(
+          StartStream(checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputData, InputMapRow("k1", "updateValue", ("v1", "10"))),
+          AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
+          AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+          CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
+
+          AddData(inputData, InputMapRow("k1", "updateValue", ("v2", "5"))),
+          AddData(inputData, InputMapRow("k2", "updateValue", ("v2", "3"))),
+          ProcessAllAvailable(),
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value AS groupingKey", "map_value AS mapValue")
+
+        checkAnswer(resultDf,
+          Seq(
+            Row("k1",
+              Map(Row("v1") -> Row("10"), Row("v2") -> Row("5"))),
+            Row("k2",
+              Map(Row("v2") -> Row("3"))))
+        )
+      }
+    }
+  }
+
+  test("state data source integration - map state TTL with single variable") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val inputStream = MemoryStream[MapInputEvent]
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            new MapStateTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputStream,
+            MapInputEvent("k1", "key1", "put", 1),
+            MapInputEvent("k1", "key2", "put", 2)
+          ),
+          AdvanceManualClock(1 * 1000), // batch timestamp: 1000
+          CheckNewAnswer(),
+          AddData(inputStream,
+            MapInputEvent("k1", "key1", "get", -1),
+            MapInputEvent("k1", "key2", "get", -1)
+          ),
+          AdvanceManualClock(30 * 1000), // batch timestamp: 31000
+          CheckNewAnswer(
+            MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
+            MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
+          ),
+          // get values from ttl state
+          AddData(inputStream,
+            MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+          ),
+          AdvanceManualClock(1 * 1000), // batch timestamp: 32000
+          CheckNewAnswer(
+            MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
+            MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
+          ),
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value AS groupingKey", "map_value AS mapValue")
+
+        checkAnswer(resultDf,
+          Seq(
+            Row("k1",
+              Map(Row("key2") -> Row(Row(2), 61000L),
+                Row("key1") -> Row(Row(1), 61000L))))
+        )
       }
     }
   }

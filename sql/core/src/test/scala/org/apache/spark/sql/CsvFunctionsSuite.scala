@@ -51,7 +51,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDS().select(from_csv($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
       },
-      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map(
         "inputSchema" -> "\"ARRAY<int>\"",
         "dataType" -> "\"ARRAY<INT>\""
@@ -63,7 +63,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDF("csv").selectExpr(s"from_csv(csv, 'ARRAY<int>')")
       },
-      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map(
         "inputSchema" -> "\"ARRAY<int>\"",
         "dataType" -> "\"ARRAY<INT>\""
@@ -109,7 +109,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkUpgradeException] {
           df2.collect()
         },
-        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+        condition = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
         parameters = Map(
           "datetime" -> "'2013-111-11 12:13:14'",
           "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
@@ -184,7 +184,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         df.select(from_csv(to_csv($"value"), schema, options)).collect()
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> toSQLType(valueType))
     )
   }
@@ -343,7 +343,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException] {
           df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
         },
-        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
       )
 
@@ -351,7 +351,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1099",
+        condition = "_LEGACY_ERROR_TEMP_1099",
         parameters = Map(
           "funcName" -> "from_csv",
           "mode" -> "DROPMALFORMED",
@@ -433,7 +433,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(("1", "i int")).toDF("csv", "schema")
           .select(from_csv($"csv", $"schema", options)).collect()
       },
-      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"schema\""),
       context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
     )
@@ -442,7 +442,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
       },
-      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"1\""),
       context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
     )
@@ -493,14 +493,14 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           exception = intercept[SparkException] {
             df.selectExpr("parsed.a").collect()
           },
-          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST"))
 
         checkError(
           exception = intercept[SparkException] {
             df.selectExpr("parsed.b").collect()
           },
-          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST"))
       }
     }
@@ -753,7 +753,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(to_csv($"value")).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`to_csv`",
         "dataType" -> "\"STRUCT<age: BIGINT, name: STRING, v: VARIANT>\"",
@@ -765,7 +765,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"VARIANT\"")
     )
   }
@@ -776,7 +776,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(to_csv($"value")).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`to_csv`",
         "dataType" -> "\"INT\"",

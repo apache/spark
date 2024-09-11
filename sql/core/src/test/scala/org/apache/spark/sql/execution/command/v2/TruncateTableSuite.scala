@@ -41,7 +41,7 @@ class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuit
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
         context = ExpectedContext(
           fragment = t,
