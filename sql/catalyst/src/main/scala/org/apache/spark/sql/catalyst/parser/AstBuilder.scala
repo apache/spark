@@ -5701,6 +5701,8 @@ class AstBuilder extends DataTypeAstBuilder
         // clause here and pass "null" for all other clauses.
         case p: Project =>
           p.copy(child = PipeOperatorSelect(p.child))
+        case other =>
+          throw SparkException.internalError(s"Unrecognized matched logical plan: $other")
       }
     }.get
   }
