@@ -71,7 +71,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       exception = intercept[AnalysisException] {
         sql(sqlText)
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
       parameters = Map(
         "objectName" -> "`bad_column`",
@@ -92,11 +92,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   private def checkErrorFailedJDBC(
       e: AnalysisException,
-      errorClass: String,
+      condition: String,
       tbl: String): Unit = {
     checkErrorMatchPVals(
       exception = e,
-      errorClass = errorClass,
+      condition = condition,
       parameters = Map(
         "url" -> "jdbc:.*",
         "tableName" -> s"`$tbl`")
@@ -126,7 +126,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 DOUBLE)")
         },
-        errorClass = "FIELD_ALREADY_EXISTS",
+        condition = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "add",
           "fieldNames" -> "`C3`",
@@ -159,7 +159,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`bad_column`",
@@ -182,7 +182,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`bad_column`",
@@ -206,7 +206,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
         },
-        errorClass = "FIELD_ALREADY_EXISTS",
+        condition = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "rename",
           "fieldNames" -> "`ID2`",
@@ -308,7 +308,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           exception = intercept[IndexAlreadyExistsException] {
             sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
           },
-          errorClass = "INDEX_ALREADY_EXISTS",
+          condition = "INDEX_ALREADY_EXISTS",
           parameters = Map("indexName" -> "`i1`", "tableName" -> "`new_table`")
         )
 
@@ -333,7 +333,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           exception = intercept[NoSuchIndexException] {
             sql(s"DROP index i1 ON $catalogName.new_table")
           },
-          errorClass = "INDEX_NOT_FOUND",
+          condition = "INDEX_NOT_FOUND",
           parameters = Map("indexName" -> "`i1`", "tableName" -> "`new_table`")
         )
       }
@@ -975,7 +975,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $catalogName.tbl2 RENAME TO tbl1")
         },
-        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`tbl1`")
       )
     }

@@ -779,7 +779,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(failureReason.isDefined)
     checkError(
       exception = failureReason.get.asInstanceOf[SparkException],
-      errorClass = "SPARK_JOB_CANCELLED",
+      condition = "SPARK_JOB_CANCELLED",
       sqlState = "XXKDA",
       parameters = scala.collection.immutable.Map("jobId" -> "0", "reason" -> "")
     )
@@ -901,7 +901,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     cancel(jobId)
     checkError(
       exception = failure.asInstanceOf[SparkException],
-      errorClass = "SPARK_JOB_CANCELLED",
+      condition = "SPARK_JOB_CANCELLED",
       sqlState = "XXKDA",
       parameters = scala.collection.immutable.Map("jobId" -> jobId.toString, "reason" -> "")
     )

@@ -454,7 +454,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               .write.format(cls.getName)
               .option("path", path).mode("ignore").save()
           },
-          errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+          condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
           parameters = Map(
             "source" -> cls.getName,
             "createMode" -> "\"Ignore\""
@@ -467,7 +467,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               .write.format(cls.getName)
               .option("path", path).mode("error").save()
           },
-          errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+          condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
           parameters = Map(
             "source" -> cls.getName,
             "createMode" -> "\"ErrorIfExists\""
@@ -651,7 +651,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           exception = intercept[SparkUnsupportedOperationException] {
             sql(s"CREATE TABLE test(a INT, b INT) USING ${cls.getName}")
           },
-          errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+          condition = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
           parameters = Map("tableName" -> "`default`.`test`", "provider" -> cls.getName)
         )
       }
@@ -732,7 +732,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"CREATE TABLE test (x INT, y INT) USING ${cls.getName}")
         },
-        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        condition = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
           "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
           "expectedSchema" -> "\"STRUCT<x: INT, y: INT>\""))
@@ -770,7 +770,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1), (1, 2)")
         },
-        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        condition = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
           "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
           "expectedSchema" -> "\"STRUCT<col1: INT, col2: INT>\""))
@@ -788,7 +788,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
                |AS VALUES ('a', 'b'), ('c', 'd') t(i, j)
                |""".stripMargin)
         },
-        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        condition = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
           "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
           "expectedSchema" -> "\"STRUCT<i: STRING, j: STRING>\""))
@@ -839,7 +839,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1)")
         },
-        errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+        condition = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
         parameters = Map(
           "tableName" -> "`default`.`test`",
           "provider" -> "org.apache.spark.sql.connector.SimpleDataSourceV2"))
@@ -851,7 +851,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"CREATE TABLE test USING ${cls.getName} AS SELECT * FROM VALUES (0, 1)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "operation" -> "append in batch mode"))
@@ -881,7 +881,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO test VALUES (4)")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "tableColumns" -> "`x`, `y`",
@@ -893,7 +893,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO test(x, x) VALUES (4, 5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`x`"))
     }
   }
@@ -935,13 +935,13 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql("INSERT INTO test PARTITION(z = 1) VALUES (2)")
         },
-        errorClass = "NON_PARTITION_COLUMN",
+        condition = "NON_PARTITION_COLUMN",
         parameters = Map("columnName" -> "`z`"))
       checkError(
         exception = intercept[AnalysisException] {
           sql("INSERT INTO test PARTITION(x, y = 1) VALUES (2, 3)")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "tableColumns" -> "`x`, `y`",
@@ -959,7 +959,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql("INSERT OVERWRITE test PARTITION(x = 1) VALUES (5)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "operation" -> "overwrite by filter in batch mode")

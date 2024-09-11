@@ -1082,7 +1082,7 @@ class AdaptiveQueryExecSuite
           val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
           c.invokePrivate(doExecute())
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> "operating on canonicalized plan"))
     }
   }

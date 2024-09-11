@@ -263,7 +263,7 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version) {
-        closeDB()
+        closeDB(ignoreException = false)
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
         fileManager.copyFileMapping()
@@ -929,10 +929,12 @@ class RocksDB(
    * @param opType - operation type releasing the lock
    */
   private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
-    logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-      log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-    acquiredThreadInfo = null
-    acquireLock.notifyAll()
+    if (acquiredThreadInfo != null) {
+      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
+        acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+      acquiredThreadInfo = null
+      acquireLock.notifyAll()
+    }
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
@@ -943,13 +945,17 @@ class RocksDB(
     logInfo(log"Opened DB with conf ${MDC(LogKeys.CONFIG, conf)}")
   }
 
-  private def closeDB(): Unit = {
+  private def closeDB(ignoreException: Boolean = true): Unit = {
     if (db != null) {
-
       // Cancel and wait until all background work finishes
       db.cancelAllBackgroundWork(true)
-      // Close the DB instance
-      db.close()
+      if (ignoreException) {
+        // Close the DB instance
+        db.close()
+      } else {
+        // Close the DB instance and throw the exception if any
+        db.closeE()
+      }
       db = null
     }
   }
