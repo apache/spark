@@ -65,7 +65,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
@@ -73,7 +73,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "config" -> "\"spark.sql.ansi.enabled\""))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
@@ -81,7 +81,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "config" -> "\"spark.sql.ansi.enabled\""))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("10.030"), 2, 1)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
       parameters = Map(
         "roundedValue" -> "10.0",
         "originalValue" -> "10.030",
@@ -89,7 +89,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
       parameters = Map(
         "roundedValue" -> "-10.0",
         "originalValue" -> "-9.95",
@@ -97,7 +97,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
         "value" -> "0",
         "precision" -> "17",
@@ -120,7 +120,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     def checkNegativeScaleDecimal(d: => Decimal): Unit = {
       checkError(
         exception = intercept[SparkException] (d),
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> ("Negative scale is not allowed: -3. " +
           "Set the config \"spark.sql.legacy.allowNegativeScaleOfDecimal\" " +
           "to \"true\" to allow it."))
@@ -317,7 +317,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       exception = intercept[SparkException] {
         d.toPrecision(5, 50, BigDecimal.RoundingMode.HALF_DOWN)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Not supported rounding mode: HALF_DOWN.")
     )
   }
@@ -350,7 +350,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       checkError(
         exception = intercept[SparkArithmeticException](
           Decimal.fromStringANSI(UTF8String.fromString(string))),
-        errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
+        condition = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
         parameters = Map("value" -> string))
     }
 
@@ -370,7 +370,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkError(
       exception = intercept[SparkNumberFormatException](
         Decimal.fromStringANSI(UTF8String.fromString("str"))),
-      errorClass = "CAST_INVALID_INPUT",
+      condition = "CAST_INVALID_INPUT",
       parameters = Map(
         "expression" -> "'str'",
         "sourceType" -> "\"STRING\"",
@@ -397,7 +397,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       checkError(
         exception = intercept[SparkArithmeticException](
           Decimal.fromStringANSI(UTF8String.fromString(string))),
-        errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
+        condition = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
         parameters = Map("value" -> string))
     }
 

@@ -42,14 +42,14 @@ class DropVariableParserSuite extends AnalysisTest with SharedSparkSession {
       exception = intercept[ParseException] {
         parsePlan("DROP VARIABLE var1")
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'VARIABLE'", "hint" -> "")
     )
     checkError(
       exception = intercept[ParseException] {
         parsePlan("DROP VAR var1")
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'VAR'", "hint" -> "")
     )
   }

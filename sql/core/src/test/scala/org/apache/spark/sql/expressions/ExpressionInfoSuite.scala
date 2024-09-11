@@ -67,7 +67,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3202",
+      condition = "_LEGACY_ERROR_TEMP_3202",
       parameters = Map(
         "exprName" -> "testName",
         "group" -> invalidGroupName,
@@ -91,7 +91,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3203",
+      condition = "_LEGACY_ERROR_TEMP_3203",
       parameters = Map(
         "exprName" -> "testName",
         "source" -> invalidSource,
@@ -104,7 +104,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3201",
+      condition = "_LEGACY_ERROR_TEMP_3201",
       parameters = Map("exprName" -> "testName", "note" -> invalidNote))
 
     val invalidSince = "-3.0.0"
@@ -113,7 +113,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3204",
+      condition = "_LEGACY_ERROR_TEMP_3204",
       parameters = Map("since" -> invalidSince, "exprName" -> "testName"))
 
     val invalidDeprecated = "  invalid deprecated"
@@ -122,7 +122,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3205",
+      condition = "_LEGACY_ERROR_TEMP_3205",
       parameters = Map("exprName" -> "testName", "deprecated" -> invalidDeprecated))
   }
 
