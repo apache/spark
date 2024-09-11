@@ -1419,19 +1419,19 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val commands =
       """
         |BEGIN
-        | DECLARE i = 0;
-        | DECLARE j = 0;
+        | DECLARE x = 0;
+        | DECLARE y = 0;
         | lbl1: LOOP
-        |   SET VAR j = 0;
+        |   SET VAR y = 0;
         |   lbl2: LOOP
-        |     SELECT i, j;
-        |     SET VAR j = j + 1;
-        |     IF j >= 2 THEN
+        |     SELECT x, y;
+        |     SET VAR y = y + 1;
+        |     IF y >= 2 THEN
         |       LEAVE lbl2;
         |     END IF;
         |   END LOOP;
-        |   SET VAR i = i + 1;
-        |   IF i >= 2 THEN
+        |   SET VAR x = x + 1;
+        |   IF x >= 2 THEN
         |     LEAVE lbl1;
         |   END IF;
         | END LOOP;
@@ -1439,22 +1439,22 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row], // declare j
-      Seq.empty[Row], // set j to 0
-      Seq(Row(0, 0)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq(Row(0, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // set j to 0
-      Seq(Row(1, 0)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq(Row(1, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // drop j
-      Seq.empty[Row] // drop i
+      Seq.empty[Row], // declare x
+      Seq.empty[Row], // declare y
+      Seq.empty[Row], // set y to 0
+      Seq(Row(0, 0)), // select x, y
+      Seq.empty[Row], // increase y
+      Seq(Row(0, 1)), // select x, y
+      Seq.empty[Row], // increase y
+      Seq.empty[Row], // increase x
+      Seq.empty[Row], // set y to 0
+      Seq(Row(1, 0)), // select x, y
+      Seq.empty[Row], // increase y
+      Seq(Row(1, 1)), // select x, y
+      Seq.empty[Row], // increase y
+      Seq.empty[Row], // increase x
+      Seq.empty[Row], // drop y
+      Seq.empty[Row] // drop x
     )
     verifySqlScriptResult(commands, expected)
   }

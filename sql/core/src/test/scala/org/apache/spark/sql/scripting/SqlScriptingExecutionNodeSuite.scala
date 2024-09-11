@@ -97,6 +97,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case TestLeafStatement(testVal) => testVal
       case TestIfElseCondition(_, description) => description
       case TestLoopCondition(_, _, description) => description
+      case loopStmt: LoopStatementExec => loopStmt.label.get
       case leaveStmt: LeaveStatementExec => leaveStmt.label
       case iterateStmt: IterateStatementExec => iterateStmt.label
       case _ => fail("Unexpected statement type")
@@ -668,5 +669,41 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
+  }
+
+  test("loop statement with leave") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        new LoopStatementExec(
+          body = new CompoundBodyExec(Seq(
+            TestLeafStatement("body1"),
+            new LeaveStatementExec("lbl"))
+          ),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "lbl"))
+  }
+
+  test("loop statement multiple iterations with if statement") {
+    val iter = new CompoundBodyExec(
+      statements = Seq(
+        new LoopStatementExec(
+          body = new CompoundBodyExec(Seq(
+            TestLeafStatement("body1"),
+            TestWhile(
+              condition = TestLoopCondition(condVal = false, 2, "condition1"),
+              body = new CompoundBodyExec(Seq(new LeaveStatementExec("lbl"))),
+              label = Some("lbl2")
+            ))
+          ),
+          label = Some("lbl")
+        )
+      )
+    ).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "lbl"))
   }
 }

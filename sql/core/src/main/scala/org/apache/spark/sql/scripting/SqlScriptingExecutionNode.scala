@@ -595,7 +595,7 @@ class IterateStatementExec(val label: String) extends LeafStatementExec {
 
 class LoopStatementExec(
     body: CompoundBodyExec,
-    label: Option[String]) extends NonLeafStatementExec {
+    val label: Option[String]) extends NonLeafStatementExec {
 
   /**
    * Loop can be interrupted by LeaveStatementExec
