@@ -617,10 +617,10 @@ class LoopStatementExec(
             }
             interrupted = true
           case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+            body.reset()
             if (label.contains(iterStatementExec.label)) {
               iterStatementExec.hasBeenMatched = true
             }
-            body.reset()
           case _ =>
         }
 
