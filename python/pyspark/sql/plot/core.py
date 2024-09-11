@@ -123,5 +123,13 @@ class PySparkPlotAccessor:
         Returns
         -------
         :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+        >>> columns = ["category", "int_val", "float_val"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.line(x="category", y="int_val")  # doctest: +SKIP
+        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         return self(kind="line", x=x, y=y, **kwargs)
