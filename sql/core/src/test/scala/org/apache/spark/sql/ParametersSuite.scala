@@ -247,7 +247,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql(sqlText, args)
       },
       condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -262,7 +262,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql(sqlText, args)
       },
       condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -277,7 +277,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql(sqlText, args)
       },
       condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -292,7 +292,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql(sqlText, args)
       },
       condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -311,7 +311,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql(sqlText, args)
       },
       condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -330,7 +330,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql(sqlText, args)
       },
       condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CREATE VIEW body"),
+      parameters = Map("statement" -> "the query of CREATE VIEW"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -714,5 +714,31 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     val analyzedPlan = Limit(Literal.create(100), df.queryExecution.logical)
     spark.sessionState.analyzer.executeAndCheck(analyzedPlan, df.queryExecution.tracker)
     checkAnswer(df, Row(11))
+  }
+
+  test("SPARK-49398: Cache Table with parameter markers in select query should throw " +
+    "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT") {
+    val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(sqlText, Map("param1" -> "1")).show()
+      },
+      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "the query of CACHE TABLE"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
+    )
+  }
+
+  test("SPARK-49398: Cache Table with parameter in identifier should work") {
+    val cacheName = "MyCacheTable"
+    withCache(cacheName) {
+      spark.sql("CACHE TABLE IDENTIFIER(:param) as SELECT 1 as c1", Map("param" -> cacheName))
+      checkAnswer(
+        spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array(cacheName)),
+        Row("c1"))
+    }
   }
 }
