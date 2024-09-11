@@ -1467,11 +1467,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  SET x = 0;
         |  lbl: LOOP
         |    SET x = x + 1;
-        |    ITERATE lbl;
-        |    SET x = x + 2;
         |    IF x > 1 THEN
         |     LEAVE lbl;
         |    END IF;
+        |    ITERATE lbl;
+        |    SET x = x + 2;
         |  END LOOP;
         |  SELECT x;
         |END""".stripMargin

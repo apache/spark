@@ -597,15 +597,23 @@ class LoopStatementExec(
     body: CompoundBodyExec,
     label: Option[String]) extends NonLeafStatementExec {
 
+  /**
+   * Loop can be interrupted by LeaveStatementExec
+   */
   private var interrupted: Boolean = false
+
+  /**
+   * Loop can be iterated by IterateStatementExec
+   */
+  private var iterated: Boolean = false
 
   private lazy val treeIterator =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = !interrupted
 
       override def next(): CompoundStatementExec = {
-        if (!body.getTreeIterator.hasNext) {
-          body.reset()
+        if (!body.getTreeIterator.hasNext || iterated) {
+          reset()
         }
 
         val retStmt = body.getTreeIterator.next()
@@ -617,10 +625,10 @@ class LoopStatementExec(
             }
             interrupted = true
           case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
-            body.reset()
             if (label.contains(iterStatementExec.label)) {
               iterStatementExec.hasBeenMatched = true
             }
+            iterated = true
           case _ =>
         }
 
@@ -632,6 +640,7 @@ class LoopStatementExec(
 
   override def reset(): Unit = {
     interrupted = false
+    iterated = false
     body.reset()
   }
 }
