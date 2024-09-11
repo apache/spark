@@ -1005,6 +1005,11 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
+      "UNSUPPORTED_MODE_DATA_TYPE" : {
+        "message" : [
+          "The <mode> does not support the <child> data type, because <reason>."
+        ]
+      },
       "UNSUPPORTED_UDF_INPUT_TYPE" : {
         "message" : [
           "UDFs do not support '<dataType>' as an input data type."
