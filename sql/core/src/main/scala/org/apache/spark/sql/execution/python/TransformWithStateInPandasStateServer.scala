@@ -24,15 +24,19 @@ import java.time.Duration
 import scala.collection.mutable
 
 import com.google.protobuf.ByteString
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -48,9 +52,15 @@ class TransformWithStateInPandasStateServer(
     stateServerSocket: ServerSocket,
     statefulProcessorHandle: StatefulProcessorHandleImpl,
     groupingKeySchema: StructType,
+    timeZoneId: String,
+    errorOnDuplicatedFieldNames: Boolean,
+    largeVarTypes: Boolean,
+    arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String,
-      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])] = null)
+      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])] = null,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -113,8 +123,63 @@ class TransformWithStateInPandasStateServer(
         handleStatefulProcessorCall(message.getStatefulProcessorCall)
       case StateRequest.MethodCase.STATEVARIABLEREQUEST =>
         handleStateVariableRequest(message.getStateVariableRequest)
+      case StateRequest.MethodCase.TIMERREQUEST =>
+        handleTimerRequest(message.getTimerRequest)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleTimerRequest(message: TimerRequest): Unit = {
+    message.getMethodCase match {
+      case TimerRequest.MethodCase.TIMERVALUEREQUEST =>
+        val timerRequest = message.getTimerValueRequest()
+        timerRequest.getMethodCase match {
+          case TimerValueRequest.MethodCase.GETPROCESSINGTIMER =>
+            val valueStr =
+              if (batchTimestampMs.isDefined) batchTimestampMs.get.toString else "-1"
+            sendResponse(0, null, ByteString.copyFromUtf8(valueStr))
+          case TimerValueRequest.MethodCase.GETWATERMARK =>
+            val valueStr = if (eventTimeWatermarkForEviction.isDefined) {
+              eventTimeWatermarkForEviction.get.toString()
+            } else "-1"
+            sendResponse(0, null, ByteString.copyFromUtf8(valueStr))
+          case _ =>
+            throw new IllegalArgumentException("Invalid timer value method call")
+        }
+
+      case TimerRequest.MethodCase.EXPIRYTIMERREQUEST =>
+        val expiryRequest = message.getExpiryTimerRequest()
+        val expiryTimestamp = expiryRequest.getExpiryTimestampMs
+        val iter = statefulProcessorHandle.getExpiredTimersWithKeyRow(expiryTimestamp)
+        if (iter == null || !iter.hasNext) {
+          // avoid sending over empty batch
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+          outputStream.flush()
+          val arrowStreamWriter = {
+            val outputSchema = new StructType()
+              .add("key", groupingKeySchema)
+              .add(StructField("timestamp", LongType))
+            val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+              errorOnDuplicatedFieldNames, largeVarTypes)
+            val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+              s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+            val root = VectorSchemaRoot.create(arrowSchema, allocator)
+            new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+              arrowTransformWithStateInPandasMaxRecordsPerBatch)
+          }
+          while (iter.hasNext) {
+            val (key, timestamp) = iter.next()
+            val internalRow = InternalRow(key, timestamp)
+            arrowStreamWriter.writeRow(internalRow)
+          }
+          arrowStreamWriter.finalizeCurrentArrowBatch()
+        }
+
+      case _ =>
+        throw new IllegalArgumentException("Invalid timer request method call")
     }
   }
 
@@ -145,6 +210,12 @@ class TransformWithStateInPandasStateServer(
           case HandleState.INITIALIZED =>
             logInfo(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+          case HandleState.DATA_PROCESSED =>
+            logInfo(log"set handle state to Data Processed")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+          case HandleState.TIMER_PROCESSED =>
+            logInfo(log"set handle state to Timer Processed")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.TIMER_PROCESSED)
           case HandleState.CLOSED =>
             logInfo(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
@@ -158,6 +229,51 @@ class TransformWithStateInPandasStateServer(
           Some(message.getGetValueState.getTtl.getDurationMs)
         } else None
         initializeValueState(stateName, schema, ttlDurationMs)
+
+      case StatefulProcessorCall.MethodCase.TIMERSTATECALL =>
+        message.getTimerStateCall.getMethodCase match {
+          case TimerStateCallCommand.MethodCase.REGISTER =>
+            val expiryTimestamp =
+              message.getTimerStateCall.getRegister.getExpiryTimestampMs
+            statefulProcessorHandle.registerTimer(expiryTimestamp)
+            sendResponse(0)
+          case TimerStateCallCommand.MethodCase.DELETE =>
+            val expiryTimestamp =
+              message.getTimerStateCall.getDelete.getExpiryTimestampMs
+            statefulProcessorHandle.deleteTimer(expiryTimestamp)
+            sendResponse(0)
+          case TimerStateCallCommand.MethodCase.LIST =>
+            val iter = statefulProcessorHandle.listTimers()
+
+            if (iter == null || !iter.hasNext) {
+              // avoid sending over empty batch
+              sendResponse(1)
+            } else {
+              sendResponse(0)
+              outputStream.flush()
+              val arrowStreamWriter = {
+                val outputSchema = new StructType()
+                  .add(StructField("timestamp", LongType))
+                val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+                  errorOnDuplicatedFieldNames, largeVarTypes)
+                val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+                  s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+                val root = VectorSchemaRoot.create(arrowSchema, allocator)
+                new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+                  arrowTransformWithStateInPandasMaxRecordsPerBatch)
+              }
+              while (iter.hasNext) {
+                val timestamp = iter.next()
+                val internalRow = InternalRow(timestamp)
+                arrowStreamWriter.writeRow(internalRow)
+              }
+              arrowStreamWriter.finalizeCurrentArrowBatch()
+            }
+
+          case _ =>
+            throw new IllegalArgumentException("Invalid timer state method call")
+        }
+
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }

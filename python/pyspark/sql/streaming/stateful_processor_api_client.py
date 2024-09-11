@@ -20,6 +20,7 @@ import socket
 from typing import Any, Union, Optional, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
@@ -32,7 +33,8 @@ class StatefulProcessorHandleState(Enum):
     CREATED = 1
     INITIALIZED = 2
     DATA_PROCESSED = 3
-    CLOSED = 4
+    TIMER_PROCESSED = 4
+    CLOSED = 5
 
 
 class StatefulProcessorApiClient:
@@ -46,6 +48,7 @@ class StatefulProcessorApiClient:
         self.handle_state = StatefulProcessorHandleState.CREATED
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
+        self.serializer = ArrowStreamSerializer()
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -56,6 +59,8 @@ class StatefulProcessorApiClient:
             proto_state = stateMessage.INITIALIZED
         elif state == StatefulProcessorHandleState.DATA_PROCESSED:
             proto_state = stateMessage.DATA_PROCESSED
+        elif state == StatefulProcessorHandleState.TIMER_PROCESSED:
+            proto_state = stateMessage.TIMER_PROCESSED
         else:
             proto_state = stateMessage.CLOSED
         set_handle_state = stateMessage.SetHandleState(state=proto_state)
@@ -124,6 +129,151 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
+    def get_batch_timestamp(self) -> int:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        get_batch_timestamp = stateMessage.GetBatchTimestampMs()
+        request = stateMessage.TimerMiscRequest(getBatchTimestampMs=get_batch_timestamp)
+        message = stateMessage.StateRequest(timerMiscRequest=request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error initializing timer state: " f"{response_message[1]}")
+        else:
+            if len(response_message[2]) == 0:
+                return -1
+            # TODO: can we simply parse from utf8 string here?
+            timestamp = int(response_message[2])
+            return timestamp
+
+    def register_timer(self, expiry_time_stamp_ms: int) -> None:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        register_call = stateMessage.RegisterTimer(expiryTimestampMs=expiry_time_stamp_ms)
+        state_call_command = stateMessage.TimerStateCallCommand(register=register_call)
+        call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error register timer: " f"{response_message[1]}")
+
+    def delete_timer(self, expiry_time_stamp_ms: int) -> None:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        delete_call = stateMessage.DeleteTimer(expiryTimestampMs=expiry_time_stamp_ms)
+        state_call_command = stateMessage.TimerStateCallCommand(delete=delete_call)
+        call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error delete timers: " f"{response_message[1]}")
+
+    def list_timers(self) -> list[int]:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        list_call = stateMessage.ListTimers()
+        state_call_command = stateMessage.TimerStateCallCommand(list=list_call)
+        call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status == 1:
+            return []
+        elif status == 0:
+            iterator = self._read_arrow_state()
+            batch = next(iterator)
+            result_list = []
+            batch_df = batch.to_pandas()
+            for i in range(batch.num_rows):
+                timestamp = batch_df.at[i, 'timestamp'].item()
+                result_list.append(timestamp)
+            return result_list
+        else:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+
+    def get_expiry_timers(self, expiry_timestamp: int) -> list[Any, int]:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        expiry_timer_call = stateMessage.ExpiryTimerRequest(expiryTimestampMs=expiry_timestamp)
+        timer_request = stateMessage.TimerRequest(expiryTimerRequest=expiry_timer_call)
+        message = stateMessage.StateRequest(timerRequest=timer_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status == 1:
+            return []
+        elif status == 0:
+            iterator = self._read_arrow_state()
+            batch = next(iterator)
+            result_list = []
+            key_fields = [field.name for field in self.key_schema.fields]
+            # TODO any better way to restore a grouping object from a batch?
+            batch_df = batch.to_pandas()
+            for i in range(batch.num_rows):
+                key = batch_df.at[i, 'key'].get(key_fields[0])
+                timestamp = batch_df.at[i, 'timestamp'].item()
+                result_list.append((key, timestamp))
+            return result_list
+        else:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+
+    def get_batch_timestamp(self) -> int:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        get_processing_time_call = stateMessage.GetProcessingTime()
+        timer_value_call = stateMessage.TimerValueRequest(getProcessingTimer=get_processing_time_call)
+        timer_request = stateMessage.TimerRequest(timerValueRequest=timer_value_call)
+        message = stateMessage.StateRequest(timerRequest=timer_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting processing timestamp: " f"{response_message[1]}")
+        else:
+            if len(response_message[2]) == 0:
+                return -1
+            # TODO: can we simply parse from utf8 string here?
+            timestamp = int(response_message[2])
+            return timestamp
+
+    def get_watermark_timestamp(self) -> int:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        get_watermark_call = stateMessage.GetWatermark()
+        timer_value_call = stateMessage.TimerValueRequest(getWatermark=get_watermark_call)
+        timer_request = stateMessage.TimerRequest(timerValueRequest=timer_value_call)
+        message = stateMessage.StateRequest(timerRequest=timer_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting eventtime timestamp: " f"{response_message[1]}")
+        else:
+            if len(response_message[2]) == 0:
+                return -1
+            # TODO: can we simply parse from utf8 string here?
+            timestamp = int(response_message[2])
+            return timestamp
+
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.
@@ -168,3 +318,6 @@ class StatefulProcessorApiClient:
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)
+
+    def _read_arrow_state(self) -> Any:
+        return self.serializer.load_stream(self.sockfile)

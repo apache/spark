@@ -77,6 +77,36 @@ class ValueState:
         self._value_state_client.clear(self._state_name)
 
 
+class TimerValues:
+    def __init__(
+            self,
+            current_processing_time_in_ms: int = -1,
+            current_watermark_in_ms: int = -1) -> None:
+        self._current_processing_time_in_ms = current_processing_time_in_ms
+        self._current_watermark_in_ms = current_watermark_in_ms
+
+    def get_current_processing_time_in_ms(self) -> int:
+        return self._current_processing_time_in_ms
+
+    def get_current_watermark_in_ms(self) -> int:
+        return self._current_watermark_in_ms
+
+
+class ExpiredTimerInfo:
+    def __init__(
+            self,
+            is_valid: bool,
+            expiry_time_in_ms: int = -1) -> None:
+        self._is_valid = is_valid
+        self._expiry_time_in_ms = expiry_time_in_ms
+
+    def is_valid(self) -> bool:
+        return self._is_valid
+
+    def get_expiry_time_in_ms(self) -> int:
+        return self._expiry_time_in_ms
+
+
 class StatefulProcessorHandle:
     """
     Represents the operation handle provided to the stateful processor used in transformWithState
@@ -112,6 +142,15 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
+    def registerTimer(self, expiry_time_stamp_ms: int) -> None:
+        self.stateful_processor_api_client.register_timer(expiry_time_stamp_ms)
+
+    def deleteTimer(self, expiry_time_stamp_ms: int) -> None:
+        self.stateful_processor_api_client.delete_timer(expiry_time_stamp_ms)
+
+    def listTimers(self) -> list[int]:
+        return self.stateful_processor_api_client.list_timers()
+
 
 class StatefulProcessor(ABC):
     """
@@ -137,8 +176,9 @@ class StatefulProcessor(ABC):
 
     @abstractmethod
     def handleInputRows(
-        self, key: Any, rows: Iterator["PandasDataFrameLike"]
-    ) -> Iterator["PandasDataFrameLike"]:
+        self, key: Any, rows: Iterator["PandasDataFrameLike"],
+        timer_values: TimerValues,
+        expired_timer_info: ExpiredTimerInfo) -> Iterator["PandasDataFrameLike"]:
         """
         Function that will allow users to interact with input data rows along with the grouping key.
         It should take parameters (key, Iterator[`pandas.DataFrame`]) and return another
@@ -156,6 +196,11 @@ class StatefulProcessor(ABC):
             grouping key.
         rows : iterable of :class:`pandas.DataFrame`
             iterator of input rows associated with grouping key
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
+        expired_timer_info: ExpiredTimerInfo
+                            Timestamp of expired timers on the grouping key.
         """
         ...
 

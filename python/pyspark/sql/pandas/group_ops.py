@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import itertools
 import sys
 from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
@@ -27,7 +28,7 @@ from pyspark.sql.streaming.stateful_processor_api_client import (
     StatefulProcessorApiClient,
     StatefulProcessorHandleState,
 )
-from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
+from pyspark.sql.streaming.stateful_processor import ExpiredTimerInfo, StatefulProcessor, StatefulProcessorHandle, TimerValues
 from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
@@ -501,7 +502,47 @@ class PandasGroupedOpsMixin:
                 )
 
             statefulProcessorApiClient.set_implicit_key(key)
-            result = statefulProcessor.handleInputRows(key, inputRows)
+
+            batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+            watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            # process with invalid expiry timer info and emit data rows
+            data_iter = statefulProcessor.handleInputRows(
+                key, inputRows, TimerValues(batch_timestamp, watermark_timestamp), ExpiredTimerInfo(False))
+            statefulProcessorApiClient.set_handle_state(
+                StatefulProcessorHandleState.DATA_PROCESSED
+            )
+
+            if timeMode == "processingtime":
+                expiry_list: list[(any, int)] = statefulProcessorApiClient.get_expiry_timers(batch_timestamp)
+            elif timeMode == "eventtime":
+                expiry_list: list[(any, int)] = statefulProcessorApiClient.get_expiry_timers(watermark_timestamp)
+            else:
+                expiry_list = []
+
+            result_iter_list = []
+            # process with valid expiry time info and with empty input rows,
+            # only timer related rows will be emitted
+            for key_obj, expiry_timestamp in expiry_list:
+                if timeMode == "processingtime" and expiry_timestamp < batch_timestamp:
+                    result_iter_list.append(statefulProcessor.handleInputRows(
+                        (key_obj,), iter([]),
+                        TimerValues(batch_timestamp, watermark_timestamp),
+                        ExpiredTimerInfo(True, expiry_timestamp)))
+                elif timeMode == "eventtime" and expiry_timestamp < watermark_timestamp:
+                    result_iter_list.append(statefulProcessor.handleInputRows(
+                        (key_obj,), iter([]),
+                        TimerValues(batch_timestamp, watermark_timestamp),
+                        ExpiredTimerInfo(True, expiry_timestamp)))
+
+            # TODO fix this, why status is timer_processed before go into handle timer?
+            """
+            statefulProcessorApiClient.set_handle_state(
+                StatefulProcessorHandleState.TIMER_PROCESSED
+            )
+            """
+
+            result_iter_list.insert(0, data_iter)
+            result = itertools.chain(*result_iter_list)
 
             return result
 

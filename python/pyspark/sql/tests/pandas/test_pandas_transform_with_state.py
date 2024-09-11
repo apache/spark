@@ -74,6 +74,11 @@ class TransformWithStateInPandasTestsMixin:
             input_path + "/text-test2.txt", [0, 0, 0, 1, 1], [123, 223, 323, 246, 6]
         )
 
+    def _prepare_test_resource3(self, input_path):
+        with open(input_path + "/text-test3.txt", "w") as fw:
+            fw.write("0, 123\n")
+            fw.write("1, 6\n")
+
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
         df_split = df.withColumn("split_values", split(df["value"], ","))
@@ -304,6 +309,251 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
+    def _test_transform_with_state_in_pandas_proc_timer(
+            self, stateful_processor, check_results):
+        input_path = tempfile.mkdtemp()
+        self._prepare_test_resource1(input_path)
+        self._prepare_test_resource2(input_path)
+        self._prepare_test_resource3(input_path)
+
+        df = self._build_test_df(input_path)
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("countAsString", StringType(), True),
+                StructField("timeValues", StringType(), True)
+            ]
+        )
+
+        query_name = "processing_time_test_query"
+        q = (
+            df.groupBy("id")
+            .transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="processingtime",
+            )
+            .writeStream.queryName(query_name)
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+
+        self.assertEqual(q.name, query_name)
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    def test_transform_with_state_in_pandas_proc_timer(self):
+        first_expired_timestamp = -1
+
+        # helper function to check expired timestamp is smaller than current processing time
+        def check_timestamp(batch_df):
+            expired_df = batch_df.filter(batch_df["countAsString"] == "-1") \
+                .select("id", "timeValues").withColumnRenamed("timeValues", "expiredTimestamp")
+            count_df = batch_df.filter(batch_df["countAsString"] != "-1") \
+                .select("id", "timeValues").withColumnRenamed("timeValues", "countStateTimestamp")
+            joined_df = expired_df.join(count_df, on="id")
+            for row in joined_df.collect():
+                assert row["expiredTimestamp"] < row["countStateTimestamp"]
+
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
+                    Row(id="0", countAsString="1"),
+                    Row(id="1", countAsString="1"),
+                }
+            elif batch_id == 1:
+                # for key 0, the accumulated count is emitted before the count state is cleared
+                # during the timer process
+                assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
+                    Row(id="0", countAsString="3"),
+                    Row(id="0", countAsString="-1"),
+                    Row(id="1", countAsString="3"),
+                }
+                self.first_expired_timestamp = \
+                    batch_df.filter(batch_df["countAsString"] == -1).first()['timeValues']
+                check_timestamp(batch_df)
+
+            else:
+                assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
+                    Row(id="0", countAsString="3"),
+                    Row(id="0", countAsString="-1"),
+                    Row(id="1", countAsString="5")
+                }
+                # The expired timestamp in current batch is larger than expiry timestamp in batch 1
+                # because this is a new timer registered in batch1 and
+                # different from the one registered in batch 0
+                current_batch_expired_timestamp = \
+                    batch_df.filter(batch_df["countAsString"] == -1).first()['timeValues']
+                assert(current_batch_expired_timestamp > self.first_expired_timestamp)
+
+        self._test_transform_with_state_in_pandas_proc_timer(ProcTimeStatefulProcessor(), check_results)
+
+"""
+    def _test_transform_with_state_in_pandas_event_time(
+            self, stateful_processor, check_results):
+        import pyspark.sql.functions as f
+
+        input_path = tempfile.mkdtemp()
+
+        def prepare_batch1(input_path):
+            with open(input_path + "/text-test1.txt", "w") as fw:
+                fw.write("a, 4\n")
+
+        def prepare_batch2(input_path):
+            with open(input_path + "/text-test2.txt", "w") as fw:
+                fw.write("a, 10\n")
+
+        def prepare_batch3(input_path):
+            with open(input_path + "/text-test3.txt", "w") as fw:
+                fw.write("a, 11\n")
+                fw.write("a, 13\n")
+                fw.write("a, 15\n")
+
+        prepare_batch1(input_path)
+        prepare_batch2(input_path)
+        prepare_batch3(input_path)
+
+        df = self._build_test_df(input_path)
+        df = df.select("id",
+                       f.from_unixtime(f.col("temperature")).alias("eventTime").cast("timestamp")) \
+            .withWatermark("eventTime", "10 seconds")
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("timestamp", StringType(), True)
+            ]
+        )
+
+        query_name = "event_time_test_query"
+        q = (
+            df.groupBy("id")
+            .transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="eventtime",
+            )
+            .writeStream.queryName(query_name)
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+
+        self.assertEqual(q.name, query_name)
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    def test_transform_with_state_in_pandas_event_time(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="15")
+                }
+            elif batch_id == 1:
+                # event time = 4 will be discarded because the watermark = 15 - 10 = 5
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="15")
+                }
+            else:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="-1"),
+                    Row(id="a", timestamp="-1"),
+                    Row(id="a", timestamp="-1")
+                }
+
+        self._test_transform_with_state_in_pandas_event_time(EventTimeStatefulProcessor(), check_results)
+"""
+
+
+class EventTimeStatefulProcessor(StatefulProcessor):
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", StringType(), True)])
+        self.handle = handle
+        self.max_state = handle.getValueState("max_state", state_schema)
+
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
+        if expired_timer_info.is_valid():
+            self.max_state.clear()
+            yield pd.DataFrame({"id": key, "timestamp": "-1"})
+
+        else:
+
+            timestamp_list = []
+            for pdf in rows:
+                # int64 will represent timestamp in nanosecond, restore to second
+                timestamp_list.extend((pdf['eventTime'].astype('int64') // 10**9).tolist())
+
+            if self.count_state.exists():
+                cur_max = int(self.max_state.get()[0])
+            else:
+                cur_max = 0
+            max_event_time = str(max(cur_max, max(timestamp_list)))
+
+            self.count_state.update(max_event_time)
+            self.handle.registerTimer(timer_values.get_current_watermark_in_ms() * 1000)
+
+            yield pd.DataFrame({"id": key, "timestamp": max_event_time})
+
+    def close(self) -> None:
+        pass
+
+
+class ProcTimeStatefulProcessor(StatefulProcessor):
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", StringType(), True)])
+        self.handle = handle
+        self.count_state = handle.getValueState("count_state", state_schema)
+
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
+        if expired_timer_info.is_valid():
+            # reset count state each time the timer is expired
+            self.count_state.clear()
+            self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
+            yield pd.DataFrame({"id": key, "countAsString": str("-1"),
+                                "timeValues": str(expired_timer_info.get_expiry_time_in_ms())})
+
+        else:
+            if not self.count_state.exists():
+                count = 0
+            else:
+                count = int(self.count_state.get()[0])
+
+            if key == ("0",):
+                self.handle.registerTimer(timer_values.get_current_processing_time_in_ms())
+
+            rows_count = 0
+            for pdf in rows:
+                pdf_count = len(pdf)
+                rows_count += pdf_count
+
+            count = count + rows_count
+
+            self.count_state.update(str(count))
+            timestamp = str(timer_values.get_current_processing_time_in_ms())
+
+            yield pd.DataFrame({"id": key, "countAsString": str(count),
+                                "timeValues": timestamp})
+
+    def close(self) -> None:
+        pass
 
 class SimpleStatefulProcessor(StatefulProcessor):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
@@ -313,7 +563,7 @@ class SimpleStatefulProcessor(StatefulProcessor):
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.num_violations_state = handle.getValueState("numViolations", state_schema)
 
-    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         new_violations = 0
         count = 0
         key_str = key[0]
@@ -353,7 +603,7 @@ class TTLStatefulProcessor(StatefulProcessor):
         self.ttl_count_state = handle.getValueState("ttl-state", state_schema, 10000)
         self.count_state = handle.getValueState("state", state_schema)
 
-    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         count = 0
         ttl_count = 0
         id = key[0]
@@ -381,7 +631,7 @@ class InvalidSimpleStatefulProcessor(StatefulProcessor):
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.num_violations_state = handle.getValueState("numViolations", state_schema)
 
-    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         count = 0
         exists = self.num_violations_state.exists()
         assert not exists

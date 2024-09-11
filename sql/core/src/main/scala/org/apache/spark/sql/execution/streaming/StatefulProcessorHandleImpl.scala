@@ -25,6 +25,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
 import org.apache.spark.sql.execution.streaming.state._
@@ -178,6 +179,20 @@ class StatefulProcessorHandleImpl(
   def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
     verifyTimerOperations("get_expired_timers")
     timerState.getExpiredTimers(expiryTimestampMs)
+  }
+
+  /**
+   * Function to retrieve all expired registered timers for all grouping keys.
+   * Returning key as UnsafeRow to avoid unnecessary (de)serialization for internal use.
+   *
+   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
+   *                          will return all timers that have timestamp less than passed threshold
+   * @return - iterator of registered timers for all grouping keys
+   */
+  def getExpiredTimersWithKeyRow(
+      expiryTimestampMs: Long): Iterator[(UnsafeRow, Long)] = {
+    verifyTimerOperations("get_expired_timers")
+    timerState.getExpiredTimersWithKeyRow(expiryTimestampMs)
   }
 
   /**
