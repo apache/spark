@@ -244,7 +244,7 @@ object Encoders {
 
     validatePublicClass[T]()
 
-    TransformingEncoder(implicitly[ClassTag[T]], BinaryEncoder, provider)
+    TransformingEncoder(classTag[T], BinaryEncoder, provider)
   }
 
   private def tupleEncoder[T](encoders: Encoder[_]*): Encoder[T] = {
