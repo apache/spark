@@ -39,13 +39,13 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
             for num in range(start, end + 1):
                 yield (num, num * num)
 
-    from pyspark.sql.functions import lit, udtf
+    from pyspark.sql.functions import udtf
 
     # Create a UDTF using the class definition and the `udtf` function.
     square_num = udtf(SquareNumbers, returnType="num: int, squared: int")
 
     # Invoke the UDTF in PySpark.
-    square_num(lit(1), lit(3)).show()
+    square_num(1, 3).show()
     # +---+-------+
     # |num|squared|
     # +---+-------+
@@ -57,7 +57,7 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
 
 def python_udtf_decorator_example(spark: SparkSession) -> None:
 
-    from pyspark.sql.functions import lit, udtf
+    from pyspark.sql.functions import udtf
 
     # Define a UDTF using the `udtf` decorator directly on the class.
     @udtf(returnType="num: int, squared: int")
@@ -67,7 +67,7 @@ def python_udtf_decorator_example(spark: SparkSession) -> None:
                 yield (num, num * num)
 
     # Invoke the UDTF in PySpark using the SquareNumbers class directly.
-    SquareNumbers(lit(1), lit(3)).show()
+    SquareNumbers(1, 3).show()
     # +---+-------+
     # |num|squared|
     # +---+-------+
@@ -129,7 +129,7 @@ def python_udtf_arrow_example(spark: SparkSession) -> None:
 def python_udtf_date_expander_example(spark: SparkSession) -> None:
 
     from datetime import datetime, timedelta
-    from pyspark.sql.functions import lit, udtf
+    from pyspark.sql.functions import udtf
 
     @udtf(returnType="date: string")
     class DateExpander:
@@ -140,7 +140,7 @@ def python_udtf_date_expander_example(spark: SparkSession) -> None:
                 yield (current.strftime('%Y-%m-%d'),)
                 current += timedelta(days=1)
 
-    DateExpander(lit("2023-02-25"), lit("2023-03-01")).show()
+    DateExpander("2023-02-25", "2023-03-01").show()
     # +----------+
     # |      date|
     # +----------+

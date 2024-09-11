@@ -140,11 +140,15 @@ class UserDefinedTableFunction:
     def _build_common_inline_user_defined_table_function(
         self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedTableFunction:
+        from pyspark.sql.functions import lit
+
         def to_expr(col: "ColumnOrName") -> Expression:
             if isinstance(col, Column):
                 return col._expr
             else:
                 return ColumnReference(col)  # type: ignore[arg-type]
+
+        args = tuple(lit(arg) for arg in args)
 
         arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
             NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()

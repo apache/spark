@@ -85,6 +85,9 @@ class BaseUDTFTestsMixin:
         rows = func(lit(1)).collect()
         self.assertEqual(rows, [Row(a=1)])
 
+        rows = func(1).collect()
+        self.assertEqual(rows, [Row(a=1)])
+
     def test_udtf_yield_multi_cols(self):
         class TestUDTF:
             def eval(self, a: int):
@@ -92,6 +95,9 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int, b: int")
         rows = func(lit(1)).collect()
+        self.assertEqual(rows, [Row(a=1, b=2)])
+
+        rows = func(1).collect()
         self.assertEqual(rows, [Row(a=1, b=2)])
 
     def test_udtf_yield_multi_rows(self):
@@ -104,6 +110,9 @@ class BaseUDTFTestsMixin:
         rows = func(lit(1)).collect()
         self.assertEqual(rows, [Row(a=1), Row(a=2)])
 
+        rows = func(1).collect()
+        self.assertEqual(rows, [Row(a=1), Row(a=2)])
+
     def test_udtf_yield_multi_row_col(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
@@ -113,6 +122,9 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int, b: int, c: int")
         rows = func(lit(1), lit(2)).collect()
+        self.assertEqual(rows, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
+
+        rows = func(1, 2).collect()
         self.assertEqual(rows, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
 
     def test_udtf_decorator(self):

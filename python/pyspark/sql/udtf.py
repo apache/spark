@@ -376,9 +376,12 @@ class UserDefinedTableFunction:
         from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         from pyspark.sql import DataFrame, SparkSession
+        from pyspark.sql.functions import lit
 
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
+
+        args = tuple(lit(arg) for arg in args)
 
         assert sc._jvm is not None
         jcols = [_to_java_column(arg) for arg in args] + [
