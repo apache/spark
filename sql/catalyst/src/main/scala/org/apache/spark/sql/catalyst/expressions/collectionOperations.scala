@@ -1726,8 +1726,8 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
     override def compare(o1: Any, o2: Any): Int =
       (o1, o2) match {
         case (null, null) => 0
-        case (null, _) => 1
-        case (_, null) => -1
+        case (null, _) => -1
+        case (_, null) => 1
         case _ => ordering.compare(o1, o2)
       }
   }
