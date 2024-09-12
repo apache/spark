@@ -1804,10 +1804,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         return self.dropDuplicates(subset)
 
-    def writeTo(self, table: str) -> DataFrameWriterV2:
+    def writeTo(self, table: str) -> "DataFrameWriterV2":
         return DataFrameWriterV2(self, table)
 
-    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+    def mergeInto(self, table: str, condition: Column) -> "MergeIntoWriter":
         return MergeIntoWriter(self, table, condition)
 
     def pandas_api(

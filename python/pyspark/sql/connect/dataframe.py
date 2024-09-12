@@ -511,7 +511,7 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def filter(self, condition: Union[Column, str]) -> ParentDataFrame:
+    def filter(self, condition: "ColumnOrName") -> ParentDataFrame:
         if isinstance(condition, str):
             expr = F.expr(condition)
         else:
@@ -531,7 +531,7 @@ class DataFrame(ParentDataFrame):
     def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
         ...
 
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> GroupedData:
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
@@ -566,7 +566,7 @@ class DataFrame(ParentDataFrame):
     def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
         ...
 
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, Column):
@@ -727,8 +727,8 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def limit(self, n: int) -> ParentDataFrame:
-        res = DataFrame(plan.Limit(child=self._plan, limit=n), session=self._session)
+    def limit(self, num: int) -> ParentDataFrame:
+        res = DataFrame(plan.Limit(child=self._plan, limit=num), session=self._session)
         res._cached_schema = self._cached_schema
         return res
 
@@ -927,7 +927,7 @@ class DataFrame(ParentDataFrame):
         )._to_table()
         return table[0][0].as_py()
 
-    def withColumns(self, colsMap: Dict[str, Column]) -> ParentDataFrame:
+    def withColumns(self, *colsMap: Dict[str, Column]) -> ParentDataFrame:
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
                 errorClass="NOT_DICT",
@@ -1252,7 +1252,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
-    def where(self, condition: Union[Column, str]) -> ParentDataFrame:
+    def where(self, condition: "ColumnOrName") -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
             raise PySparkTypeError(
                 errorClass="NOT_COLUMN_OR_STR",
@@ -2189,7 +2189,7 @@ class DataFrame(ParentDataFrame):
 
         return DataFrameWriterV2(self._plan, self._session, table, cb)
 
-    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+    def mergeInto(self, table: str, condition: Column) -> "MergeIntoWriter":
         def cb(ei: "ExecutionInfo") -> None:
             self._execution_info = ei
 
@@ -2197,10 +2197,10 @@ class DataFrame(ParentDataFrame):
             self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
         )
 
-    def offset(self, n: int) -> ParentDataFrame:
-        return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
+    def offset(self, num: int) -> ParentDataFrame:
+        return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
-    def checkpoint(self, eager: bool = True) -> "DataFrame":
+    def checkpoint(self, eager: bool = True) -> ParentDataFrame:
         cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
@@ -2210,7 +2210,7 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
         cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
