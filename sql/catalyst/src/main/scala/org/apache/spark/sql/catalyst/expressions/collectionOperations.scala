@@ -1549,7 +1549,7 @@ case class ToJavaArray(array: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(array.dataType)
   override def dataType: DataType = {
-    if (isPrimitiveType && elementType != BooleanType && !resultArrayElementNullable) {
+    if (canPerformFast) {
       elementType match {
         case ByteType => ObjectType(classOf[Array[Byte]])
         case ShortType => ObjectType(classOf[Array[Short]])
@@ -1580,11 +1580,13 @@ case class ToJavaArray(array: Expression)
     array.dataType.asInstanceOf[ArrayType].elementType
   private def resultArrayElementNullable: Boolean =
     array.dataType.asInstanceOf[ArrayType].containsNull
-  @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
+  private def isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
+  private def canPerformFast: Boolean =
+    isPrimitiveType && elementType != BooleanType && !resultArrayElementNullable
 
   private def toJavaArray(array: Any): Any = {
     val arrayData = array.asInstanceOf[ArrayData]
-    if (isPrimitiveType && elementType != BooleanType && !resultArrayElementNullable) {
+    if (canPerformFast) {
       elementType match {
         case ByteType => arrayData.toByteArray()
         case ShortType => arrayData.toShortArray()
@@ -1613,7 +1615,7 @@ case class ToJavaArray(array: Expression)
       ev: ExprCode,
       array: String): String = {
     val elementTypeTerm = ctx.addReferenceObj("elementTypeTerm", elementType)
-    if (isPrimitiveType && elementType != BooleanType && !resultArrayElementNullable) {
+    if (canPerformFast) {
       val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
       s"""${ev.value} = $array.to${primitiveTypeName}Array();"""
     } else if (isPrimitiveType) {
