@@ -89,7 +89,6 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
         Array(argOffsets),
         groupedSchema(dedupAttributes),
         sessionLocalTimeZone,
-        largeVarTypes,
         arrowMaxRecordsPerBatch,
         pythonRunnerConf,
         pythonMetrics,

@@ -25,7 +25,6 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -45,6 +44,7 @@ class CoGroupedArrowPythonRunner(
     leftSchema: StructType,
     rightSchema: StructType,
     timeZoneId: String,
+    arrowMaxRecordsPerBatch: Int,
     conf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -115,14 +115,13 @@ class CoGroupedArrowPythonRunner(
 
         Utils.tryWithSafeFinally {
           val writer = new ArrowStreamWriter(root, null, dataOut)
-          val arrowWriter = ArrowWriter.create(root)
+          val batchWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
           writer.start()
 
           while (group.hasNext) {
-            arrowWriter.write(group.next())
+            batchWriter.writeRow(group.next())
           }
-          arrowWriter.finish()
-          writer.writeBatch()
+          batchWriter.finalizeCurrentArrowBatch()
           writer.end()
         }{
           root.close()
