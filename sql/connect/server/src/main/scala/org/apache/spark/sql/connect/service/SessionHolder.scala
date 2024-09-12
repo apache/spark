@@ -58,7 +58,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Analyzing a large plan may be expensive, and it is not uncommon to build the plan step-by-step
   // with several analysis during the process. This cache aids the recursive analysis process by
   // memorizing `LogicalPlan`s which may be a sub-tree in a subsequent plan.
-  private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
+  private lazy val planCache: Option[Cache[(String, Long), LogicalPlan]] = {
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
       logWarning(
         log"Session plan cache is disabled due to non-positive cache size." +
@@ -72,7 +72,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         CacheBuilder
           .newBuilder()
           .maximumSize(SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))
-          .build[proto.Relation, LogicalPlan]())
+          .build[(String, Long), LogicalPlan]())
     }
   }
 
@@ -435,6 +435,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * `spark.connect.session.planCache.enabled` is true.
    * @param rel
    *   The relation to transform.
+   * @param clientId
+   *   The client identifier.
    * @param cachePlan
    *   Whether to cache the result logical plan.
    * @param transform
@@ -442,17 +444,38 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   The logical plan.
    */
-  private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
+  private[connect] def usePlanCache(rel: proto.Relation, clientId: String, cachePlan: Boolean)(
       transform: proto.Relation => LogicalPlan): LogicalPlan = {
     val planCacheEnabled = Option(session)
       .forall(_.sessionState.conf.getConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
-    // We only cache plans that have a plan ID.
-    val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
+    if (!planCacheEnabled) {
+      return transform(rel)
+    }
 
-    def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
+    // Cached relations do not need an additional cache.
+    val unsupported = rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION => true
+      case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION => true
+      case _ => false
+    }
+    if (unsupported) {
+      return transform(rel)
+    }
+
+    // We only cache plans that have a plan ID.
+    val planId = if (rel.hasCommon && rel.getCommon.hasPlanId) {
+      Some(rel.getCommon.getPlanId)
+    } else {
+      None
+    }
+    if (planId.isEmpty) {
+      return transform(rel)
+    }
+
+    def getPlanCache(planId: Option[Long]): Option[LogicalPlan] =
       planCache match {
-        case Some(cache) if planCacheEnabled && hasPlanId =>
-          Option(cache.getIfPresent(rel)) match {
+        case Some(cache) =>
+          Option(cache.getIfPresent((clientId, planId.get))) match {
             case Some(plan) =>
               logDebug(s"Using cached plan for relation '$rel': $plan")
               Some(plan)
@@ -460,25 +483,24 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
           }
         case _ => None
       }
-    def putPlanCache(rel: proto.Relation, plan: LogicalPlan): Unit =
+    def putPlanCache(planId: Option[Long], plan: LogicalPlan): Unit =
       planCache match {
-        case Some(cache) if planCacheEnabled && hasPlanId =>
-          cache.put(rel, plan)
+        case Some(cache) => cache.put((clientId, planId.get), plan)
         case _ =>
       }
 
-    getPlanCache(rel)
+    getPlanCache(planId)
       .getOrElse({
         val plan = transform(rel)
         if (cachePlan) {
-          putPlanCache(rel, plan)
+          putPlanCache(planId, plan)
         }
         plan
       })
   }
 
   // For testing. Expose the plan cache for testing purposes.
-  private[service] def getPlanCache: Option[Cache[proto.Relation, LogicalPlan]] = planCache
+  private[service] def getPlanCache: Option[Cache[(String, Long), LogicalPlan]] = planCache
 }
 
 object SessionHolder {

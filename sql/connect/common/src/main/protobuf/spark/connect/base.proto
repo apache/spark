@@ -49,6 +49,11 @@ message UserContext {
   string user_id = 1;
   string user_name = 2;
 
+  // (Optional)
+  //
+  // The client_id field is used to identify the client object that is sending the request.
+  optional string client_id = 3;
+
   // To extend the existing user context message that is used to identify incoming requests,
   // Spark Connect leverages the Any protobuf type that can be used to inject arbitrary other
   // messages into this message. Extensions are stored as a `repeated` type to be able to

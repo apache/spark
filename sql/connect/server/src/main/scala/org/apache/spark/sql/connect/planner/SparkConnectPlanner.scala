@@ -92,11 +92,16 @@ final case class InvalidCommandInput(
 
 class SparkConnectPlanner(
     val sessionHolder: SessionHolder,
-    val executeHolderOpt: Option[ExecuteHolder] = None)
+    val executeHolderOpt: Option[ExecuteHolder] = None,
+    val clientId: String = "")
     extends Logging {
 
   def this(executeHolder: ExecuteHolder) = {
-    this(executeHolder.sessionHolder, Some(executeHolder))
+    this(executeHolder.sessionHolder, Some(executeHolder), executeHolder.clientId)
+  }
+
+  def this(sessionHolder: SessionHolder, clientId: String) = {
+    this(sessionHolder, None, clientId)
   }
 
   if (!executeHolderOpt.forall { e => e.sessionHolder == sessionHolder }) {
@@ -146,7 +151,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+    sessionHolder.usePlanCache(rel, clientId, cachePlan) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)

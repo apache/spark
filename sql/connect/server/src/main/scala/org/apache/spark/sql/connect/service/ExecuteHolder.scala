@@ -120,6 +120,11 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
+  /**
+   * Return the client identifier if there is one, otherwise return an empty string.
+   */
+  def clientId: String = request.getUserContext().getClientId()
+
   def addObservation(name: String, observation: Observation): Unit = synchronized {
     observations += (name -> observation)
   }

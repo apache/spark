@@ -731,6 +731,7 @@ object SparkConnectClient {
       if (userId != null) {
         builder.setUserId(userId)
       }
+      builder.setClientId(UUID.randomUUID.toString)
       if (userName != null) {
         builder.setUserName(userName)
       }

@@ -54,7 +54,8 @@ private[connect] class SparkConnectAnalyzeHandler(
   def process(
       request: proto.AnalyzePlanRequest,
       sessionHolder: SessionHolder): proto.AnalyzePlanResponse = {
-    lazy val planner = new SparkConnectPlanner(sessionHolder)
+    lazy val planner =
+      new SparkConnectPlanner(sessionHolder, request.getUserContext().getClientId())
     val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
 

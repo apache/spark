@@ -281,6 +281,18 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         # Should not throw any error
         session.stop()
 
+    def test_session_plan_cache(self):
+        # SPARK-49610: session plan cache uses plan id.
+
+        import pyspark.sql.functions as F
+
+        # Deeply nested sessions benefit from the session-local plan cache.
+        df = self.spark.range(1)
+        for i in range(256):
+            if str(i) not in df.columns:
+                df = df.withColumn(str(i), F.col("id") + i)
+        df.show()
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
