@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -617,4 +618,46 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
   }
 
   override def prettyName: String = "sql_keywords"
+}
+
+@ExpressionDescription(
+  usage = """_FUNC_() - Get Spark SQL all collations""",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_() LIMIT 2;
+       SYSTEM	BUILTIN	UTF8_BINARY	NULL	NULL	ACCENT_SENSITIVE	CASE_SENSITIVE	NO_PAD	NULL
+       SYSTEM	BUILTIN	UTF8_LCASE	NULL	NULL	ACCENT_SENSITIVE	CASE_INSENSITIVE	NO_PAD	NULL
+  """,
+  since = "4.0.0",
+  group = "generator_funcs")
+case class AllCollations() extends LeafExpression with Generator with CodegenFallback {
+  override def elementSchema: StructType = new StructType()
+    .add("COLLATION_CATALOG", StringType, nullable = false)
+    .add("COLLATION_SCHEMA", StringType, nullable = false)
+    .add("COLLATION_NAME", StringType, nullable = false)
+    .add("LANGUAGE", StringType)
+    .add("COUNTRY", StringType)
+    .add("ACCENT_SENSITIVITY", StringType, nullable = false)
+    .add("CASE_SENSITIVITY", StringType, nullable = false)
+    .add("PAD_ATTRIBUTE", StringType, nullable = false)
+    .add("ICU_VERSION", StringType)
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
+    CollationFactory.listCollations().asScala.map(CollationFactory.loadCollationMeta).map { m =>
+      InternalRow(
+        UTF8String.fromString(m.catalog),
+        UTF8String.fromString(m.schema),
+        UTF8String.fromString(m.collationName),
+        if (m.language != null) UTF8String.fromString(m.language) else null,
+        if (m.country != null) UTF8String.fromString(m.country) else null,
+        UTF8String.fromString(
+          if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE"),
+        UTF8String.fromString(
+          if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE"),
+        UTF8String.fromString(m.padAttribute),
+        if (m.icuVersion != null) UTF8String.fromString(m.icuVersion) else null)
+    }
+  }
+
+  override def prettyName: String = "all_collations"
 }
