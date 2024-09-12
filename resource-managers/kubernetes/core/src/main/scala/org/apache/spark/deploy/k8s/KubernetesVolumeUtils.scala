@@ -41,17 +41,17 @@ object KubernetesVolumeUtils {
   def parseVolumesWithPrefix(sparkConf: SparkConf, prefix: String): Seq[KubernetesVolumeSpec] = {
     // since volume prefix for volume coincides with volume labels prefix, filtering out
     // required config
-    val properties = sparkConf.getAllWithPrefix(prefix).toMap.filter(x => !x._1.startsWith("label"))
-    val labelsProperties = sparkConf.getAllWithPrefix(prefix).
-      toMap.filter(x => x._1.startsWith("label"))
+    val properties = sparkConf.getAllWithPrefix(prefix).toMap
+    val volumeProperties = properties.filter(!_._1.startsWith("label"))
+    val labelsProperties = properties.filter(_._1.startsWith("label"))
 
-    getVolumeTypesAndNames(properties).map { case (volumeType, volumeName) =>
+    getVolumeTypesAndNames(volumeProperties).map { case (volumeType, volumeName) =>
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
       val labelsSubKey = s"label.$volumeType.$volumeName."
 
-      val selectedVolumeLabels = labelsProperties
+      val volumeSpecificLabelsMap = labelsProperties
         .filter(_._1.startsWith(labelsSubKey))
         .map {
           case (k, v) => k.replaceAll(labelsSubKey, "") -> v
@@ -59,11 +59,11 @@ object KubernetesVolumeUtils {
 
       KubernetesVolumeSpec(
         volumeName = volumeName,
-        mountPath = properties(pathKey),
-        mountSubPath = properties.getOrElse(subPathKey, ""),
-        mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
-        volumeConf = parseVolumeSpecificConf(properties,
-          volumeType, volumeName, selectedVolumeLabels))
+        mountPath = volumeProperties(pathKey),
+        mountSubPath = volumeProperties.getOrElse(subPathKey, ""),
+        mountReadOnly = volumeProperties.get(readOnlyKey).exists(_.toBoolean),
+        volumeConf = parseVolumeSpecificConf(volumeProperties,
+          volumeType, volumeName, volumeSpecificLabelsMap))
     }.toSeq
   }
 
