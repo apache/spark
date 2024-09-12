@@ -307,8 +307,11 @@ class RocksDB(
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
+    println(s"Loading $version)}")
+    println(s"loadedVersion $loadedVersion)}")
     var currLineage: Option[Array[(Long, Option[String])]] = None
     try {
+      // TODO[MUST] when loaded version = version, still need to get currentLineage from previous version
       if (loadedVersion != version ||
         (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
         (!loadedCheckpointId.isDefined || checkpointUniqueId.get != loadedCheckpointId.get))) {
@@ -321,6 +324,9 @@ class RocksDB(
           // so you use the lineage to get version-1_uniqueId.zip
           fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
         }
+
+        println(s"wei-=-=load should trigger if? ${version != 0 && enableChangelogCheckpointing && checkpointFormatVersion >= 2}")
+        println(s"wei-=-=load should trigger if? ${version}, ${enableChangelogCheckpointing}, ${checkpointFormatVersion}")
 
         if (version != 0 && enableChangelogCheckpointing && checkpointFormatVersion >= 2) {
           // TODO: changelog not always enabled?
@@ -859,6 +865,7 @@ class RocksDB(
           maxColumnFamilyId,
           uniqueId)) =>
         try {
+          println("wei== uploadSnapshot(), version: " + version + ", uniqueId: " + uniqueId)
           val uploadTime = timeTakenMs {
             fileManager.saveCheckpointToDfs(
               localDir,
