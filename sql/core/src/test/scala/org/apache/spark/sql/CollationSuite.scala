@@ -1624,4 +1624,46 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("show collations") {
+    assert(sql("SHOW COLLATIONS").collect().length >= 562)
+
+    // verify that the output ordering is as expected (UTF8_BINARY, UTF8_LCASE, etc.)
+    val df = sql("SHOW COLLATIONS").limit(10)
+    checkAnswer(df,
+      Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
+      Row("SYSTEM", "BUILTIN", "UTF8_LCASE", null, null,
+        "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", null),
+      Row("SYSTEM", "BUILTIN", "UNICODE", "", "",
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+      Row("SYSTEM", "BUILTIN", "UNICODE_AI", "", "",
+        "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
+      Row("SYSTEM", "BUILTIN", "UNICODE_CI", "", "",
+        "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+     Row("SYSTEM", "BUILTIN", "UNICODE_CI_AI", "", "",
+       "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
+     Row("SYSTEM", "BUILTIN", "af", "Afrikaans", "",
+       "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+     Row("SYSTEM", "BUILTIN", "af_AI", "Afrikaans", "",
+       "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
+     Row("SYSTEM", "BUILTIN", "af_CI", "Afrikaans", "",
+       "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+     Row("SYSTEM", "BUILTIN", "af_CI_AI", "Afrikaans", "",
+        "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
+
+    checkAnswer(sql("SHOW COLLATIONS LIKE '*UTF8_BINARY*'"),
+      Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null))
+
+    checkAnswer(sql("SHOW COLLATIONS '*zh_Hant_HKG*'"),
+      Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "Chinese", "Hong Kong SAR China",
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "Chinese", "Hong Kong SAR China",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "Chinese", "Hong Kong SAR China",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
+  }
 }

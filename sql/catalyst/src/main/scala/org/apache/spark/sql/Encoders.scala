@@ -22,10 +22,8 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
-import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer, EncodeUsingSerializer}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, Codec, ExpressionEncoder, JavaSerializationCodec, KryoSerializationCodec}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, TransformingEncoder}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -193,7 +191,7 @@ object Encoders {
    *
    * @since 1.6.0
    */
-  def kryo[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = true)
+  def kryo[T: ClassTag]: Encoder[T] = genericSerializer(KryoSerializationCodec)
 
   /**
    * Creates an encoder that serializes objects of type T using Kryo.
@@ -215,7 +213,7 @@ object Encoders {
    *
    * @since 1.6.0
    */
-  def javaSerialization[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = false)
+  def javaSerialization[T: ClassTag]: Encoder[T] = genericSerializer(JavaSerializationCodec)
 
   /**
    * Creates an encoder that serializes objects of type T using generic Java serialization.
@@ -237,24 +235,15 @@ object Encoders {
   }
 
   /** A way to construct encoders using generic serializers. */
-  private def genericSerializer[T: ClassTag](useKryo: Boolean): Encoder[T] = {
+  private def genericSerializer[T: ClassTag](
+    provider: () => Codec[Any, Array[Byte]]): Encoder[T] = {
     if (classTag[T].runtimeClass.isPrimitive) {
       throw QueryExecutionErrors.primitiveTypesNotSupportedError()
     }
 
     validatePublicClass[T]()
 
-    ExpressionEncoder[T](
-      objSerializer =
-        EncodeUsingSerializer(
-          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo),
-      objDeserializer =
-        DecodeUsingSerializer[T](
-          Cast(GetColumnByOrdinal(0, BinaryType), BinaryType),
-          classTag[T],
-          kryo = useKryo),
-      clsTag = classTag[T]
-    )
+    ExpressionEncoder(TransformingEncoder(classTag[T], BinaryEncoder, provider))
   }
 
   /**

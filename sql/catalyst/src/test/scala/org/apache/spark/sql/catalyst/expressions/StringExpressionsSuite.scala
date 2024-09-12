@@ -1987,7 +1987,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")).replacement :: Nil)
   }
 
   test("SPARK-33386: elt ArrayIndexOutOfBoundsException") {
