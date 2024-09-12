@@ -24,7 +24,6 @@ on:
     branches:
       - master
 
-
 concurrency:
   group: 'docs preview'
   cancel-in-progress: true
