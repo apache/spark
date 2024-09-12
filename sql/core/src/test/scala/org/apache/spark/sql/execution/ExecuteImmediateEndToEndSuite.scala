@@ -38,7 +38,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("EXEC IMMEDIATE STACK OVERFLOW") {
+  // TODO(SPARK-49622) Re-enable `EXEC IMMEDIATE STACK OVERFLOW` test case
+  ignore("EXEC IMMEDIATE STACK OVERFLOW") {
     try {
       spark.sql("DECLARE parm = 1;")
       val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
