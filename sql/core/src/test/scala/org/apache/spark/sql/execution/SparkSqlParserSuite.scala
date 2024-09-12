@@ -887,6 +887,31 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("TABLE t |> SELECT 1 AS X")
       parser.parsePlan("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       parser.parsePlan("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      // PIVOT and UNPIVOT operations
+      parser.parsePlan(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 2012, 10000),
+          |  ("Java", 2012, 20000),
+          |  ("dotNET", 2012, 5000),
+          |  ("dotNET", 2013, 48000),
+          |  ("Java", 2013, 30000)
+          |  AS courseSales(course, year, earnings)
+          ||> PIVOT (
+          |  SUM(earnings)
+          |  FOR course IN ('dotNET', 'Java')
+          |)
+          |""".stripMargin)
+      parser.parsePlan(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+          ||> UNPIVOT (
+          |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+          |)
+          |""".stripMargin)
     }
   }
 }

@@ -12,6 +12,24 @@ drop table if exists st;
 create table st(x int, col struct<i1:int, i2:int>) using parquet;
 insert into st values (1, (2, 3));
 
+create temporary view courseSales as select * from values
+  ("dotNET", 2012, 10000),
+  ("Java", 2012, 20000),
+  ("dotNET", 2012, 5000),
+  ("dotNET", 2013, 48000),
+  ("Java", 2013, 30000)
+  as courseSales(course, year, earnings);
+
+create temporary view years as select * from values
+  (2012, 1),
+  (2013, 2)
+  as years(y, s);
+
+create temporary view yearsWithComplexTypes as select * from values
+  (2012, array(1, 1), map('1', 1), struct(1, 'a')),
+  (2013, array(2, 2), map('2', 2), struct(2, 'b'))
+  as yearsWithComplexTypes(y, a, m, s);
+
 -- Selection operators: positive tests.
 ---------------------------------------
 
@@ -91,6 +109,59 @@ table t
 
 table t
 |> select y, length(y) + sum(x) as result;
+
+-- Pivot and unpivot operators: positive tests.
+-----------------------------------------------
+
+table courseSales
+|> select `year`, course, earnings
+|> pivot (
+     sum(earnings)
+     for course in ('dotNET', 'Java')
+  );
+
+table courseSales
+|> select `year` as y, course as c, earnings as e
+|> pivot (
+     sum(e) as s, avg(e) as a
+     for y in (2012 as firstYear, 2013 as secondYear)
+   );
+
+-- Pivot on multiple pivot columns with aggregate columns of complex data types.
+(select course, `year`, y, a
+ from courseSales
+ join yearsWithComplexTypes on `year` = y)
+|> pivot (
+     max(a)
+     for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
+   );
+
+-- Pivot on pivot column of struct type.
+(select earnings, `year`, s
+ from courseSales
+ join yearsWithComplexTypes on `year` = y)
+|> pivot (
+     sum(earnings)
+     for s in ((1, 'a'), (2, 'b'))
+   );
+
+-- Pivot and unpivot operators: negative tests.
+-----------------------------------------------
+
+-- The PIVOT operator refers to a column 'year' is not available in the input relation.
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   );
+
+-- Non-literal PIVOT values are not supported.
+table courseSales
+|> pivot (
+     sum(earnings)
+     for `year` in (course, 2013)
+   );
 
 -- Cleanup.
 -----------

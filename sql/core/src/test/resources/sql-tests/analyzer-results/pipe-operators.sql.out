@@ -63,6 +63,57 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
+create temporary view courseSales as select * from values
+  ("dotNET", 2012, 10000),
+  ("Java", 2012, 20000),
+  ("dotNET", 2012, 5000),
+  ("dotNET", 2013, 48000),
+  ("Java", 2013, 30000)
+  as courseSales(course, year, earnings)
+-- !query analysis
+CreateViewCommand `courseSales`, select * from values
+  ("dotNET", 2012, 10000),
+  ("Java", 2012, 20000),
+  ("dotNET", 2012, 5000),
+  ("dotNET", 2013, 48000),
+  ("Java", 2013, 30000)
+  as courseSales(course, year, earnings), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [course#x, year#x, earnings#x]
+      +- SubqueryAlias courseSales
+         +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+create temporary view years as select * from values
+  (2012, 1),
+  (2013, 2)
+  as years(y, s)
+-- !query analysis
+CreateViewCommand `years`, select * from values
+  (2012, 1),
+  (2013, 2)
+  as years(y, s), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [y#x, s#x]
+      +- SubqueryAlias years
+         +- LocalRelation [y#x, s#x]
+
+
+-- !query
+create temporary view yearsWithComplexTypes as select * from values
+  (2012, array(1, 1), map('1', 1), struct(1, 'a')),
+  (2013, array(2, 2), map('2', 2), struct(2, 'b'))
+  as yearsWithComplexTypes(y, a, m, s)
+-- !query analysis
+CreateViewCommand `yearsWithComplexTypes`, select * from values
+  (2012, array(1, 1), map('1', 1), struct(1, 'a')),
+  (2013, array(2, 2), map('2', 2), struct(2, 'b'))
+  as yearsWithComplexTypes(y, a, m, s), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [y#x, a#x, m#x, s#x]
+      +- SubqueryAlias yearsWithComplexTypes
+         +- LocalRelation [y#x, a#x, m#x, s#x]
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query analysis
@@ -284,6 +335,143 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 39,
     "fragment" : "sum(x)"
   } ]
+}
+
+
+-- !query
+table courseSales
+|> select `year`, course, earnings
+|> pivot (
+     sum(earnings)
+     for course in ('dotNET', 'Java')
+  )
+-- !query analysis
+Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[0] AS dotNET#xL, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[1] AS Java#xL]
++- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(coursesales.earnings)#xL, dotNET, Java, 0, 0) AS __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x]
+   +- Aggregate [year#x, course#x], [year#x, course#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
+      +- Project [year#x, course#x, earnings#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+table courseSales
+|> select `year` as y, course as c, earnings as e
+|> pivot (
+     sum(e) as s, avg(e) as a
+     for y in (2012 as firstYear, 2013 as secondYear)
+   )
+-- !query analysis
+Project [c#x, __pivot_sum(e) AS s AS `sum(e) AS s`#x[0] AS firstYear_s#xL, __pivot_avg(e) AS a AS `avg(e) AS a`#x[0] AS firstYear_a#x, __pivot_sum(e) AS s AS `sum(e) AS s`#x[1] AS secondYear_s#xL, __pivot_avg(e) AS a AS `avg(e) AS a`#x[1] AS secondYear_a#x]
++- Aggregate [c#x], [c#x, pivotfirst(y#x, sum(e) AS s#xL, 2012, 2013, 0, 0) AS __pivot_sum(e) AS s AS `sum(e) AS s`#x, pivotfirst(y#x, avg(e) AS a#x, 2012, 2013, 0, 0) AS __pivot_avg(e) AS a AS `avg(e) AS a`#x]
+   +- Aggregate [c#x, y#x], [c#x, y#x, sum(e#x) AS sum(e) AS s#xL, avg(e#x) AS avg(e) AS a#x]
+      +- Project [pipeselect(year#x) AS y#x, pipeselect(course#x) AS c#x, pipeselect(earnings#x) AS e#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+(select course, `year`, y, a
+ from courseSales
+ join yearsWithComplexTypes on `year` = y)
+|> pivot (
+     max(a)
+     for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
+   )
+-- !query analysis
+Aggregate [year#x], [year#x, max(if ((named_struct(y, y#x, course, course#x) <=> cast(named_struct(col1, 2012, col2, dotNET) as struct<y:int,course:string>))) a#x else cast(null as array<int>)) AS {2012, dotNET}#x, max(if ((named_struct(y, y#x, course, course#x) <=> cast(named_struct(col1, 2013, col2, Java) as struct<y:int,course:string>))) a#x else cast(null as array<int>)) AS {2013, Java}#x]
++- Project [course#x, year#x, y#x, a#x]
+   +- Join Inner, (year#x = y#x)
+      :- SubqueryAlias coursesales
+      :  +- View (`courseSales`, [course#x, year#x, earnings#x])
+      :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+      :        +- Project [course#x, year#x, earnings#x]
+      :           +- SubqueryAlias courseSales
+      :              +- LocalRelation [course#x, year#x, earnings#x]
+      +- SubqueryAlias yearswithcomplextypes
+         +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
+            +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
+               +- Project [y#x, a#x, m#x, s#x]
+                  +- SubqueryAlias yearsWithComplexTypes
+                     +- LocalRelation [y#x, a#x, m#x, s#x]
+
+
+-- !query
+(select earnings, `year`, s
+ from courseSales
+ join yearsWithComplexTypes on `year` = y)
+|> pivot (
+     sum(earnings)
+     for s in ((1, 'a'), (2, 'b'))
+   )
+-- !query analysis
+Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[0] AS {1, a}#xL, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[1] AS {2, b}#xL]
++- Aggregate [year#x], [year#x, pivotfirst(s#x, sum(coursesales.earnings)#xL, [1,a], [2,b], 0, 0) AS __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x]
+   +- Aggregate [year#x, s#x], [year#x, s#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
+      +- Project [earnings#x, year#x, s#x]
+         +- Join Inner, (year#x = y#x)
+            :- SubqueryAlias coursesales
+            :  +- View (`courseSales`, [course#x, year#x, earnings#x])
+            :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            :        +- Project [course#x, year#x, earnings#x]
+            :           +- SubqueryAlias courseSales
+            :              +- LocalRelation [course#x, year#x, earnings#x]
+            +- SubqueryAlias yearswithcomplextypes
+               +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
+                  +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
+                     +- Project [y#x, a#x, m#x, s#x]
+                        +- SubqueryAlias yearsWithComplexTypes
+                           +- LocalRelation [y#x, a#x, m#x, s#x]
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`year`",
+    "proposal" : "`course`, `earnings`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 111,
+    "fragment" : "pivot (\n     sum(earnings)\n     for `year` in (2012, 2013)\n   )"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> pivot (
+     sum(earnings)
+     for `year` in (course, 2013)
+   )
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_LITERAL_PIVOT_VALUES",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "expression" : "\"course\""
+  }
 }
 
 
