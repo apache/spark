@@ -273,7 +273,8 @@ class AstBuilder extends DataTypeAstBuilder
 
     if (conditions.length != conditionalBodies.length) {
       throw SparkException.internalError(
-        "Mismatched number of conditions and condition bodies in case statement")
+        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+          s" ${conditionalBodies.length} in case statement")
     }
 
     CaseStatement(
@@ -296,7 +297,8 @@ class AstBuilder extends DataTypeAstBuilder
 
     if (conditions.length != conditionalBodies.length) {
       throw SparkException.internalError(
-        "Mismatched number of conditions and condition bodies in case statement")
+        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+          s" ${conditionalBodies.length} in case statement")
     }
 
     CaseStatement(

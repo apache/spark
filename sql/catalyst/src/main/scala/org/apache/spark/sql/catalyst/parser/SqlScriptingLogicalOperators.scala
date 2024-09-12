@@ -130,8 +130,7 @@ case class IterateStatement(label: String) extends CompoundPlanStatement
  * @param conditions Collection of conditions which correspond to WHEN clauses.
  * @param conditionalBodies Collection of bodies that have a corresponding condition,
  *                          in WHEN branches.
- * @param elseBody Body that is executed if none of the conditions are met,
- *                          i.e. ELSE branch.
+ * @param elseBody Body that is executed if none of the conditions are met, i.e. ELSE branch.
  */
 case class CaseStatement(
     conditions: Seq[SingleStatement],

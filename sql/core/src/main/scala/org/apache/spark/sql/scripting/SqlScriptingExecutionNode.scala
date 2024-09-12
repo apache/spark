@@ -410,8 +410,7 @@ class WhileStatementExec(
  * @param conditions Collection of executable conditions which correspond to WHEN clauses.
  * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
  *                 in WHEN branches.
- * @param elseBody Body that is executed if none of the conditions are met,
- *                          i.e. ELSE branch.
+ * @param elseBody Body that is executed if none of the conditions are met, i.e. ELSE branch.
  * @param session Spark session that SQL script is executed within.
  */
 class CaseStatementExec(
