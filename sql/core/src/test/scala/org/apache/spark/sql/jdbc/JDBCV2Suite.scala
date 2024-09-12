@@ -208,6 +208,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
         "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
+        "('adam', '2024-09-05', '2024-09-05 11:23:45')").executeUpdate()
 
       conn.prepareStatement(
         "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
@@ -1599,14 +1601,56 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedTopN: ORDER BY [EXTRACT(DAY_OF_YEAR FROM DATE1) ASC NULLS FIRST] LIMIT 1,"
     checkPushedInfo(df9, expectedPlanFragment9)
     checkAnswer(df9, Seq(Row("alex")))
+  }
 
-    val df10 = sql("SELECT name FROM h2.test.datetime WHERE " +
-      "DATE_TRUNC('DAY', date1) = date'2022-05-19'")
-    checkFiltersRemoved(df10)
-    val expectedPlanFragment10 =
-      "PushedFilters: [(DATE_TRUNC('DAY', CAST(DATE1 AS timestamp))) = 1652943600000000]"
-    checkPushedInfo(df10, expectedPlanFragment10)
-    checkAnswer(df10, Seq(Row("amy")))
+  test("scan with filter push-down with date_trunc function") {
+    val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('SECOND', time1) = timestamp'2024-09-05 11:23:45'")
+    checkFiltersRemoved(df1)
+    val expectedPlanFragment1 =
+      "PushedFilters: [(DATE_TRUNC('SECOND', TIME1)) = 1725560625000000]"
+    checkPushedInfo(df1, expectedPlanFragment1)
+    checkAnswer(df1, Seq(Row("adam")))
+
+    val df2 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('MINUTE', time1) = timestamp'2024-09-05 11:23:00'")
+    checkFiltersRemoved(df2)
+    val expectedPlanFragment2 =
+      "PushedFilters: [(DATE_TRUNC('MINUTE', TIME1)) = 1725560580000000]"
+    checkPushedInfo(df2, expectedPlanFragment2)
+    checkAnswer(df2, Seq(Row("adam")))
+
+    val df3 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('HOUR', time1) = timestamp'2024-09-05 11:00:00'")
+    checkFiltersRemoved(df3)
+    val expectedPlanFragment3 =
+      "PushedFilters: [(DATE_TRUNC('HOUR', TIME1)) = 1725559200000000]"
+    checkPushedInfo(df3, expectedPlanFragment3)
+    checkAnswer(df3, Seq(Row("adam")))
+
+    val df4 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('DAY', time1) = timestamp'2022-05-19 00:00:00'")
+    checkFiltersRemoved(df4)
+    val expectedPlanFragment4 =
+      "PushedFilters: [(DATE_TRUNC('DAY', TIME1)) = 1652943600000000]"
+    checkPushedInfo(df4, expectedPlanFragment4)
+    checkAnswer(df4, Seq(Row("amy")))
+
+    val df5 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('MONTH', time1) = timestamp'2022-05-01 00:00:00'")
+    checkFiltersRemoved(df5)
+    val expectedPlanFragment5 =
+      "PushedFilters: [(DATE_TRUNC('MONTH', TIME1)) = 1651388400000000]"
+    checkPushedInfo(df5, expectedPlanFragment5)
+    checkAnswer(df5, Seq(Row("amy"), Row("alex")))
+
+    val df6 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('YEAR', time1) = timestamp'2022-01-01 00:00:00'")
+    checkFiltersRemoved(df6)
+    val expectedPlanFragment6 =
+      "PushedFilters: [(DATE_TRUNC('YEAR', TIME1)) = 1641024000000000]"
+    checkPushedInfo(df6, expectedPlanFragment6)
+    checkAnswer(df6, Seq(Row("amy"), Row("alex")))
   }
 
   test("scan with filter push-down with misc functions") {
