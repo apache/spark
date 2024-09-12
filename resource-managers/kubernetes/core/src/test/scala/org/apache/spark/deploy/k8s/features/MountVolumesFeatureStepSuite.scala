@@ -148,7 +148,6 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(SparkPod.initialPod())
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
-//    TODO : add docs for volume labels
     assert(pvcClaim.getClaimName.endsWith("-driver-pvc-0"))
   }
 
