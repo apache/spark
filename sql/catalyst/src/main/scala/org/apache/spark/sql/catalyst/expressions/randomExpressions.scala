@@ -269,7 +269,6 @@ case class Uniform(min: Expression, max: Expression)
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
               "paramIndex" -> ordinalNumber(index),
-              "functionName" -> prettyName,
               "requiredType" -> requiredType,
               "inputSql" -> toSQLExpr(expr),
               "inputType" -> toSQLType(expr.dataType)))
