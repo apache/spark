@@ -367,7 +367,7 @@ select locate(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 3) 
 select locate(utf8_binary, 'a'), locate(utf8_lcase, 'a') from t5;
 select locate(utf8_binary, 'AaAA' collate utf8_lcase, 4), locate(utf8_lcase, 'AAa' collate utf8_binary, 4) from t5;
 
--- StringTrim*
+-- StringTrim
 select TRIM(utf8_binary, utf8_lcase) from t5;
 select TRIM(s, utf8_binary) from t5;
 select TRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
@@ -375,6 +375,7 @@ select TRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select TRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5;
 select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
+-- StringTrimBoth
 select BTRIM(utf8_binary, utf8_lcase) from t5;
 select BTRIM(s, utf8_binary) from t5;
 select BTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
@@ -382,6 +383,7 @@ select BTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select BTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
 select BTRIM('ABc', utf8_binary), BTRIM('ABc', utf8_lcase) from t5;
 select BTRIM('ABc' collate utf8_lcase, utf8_binary), BTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
+-- StringTrimLeft
 select LTRIM(utf8_binary, utf8_lcase) from t5;
 select LTRIM(s, utf8_binary) from t5;
 select LTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
@@ -389,6 +391,7 @@ select LTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select LTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5;
 select LTRIM('ABc' collate utf8_lcase, utf8_binary), LTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
+-- StringTrimRight
 select RTRIM(utf8_binary, utf8_lcase) from t5;
 select RTRIM(s, utf8_binary) from t5;
 select RTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
