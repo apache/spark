@@ -220,11 +220,6 @@ class StateStoreChangelogWriterV2(
   // append the version field to the changelog file starting from version 2
   writeVersion()
 
-  override def writeLineage(lineage: Array[(Long, String)]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v2")
-  }
-
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
   }

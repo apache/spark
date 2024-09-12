@@ -181,7 +181,7 @@ trait StateStoreWriter
   def stateSchemaDirPath(
       storeName: Option[String] = None): Path = {
     val stateCheckpointPath =
-      new Path(getStateInfo.checkpointLocation, s"${stateInfo.operatorId.toString}")
+      new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId.toString}")
     storeName match {
       case Some(storeName) =>
         new Path(new Path(stateCheckpointPath, "_stateSchema"), storeName)

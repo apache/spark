@@ -20,7 +20,7 @@ import java.time.Duration
 
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.explode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessor, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
@@ -125,7 +125,7 @@ class SessionGroupsStatefulProcessorWithTTL extends
  * Test suite to verify integration of state data source reader with the transformWithState operator
  */
 class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 

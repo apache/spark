@@ -161,7 +161,7 @@ class RocksDB(
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
-  @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+  @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
   // variables to manage checkpoint ID. Once a checkpoint finishes, it needs to return
   // the `lastCommittedCheckpointId` as the committed checkpointID, as well as
@@ -173,8 +173,8 @@ class RocksDB(
   // can help debug problems.
   @volatile private var LastCommitBasedCheckpointId: Option[String] = None
   @volatile private var lastCommittedCheckpointId: Option[String] = None
-  @volatile private var loadedCheckpointId: Option[String] = None
-  @volatile private var sessionCheckpointId: Option[String] = None
+  @volatile protected var loadedCheckpointId: Option[String] = None
+  @volatile protected var sessionCheckpointId: Option[String] = None
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -519,7 +519,6 @@ class RocksDB(
   /**
    * Replay change log from the loaded version to the target version.
    */
-<<<<<<< HEAD
   private def replayChangelog(
       endVersion: Long,
       checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None): Unit = {

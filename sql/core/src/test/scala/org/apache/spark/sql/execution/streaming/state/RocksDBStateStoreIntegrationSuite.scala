@@ -180,7 +180,7 @@ class TestStateStoreProviderWrapper extends StateStoreProvider {
 }
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   testWithColumnFamilies("RocksDBStateStore",
