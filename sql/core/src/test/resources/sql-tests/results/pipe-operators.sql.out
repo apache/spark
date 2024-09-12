@@ -277,6 +277,203 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+table t
+|> tablesample (100 percent) repeatable (0)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> tablesample (1 rows) repeatable (0)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> tablesample (bucket 1 out of 1) repeatable (0)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> tablesample (100 percent) repeatable (0)
+|> tablesample (5 rows) repeatable (0)
+|> tablesample (bucket 1 out of 1) repeatable (0)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> tablesample ()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0014",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 25,
+    "fragment" : "tablesample ()"
+  } ]
+}
+
+
+-- !query
+table t
+|> tablesample (-100 percent)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "messageParameters" : {
+    "msg" : "Sampling fraction (-1.0) must be on interval [0, 1]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 37,
+    "fragment" : "tablesample (-100 percent)"
+  } ]
+}
+
+
+-- !query
+table t
+|> tablesample (-5 rows)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expr" : "\"-5\"",
+    "name" : "limit",
+    "v" : "-5"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 26,
+    "fragment" : "-5"
+  } ]
+}
+
+
+-- !query
+table t
+|> tablesample (x rows)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expr" : "\"x\"",
+    "name" : "limit"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 25,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
+table t
+|> tablesample (bucket 2 out of 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "messageParameters" : {
+    "msg" : "Sampling fraction (2.0) must be on interval [0, 1]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 42,
+    "fragment" : "tablesample (bucket 2 out of 1)"
+  } ]
+}
+
+
+-- !query
+table t
+|> tablesample (200b) repeatable (0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0015",
+  "messageParameters" : {
+    "msg" : "byteLengthLiteral"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 44,
+    "fragment" : "tablesample (200b) repeatable (0)"
+  } ]
+}
+
+
+-- !query
+table t
+|> tablesample (200) repeatable (0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0016",
+  "messageParameters" : {
+    "bytesStr" : "200"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 43,
+    "fragment" : "tablesample (200) repeatable (0)"
+  } ]
+}
+
+
+-- !query
 drop table t
 -- !query schema
 struct<>

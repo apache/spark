@@ -887,6 +887,10 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("TABLE t |> SELECT 1 AS X")
       parser.parsePlan("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       parser.parsePlan("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      // Sampling operations
+      parser.parsePlan("SELECT 1 AS X |> TABLESAMPLE (50 PERCENT)")
+      parser.parsePlan("SELECT 1 AS X |> TABLESAMPLE (5 ROWS)")
+      parser.parsePlan("SELECT 1 AS X |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
     }
   }
 }

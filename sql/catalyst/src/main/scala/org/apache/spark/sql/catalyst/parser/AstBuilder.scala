@@ -5749,7 +5749,9 @@ class AstBuilder extends DataTypeAstBuilder
         case other =>
           throw SparkException.internalError(s"Unrecognized matched logical plan: $other")
       }
-    }.get
+    }.getOrElse(Option(ctx.sample).map { c =>
+      withSample(c, left)
+    }.get)
   }
 
   /**
