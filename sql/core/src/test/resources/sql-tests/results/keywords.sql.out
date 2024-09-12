@@ -48,6 +48,7 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	false
 COLLATION	false
+COLLATIONS	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
@@ -251,6 +252,7 @@ REFERENCES	false
 REFRESH	false
 RENAME	false
 REPAIR	false
+REPEAT	false
 REPEATABLE	false
 REPLACE	false
 RESET	false
@@ -336,6 +338,7 @@ UNKNOWN	false
 UNLOCK	false
 UNPIVOT	false
 UNSET	false
+UNTIL	false
 UPDATE	false
 USE	false
 USER	false

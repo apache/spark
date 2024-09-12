@@ -43,8 +43,8 @@ private[sql] class ProtobufOptions(
 
   /**
    * Adds support for recursive fields. If this option is is not specified, recursive fields are
-   * not permitted. Setting it to 0 drops the recursive fields, 1 allows it to be recursed once,
-   * and 2 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
+   * not permitted. Setting it to 1 drops the recursive fields, 0 allows it to be recursed once,
+   * and 3 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
    * allowed in order avoid inadvertently creating very large schemas. If a Protobuf message
    * has depth beyond this limit, the Spark struct returned is truncated after the recursion limit.
    *
@@ -52,8 +52,8 @@ private[sql] class ProtobufOptions(
    *   `message Person { string name = 1; Person friend = 2; }`
    * The following lists the schema with different values for this setting.
    *  1:  `struct<name: string>`
-   *  2:  `struct<name string, friend: struct<name: string>>`
-   *  3:  `struct<name string, friend: struct<name string, friend: struct<name: string>>>`
+   *  2:  `struct<name: string, friend: struct<name: string>>`
+   *  3:  `struct<name: string, friend: struct<name: string, friend: struct<name: string>>>`
    * and so on.
    */
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
@@ -181,7 +181,7 @@ private[sql] class ProtobufOptions(
   val upcastUnsignedInts: Boolean =
     parameters.getOrElse("upcast.unsigned.ints", false.toString).toBoolean
 
-  // Whether to unwrap the struct representation for well known primitve wrapper types when
+  // Whether to unwrap the struct representation for well known primitive wrapper types when
   // deserializing. By default, the wrapper types for primitives (i.e. google.protobuf.Int32Value,
   // google.protobuf.Int64Value, etc.) will get deserialized as structs. We allow the option to
   // deserialize them as their respective primitives.
@@ -221,7 +221,7 @@ private[sql] class ProtobufOptions(
   // By default, in the spark schema field a will be dropped, which result in schema
   // b struct<name: string>
   // If retain.empty.message.types=true, field a will be retained by inserting a dummy column.
-  // b struct<a struct<__dummy_field_in_empty_struct: string>, name: string>
+  // b struct<a: struct<__dummy_field_in_empty_struct: string>, name: string>
   val retainEmptyMessage: Boolean =
     parameters.getOrElse("retain.empty.message.types", false.toString).toBoolean
 }

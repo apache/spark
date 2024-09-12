@@ -6168,10 +6168,6 @@ class DataFrame:
         |  1| 21|
         +---+---+
 
-        Notes
-        -----
-        This API is experimental
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -6244,10 +6240,6 @@ class DataFrame:
         +---+---+
         |  1| 21|
         +---+---+
-
-        Notes
-        -----
-        This API is unstable, and for developers.
 
         See Also
         --------
