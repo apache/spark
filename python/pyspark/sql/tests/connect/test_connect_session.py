@@ -280,7 +280,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         # Should not throw any error
         session.stop()
-    
+
     def test_session_plan_cache(self):
         # SPARK-49610: session plan cache uses plan id.
 
@@ -292,6 +292,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             if str(i) not in df.columns:
                 df = df.withColumn(str(i), F.col("id") + i)
         df.show()
+
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
