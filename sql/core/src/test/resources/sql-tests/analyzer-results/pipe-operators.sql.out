@@ -491,6 +491,18 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select * from t where first_value(x) over (partition by y) = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
 table t
 |> select x, length(y) as z
 |> where x + length(y) < 4

@@ -158,9 +158,11 @@ table t
 table t
 |> where y = 'abc' or length(y) + sum(x) = 1;
 
--- Window functions are not allowed in the pipe operator WHERE predicate.
+-- Window functions are not allowed in the WHERE clause (pipe operators or otherwise).
 table t
 |> where first_value(x) over (partition by y) = 1;
+
+select * from t where first_value(x) over (partition by y) = 1;
 
 -- Pipe operators may only refer to attributes produced as output from the directly-preceding
 -- pipe operator, not from earlier ones.
