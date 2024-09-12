@@ -329,7 +329,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       new File(remoteDir).delete() // to make sure that the directory gets created
       val conf = dbConf.copy(
         minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3)
-      withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
+        checkpointFormatVersion = checkpointFormatVersion) { db =>
         // Commit 5 versions
         // stale versions: (1, 2)
         // keep versions: (3, 4, 5)
