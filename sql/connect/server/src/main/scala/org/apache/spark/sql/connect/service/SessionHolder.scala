@@ -137,11 +137,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Add the operation ID of the supplied ExecuteHolder to this session.
+   * Add an operation ID to this session.
    *
    * Called only by SparkConnectExecutionManager when a new execution is started.
    */
-  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
+  private[service] def addOperationId(operationId: String): Unit = {
     if (closedTimeMs.isDefined) {
       // Do not accept new executions if the session is closing.
       throw new SparkSQLException(
@@ -151,24 +151,23 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     var existed = true
     operationIds.computeIfAbsent(
-      executeHolder.operationId,
+      operationId,
       _ => {
         existed = false
         ()
       })
     if (existed) {
       // The existence of it should have been checked by SparkConnectExecutionManager.
-      throw new IllegalStateException(
-        s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
+      throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
     }
   }
 
   /**
-   * Remove ExecuteHolder from this session.
+   * Remove an operation ID from this session.
    *
    * Called only by SparkConnectExecutionManager when an execution is ended.
    */
-  private[service] def removeExecuteHolder(operationId: String): Unit = {
+  private[service] def removeOperationId(operationId: String): Unit = {
     operationIds.remove(operationId)
   }
 
