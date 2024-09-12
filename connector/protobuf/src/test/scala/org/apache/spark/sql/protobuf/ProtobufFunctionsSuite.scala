@@ -2085,6 +2085,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       )
 
       // Negative tests for to_protobuf.
+      var fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2094,14 +2095,14 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |""".stripMargin)),
         errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
-          "sqlExpr" -> s"""\"toprotobuf(complex_struct, 42, $testFileDescFile, map())\"""",
+          "sqlExpr" -> s"""\"to_protobuf(complex_struct, 42, $testFileDescFile, map())\"""",
           "msg" -> ("The second argument of the TO_PROTOBUF SQL function must be a constant " +
             "string representing the Protobuf message name"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())",
+          fragment = fragment,
           start = 10,
-          stop = 153))
+          stop = fragment.length + 9))
       )
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2112,15 +2113,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |""".stripMargin)),
         errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
-          "sqlExpr" -> "\"toprotobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
+          "sqlExpr" -> "\"to_protobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
           "msg" -> ("The third argument of the TO_PROTOBUF SQL function must be a constant " +
-            "string representing the Protobuf descriptor file path"),
+            "string or binary data representing the Protobuf descriptor file path"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment = "to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())",
           start = 10,
           stop = 73))
       )
+      fragment = s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2131,19 +2133,19 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" ->
-            s"""\"toprotobuf(complex_struct, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+            s"""\"to_protobuf(complex_struct, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
           "msg" -> ("The fourth argument of the TO_PROTOBUF SQL function must be a constant " +
             "map of strings to strings containing the options to use for converting the value " +
             "to Protobuf format"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment =
-            s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
+          fragment = fragment,
           start = 10,
-          stop = 172))
+          stop = fragment.length + 9))
       )
 
       // Negative tests for from_protobuf.
+      fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2152,14 +2154,14 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |""".stripMargin)),
         errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
-          "sqlExpr" -> s"""\"fromprotobuf(protobuf_data, 42, $testFileDescFile, map())\"""",
+          "sqlExpr" -> s"""\"from_protobuf(protobuf_data, 42, $testFileDescFile, map())\"""",
           "msg" -> ("The second argument of the FROM_PROTOBUF SQL function must be a constant " +
             "string representing the Protobuf message name"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())",
+          fragment = fragment,
           start = 8,
-          stop = 152))
+          stop = fragment.length + 7))
       )
       checkError(
         exception = intercept[AnalysisException](sql(
@@ -2169,15 +2171,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |""".stripMargin)),
         errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
-          "sqlExpr" -> "\"fromprotobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
+          "sqlExpr" -> "\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
           "msg" -> ("The third argument of the FROM_PROTOBUF SQL function must be a constant " +
-            "string representing the Protobuf descriptor file path"),
+            "string or binary data representing the Protobuf descriptor file path"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment = "from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())",
           start = 8,
           stop = 72))
       )
+      fragment = s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
       checkError(
         exception = intercept[AnalysisException](sql(
           s"""
@@ -2188,16 +2191,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" ->
-            s"""\"fromprotobuf(protobuf_data, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+            s"""\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
           "msg" -> ("The fourth argument of the FROM_PROTOBUF SQL function must be a constant " +
             "map of strings to strings containing the options to use for converting the value " +
             "from Protobuf format"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
-          fragment =
-            s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)",
+          fragment = fragment,
           start = 10,
-          stop = 173))
+          stop = fragment.length + 9))
       )
     }
   }

@@ -434,6 +434,12 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_USE_KRYO" : {
+    "message" : [
+      "Cannot load Kryo serialization codec. Kryo serialization cannot be used in the Spark Connect client. Use Java serialization, provide a custom Codec, or use Spark Classic instead."
+    ],
+    "sqlState" : "22KD3"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -1457,6 +1463,12 @@
     ],
     "sqlState" : "42704"
   },
+  "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in flatMapGroupsWithState. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
@@ -1466,6 +1478,12 @@
   "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
     "message" : [
       "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
+  },
+  "FOREACH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
   },
@@ -2177,6 +2195,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXTERNAL_TYPE" : {
+    "message" : [
+      "The external type <externalType> is not valid for the type <type> at the expression <expr>."
+    ],
+    "sqlState" : "42K0N"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -2483,6 +2507,24 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_LABEL_USAGE" : {
+    "message" : [
+      "The usage of the label <labelName> is invalid."
+    ],
+    "subClass" : {
+      "DOES_NOT_EXIST" : {
+        "message" : [
+          "Label was used in the <statementType> statement, but the label does not belong to any surrounding block."
+        ]
+      },
+      "ITERATE_IN_COMPOUND" : {
+        "message" : [
+          "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
+        ]
+      }
+    },
+    "sqlState" : "42K0L"
+  },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
       "Invalid lambda function call."
@@ -2673,6 +2715,11 @@
       "DOUBLE" : {
         "message" : [
           "expects an double literal, but got <invalidValue>."
+        ]
+      },
+      "DTYPE" : {
+        "message" : [
+          "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
       "INTEGER" : {
@@ -3861,6 +3908,12 @@
     ],
     "sqlState" : "42K08"
   },
+  "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
+    "message" : [
+      "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
+    ],
+    "sqlState" : "42K05"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -4308,6 +4361,24 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TRANSPOSE_EXCEED_ROW_LIMIT" : {
+    "message" : [
+      "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
+    ],
+    "sqlState" : "54006"
+  },
+  "TRANSPOSE_INVALID_INDEX_COLUMN" : {
+    "message" : [
+      "Invalid index column for TRANSPOSE because: <reason>"
+    ],
+    "sqlState" : "42804"
+  },
+  "TRANSPOSE_NO_LEAST_COMMON_TYPE" : {
+    "message" : [
+      "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
+    ],
+    "sqlState" : "42K09"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -5081,6 +5152,43 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SHOW_CREATE_TABLE" : {
+    "message" : [
+      "Unsupported a SHOW CREATE TABLE command."
+    ],
+    "subClass" : {
+      "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
+        "message" : [
+          "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
+        ]
+      },
+      "ON_TEMPORARY_VIEW" : {
+        "message" : [
+          "The command is not supported on a temporary view <tableName>."
+        ]
+      },
+      "ON_TRANSACTIONAL_HIVE_TABLE" : {
+        "message" : [
+          "Failed to execute the command against transactional Hive table <tableName>.",
+          "Please use SHOW CREATE TABLE <tableName> AS SERDE to show Hive DDL instead."
+        ]
+      },
+      "WITH_UNSUPPORTED_FEATURE" : {
+        "message" : [
+          "Failed to execute the command against table/view <tableName> which is created by Hive and uses the following unsupported features",
+          "<unsupportedFeatures>"
+        ]
+      },
+      "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
+        "message" : [
+          "Failed to execute the command against the table <tableName> which is created by Hive and uses the following unsupported serde configuration",
+          "<configs>",
+          "Please use SHOW CREATE TABLE <tableName> AS SERDE to show Hive DDL instead."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
     "message" : [
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
@@ -5641,11 +5749,6 @@
   "_LEGACY_ERROR_TEMP_1052" : {
     "message" : [
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1057" : {
-    "message" : [
-      "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1058" : {
@@ -6300,41 +6403,6 @@
   "_LEGACY_ERROR_TEMP_1268" : {
     "message" : [
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1270" : {
-    "message" : [
-      "SHOW CREATE TABLE is not supported on a temporary view: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1271" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported feature(s)",
-      "<unsupportedFeatures>",
-      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1272" : {
-    "message" : [
-      "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1273" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
-      "<configs>",
-      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1274" : {
-    "message" : [
-      "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1275" : {
-    "message" : [
-      "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
-      "<features>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1276" : {

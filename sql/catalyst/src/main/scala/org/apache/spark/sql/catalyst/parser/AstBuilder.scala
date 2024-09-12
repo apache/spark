@@ -24,7 +24,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
@@ -260,6 +260,56 @@ class AstBuilder extends DataTypeAstBuilder
 
     WhileStatement(condition, body, Some(labelText))
   }
+
+  private def leaveOrIterateContextHasLabel(
+      ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
+    ctx match {
+      case c: BeginEndCompoundBlockContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label) =>
+        if (isIterate) {
+          throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
+        }
+        true
+      case c: WhileStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        => true
+      case _ => false
+    }
+  }
+
+  override def visitLeaveStatement(ctx: LeaveStatementContext): LeaveStatement =
+    withOrigin(ctx) {
+      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      var parentCtx = ctx.parent
+
+      while (Option(parentCtx).isDefined) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isIterate = false)) {
+          return LeaveStatement(labelText)
+        }
+        parentCtx = parentCtx.parent
+      }
+
+      throw SqlScriptingErrors.labelDoesNotExist(
+        CurrentOrigin.get, labelText, "LEAVE")
+    }
+
+  override def visitIterateStatement(ctx: IterateStatementContext): IterateStatement =
+    withOrigin(ctx) {
+      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      var parentCtx = ctx.parent
+
+      while (Option(parentCtx).isDefined) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isIterate = true)) {
+          return IterateStatement(labelText)
+        }
+        parentCtx = parentCtx.parent
+      }
+
+      throw SqlScriptingErrors.labelDoesNotExist(
+        CurrentOrigin.get, labelText, "ITERATE")
+    }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])

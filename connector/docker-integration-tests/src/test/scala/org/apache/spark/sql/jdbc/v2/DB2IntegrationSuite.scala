@@ -28,9 +28,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.8.0):
+ * To run this test suite for a specific version (e.g., icr.io/db2_community/db2:11.5.9.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.8.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=icr.io/db2_community/db2:11.5.9.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */

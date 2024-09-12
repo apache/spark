@@ -28,6 +28,9 @@ import org.apache.spark.sql.streaming.GroupState
  * mapPartitions etc. This class is shared between the client and the server so that when the
  * methods are used in client UDFs, the server will be able to find them when actually executing
  * the UDFs.
+ *
+ * DO NOT REMOVE/CHANGE THIS OBJECT OR ANY OF ITS METHODS, THEY ARE NEEDED FOR BACKWARDS
+ * COMPATIBILITY WITH OLDER CLIENTS!
  */
 @SerialVersionUID(8464839273647598302L)
 private[sql] object UdfUtils extends Serializable {
@@ -135,6 +138,9 @@ private[sql] object UdfUtils extends Serializable {
     f(value).iterator.to(Seq)
   }
 
+  // ----------------------------------------------------------------------------------------------
+  // Scala Functions wrappers for java UDFs.
+  // ----------------------------------------------------------------------------------------------
   //  (1 to 22).foreach { i =>
   //    val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
   //    val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")

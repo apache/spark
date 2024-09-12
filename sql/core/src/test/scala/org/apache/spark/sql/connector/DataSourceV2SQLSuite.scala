@@ -2125,10 +2125,18 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("REPLACE TABLE: v1 table") {
-    sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
-    val v2Catalog = catalog("spark_catalog").asTableCatalog
-    val table = v2Catalog.loadTable(Identifier.of(Array("default"), "tbl"))
-    assert(table.properties().get(TableCatalog.PROP_PROVIDER) == classOf[SimpleScanSource].getName)
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    }
+    checkError(
+      exception = e,
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`tbl`",
+        "operation" -> "REPLACE TABLE"
+      )
+    )
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
@@ -2388,16 +2396,6 @@ class DataSourceV2SQLSuiteV1Filter
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")
-  }
-
-  test("SHOW COLUMNS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t IN testcat.ns1.ns2"), Seq(Row("id"), Row("data")))
-      checkAnswer(sql(s"SHOW COLUMNS in $t"), Seq(Row("id"), Row("data")))
-      checkAnswer(sql(s"SHOW COLUMNS FROM $t"), Seq(Row("id"), Row("data")))
-    }
   }
 
   test("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]") {
@@ -3770,6 +3768,19 @@ class DataSourceV2SQLSuiteV1Filter
     checkWriteOperations("read_only_cat")
   }
 
+  test("StagingTableCatalog without atomic support") {
+    withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
+      withTable("fakeStagedCat.t") {
+        sql("CREATE TABLE fakeStagedCat.t AS SELECT 1 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1))
+        sql("REPLACE TABLE fakeStagedCat.t AS SELECT 2 col")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(2))
+        sql("CREATE OR REPLACE TABLE fakeStagedCat.t AS SELECT 1 c1, 2 c2")
+        checkAnswer(spark.table("fakeStagedCat.t"), Row(1, 2))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3853,5 +3864,40 @@ class ReadOnlyCatalog extends InMemoryCatalog {
       writePrivileges: util.Set[TableWritePrivilege]): Table = {
     throw new RuntimeException("cannot write with " +
       writePrivileges.asScala.toSeq.map(_.toString).sorted.mkString(","))
+  }
+}
+
+class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
+  override def stageCreate(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    super.dropTable(ident)
+    super.createTable(ident, columns, partitions, properties)
+    null
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      columns: Array[ColumnV2],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    try {
+      super.dropTable(ident)
+    } catch {
+      case _: Throwable =>
+    }
+    super.createTable(ident, columns, partitions, properties)
+    null
   }
 }

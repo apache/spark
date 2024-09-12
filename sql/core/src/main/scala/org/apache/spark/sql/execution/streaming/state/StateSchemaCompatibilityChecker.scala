@@ -176,10 +176,17 @@ class StateSchemaCompatibilityChecker(
       true
     } else {
       // validate if the new schema is compatible with the existing schema
-      existingStateSchemaList.lazyZip(newStateSchemaList).foreach {
-        case (existingStateSchema, newStateSchema) =>
-          check(existingStateSchema, newStateSchema, ignoreValueSchema)
+      val existingSchemaMap = existingStateSchemaList.map { schema =>
+        schema.colFamilyName -> schema
+      }.toMap
+      // For each new state variable, we want to compare it to the old state variable
+      // schema with the same name
+      newStateSchemaList.foreach { newSchema =>
+        existingSchemaMap.get(newSchema.colFamilyName).foreach { existingStateSchema =>
+          check(existingStateSchema, newSchema, ignoreValueSchema)
+        }
       }
+      // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
       false
     }
   }

@@ -214,14 +214,14 @@ class RocksDB(
 
   /**
    * Remove RocksDB column family, if exists
+   * @return columnFamilyId if it exists, else None
    */
-  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+  def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
     if (checkColFamilyExists(colFamilyName)) {
-      colFamilyNameToIdMap.remove(colFamilyName)
       shouldForceSnapshot.set(true)
-      true
+      Some(colFamilyNameToIdMap.remove(colFamilyName))
     } else {
-      false
+      None
     }
   }
 
@@ -407,10 +407,12 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(endVersion: Long): Unit = {
+    logInfo(log"Replaying changelog from version " +
+      log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
+      log"${MDC(LogKeys.END_VERSION, endVersion)}")
     for (v <- loadedVersion + 1 to endVersion) {
-      logInfo(log"replaying changelog from version " +
-        log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
-        log"${MDC(LogKeys.END_VERSION, endVersion)}")
+      logInfo(log"Replaying changelog on version " +
+        log"${MDC(LogKeys.VERSION_NUM, v)}")
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
@@ -784,6 +786,7 @@ class RocksDB(
       dbLogger.close()
       synchronized {
         latestSnapshot.foreach(_.close())
+        latestSnapshot = None
       }
       silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {

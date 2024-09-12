@@ -31,8 +31,9 @@ import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.state.StateMessage
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
-import org.apache.spark.sql.streaming.{ListState, ValueState}
+import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -90,14 +91,27 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(outputStream).writeInt(0)
   }
 
-  test("get value state") {
-    val message = StatefulProcessorCall.newBuilder().setGetValueState(
-      StateCallCommand.newBuilder()
+  Seq(true, false).foreach { useTTL =>
+    test(s"get value state, useTTL=$useTTL") {
+      val stateCallCommandBuilder = StateCallCommand.newBuilder()
         .setStateName("newName")
-        .setSchema("StructType(List(StructField(value,IntegerType,true)))")).build()
-    stateServer.handleStatefulProcessorCall(message)
-    verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]])
-    verify(outputStream).writeInt(0)
+        .setSchema("StructType(List(StructField(value,IntegerType,true)))")
+      if (useTTL) {
+        stateCallCommandBuilder.setTtl(StateMessage.TTLConfig.newBuilder().setDurationMs(1000))
+      }
+      val message = StatefulProcessorCall
+        .newBuilder()
+        .setGetValueState(stateCallCommandBuilder.build())
+        .build()
+      stateServer.handleStatefulProcessorCall(message)
+      if (useTTL) {
+        verify(statefulProcessorHandle)
+          .getValueState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
+      } else {
+        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]])
+      }
+      verify(outputStream).writeInt(0)
+    }
   }
 
   test("value state exists") {

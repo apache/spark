@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.25.3"
+  val protoVersion = "3.25.4"
   // GRPC version used for Spark Connect.
   val grpcVersion = "1.62.2"
 }
@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
   enable(SparkUnidoc.settings)(spark)
 
   /* Enable unidoc only for the root spark connect client project */
-  enable(SparkConnectClientUnidoc.settings)(connectClient)
+  // enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -419,11 +419,6 @@ object SparkBuild extends PomBuild {
   enable(SparkProtobuf.settings)(protobuf)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
-
-  if (!profiles.contains("volcano")) {
-    enable(Volcano.settings)(kubernetes)
-    enable(Volcano.settings)(kubernetesIntegrationTests)
-  }
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
@@ -1322,13 +1317,6 @@ object SparkR {
   )
 }
 
-object Volcano {
-  // Exclude all volcano file for Compile and Test
-  lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
-  )
-}
-
 trait SharedUnidocSettings {
 
   import BuildCommons._
@@ -1421,6 +1409,7 @@ trait SharedUnidocSettings {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
+        "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree"
       )
     },
@@ -1486,8 +1475,8 @@ object SparkConnectClientUnidoc extends SharedUnidocSettings {
   }
 
   lazy val settings = baseSettings ++ Seq(
-    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
-    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
   )
 }
 

@@ -150,7 +150,8 @@ class JSONOptions(
     sep
   }
 
-  protected def checkedEncoding(enc: String): String = enc
+  protected def checkedEncoding(enc: String): String =
+    CharsetProvider.forName(enc, caller = "JSONOptions").name()
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
@@ -233,16 +234,16 @@ class JSONOptionsInRead(
   }
 
   protected override def checkedEncoding(enc: String): String = {
-    val isDenied = JSONOptionsInRead.denyList.contains(Charset.forName(enc))
+    val charset = CharsetProvider.forName(enc, caller = "JSONOptionsInRead")
+    val isDenied = JSONOptionsInRead.denyList.contains(charset)
     require(multiLine || !isDenied,
       s"""The $enc encoding must not be included in the denyList when multiLine is disabled:
          |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
-    val isLineSepRequired =
-        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+    val isLineSepRequired = multiLine || charset == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
     require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
-    enc
+    charset.name()
   }
 }
 

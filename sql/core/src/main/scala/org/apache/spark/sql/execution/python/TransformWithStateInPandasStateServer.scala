@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
 import java.net.ServerSocket
+import java.time.Duration
 
 import scala.collection.mutable
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
-import org.apache.spark.sql.streaming.{ListState, ValueState}
+import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -181,11 +182,14 @@ class TransformWithStateInPandasStateServer(
       case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
         val stateName = message.getGetValueState.getStateName
         val schema = message.getGetValueState.getSchema
-        initializeStateVariable(stateName, schema, "valueState")
+        val ttlDurationMs = if (message.getGetValueState.hasTtl) {
+          Some(message.getGetValueState.getTtl.getDurationMs)
+        } else None
+        initializeStateVariable(stateName, schema, "valueState", ttlDurationMs)
       case StatefulProcessorCall.MethodCase.GETLISTSTATE =>
         val stateName = message.getGetListState.getStateName
         val schema = message.getGetListState.getSchema
-        initializeStateVariable(stateName, schema, "listState")
+        initializeStateVariable(stateName, schema, "listState", None)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -345,14 +349,20 @@ class TransformWithStateInPandasStateServer(
   private def initializeStateVariable(
     stateName: String,
     schemaString: String,
-    stateVariable: String): Unit = {
+    stateVariable: String,
+    ttlDurationMs: Option[Int]): Unit = {
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateVariable match {
         case "valueState" => if (!valueStates.contains(stateName)) {
+          val state = if (ttlDurationMs.isEmpty) {
+            statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema))
+          } else {
+            statefulProcessorHandle.getValueState(
+              stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+          }
           valueStates.put(stateName,
-            ValueStateInfo(statefulProcessorHandle.getValueState[Row](stateName,
-              Encoders.row(schema)), schema, expressionEncoder.createDeserializer()))
+            ValueStateInfo(state, schema, expressionEncoder.createDeserializer()))
           sendResponse(0)
         } else {
           sendResponse(1, s"Value state $stateName already exists")

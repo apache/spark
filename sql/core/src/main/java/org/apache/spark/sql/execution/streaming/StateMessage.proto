@@ -60,6 +60,7 @@ message ImplicitGroupingKeyRequest {
 message StateCallCommand {
   string stateName = 1;
   string schema = 2;
+  TTLConfig ttl = 3;
 }
 
 message ValueStateCall {
@@ -123,4 +124,8 @@ enum HandleState {
 
 message SetHandleState {
   HandleState state = 1;
+}
+
+message TTLConfig {
+  int32 durationMs = 1;
 }

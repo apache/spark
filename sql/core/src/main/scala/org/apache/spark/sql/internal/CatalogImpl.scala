@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -671,12 +672,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     } else {
       CatalogTableType.MANAGED
     }
-    val location = if (storage.locationUri.isDefined) {
-      val locationStr = storage.locationUri.get.toString
-      Some(locationStr)
-    } else {
-      None
-    }
+
+    // The location in UnresolvedTableSpec should be the original user-provided path string.
+    val location = CaseInsensitiveMap(options).get("path")
 
     val newOptions = OptionList(options.map { case (key, value) =>
       (key, Literal(value).asInstanceOf[Expression])

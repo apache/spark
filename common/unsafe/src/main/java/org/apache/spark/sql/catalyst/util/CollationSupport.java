@@ -283,7 +283,7 @@ public final class CollationSupport {
       return v.toLowerCase().toTitleCase();
     }
     public static UTF8String execBinaryICU(final UTF8String v) {
-      return CollationAwareUTF8String.toLowerCase(v).toTitleCaseICU();
+      return CollationAwareUTF8String.toTitleCaseICU(v);
     }
     public static UTF8String execLowercase(final UTF8String v) {
       return CollationAwareUTF8String.toTitleCase(v);
