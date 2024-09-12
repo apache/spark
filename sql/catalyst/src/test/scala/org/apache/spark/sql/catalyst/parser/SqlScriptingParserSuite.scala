@@ -214,8 +214,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = exception,
       condition = "LABELS_MISMATCH",
       parameters = Map("beginLabel" -> toSQLId("lbl_begin"), "endLabel" -> toSQLId("lbl_end")))
-    assert(exception.origin.line.isDefined)
-    assert(exception.origin.line.get == 2)
+    assert(exception.origin.line.contains(2))
   }
 
   test("compound: endLabel") {
