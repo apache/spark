@@ -91,7 +91,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Setting it to -1 indicated forever.
   @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
-  private val operationIds: ConcurrentMap[String, Unit] = new ConcurrentHashMap[String, Unit]()
+  private val operationIds: ConcurrentMap[String, Boolean] =
+    new ConcurrentHashMap[String, Boolean]()
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
   // each other.
@@ -149,17 +150,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         messageParameters = Map("handle" -> sessionId))
     }
 
-    var existed = true
-    operationIds.computeIfAbsent(
+    operationIds.compute(
       operationId,
-      _ => {
-        existed = false
-        ()
+      (operationId, value) => {
+        if (value == true) {
+          // The existence of it should have been checked by SparkConnectExecutionManager.
+          throw new IllegalStateException(
+            s"ExecuteHolder with opId=${operationId} already exists!")
+        }
+        true
       })
-    if (existed) {
-      // The existence of it should have been checked by SparkConnectExecutionManager.
-      throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
-    }
   }
 
   /**
