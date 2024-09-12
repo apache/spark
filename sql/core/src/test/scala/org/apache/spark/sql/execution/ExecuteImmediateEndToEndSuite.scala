@@ -41,7 +41,7 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
   test("EXEC IMMEDIATE STACK OVERFLOW") {
     try {
       spark.sql("DECLARE parm = 1;")
-      val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
+      val query = (1 to 5000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
       Seq(
         s"EXECUTE IMMEDIATE '$query'",
         s"EXECUTE IMMEDIATE '$query' INTO parm").foreach { q =>

@@ -33,7 +33,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
   }
 
   test("PARSE_STACK_OVERFLOW_ERROR: Stack overflow hit") {
-    val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
+    val query = (1 to 5000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
     val e = intercept[ParseException] {
       spark.sql(query)
     }
