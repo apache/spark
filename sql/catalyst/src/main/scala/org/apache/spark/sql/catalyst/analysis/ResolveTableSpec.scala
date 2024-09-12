@@ -91,6 +91,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         provider = u.provider,
         options = newOptions.toMap,
         location = u.location,
+        collation = u.collation,
         comment = u.comment,
         serde = u.serde,
         external = u.external)

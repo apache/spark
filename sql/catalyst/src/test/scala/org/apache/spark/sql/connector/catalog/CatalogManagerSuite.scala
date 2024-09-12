@@ -33,7 +33,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   private def createSessionCatalog(): SessionCatalog = {
     val catalog = new V1InMemoryCatalog()
     catalog.createDatabase(
-      CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", new URI("fake"), Map.empty),
+      CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", None, new URI("fake"), Map.empty),
       ignoreIfExists = true)
     new SessionCatalog(catalog, EmptyFunctionRegistry)
   }
@@ -91,7 +91,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     val v1SessionCatalog = createSessionCatalog()
     v1SessionCatalog.createDatabase(
       CatalogDatabase(
-        "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
+        "test", "", None, v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
       ignoreIfExists = false)
     val catalogManager = new CatalogManager(FakeV2SessionCatalog, v1SessionCatalog)
 

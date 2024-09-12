@@ -55,6 +55,12 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_COMMENT = "comment";
 
   /**
+   * A reserved property to specify the collation of the namespace. The description
+   * will be returned in the result of "DESCRIBE NAMESPACE" command.
+   */
+  String PROP_COLLATION = "collation";
+
+  /**
    * A reserved property to specify the owner of the namespace.
    */
   String PROP_OWNER = "owner";

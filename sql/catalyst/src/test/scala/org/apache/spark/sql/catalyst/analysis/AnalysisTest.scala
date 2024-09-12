@@ -76,7 +76,7 @@ trait AnalysisTest extends PlanTest {
     val catalog = new SessionCatalog(
       new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin)
     catalog.createDatabase(
-      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      CatalogDatabase("default", "", None, new URI("loc"), Map.empty),
       ignoreIfExists = false)
     createTempView(catalog, "TaBlE", TestRelations.testRelation, overrideIfExists = true)
     createTempView(catalog, "TaBlE2", TestRelations.testRelation2, overrideIfExists = true)

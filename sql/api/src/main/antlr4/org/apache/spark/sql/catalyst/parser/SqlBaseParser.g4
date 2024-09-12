@@ -144,6 +144,7 @@ statement
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
+         collationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) propertyList))*             #createNamespace
     | ALTER namespace identifierReference
         SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
@@ -507,6 +508,7 @@ createTableClauses
      createFileFormat |
      locationSpec |
      commentSpec |
+     collationSpec |
      (TBLPROPERTIES tableProps=propertyList))*
     ;
 
@@ -1202,6 +1204,10 @@ unitInUnitToUnit
 
 colPosition
     : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
+    ;
+
+collationSpec
+    : SET DEFAULT COLLATION collationName=identifier
     ;
 
 collateClause

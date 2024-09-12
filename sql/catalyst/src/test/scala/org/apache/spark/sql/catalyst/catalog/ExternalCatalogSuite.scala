@@ -1065,7 +1065,7 @@ abstract class CatalogTestUtils {
   }
 
   def newDb(name: String): CatalogDatabase = {
-    CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
+    CatalogDatabase(name, name + " description", None, newUriForDatabase(), Map.empty)
   }
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))

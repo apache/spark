@@ -37,7 +37,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
   private def getAnalyzer(externalCatalog: ExternalCatalog, databasePath: File): Analyzer = {
     val v1Catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin)
     v1Catalog.createDatabase(
-      CatalogDatabase("default", "", databasePath.toURI, Map.empty),
+      CatalogDatabase("default", "", None, databasePath.toURI, Map.empty),
       ignoreIfExists = false)
     v1Catalog.createTable(
       CatalogTable(

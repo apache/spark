@@ -234,9 +234,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
+      val collation = c.properties.get(SupportsNamespaces.PROP_COLLATION)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
+      CreateDatabaseCommand(name, c.ifNotExists, location, comment, collation, newProperties)
 
     case d @ DropNamespace(ResolvedV1Database(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
@@ -491,8 +492,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       storageFormat: CatalogStorageFormat,
       provider: String): CreateTableV1 = {
     val tableDesc = buildCatalogTable(
-      ident, tableSchema, partitioning, tableSpec.properties, provider,
-      tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external)
+      ident, tableSchema, partitioning, tableSpec.properties, provider, tableSpec.location,
+      tableSpec.comment, tableSpec.collation, storageFormat, tableSpec.external)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
     CreateTableV1(tableDesc, mode, query)
   }
@@ -568,6 +569,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       provider: String,
       location: Option[String],
       comment: Option[String],
+      collation: Option[String],
       storageFormat: CatalogStorageFormat,
       external: Boolean): CatalogTable = {
     val tableType = if (external || location.isDefined) {
@@ -588,7 +590,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       properties = properties ++
         maybeClusterBySpec.map(
           clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
-      comment = comment)
+      comment = comment,
+      collation = collation
+    )
   }
 
   object ResolvedViewIdentifier {

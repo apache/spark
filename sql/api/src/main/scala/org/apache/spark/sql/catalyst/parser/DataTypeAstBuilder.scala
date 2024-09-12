@@ -220,4 +220,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
     ctx.identifier.getText
   }
+
+  protected def visitCollationSpecList(
+      ctx: java.util.List[CollationSpecContext]): Option[String] = {
+    ctx.asScala.headOption.map(visitCollationSpec)
+  }
+
+  override def visitCollationSpec(ctx: CollationSpecContext): String = withOrigin(ctx) {
+    val collationName = ctx.identifier.getText
+    CollationFactory.fetchCollation(collationName).collationName
+  }
 }

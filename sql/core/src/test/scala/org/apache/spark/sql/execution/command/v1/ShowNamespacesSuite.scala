@@ -39,6 +39,7 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
       CatalogDatabase(
         name = ns,
         description = "",
+        collation = None,
         locationUri = Utils.createTempDir().toURI,
         properties = Map.empty),
       ignoreIfExists = false)

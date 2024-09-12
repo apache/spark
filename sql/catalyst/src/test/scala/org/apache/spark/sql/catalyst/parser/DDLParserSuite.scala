@@ -2653,7 +2653,7 @@ class DDLParserSuite extends AnalysisTest {
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-         OptionList(Seq.empty), None, None, None, false), false)
+         OptionList(Seq.empty), None, None, None, None, false), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(
@@ -2666,7 +2666,7 @@ class DDLParserSuite extends AnalysisTest {
       "b STRING NOT NULL DEFAULT 'abc') USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false), false))
     // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
@@ -2826,12 +2826,12 @@ class DDLParserSuite extends AnalysisTest {
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false), false))
     // Two generation expressions
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +
@@ -2988,5 +2988,47 @@ class DDLParserSuite extends AnalysisTest {
       exception = internalException(insertDirSql),
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
+  }
+
+  test("create table with bad collation name") {
+    checkError(
+      exception = internalException("CREATE TABLE t DEFAULT COLLATION XD"),
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "id, xh, af", "collationName" -> "XD")
+    )
+  }
+
+  test("create table with default collation") {
+    comparePlans(parsePlan(
+      "CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION uNiCoDe"),
+      CreateTable(UnresolvedIdentifier(Seq("t")),
+        Seq(ColumnDefinition("c", StringType)),
+        Seq.empty[Transform],
+        UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+          None, None, Some("UNICODE"), None, false), false))
+  }
+
+  test("replace table with default collation") {
+    comparePlans(parsePlan(
+      "REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION uNiCoDe"),
+      ReplaceTable(UnresolvedIdentifier(Seq("t")),
+        Seq(ColumnDefinition("c", StringType)),
+        Seq.empty[Transform],
+        UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+          None, None, Some("UNICODE"), None, false), false))
+  }
+
+  test("create namespace with default collation") {
+    comparePlans(parsePlan(
+      "CREATE NAMESPACE t DEFAULT COLLATION uNiCoDe"),
+      CreateNamespace(UnresolvedNamespace(Seq("t")), false, Map("collation" -> "UNICODE")))
+  }
+
+  test("create namespace with bad collation name") {
+    checkError(
+      exception = internalException("CREATE NAMESPACE ns DEFAULT COLLATION XD"),
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "id, xh, af", "collationName" -> "XD")
+    )
   }
 }

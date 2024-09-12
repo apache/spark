@@ -40,10 +40,10 @@ class LookupFunctionsSuite extends PlanTest {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val externalCatalog = new CustomInMemoryCatalog
         externalCatalog.createDatabase(
-          CatalogDatabase("default", "", new URI("loc1"), Map.empty),
+          CatalogDatabase("default", "", None, new URI("loc1"), Map.empty),
           ignoreIfExists = false)
         externalCatalog.createDatabase(
-          CatalogDatabase("db1", "", new URI("loc2"), Map.empty),
+          CatalogDatabase("db1", "", None, new URI("loc2"), Map.empty),
           ignoreIfExists = false)
         val catalog = new SessionCatalog(externalCatalog, new SimpleFunctionRegistry)
         val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
@@ -79,7 +79,7 @@ class LookupFunctionsSuite extends PlanTest {
     val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
     val analyzer = {
       catalog.createDatabase(
-        CatalogDatabase("default", "", new URI("loc"), Map.empty),
+        CatalogDatabase("default", "", None, new URI("loc"), Map.empty),
         ignoreIfExists = false)
       new Analyzer(catalogManager)
     }
@@ -104,7 +104,7 @@ class LookupFunctionsSuite extends PlanTest {
     val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
     val analyzer = {
       catalog.createDatabase(
-        CatalogDatabase("default", "", new URI("loc"), Map.empty),
+        CatalogDatabase("default", "", None, new URI("loc"), Map.empty),
         ignoreIfExists = false)
       new Analyzer(catalogManager)
     }

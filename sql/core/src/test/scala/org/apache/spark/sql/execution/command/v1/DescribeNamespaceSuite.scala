@@ -54,6 +54,24 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
       assert(result(4) === Row("Properties", ""))
     }
   }
+
+  Seq(true).foreach { hasCollations =>
+    test(s"DESCRIBE NAMESPACE EXTENDED with collation specified = $hasCollations") {
+      withNamespace("ns") {
+        val defaultCollation = if (hasCollations) "DEFAULT COLLATION uNiCoDe" else ""
+
+        sql(s"CREATE NAMESPACE ns $defaultCollation")
+        val descriptionDf = sql(s"DESCRIBE NAMESPACE EXTENDED ns")
+          .where("info_name = 'Collation'")
+
+        if (hasCollations) {
+          checkAnswer(descriptionDf, Seq(Row("Collation", "UNICODE")))
+        } else {
+          assert(descriptionDf.isEmpty)
+        }
+      }
+    }
+  }
 }
 
 /**

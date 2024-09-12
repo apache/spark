@@ -327,6 +327,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         extraOptions.get("path"),
         None,
         None,
+        None,
         false)
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),

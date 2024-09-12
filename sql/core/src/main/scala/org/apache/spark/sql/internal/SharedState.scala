@@ -153,6 +153,7 @@ private[sql] class SharedState(
       val defaultDbDefinition = CatalogDatabase(
         SQLConf.get.defaultDatabase,
         "default database",
+        None,
         CatalogUtils.stringToURI(conf.get(WAREHOUSE_PATH)),
         Map())
       // There may be another Spark application creating default database at the same time, here we
