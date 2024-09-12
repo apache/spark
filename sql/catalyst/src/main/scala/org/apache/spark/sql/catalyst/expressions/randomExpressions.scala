@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -39,8 +39,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterministic
-  with ExpressionWithRandomSeed {
+trait RDG extends Expression with ExpressionWithRandomSeed {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -48,12 +47,6 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
   @transient protected var rng: XORShiftRandom = _
 
   override def stateful: Boolean = true
-
-  override protected def initializeInternal(partitionIndex: Int): Unit = {
-    rng = new XORShiftRandom(seed + partitionIndex)
-  }
-
-  override def seedExpression: Expression = child
 
   @transient protected lazy val seed: Long = seedExpression match {
     case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
@@ -63,6 +56,15 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType
+}
+
+abstract class NondeterministicUnaryRDG
+  extends RDG with UnaryLike[Expression] with Nondeterministic with ExpectsInputTypes {
+  override def seedExpression: Expression = child
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    rng = new XORShiftRandom(seed + partitionIndex)
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegerType, LongType))
 }
@@ -105,7 +107,7 @@ private[catalyst] object ExpressionWithRandomSeed {
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
+case class Rand(child: Expression, hideSeed: Boolean = false) extends NondeterministicUnaryRDG {
 
   def this() = this(UnresolvedSeed, true)
 
@@ -156,7 +158,7 @@ object Rand {
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
+case class Randn(child: Expression, hideSeed: Boolean = false) extends NondeterministicUnaryRDG {
 
   def this() = this(UnresolvedSeed, true)
 
@@ -199,29 +201,16 @@ object Randn {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(10, 20) > 0 AS result;
+      > SELECT _FUNC_(10, 20, 0) > 0 AS result;
       true
   """,
   since = "4.0.0",
   group = "math_funcs")
-object UniformExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val numArgs = expressions.length
-    expressions match {
-      case Seq(min, max) =>
-        Uniform(min, max)
-      case Seq(min, max, seed) =>
-        Uniform(min, max, seed)
-      case _ =>
-        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
-    }
-  }
-}
+case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
+  extends RuntimeReplaceable with TernaryLike[Expression] with RDG {
+  def this(min: Expression, max: Expression) =
+    this(min, max, Literal(Uniform.random.nextLong(), LongType))
 
-case class Uniform(min: Expression, max: Expression)
-  extends RuntimeReplaceable with BinaryLike[Expression] with ExpressionWithRandomSeed {
-
-  private var seed: Expression = Literal(Uniform.random.nextLong(), LongType)
   final override lazy val deterministic: Boolean = false
   override val nodePatterns: Seq[TreePattern] =
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
@@ -255,7 +244,7 @@ case class Uniform(min: Expression, max: Expression)
     def requiredType = "integer or floating-point"
     Seq((min, "min", 0),
       (max, "max", 1),
-      (seed, "seed", 2)).foreach {
+      (seedExpression, "seed", 2)).foreach {
       case (expr: Expression, name: String, index: Int) =>
         if (!expr.foldable && result == TypeCheckResult.TypeCheckSuccess) {
           result = DataTypeMismatch(
@@ -277,18 +266,16 @@ case class Uniform(min: Expression, max: Expression)
     result
   }
 
-  override def left: Expression = min
-  override def right: Expression = max
+  override def first: Expression = min
+  override def second: Expression = max
+  override def third: Expression = seedExpression
 
-  override def seedExpression: Expression = seed
-  override def withNewSeed(newSeed: Long): Expression = {
-    val result = Uniform(min, max)
-    result.seed = Literal(newSeed, LongType)
-    result
-  }
+  override def withNewSeed(newSeed: Long): Expression =
+    Uniform(min, max, Literal(newSeed, LongType))
 
-  override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
-    Uniform(newFirst, newSecond)
+  override def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    Uniform(newFirst, newSecond, newThird)
 
   override def replacement: Expression = {
     def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
@@ -305,12 +292,6 @@ case class Uniform(min: Expression, max: Expression)
 
 object Uniform {
   lazy val random = new Random()
-
-  def apply(min: Expression, max: Expression, seedExpression: Expression): Uniform = {
-    val result = Uniform(min, max)
-    result.seed = seedExpression
-    result
-  }
 }
 
 @ExpressionDescription(

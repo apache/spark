@@ -173,7 +173,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"VOID\"",
     "paramIndex" : "first",
     "requiredType" : "integer or floating-point",
-    "sqlExpr" : "\"uniform(NULL, 1)\""
+    "sqlExpr" : "\"uniform(NULL, 1, 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -197,7 +197,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"VOID\"",
     "paramIndex" : "second",
     "requiredType" : "integer or floating-point",
-    "sqlExpr" : "\"uniform(0, NULL)\""
+    "sqlExpr" : "\"uniform(0, NULL, 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -221,7 +221,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"VOID\"",
     "paramIndex" : "third",
     "requiredType" : "integer or floating-point",
-    "sqlExpr" : "\"uniform(0, 1)\""
+    "sqlExpr" : "\"uniform(0, 1, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -244,7 +244,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputExpr" : "\"col\"",
     "inputName" : "seed",
     "inputType" : "integer or floating-point",
-    "sqlExpr" : "\"uniform(10, 20)\""
+    "sqlExpr" : "\"uniform(10, 20, col)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -267,7 +267,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputExpr" : "\"col\"",
     "inputName" : "min",
     "inputType" : "integer or floating-point",
-    "sqlExpr" : "\"uniform(col, 10)\""
+    "sqlExpr" : "\"uniform(col, 10, 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",

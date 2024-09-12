@@ -386,7 +386,7 @@ object FunctionRegistry {
     expression[Randn]("randn"),
     expression[RandStr]("randstr"),
     expression[Stack]("stack"),
-    expressionBuilder("uniform", UniformExpressionBuilder),
+    expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
     CaseWhen.registryEntry,
 
