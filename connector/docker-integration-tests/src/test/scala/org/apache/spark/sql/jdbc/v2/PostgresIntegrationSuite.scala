@@ -23,7 +23,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -133,51 +132,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     }
   }
 
-  test("SPARK-49162: Push down aggregate date_trunc function") {
-    def testAggregatePushdown(format: String, expectedResult: Set[Row]): Unit = {
-      val df = sql(
-        s"""
-            SELECT DATE_TRUNC('$format', time), COUNT(*)
-            | FROM $catalogName.datetime_table
-            | GROUP BY 1
-         """.stripMargin
-      )
-      val aggregates = df.queryExecution.optimizedPlan.collect {
-        case agg: Aggregate => agg
-      }
-      assert(aggregates.isEmpty)
-      assert(df.collect().toSet === expectedResult)
-    }
-
-    testAggregatePushdown("YEAR",
-      Set(Row(Timestamp.valueOf("2024-01-01 00:00:00.0"), 2)))
-    testAggregatePushdown("MONTH",
-      Set(
-        Row(Timestamp.valueOf("2024-02-01 00:00:00.0"), 1),
-        Row(Timestamp.valueOf("2024-01-01 00:00:00.0"), 1)
-      ))
-    testAggregatePushdown("DAY",
-      Set(
-        Row(Timestamp.valueOf("2024-02-02 00:00:00.0"), 1),
-        Row(Timestamp.valueOf("2024-01-01 00:00:00.0"), 1)
-      ))
-    testAggregatePushdown("HOUR",
-      Set(
-        Row(Timestamp.valueOf("2024-02-02 02:00:00.0"), 1),
-        Row(Timestamp.valueOf("2024-01-01 01:00:00.0"), 1)
-      ))
-    testAggregatePushdown("MINUTE",
-      Set(
-        Row(Timestamp.valueOf("2024-02-02 02:02:00.0"), 1),
-        Row(Timestamp.valueOf("2024-01-01 01:01:00.0"), 1)
-      ))
-    testAggregatePushdown("SECOND",
-      Set(
-        Row(Timestamp.valueOf("2024-02-02 02:02:02.0"), 1),
-        Row(Timestamp.valueOf("2024-01-01 01:01:01.0"), 1)
-      ))
-  }
-
   test("SPARK-49162: Push down filter date_trunc function") {
     def testFilterPushdown(format: String, date: String, expectedResult: Set[Row]): Unit = {
       val df = sql(
@@ -187,10 +141,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
            | WHERE DATE_TRUNC('$format', time) = '$date'
          """.stripMargin
       )
-      val filters = df.queryExecution.optimizedPlan.collect {
-        case f: Filter => f
-      }
-      assert(filters.isEmpty)
+      checkFilterPushed(df)
       assert(df.collect().toSet === expectedResult)
     }
 
