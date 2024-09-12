@@ -6656,11 +6656,6 @@
       "Type <dataType> does not support ordered operations."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2011" : {
-    "message" : [
-      "Unexpected data type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"

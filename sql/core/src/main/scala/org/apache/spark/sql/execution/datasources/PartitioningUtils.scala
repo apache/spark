@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -550,8 +550,7 @@ object PartitioningUtils extends SQLConfHelper {
       Cast(Literal(unescapePathName(value)), it).eval()
     case BinaryType => value.getBytes()
     case BooleanType => value.toBoolean
-    case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
-  }
+    case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
 
   def validatePartitionColumn(
       schema: StructType,
