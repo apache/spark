@@ -75,7 +75,11 @@ class PySparkSampledPlotBase:
 
 class PySparkPlotAccessor:
     plot_data_map = {
+        "bar": PySparkTopNPlotBase().get_top_n,
+        "barh": PySparkTopNPlotBase().get_top_n,
         "line": PySparkSampledPlotBase().get_sampled,
+        "scatter": PySparkTopNPlotBase().get_top_n,
+        "area": PySparkSampledPlotBase().get_sampled,
     }
     _backends = {}  # type: ignore[var-annotated]
 
@@ -133,3 +137,68 @@ class PySparkPlotAccessor:
         >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         return self(kind="line", x=x, y=y, **kwargs)
+
+    def bar(self, x: str, y: Union[str, list[str]], **kwargs: Any) -> "Figure":
+        """
+        Vertical bar plot.
+
+        A bar plot is a plot that presents categorical data with rectangular bars with lengths
+        proportional to the values that they represent. A bar plot shows comparisons among
+        discrete categories. One axis of the plot shows the specific categories being compared,
+        and the other axis represents a measured value.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to use for the horizontal axis.
+        y : str or list of str
+            Name(s) of the column(s) to use for the vertical axis. Multiple columns can be plotted.
+        **kwds : optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+        >>> columns = ["category", "int_val", "float_val"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKIP
+        >>> df.plot.bar(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        """
+        return self(kind="bar", x=x, y=y, **kwargs)
+
+    def barh(self, x: str, y: Union[str, list[str]], **kwargs: Any) -> "Figure":
+        """
+        Make a horizontal bar plot.
+
+        A horizontal bar plot is a plot that presents quantitative data with
+        rectangular bars with lengths proportional to the values that they
+        represent. A bar plot shows comparisons among discrete categories. One
+        axis of the plot shows the specific categories being compared, and the
+        other axis represents a measured value.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to use for the horizontal axis.
+        y : str or list of str
+            Name(s) of the column(s) to use for the vertical axis. Multiple columns can be plotted.
+        **kwds : optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+        >>> columns = ["category", "int_val", "float_val"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.barh(x="category", y="int_val")  # doctest: +SKIP
+        >>> df.plot.barh(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        """
+        return self(kind="barh", x=x, y=y, **kwargs)

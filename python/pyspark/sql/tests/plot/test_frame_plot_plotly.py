@@ -47,6 +47,29 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
         self._check_fig_data(fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
 
+    def test_bar_plot(self):
+        # single column as vertical axis
+        fig = self.sdf.plot(kind="bar", x="category", y="int_val")
+        self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20])
+
+        # multiple columns as vertical axis
+        fig = self.sdf.plot.bar(x="category", y=["int_val", "float_val"])
+        self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
+        self._check_fig_data(fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
+
+    def test_barh_plot(self):
+        # single column as vertical axis
+        fig = self.sdf.plot(kind="barh", x="category", y="int_val")
+        self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20])
+        self.assertEqual(fig["data"][0]["orientation"], "h")
+
+        # multiple columns as vertical axis
+        fig = self.sdf.plot.barh(x="category", y=["int_val", "float_val"])
+        self._check_fig_data(fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
+        self.assertEqual(fig["data"][0]["orientation"], "h")
+        self._check_fig_data(fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
+        self.assertEqual(fig["data"][1]["orientation"], "h")
+
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
     pass
