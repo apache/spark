@@ -534,7 +534,7 @@ class PandasGroupedOpsMixin:
                         TimerValues(batch_timestamp, watermark_timestamp),
                         ExpiredTimerInfo(True, expiry_timestamp)))
 
-            # TODO fix this, why status is timer_processed before go into handle timer?
+            # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
             """
             statefulProcessorApiClient.set_handle_state(
                 StatefulProcessorHandleState.TIMER_PROCESSED

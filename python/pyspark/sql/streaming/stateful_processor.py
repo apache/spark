@@ -78,6 +78,12 @@ class ValueState:
 
 
 class TimerValues:
+    """
+    Class used for arbitrary stateful operations with transformWithState to access processing
+    time or event time for current batch.
+
+    .. versionadded:: 4.0.0
+    """
     def __init__(
             self,
             current_processing_time_in_ms: int = -1,
@@ -85,14 +91,26 @@ class TimerValues:
         self._current_processing_time_in_ms = current_processing_time_in_ms
         self._current_watermark_in_ms = current_watermark_in_ms
 
+    """
+    Get processing time for current batch, return timestamp in millisecond.
+    """
     def get_current_processing_time_in_ms(self) -> int:
         return self._current_processing_time_in_ms
 
+    """
+    Get watermark for current batch, return timestamp in millisecond.
+    """
     def get_current_watermark_in_ms(self) -> int:
         return self._current_watermark_in_ms
 
 
 class ExpiredTimerInfo:
+    """
+    Class used for arbitrary stateful operations with transformWithState to access expired timer
+    info. When is_valid is false, the expiry timestamp is invalid.
+
+    .. versionadded:: 4.0.0
+    """
     def __init__(
             self,
             is_valid: bool,
@@ -100,9 +118,15 @@ class ExpiredTimerInfo:
         self._is_valid = is_valid
         self._expiry_time_in_ms = expiry_time_in_ms
 
+    """
+    Whether the expiry info is valid.
+    """
     def is_valid(self) -> bool:
         return self._is_valid
 
+    """
+    Get the timestamp for expired timer, return timestamp in millisecond.
+    """
     def get_expiry_time_in_ms(self) -> int:
         return self._expiry_time_in_ms
 

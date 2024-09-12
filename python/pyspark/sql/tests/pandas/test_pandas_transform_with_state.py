@@ -312,9 +312,9 @@ class TransformWithStateInPandasTestsMixin:
     def _test_transform_with_state_in_pandas_proc_timer(
             self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
+        self._prepare_test_resource3(input_path)
         self._prepare_test_resource1(input_path)
         self._prepare_test_resource2(input_path)
-        self._prepare_test_resource3(input_path)
 
         df = self._build_test_df(input_path)
 
@@ -397,23 +397,21 @@ class TransformWithStateInPandasTestsMixin:
 
         self._test_transform_with_state_in_pandas_proc_timer(ProcTimeStatefulProcessor(), check_results)
 
-"""
-    def _test_transform_with_state_in_pandas_event_time(
-            self, stateful_processor, check_results):
+    def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
         import pyspark.sql.functions as f
 
         input_path = tempfile.mkdtemp()
 
         def prepare_batch1(input_path):
+            with open(input_path + "/text-test3.txt", "w") as fw:
+                fw.write("a, 20\n")
+
+        def prepare_batch2(input_path):
             with open(input_path + "/text-test1.txt", "w") as fw:
                 fw.write("a, 4\n")
 
-        def prepare_batch2(input_path):
-            with open(input_path + "/text-test2.txt", "w") as fw:
-                fw.write("a, 10\n")
-
         def prepare_batch3(input_path):
-            with open(input_path + "/text-test3.txt", "w") as fw:
+            with open(input_path + "/text-test2.txt", "w") as fw:
                 fw.write("a, 11\n")
                 fw.write("a, 13\n")
                 fw.write("a, 15\n")
@@ -463,24 +461,27 @@ class TransformWithStateInPandasTestsMixin:
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
-                    Row(id="a", timestamp="15")
+                    Row(id="a", timestamp="20")
                 }
             elif batch_id == 1:
                 # event time = 4 will be discarded because the watermark = 15 - 10 = 5
+                # the timer registered in the first batch (watermark = 0) has expired
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="20"),
+                    Row(id="a-expired", timestamp="0")
+                }
+            else:
+                # watermark has not progressed, so timer registered in batch 1(watermark = 10)
+                # has not yet expired
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="15")
                 }
-            else:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="a", timestamp="-1"),
-                    Row(id="a", timestamp="-1"),
-                    Row(id="a", timestamp="-1")
-                }
 
         self._test_transform_with_state_in_pandas_event_time(EventTimeStatefulProcessor(), check_results)
-"""
 
 
+# A stateful processor that output the max event time it has seen. Register timer for
+# current watermark. Clear max state if timer expires.
 class EventTimeStatefulProcessor(StatefulProcessor):
 
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -491,23 +492,25 @@ class EventTimeStatefulProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         if expired_timer_info.is_valid():
             self.max_state.clear()
-            yield pd.DataFrame({"id": key, "timestamp": "-1"})
+            self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
+            str_key = f"{str(key[0])}-expired"
+            yield pd.DataFrame({"id": (str_key,),
+                                "timestamp": str(expired_timer_info.get_expiry_time_in_ms())})
 
         else:
-
             timestamp_list = []
             for pdf in rows:
                 # int64 will represent timestamp in nanosecond, restore to second
                 timestamp_list.extend((pdf['eventTime'].astype('int64') // 10**9).tolist())
 
-            if self.count_state.exists():
+            if self.max_state.exists():
                 cur_max = int(self.max_state.get()[0])
             else:
                 cur_max = 0
             max_event_time = str(max(cur_max, max(timestamp_list)))
 
-            self.count_state.update(max_event_time)
-            self.handle.registerTimer(timer_values.get_current_watermark_in_ms() * 1000)
+            self.max_state.update((max_event_time,))
+            self.handle.registerTimer(timer_values.get_current_watermark_in_ms())
 
             yield pd.DataFrame({"id": key, "timestamp": max_event_time})
 
@@ -515,6 +518,8 @@ class EventTimeStatefulProcessor(StatefulProcessor):
         pass
 
 
+# A stateful processor that output the accumulation of count of input rows; register
+# processing timer and clear the counter if timer expires.
 class ProcTimeStatefulProcessor(StatefulProcessor):
 
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -546,7 +551,7 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
 
             count = count + rows_count
 
-            self.count_state.update(str(count))
+            self.count_state.update((str(count),))
             timestamp = str(timer_values.get_current_processing_time_in_ms())
 
             yield pd.DataFrame({"id": key, "countAsString": str(count),
@@ -554,6 +559,7 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
 
 class SimpleStatefulProcessor(StatefulProcessor):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
