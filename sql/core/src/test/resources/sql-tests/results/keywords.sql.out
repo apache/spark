@@ -48,6 +48,7 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	false
 COLLATION	false
+COLLATIONS	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
