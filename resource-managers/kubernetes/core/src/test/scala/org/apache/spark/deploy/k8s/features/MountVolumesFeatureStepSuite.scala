@@ -131,16 +131,16 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(pvcClaim.getClaimName.endsWith("-driver-pvc-0"))
   }
 
-  test("Create and mounts persistentVolumeClaims in driver with labels") {
+  test("SPARK-49598: Create and mounts persistentVolumeClaims in driver with labels") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND,
-        labels = Map("foo" -> "bar", "env" -> "test"),
+      KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
+        storageClass = Some("gp"),
         size = Some("1Mi"),
-        storageClass = Some("gp"))
+        labels = Some(Map("foo" -> "bar", "env" -> "test")))
     )
 
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
@@ -151,16 +151,16 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(pvcClaim.getClaimName.endsWith("-driver-pvc-0"))
   }
 
-  test("Create and mounts persistentVolumeClaims in executors with labels") {
+  test("SPARK-49598: Create and mounts persistentVolumeClaims in executors with labels") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND,
-        labels = Map("foo1" -> "bar1", "env" -> "exec-test"),
+      KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
+        storageClass = Some("gp"),
         size = Some("1Mi"),
-        storageClass = Some("gp"))
+        labels = Some(Map("foo1" -> "bar1", "env" -> "exec-test")))
     )
 
     val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
@@ -172,26 +172,27 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(executorPVC.getClaimName.endsWith("-exec-1-pvc-0"))
   }
 
-  test("Mounts multiple volumes to executor with labels") {
+  test("SPARK-49598: Mount multiple volumes to executor with labels") {
     val pvcVolumeConf1 = KubernetesVolumeSpec(
       "checkpointVolume1",
       "/checkpoints1",
       "",
       true,
-      KubernetesPVCVolumeConf("pvcClaim1",
-        labels = Map("foo1" -> "bar1", "env1" -> "exec-test-1"),
+      KubernetesPVCVolumeConf(claimName = "pvcClaim1",
+        storageClass = Some("gp"),
         size = Some("1Mi"),
-        storageClass = Some("gp"))
+        labels = Some(Map("foo1" -> "bar1", "env1" -> "exec-test-1")))
     )
+
     val pvcVolumeConf2 = KubernetesVolumeSpec(
       "checkpointVolume2",
       "/checkpoints2",
       "",
       true,
-      KubernetesPVCVolumeConf("pvcClaim2",
-        labels = Map("foo2" -> "bar2", "env2" -> "exec-test-2"),
+      KubernetesPVCVolumeConf(claimName = "pvcClaim2",
+        storageClass = Some("gp"),
         size = Some("1Mi"),
-        storageClass = Some("gp"))
+        labels = Some(Map("foo2" -> "bar2", "env2" -> "exec-test-2")))
     )
 
     val kubernetesConf = KubernetesTestConf.createExecutorConf(

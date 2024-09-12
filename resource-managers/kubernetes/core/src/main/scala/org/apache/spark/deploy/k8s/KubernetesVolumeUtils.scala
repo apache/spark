@@ -39,31 +39,27 @@ object KubernetesVolumeUtils {
    */
   @Since("3.0.0")
   def parseVolumesWithPrefix(sparkConf: SparkConf, prefix: String): Seq[KubernetesVolumeSpec] = {
-    // since volume prefix for volume coincides with volume labels prefix, filtering out
-    // required config
     val properties = sparkConf.getAllWithPrefix(prefix).toMap
-    val volumeProperties = properties.filter(!_._1.startsWith("label"))
-    val labelsProperties = properties.filter(_._1.startsWith("label"))
 
-    getVolumeTypesAndNames(volumeProperties).map { case (volumeType, volumeName) =>
+    getVolumeTypesAndNames(properties).map { case (volumeType, volumeName) =>
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
-      val labelsSubKey = s"label.$volumeType.$volumeName."
+      val labelsKey = s"$volumeType.$volumeName.label."
 
-      val volumeSpecificLabelsMap = labelsProperties
-        .filter(_._1.startsWith(labelsSubKey))
+      val volumeSpecificLabelsMap = properties
+        .filter(_._1.startsWith(labelsKey))
         .map {
-          case (k, v) => k.replaceAll(labelsSubKey, "") -> v
+          case (k, v) => k.replaceAll(labelsKey, "") -> v
         }
 
       KubernetesVolumeSpec(
         volumeName = volumeName,
-        mountPath = volumeProperties(pathKey),
-        mountSubPath = volumeProperties.getOrElse(subPathKey, ""),
-        mountReadOnly = volumeProperties.get(readOnlyKey).exists(_.toBoolean),
-        volumeConf = parseVolumeSpecificConf(volumeProperties,
-          volumeType, volumeName, volumeSpecificLabelsMap))
+        mountPath = properties(pathKey),
+        mountSubPath = properties.getOrElse(subPathKey, ""),
+        mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
+        volumeConf = parseVolumeSpecificConf(properties,
+          volumeType, volumeName, Option(volumeSpecificLabelsMap)))
     }.toSeq
   }
 
@@ -87,7 +83,7 @@ object KubernetesVolumeUtils {
       options: Map[String, String],
       volumeType: String,
       volumeName: String,
-      labels: Map[String, String]): KubernetesVolumeSpecificConf = {
+      labels: Option[Map[String, String]]): KubernetesVolumeSpecificConf = {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"

@@ -103,16 +103,14 @@ object KubernetesTestConf {
     }
   }
 
-  def key(vtype: String, vname: String, subkey: String, prefix: String): String = {
-    s"${prefix}$vtype.$vname.$subkey"
-  }
-
   private def setVolumeSpecs(
       conf: SparkConf,
       prefix: String,
       volumes: Seq[KubernetesVolumeSpec]): Unit = {
+    def key(vtype: String, vname: String, subkey: String): String = {
+      s"${prefix}$vtype.$vname.$subkey"
+    }
 
-    val labelSubKey = "label"
     volumes.foreach { case spec =>
       val (vtype, configs) = spec.volumeConf match {
         case KubernetesHostPathVolumeConf(path) =>
@@ -123,7 +121,10 @@ object KubernetesTestConf {
           val sconf = storageClass
             .map { s => (KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY, s) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
-          val llabels = labels.map { case(k, v) => s"$labelSubKey.$k" -> v }
+          val llabels = labels match {
+            case Some(value) => value.map { case(k, v) => s"label.$k" -> v }
+            case None => Map()
+          }
           (KUBERNETES_VOLUMES_PVC_TYPE,
             Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++
               sconf ++ lconf ++ llabels)
@@ -139,23 +140,16 @@ object KubernetesTestConf {
             KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY -> server))
       }
 
-      conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY,
-        prefix), spec.mountPath)
+      conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY), spec.mountPath)
       if (spec.mountSubPath.nonEmpty) {
-        conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY, prefix),
+        conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY),
           spec.mountSubPath)
       }
-      conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_READONLY_KEY, prefix),
+      conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_READONLY_KEY),
         spec.mountReadOnly.toString)
 
       configs.foreach { case (k, v) =>
-        if (k.startsWith(s"$labelSubKey.")) {
-          conf.set(key(vtype, spec.volumeName, k.replaceAll(s"$labelSubKey.",
-            ""), prefix + s"$labelSubKey."), v)
-        }
-        else {
-          conf.set(key(vtype, spec.volumeName, k, prefix), v)
-        }
+        conf.set(key(vtype, spec.volumeName, k), v)
       }
     }
   }

@@ -59,13 +59,13 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
       KubernetesPVCVolumeConf("claimName"))
   }
 
-  test("Parses persistentVolumeClaim volumes correctly with labels") {
+  test("SPARK-49598: Parses persistentVolumeClaim volumes correctly with labels") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
     sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
-    sparkConf.set("test.label.persistentVolumeClaim.volumeName.env", "test")
-    sparkConf.set("test.label.persistentVolumeClaim.volumeName.foo", "bar")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.label.env", "test")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.label.foo", "bar")
 
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
@@ -73,10 +73,11 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
       KubernetesPVCVolumeConf(claimName = "claimName",
-        labels = Map("env" -> "test", "foo" -> "bar")))
+        labels = Some(Map("env" -> "test", "foo" -> "bar"))))
   }
 
-  test("Parses persistentVolumeClaim volumes & puts labels as empty Map if not provided") {
+  test("SPARK-49598: Parses persistentVolumeClaim volumes & puts " +
+    "labels as empty Map if not provided") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
@@ -87,7 +88,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
-      KubernetesPVCVolumeConf(claimName = "claimName", labels = Map()))
+      KubernetesPVCVolumeConf(claimName = "claimName", labels = Some(Map())))
   }
 
   test("Parses emptyDir volumes correctly") {
