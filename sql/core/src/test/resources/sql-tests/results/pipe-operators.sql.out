@@ -86,10 +86,22 @@ struct<>
 
 
 -- !query
-create temporary view years as select * from values
-  (2012, 1),
-  (2013, 2)
-  as years(y, s)
+create temporary view courseEarnings as select * from values
+  ("dotNET", 15000, 48000, 22500),
+  ("Java", 20000, 30000, NULL)
+  as courseEarnings(course, `2012`, `2013`, `2014`)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view courseEarningsAndSales as select * from values
+  ("dotNET", 15000, NULL, 48000, 1, 22500, 1),
+  ("Java", 20000, 1, 30000, 2, NULL, NULL)
+  as courseEarningsAndSales(
+    course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014)
 -- !query schema
 struct<>
 -- !query output
@@ -368,6 +380,56 @@ struct<year:int,{1, a}:bigint,{2, b}:bigint>
 -- !query output
 2012	35000	NULL
 2013	NULL	78000
+
+
+-- !query
+table courseEarnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query schema
+struct<course:string,year:string,earningsYear:int>
+-- !query output
+Java	2012	20000
+Java	2013	30000
+dotNET	2012	15000
+dotNET	2013	48000
+dotNET	2014	22500
+
+
+-- !query
+table courseEarnings
+|> unpivot include nulls (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query schema
+struct<course:string,year:string,earningsYear:int>
+-- !query output
+Java	2012	20000
+Java	2013	30000
+Java	2014	NULL
+dotNET	2012	15000
+dotNET	2013	48000
+dotNET	2014	22500
+
+
+-- !query
+table courseEarningsAndSales
+|> unpivot include nulls (
+     (earnings, sales) for `year` in (
+       (earnings2012, sales2012) as `2012`,
+       (earnings2013, sales2013) as `2013`,
+       (earnings2014, sales2014) as `2014`)
+   )
+-- !query schema
+struct<course:string,year:string,earnings:int,sales:int>
+-- !query output
+Java	2012	20000	1
+Java	2013	30000	2
+Java	2014	NULL	NULL
+dotNET	2012	15000	NULL
+dotNET	2013	48000	1
+dotNET	2014	22500	1
 
 
 -- !query

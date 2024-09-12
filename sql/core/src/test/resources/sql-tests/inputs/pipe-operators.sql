@@ -20,10 +20,16 @@ create temporary view courseSales as select * from values
   ("Java", 2013, 30000)
   as courseSales(course, year, earnings);
 
-create temporary view years as select * from values
-  (2012, 1),
-  (2013, 2)
-  as years(y, s);
+create temporary view courseEarnings as select * from values
+  ("dotNET", 15000, 48000, 22500),
+  ("Java", 20000, 30000, NULL)
+  as courseEarnings(course, `2012`, `2013`, `2014`);
+
+create temporary view courseEarningsAndSales as select * from values
+  ("dotNET", 15000, NULL, 48000, 1, 22500, 1),
+  ("Java", 20000, 1, 30000, 2, NULL, NULL)
+  as courseEarningsAndSales(
+    course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014);
 
 create temporary view yearsWithComplexTypes as select * from values
   (2012, array(1, 1), map('1', 1), struct(1, 'a')),
@@ -143,6 +149,24 @@ table courseSales
 |> pivot (
      sum(earnings)
      for s in ((1, 'a'), (2, 'b'))
+   );
+
+table courseEarnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   );
+
+table courseEarnings
+|> unpivot include nulls (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   );
+
+table courseEarningsAndSales
+|> unpivot include nulls (
+     (earnings, sales) for `year` in (
+       (earnings2012, sales2012) as `2012`,
+       (earnings2013, sales2013) as `2013`,
+       (earnings2014, sales2014) as `2014`)
    );
 
 -- Pivot and unpivot operators: negative tests.

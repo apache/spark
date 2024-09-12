@@ -84,18 +84,35 @@ CreateViewCommand `courseSales`, select * from values
 
 
 -- !query
-create temporary view years as select * from values
-  (2012, 1),
-  (2013, 2)
-  as years(y, s)
+create temporary view courseEarnings as select * from values
+  ("dotNET", 15000, 48000, 22500),
+  ("Java", 20000, 30000, NULL)
+  as courseEarnings(course, `2012`, `2013`, `2014`)
 -- !query analysis
-CreateViewCommand `years`, select * from values
-  (2012, 1),
-  (2013, 2)
-  as years(y, s), false, false, LocalTempView, UNSUPPORTED, true
-   +- Project [y#x, s#x]
-      +- SubqueryAlias years
-         +- LocalRelation [y#x, s#x]
+CreateViewCommand `courseEarnings`, select * from values
+  ("dotNET", 15000, 48000, 22500),
+  ("Java", 20000, 30000, NULL)
+  as courseEarnings(course, `2012`, `2013`, `2014`), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [course#x, 2012#x, 2013#x, 2014#x]
+      +- SubqueryAlias courseEarnings
+         +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
+
+
+-- !query
+create temporary view courseEarningsAndSales as select * from values
+  ("dotNET", 15000, NULL, 48000, 1, 22500, 1),
+  ("Java", 20000, 1, 30000, 2, NULL, NULL)
+  as courseEarningsAndSales(
+    course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014)
+-- !query analysis
+CreateViewCommand `courseEarningsAndSales`, select * from values
+  ("dotNET", 15000, NULL, 48000, 1, 22500, 1),
+  ("Java", 20000, 1, 30000, 2, NULL, NULL)
+  as courseEarningsAndSales(
+    course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
+      +- SubqueryAlias courseEarningsAndSales
+         +- LocalRelation [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
 
 
 -- !query
@@ -430,6 +447,55 @@ Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)
                      +- Project [y#x, a#x, m#x, s#x]
                         +- SubqueryAlias yearsWithComplexTypes
                            +- LocalRelation [y#x, a#x, m#x, s#x]
+
+
+-- !query
+table courseEarnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query analysis
+Filter isnotnull(coalesce(earningsYear#x))
++- Expand [[course#x, 2012, 2012#x], [course#x, 2013, 2013#x], [course#x, 2014, 2014#x]], [course#x, year#x, earningsYear#x]
+   +- SubqueryAlias courseearnings
+      +- View (`courseEarnings`, [course#x, 2012#x, 2013#x, 2014#x])
+         +- Project [cast(course#x as string) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
+            +- Project [course#x, 2012#x, 2013#x, 2014#x]
+               +- SubqueryAlias courseEarnings
+                  +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
+
+
+-- !query
+table courseEarnings
+|> unpivot include nulls (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query analysis
+Expand [[course#x, 2012, 2012#x], [course#x, 2013, 2013#x], [course#x, 2014, 2014#x]], [course#x, year#x, earningsYear#x]
++- SubqueryAlias courseearnings
+   +- View (`courseEarnings`, [course#x, 2012#x, 2013#x, 2014#x])
+      +- Project [cast(course#x as string) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
+         +- Project [course#x, 2012#x, 2013#x, 2014#x]
+            +- SubqueryAlias courseEarnings
+               +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
+
+
+-- !query
+table courseEarningsAndSales
+|> unpivot include nulls (
+     (earnings, sales) for `year` in (
+       (earnings2012, sales2012) as `2012`,
+       (earnings2013, sales2013) as `2013`,
+       (earnings2014, sales2014) as `2014`)
+   )
+-- !query analysis
+Expand [[course#x, 2012, earnings2012#x, sales2012#x], [course#x, 2013, earnings2013#x, sales2013#x], [course#x, 2014, earnings2014#x, sales2014#x]], [course#x, year#x, earnings#x, sales#x]
++- SubqueryAlias courseearningsandsales
+   +- View (`courseEarningsAndSales`, [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x])
+      +- Project [cast(course#x as string) AS course#x, cast(earnings2012#x as int) AS earnings2012#x, cast(sales2012#x as int) AS sales2012#x, cast(earnings2013#x as int) AS earnings2013#x, cast(sales2013#x as int) AS sales2013#x, cast(earnings2014#x as int) AS earnings2014#x, cast(sales2014#x as int) AS sales2014#x]
+         +- Project [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
+            +- SubqueryAlias courseEarningsAndSales
+               +- LocalRelation [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
 
 
 -- !query
