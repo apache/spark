@@ -551,6 +551,7 @@ object PartitioningUtils extends SQLConfHelper {
     case BinaryType => value.getBytes()
     case BooleanType => value.toBoolean
     case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
+  }
 
   def validatePartitionColumn(
       schema: StructType,
