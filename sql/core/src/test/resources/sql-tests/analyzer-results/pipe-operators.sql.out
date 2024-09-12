@@ -246,20 +246,72 @@ Distinct
 
 
 -- !query
-<<<<<<< HEAD
+table t
+|> select *
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
+-- !query
+table t
+|> select * except (y)
+-- !query analysis
+Project [x#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ *
+-- !query analysis
+Repartition 3, true
++- Project [x#x, y#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ distinct x
+-- !query analysis
+Repartition 3, true
++- Distinct
+   +- Project [x#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ all x
+-- !query analysis
+Repartition 3, true
++- Project [x#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 table t
 |> select sum(x) as result
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "error" : "'<<'",
-    "hint" : ""
-  }
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
+  } ]
 }
 
 

@@ -82,7 +82,22 @@ table t
 table t
 |> select distinct x, y;
 
-<<<<<<< HEAD
+-- SELECT * is supported.
+table t
+|> select *;
+
+table t
+|> select * except (y);
+
+-- Hints are supported.
+table t
+|> select /*+ repartition(3) */ *;
+
+table t
+|> select /*+ repartition(3) */ distinct x;
+
+table t
+|> select /*+ repartition(3) */ all x;
 
 -- SELECT operators: negative tests.
 ---------------------------------------

@@ -231,22 +231,75 @@ struct<x:int,y:string>
 
 
 -- !query
-<<<<<<< HEAD
+table t
+|> select *
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
 
 
+-- !query
+table t
+|> select * except (y)
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ *
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ distinct x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ all x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
 table t
 |> select sum(x) as result
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "error" : "'<<'",
-    "hint" : ""
-  }
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
+  } ]
 }
 
 
