@@ -74,6 +74,11 @@ class TransformWithStateInPandasTestsMixin:
             input_path + "/text-test2.txt", [0, 0, 0, 1, 1], [123, 223, 323, 246, 6]
         )
 
+    def _prepare_test_resource3(self, input_path):
+        with open(input_path + "/text-test2.txt", "w") as fw:
+            fw.write("3, 12\n")
+            fw.write("0, 67\n")
+
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
         df_split = df.withColumn("split_values", split(df["value"], ","))
@@ -303,6 +308,108 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
+
+    def _test_transform_with_state_init_state_in_pandas(
+            self, stateful_processor, check_results
+    ):
+        input_path = tempfile.mkdtemp()
+        self._prepare_test_resource1(input_path)
+        self._prepare_test_resource3(input_path)
+
+        df = self._build_test_df(input_path)
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("value", StringType(), True),
+            ]
+        )
+
+        from pyspark.sql import GroupedData
+
+        data = [("0", 789), ("3", 987)]
+        initial_state = \
+            self.spark.createDataFrame(data, "id string, initVal int") \
+                .groupBy("id")
+
+        q = (
+            df.groupBy("id")
+            .transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+                initialState=initial_state
+            )
+            .writeStream.queryName("this_query")
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    def test_transform_with_state_init_state_in_pandas(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                # for key 0, initial state was processed and it was only processed once;
+                # for key 1, it did not appear in the initial state df;
+                # for key 3, it did not appear in the first batch of input keys
+                # so it won't be emitted
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(789 + 123 + 46)),
+                    Row(id="1", value=str(146 + 346)),
+                }
+            else:
+                # for key 0, verify initial state was only processed once in the first batch;
+                # for key 3, verify init state was now processed
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(789 + 123 + 46 + 67)),
+                    # Row(id="3", value=str(987 + 12)),
+                    Row(id="3", value=str(12)),
+                }
+
+        self._test_transform_with_state_init_state_in_pandas(SimpleStatefulProcessorWithInitialState(), check_results)
+
+
+class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value_state", state_schema)
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        exists = self.value_state.exists()
+        if exists:
+            value_row = self.value_state.get()
+            existing_value = value_row[0]
+        else:
+            existing_value = 0
+
+        accumulated_value = existing_value
+
+        for pdf in rows:
+            value = pdf['temperature'].astype(int).sum()
+            accumulated_value += value
+
+        self.value_state.update((accumulated_value,))
+
+        yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
+
+    def handleInitialState(self, key, initialState) -> None:
+        initVal = initialState.at[0, "initVal"]
+        self.value_state.update((initVal,))
+
+    def close(self) -> None:
+        pass
 
 
 class SimpleStatefulProcessor(StatefulProcessor):

@@ -27,3 +27,4 @@ Stateful Processor
     StatefulProcessor.init
     StatefulProcessor.handleInputRows
     StatefulProcessor.close
+    StatefulProcessor.handleInitialState

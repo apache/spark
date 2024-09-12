@@ -366,6 +366,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
+        initialState: "GroupedData" = None
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -500,7 +501,15 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
+            # only process initial state if first batch
+            is_first_batch = statefulProcessorApiClient.is_first_batch()
             statefulProcessorApiClient.set_implicit_key(key)
+            if is_first_batch:
+                initial_state = statefulProcessorApiClient.get_initial_state(key)
+                # if user did not provide initial state df, initial_state will be None
+                if initial_state is not None:
+                    statefulProcessor.handleInitialState(key, initial_state)
+
             result = statefulProcessor.handleInputRows(key, inputRows)
 
             return result
@@ -516,11 +525,17 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
 
+        if initialState is None:
+            initial_state_java_obj = None
+        else:
+            initial_state_java_obj = initialState._jgd
+
         jdf = self._jgd.transformWithStateInPandas(
             udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
+            initial_state_java_obj
         )
         return DataFrame(jdf, self.session)
 

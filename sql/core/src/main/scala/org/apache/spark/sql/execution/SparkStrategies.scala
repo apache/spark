@@ -783,15 +783,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object TransformWithStateInPandasStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case TransformWithStateInPandas(
-        func, groupingAttributes, outputAttrs, outputMode, timeMode, child) =>
+      case t@TransformWithStateInPandas(
+      func, _, outputAttrs, outputMode, timeMode, child,
+      hasInitialState, i, _, initialStateSchema) =>
         val execPlan = TransformWithStateInPandasExec(
-          func, groupingAttributes, outputAttrs, outputMode, timeMode,
+          func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          planLater(child)
+          planLater(child),
+          hasInitialState,
+          planLater(i),
+          t.rightAttributes,
+          initialStateSchema
         )
 
         execPlan :: Nil

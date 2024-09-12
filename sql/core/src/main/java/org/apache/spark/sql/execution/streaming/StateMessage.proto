@@ -40,6 +40,7 @@ message StatefulProcessorCall {
     StateCallCommand getValueState = 2;
     StateCallCommand getListState = 3;
     StateCallCommand getMapState = 4;
+    UtilsCallCommand utilsCall = 5;
   }
 }
 
@@ -105,4 +106,18 @@ message SetHandleState {
 
 message TTLConfig {
   int32 durationMs = 1;
+}
+
+message UtilsCallCommand {
+  oneof method {
+    IsFirstBatch isFirstBatch = 1;
+    GetInitialState getInitialState = 2;
+  }
+}
+
+message IsFirstBatch {
+}
+
+message GetInitialState {
+  bytes value = 1;
 }

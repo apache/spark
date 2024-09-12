@@ -24,15 +24,20 @@ import java.time.Duration
 import scala.collection.mutable
 
 import com.google.protobuf.ByteString
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, UtilsCallCommand, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -48,9 +53,16 @@ class TransformWithStateInPandasStateServer(
     stateServerSocket: ServerSocket,
     statefulProcessorHandle: StatefulProcessorHandleImpl,
     groupingKeySchema: StructType,
+    timeZoneId: String,
+    errorOnDuplicatedFieldNames: Boolean,
+    largeVarTypes: Boolean,
+    arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String,
-      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])] = null)
+      (ValueState[Row], StructType, ExpressionEncoder.Deserializer[Row])] = null,
+    hasInitialState: Boolean,
+    initialStateSchema: StructType,
+    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])])
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -63,6 +75,11 @@ class TransformWithStateInPandasStateServer(
     new mutable.HashMap[String, (ValueState[Row], StructType,
       ExpressionEncoder.Deserializer[Row])]()
   }
+
+  private val initialStateKeyToRowMap: Map[InternalRow, Iterator[InternalRow]] =
+    if (hasInitialState) {
+      initialStateDataIterator.toMap
+    } else Map.empty
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -158,8 +175,67 @@ class TransformWithStateInPandasStateServer(
           Some(message.getGetValueState.getTtl.getDurationMs)
         } else None
         initializeValueState(stateName, schema, ttlDurationMs)
+      case StatefulProcessorCall.MethodCase.UTILSCALL =>
+        handleStatefulProcessorUtilRequest(message.getUtilsCall)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private def handleStatefulProcessorUtilRequest(message: UtilsCallCommand): Unit = {
+    message.getMethodCase match {
+      case UtilsCallCommand.MethodCase.ISFIRSTBATCH =>
+        if (!hasInitialState) {
+          // In physical planning, hasInitialState will always be flipped
+          // if it is not first batch
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+        }
+
+      case UtilsCallCommand.MethodCase.GETINITIALSTATE =>
+        if (!hasInitialState || initialStateKeyToRowMap.isEmpty) {
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+
+          outputStream.flush()
+          val arrowStreamWriter = {
+            val outputSchema = initialStateSchema
+            val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+              errorOnDuplicatedFieldNames, largeVarTypes)
+            val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+              s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+            val root = VectorSchemaRoot.create(arrowSchema, allocator)
+            new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+              arrowTransformWithStateInPandasMaxRecordsPerBatch)
+          }
+
+          val keyBytes = message.getGetInitialState.getValue.toByteArray
+          // The key row is serialized as a byte array, we need to convert it back to a Row
+          val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema, keyRowDeserializer)
+          val groupingKeyToInternalRow =
+            ExpressionEncoder(groupingKeySchema).createSerializer().apply(keyRow)
+          val iter = initialStateKeyToRowMap
+            .get(groupingKeyToInternalRow).getOrElse(Iterator.empty)
+
+          var seenInitStateOnKey = false
+          while (iter.hasNext) {
+            if (seenInitStateOnKey) {
+              throw StateStoreErrors.cannotReInitializeStateOnKey(
+                keyRowDeserializer.apply(groupingKeyToInternalRow).toString)
+            } else {
+              val initialStateRow = iter.next()
+              seenInitStateOnKey = true
+              arrowStreamWriter.writeRow(initialStateRow)
+            }
+          }
+          arrowStreamWriter.finalizeCurrentArrowBatch()
+        }
+
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Invalid method call for ${message.getMethodCase.toString}")
     }
   }
 

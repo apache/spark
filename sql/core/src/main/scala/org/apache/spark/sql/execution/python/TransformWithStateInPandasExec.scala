@@ -28,14 +28,15 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{BinaryExecNode, GroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaValidationResult, StateStore, StateStoreOps}
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaValidationResult, StateStore, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProviderId}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 /**
  * Physical operator for executing
@@ -50,6 +51,8 @@ import org.apache.spark.util.CompletionIterator
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param child the physical plan for the underlying data
+ * @param initialState the physical plan for the input initial state
+ * @param initialStateGroupingAttrs grouping attributes for initial state
  */
 case class TransformWithStateInPandasExec(
     functionExpr: Expression,
@@ -61,7 +64,12 @@ case class TransformWithStateInPandasExec(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
-    child: SparkPlan) extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+    child: SparkPlan,
+    hasInitialState: Boolean,
+    initialState: SparkPlan,
+    initialStateGroupingAttrs: Seq[Attribute],
+    initialStateSchema: StructType)
+  extends BinaryExecNode with StateStoreWriter with WatermarkSupport {
 
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
@@ -89,14 +97,25 @@ case class TransformWithStateInPandasExec(
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
+  /**
+   * Distribute by grouping attributes - We need the underlying data and the initial state data
+   * to have the same grouping so that the data are co-located on the same task.
+   */
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
       getStateInfo, conf) ::
+      StatefulOperatorPartitioning.getCompatibleDistribution(
+        initialStateGroupingAttrs, getStateInfo, conf) ::
       Nil
   }
 
+  /**
+   * We need the initial state to also use the ordering as the data so that we can co-locate the
+   * keys from the underlying data and the initial state.
+   */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
-    groupingAttributes.map(SortOrder(_, Ascending)))
+    groupingAttributes.map(SortOrder(_, Ascending)),
+    initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
@@ -112,59 +131,113 @@ case class TransformWithStateInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics
 
-    val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
+    if (!hasInitialState) {
+      child.execute().mapPartitionsWithStateStore[InternalRow](
+        getStateInfo,
+        schemaForKeyRow,
+        schemaForValueRow,
+        NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+        session.sqlContext.sessionState,
+        Some(session.sqlContext.streams.stateStoreCoordinator),
+        useColumnFamilies = true,
+        useMultipleValuesPerKey = true
+      ) {
+        case (store: StateStore, dataIterator: Iterator[InternalRow]) =>
+          processDataWithPartition(store, dataIterator)
+      }
+    } else {
+      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val hadoopConfBroadcast = sparkContext.broadcast(
+        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
 
-    child.execute().mapPartitionsWithStateStore[InternalRow](
-      getStateInfo,
-      schemaForKeyRow,
-      schemaForValueRow,
-      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
-      session.sqlContext.sessionState,
-      Some(session.sqlContext.streams.stateStoreCoordinator),
-      useColumnFamilies = true,
-      useMultipleValuesPerKey = true
-    ) {
-      case (store: StateStore, dataIterator: Iterator[InternalRow]) =>
-        val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
-        val commitTimeMs = longMetric("commitTimeMs")
-        val currentTimeNs = System.nanoTime
-        val updatesStartTimeNs = currentTimeNs
+      child.execute().stateStoreAwareZipPartitions(
+        initialState.execute(),
+        getStateInfo,
+        storeNames = Seq(),
+        session.sqlContext.streams.stateStoreCoordinator) {
+        // The state store aware zip partitions will provide us with two iterators,
+        // child data iterator and the initial state iterator per partition.
+        case (partitionId, childDataIterator, initStateIterator) =>
+          val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
+            stateInfo.get.operatorId, partitionId)
+          val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
+          val store = StateStore.get(
+            storeProviderId = storeProviderId,
+            keySchema = schemaForKeyRow,
+            valueSchema = schemaForValueRow,
+            NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+            version = stateInfo.get.storeVersion,
+            useColumnFamilies = true,
+            storeConf = storeConf,
+            hadoopConf = hadoopConfBroadcast.value.value
+          )
 
-        val data = groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
+          val groupedInitialStateIter = GroupedIterator(initStateIterator,
+            initialStateGroupingAttrs, initialState.output)
 
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-          groupingKeyExprEncoder, timeMode, isStreaming = true, batchTimestampMs, metrics)
-        val runner = new TransformWithStateInPandasPythonRunner(
-          chainedFunc,
-          PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-          Array(argOffsets),
-          DataTypeUtils.fromAttributes(dedupAttributes),
-          processorHandle,
-          sessionLocalTimeZone,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID,
-          groupingKeySchema
-        )
-
-        val outputIterator = executePython(data, output, runner)
-
-        CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
-          // Note: Due to the iterator lazy execution, this metric also captures the time taken
-          // by the upstream (consumer) operators in addition to the processing in this operator.
-          allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-          commitTimeMs += timeTakenMs {
-            store.commit()
-          }
-          setStoreMetrics(store)
-          setOperatorMetrics()
-        }).map { row =>
-          numOutputRows += 1
-          row
-        }
+          processDataWithPartition(store, childDataIterator, groupedInitialStateIter)
+      }
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
-    copy(child = newChild)
+  private def processDataWithPartition(
+      store: StateStore,
+      dataIterator: Iterator[InternalRow],
+      initStateIterator: Iterator[(InternalRow, Iterator[InternalRow])] = Iterator.empty):
+  Iterator[InternalRow] = {
+    val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+    val commitTimeMs = longMetric("commitTimeMs")
+    val currentTimeNs = System.nanoTime
+    val updatesStartTimeNs = currentTimeNs
+
+    val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
+    val data =
+      groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
+
+    val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
+      groupingKeyExprEncoder, timeMode, isStreaming = true, batchTimestampMs, metrics)
+    val runner = new TransformWithStateInPandasPythonRunner(
+      chainedFunc,
+      PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+      Array(argOffsets),
+      DataTypeUtils.fromAttributes(dedupAttributes),
+      processorHandle,
+      sessionLocalTimeZone,
+      pythonRunnerConf,
+      pythonMetrics,
+      jobArtifactUUID,
+      groupingKeySchema,
+      hasInitialState,
+      initialStateSchema,
+      initStateIterator
+    )
+
+    val outputIterator = executePython(data, output, runner)
+
+    CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
+      // Note: Due to the iterator lazy execution, this metric also captures the time taken
+      // by the upstream (consumer) operators in addition to the processing in this operator.
+      allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+      commitTimeMs += timeTakenMs {
+        store.commit()
+      }
+      setStoreMetrics(store)
+      setOperatorMetrics()
+    }).map { row =>
+      numOutputRows += 1
+      row
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateInPandasExec =
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+
+    override def left: SparkPlan = child
+
+    override def right: SparkPlan = initialState
 }
