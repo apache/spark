@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.SQLOrderingUtil;
 public class ArrayExpressionUtils {
 
   // comparator
-  // Boolean nullable comparator
+  // Boolean ascending nullable comparator
   private static final Comparator<Boolean> booleanComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -36,7 +36,7 @@ public class ArrayExpressionUtils {
     return o1.equals(o2) ? 0 : (o1 ? 1 : -1);
   };
 
-  // Byte nullable comparator
+  // Byte ascending nullable comparator
   private static final Comparator<Byte> byteComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -48,7 +48,7 @@ public class ArrayExpressionUtils {
     return Byte.compare(o1, o2);
   };
 
-  // Short nullable comparator
+  // Short ascending nullable comparator
   private static final Comparator<Short> shortComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -60,7 +60,7 @@ public class ArrayExpressionUtils {
     return Short.compare(o1, o2);
   };
 
-  // Integer nullable comparator
+  // Integer ascending nullable comparator
   private static final Comparator<Integer> integerComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -72,7 +72,7 @@ public class ArrayExpressionUtils {
     return Integer.compare(o1, o2);
   };
 
-  // Long nullable comparator
+  // Long ascending nullable comparator
   private static final Comparator<Long> longComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -84,7 +84,7 @@ public class ArrayExpressionUtils {
     return Long.compare(o1, o2);
   };
 
-  // Float nullable comparator
+  // Float ascending nullable comparator
   private static final Comparator<Float> floatComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -96,7 +96,7 @@ public class ArrayExpressionUtils {
     return SQLOrderingUtil.compareFloats(o1, o2);
   };
 
-  // Double nullable comparator
+  // Double ascending nullable comparator
   private static final Comparator<Double> doubleComp = (o1, o2) -> {
     if (o1 == null && o2 == null) {
       return 0;
@@ -108,7 +108,7 @@ public class ArrayExpressionUtils {
     return SQLOrderingUtil.compareDoubles(o1, o2);
   };
 
-  // Boolean nullable comparator
+  // Boolean nullable
   public static int binarySearch(Boolean[] data, Boolean value) {
     return Arrays.binarySearch(data, value, booleanComp);
   }
