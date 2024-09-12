@@ -511,11 +511,13 @@ class RelationalGroupedDataset protected[sql](
       val leftChild = df.logicalPlan
       val rightChild = initialState.df.logicalPlan
 
+      // Place grouping attributes at the front of output so we can
+      // refer to them correctly in the following planning phase;
+      // will perform dedup in the physical operator
       val left = df.sparkSession.sessionState.executePlan(
-        Project(leftChild.output, leftChild)).analyzed
+        Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
       val right = initialState.df.sparkSession.sessionState.executePlan(
-        Project(rightChild.output, rightChild)).analyzed
-
+        Project(initGroupingAttrs ++ rightChild.output, rightChild)).analyzed
 
       TransformWithStateInPandas(
         func.expr,

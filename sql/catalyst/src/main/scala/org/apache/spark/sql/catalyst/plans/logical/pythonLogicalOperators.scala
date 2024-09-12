@@ -202,6 +202,10 @@ case class TransformWithStateInPandas(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPandas =
     copy(child = newLeft, initialState = newRight)
 
+  // We call the following attributes from `SparkStrategies` because attribute were
+  // resolved when we got there; if we directly pass Seq of attributes before it
+  // is fully analyzed, we will have conflicting attributes when resolving (initial state
+  // and child have the same names on grouping attributes)
   def leftAttributes: Seq[Attribute] = left.output.take(groupingAttributesLen)
 
   def rightAttributes: Seq[Attribute] = if (hasInitialState) {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{BinaryExecNode, GroupedIterator, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
@@ -172,10 +172,14 @@ case class TransformWithStateInPandasExec(
             hadoopConf = hadoopConfBroadcast.value.value
           )
 
-          val groupedInitialStateIter = GroupedIterator(initStateIterator,
-            initialStateGroupingAttrs, initialState.output)
+          // dedup attributes here because grouping attributes appear twice (key and value)
+          val (dedupAttributes, _) =
+            resolveArgOffsets(initialState.output, initialStateGroupingAttrs)
+          val initData =
+            groupAndProject(initStateIterator, initialStateGroupingAttrs,
+              initialState.output, dedupAttributes)
 
-          processDataWithPartition(store, childDataIterator, groupedInitialStateIter)
+          processDataWithPartition(store, childDataIterator, initData)
       }
     }
   }
