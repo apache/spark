@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: GitHub pages deployment
+name: GitHub Pages deployment
 
 on:
   push:
