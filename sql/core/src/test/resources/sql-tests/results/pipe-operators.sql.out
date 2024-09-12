@@ -231,25 +231,22 @@ struct<x:int,y:string>
 
 
 -- !query
+<<<<<<< HEAD
+
+
 table t
 |> select sum(x) as result
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "expr" : "sum(x#x) AS result#xL"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 34,
-    "fragment" : "sum(x) as result"
-  } ]
+    "error" : "'<<'",
+    "hint" : ""
+  }
 }
 
 
@@ -264,14 +261,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "y#x"
+    "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 19,
-    "fragment" : "y"
+    "startIndex" : 34,
+    "stopIndex" : 39,
+    "fragment" : "sum(x)"
   } ]
 }
 

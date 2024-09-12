@@ -82,6 +82,7 @@ table t
 table t
 |> select distinct x, y;
 
+<<<<<<< HEAD
 
 -- SELECT operators: negative tests.
 ---------------------------------------
