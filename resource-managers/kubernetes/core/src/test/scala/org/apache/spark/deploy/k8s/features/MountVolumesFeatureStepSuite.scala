@@ -120,7 +120,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND)
+      KubernetesPVCVolumeConf("OnDemand")
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -138,7 +138,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "",
       true,
       KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
-        storageClass = Some("gp"),
+        storageClass = Some("gp3"),
         size = Some("1Mi"),
         labels = Some(Map("foo" -> "bar", "env" -> "test")))
     )
@@ -158,7 +158,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "",
       true,
       KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
-        storageClass = Some("gp"),
+        storageClass = Some("gp3"),
         size = Some("1Mi"),
         labels = Some(Map("foo1" -> "bar1", "env" -> "exec-test")))
     )
@@ -179,7 +179,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "",
       true,
       KubernetesPVCVolumeConf(claimName = "pvcClaim1",
-        storageClass = Some("gp"),
+        storageClass = Some("gp3"),
         size = Some("1Mi"),
         labels = Some(Map("foo1" -> "bar1", "env1" -> "exec-test-1")))
     )
@@ -190,7 +190,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "",
       true,
       KubernetesPVCVolumeConf(claimName = "pvcClaim2",
-        storageClass = Some("gp"),
+        storageClass = Some("gp3"),
         size = Some("1Mi"),
         labels = Some(Map("foo2" -> "bar2", "env2" -> "exec-test-2")))
     )

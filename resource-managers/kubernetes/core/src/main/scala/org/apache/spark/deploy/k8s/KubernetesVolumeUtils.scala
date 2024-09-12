@@ -45,12 +45,12 @@ object KubernetesVolumeUtils {
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
-      val labelsKey = s"$volumeType.$volumeName.label."
+      val labelKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_LABEL_KEY"
 
-      val volumeSpecificLabelsMap = properties
-        .filter(_._1.startsWith(labelsKey))
+      val volumeLabelsMap = properties
+        .filter(_._1.startsWith(labelKey))
         .map {
-          case (k, v) => k.replaceAll(labelsKey, "") -> v
+          case (k, v) => k.replaceAll(labelKey, "") -> v
         }
 
       KubernetesVolumeSpec(
@@ -59,7 +59,7 @@ object KubernetesVolumeUtils {
         mountSubPath = properties.getOrElse(subPathKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties,
-          volumeType, volumeName, Option(volumeSpecificLabelsMap)))
+          volumeType, volumeName, Option(volumeLabelsMap)))
     }.toSeq
   }
 

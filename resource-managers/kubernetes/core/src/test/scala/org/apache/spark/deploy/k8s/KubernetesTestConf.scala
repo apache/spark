@@ -147,7 +147,6 @@ object KubernetesTestConf {
       }
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_READONLY_KEY),
         spec.mountReadOnly.toString)
-
       configs.foreach { case (k, v) =>
         conf.set(key(vtype, spec.volumeName, k), v)
       }
